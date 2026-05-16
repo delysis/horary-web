@@ -1,4 +1,4 @@
-const CACHE = 'horary-v1'
+const CACHE = 'horary-v6'
 const PRECACHE = ['/horary-web/', '/horary-web/index.html']
 
 self.addEventListener('install', (e) => {
@@ -8,25 +8,28 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+    (async () => {
+      await self.clients.claim()
+      const keys = await caches.keys()
+      await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      const clients = await self.clients.matchAll({ type: 'window' })
+      for (const client of clients) client.navigate(client.url)
+    })()
   )
-  self.clients.claim()
 })
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return
+  if (new URL(e.request.url).origin !== self.location.origin) return
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const network = fetch(e.request).then((res) => {
+    fetch(e.request)
+      .then((res) => {
         if (res.ok) {
           const clone = res.clone()
           caches.open(CACHE).then((c) => c.put(e.request, clone))
         }
         return res
       })
-      return cached || network
-    })
+      .catch(() => caches.match(e.request))
   )
 })

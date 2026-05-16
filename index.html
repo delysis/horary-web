@@ -14,9 +14,19 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/horary-web/sw.js')
-        })
+        if (location.hostname === 'localhost') {
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            if (regs.length > 0) { regs.forEach(r => r.unregister()); window.location.reload() }
+          })
+        } else {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/horary-web/sw.js')
+            let refreshing = false
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+              if (!refreshing) { refreshing = true; window.location.reload() }
+            })
+          })
+        }
       }
     </script>
   </body>
