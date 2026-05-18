@@ -6,6 +6,11 @@ const PLANET_GLYPHS: Record<string, string> = {
   Mc: 'MC', Ic: 'IC',
 }
 
+const PLANET_FONT_SIZES: Record<string, number> = {
+  Pluto: 12,
+  Sun: 14, Moon: 14,
+}
+
 
 const ASPECT_COLORS: Record<string, string> = {
   conjunction: '#999',
@@ -261,7 +266,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
         return (
           <g key={name}>
             <text x={pg.x} y={pg.y} textAnchor="middle" dominantBaseline="middle"
-              fontSize={16} fill="rgba(255,255,255,0.9)">{glyph}</text>
+              fontSize={PLANET_FONT_SIZES[name] ?? 20} fill="rgba(255,255,255,0.9)">{glyph}</text>
             <text x={pl.x} y={pl.y} textAnchor="middle" dominantBaseline="middle"
               fontSize={9} fill="rgba(255,255,255,0.55)">{formatArcMin(deg)}</text>
           </g>
