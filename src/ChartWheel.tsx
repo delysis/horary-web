@@ -2,9 +2,10 @@ const SIGN_GLYPHS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '�
 
 const PLANET_GLYPHS: Record<string, string> = {
   Sun: '☉', Moon: '☽', Mercury: '☿', Venus: '♀', Mars: '♂',
-  Jupiter: '♃', Saturn: '♄', Uranus: '♅', Neptune: '♆', Pluto: '♇',
+  Jupiter: '♃', Saturn: '♄', Uranus: '♅', Neptune: '♆', Pluto: '⯓',
   Mc: 'MC', Ic: 'IC',
 }
+
 
 const ASPECT_COLORS: Record<string, string> = {
   conjunction: '#999',
@@ -23,9 +24,9 @@ const CY = SIZE / 2
 const R_OUTER = 238
 const R_SIGN_INNER = 200
 const R_HOUSE_OUTER = 192
-const R_PLANET = 158
-const R_LABEL = 128
-const R_INNER = 72
+const R_PLANET = 178
+const R_LABEL = 162
+const R_INNER = 95
 
 function toRad(deg: number) { return (deg * Math.PI) / 180 }
 
@@ -47,6 +48,7 @@ function formatArcMin(eclipticDeg: number): string {
   return `${inSign}°${String(mins).padStart(2, '0')}′`
 }
 
+
 function houseMidAngle(cusps: number[], i: number, ascDeg: number): number {
   const cur = cusps[i]
   const next = cusps[(i + 1) % 12]
@@ -54,10 +56,108 @@ function houseMidAngle(cusps: number[], i: number, ascDeg: number): number {
   return eclToAngle(cur + span / 2, ascDeg)
 }
 
+type Box = { minX: number; maxX: number; minY: number; maxY: number }
+
+function layoutPlanets(nameAnglePairs: [string, number][], obstacles: Box[] = []): Map<string, { angle: number; inset: number }> {
+  const LANE_STEP = 18
+  const MAX_INSET = R_LABEL - R_INNER - 30
+  const names = nameAnglePairs.map(([n]) => n)
+
+  function angSep(a: number, b: number) {
+    const d = Math.abs(((a - b) + 360) % 360)
+    return Math.min(d, 360 - d)
+  }
+
+  function getBounds(angle: number, inset: number) {
+    const g = polar(angle, R_PLANET - inset)
+    const l = polar(angle, R_LABEL - inset)
+    return [
+      { minX: g.x - 7,  maxX: g.x + 7,  minY: g.y - 7, maxY: g.y + 7 },
+      { minX: l.x - 13, maxX: l.x + 13, minY: l.y - 4, maxY: l.y + 4 },
+    ]
+  }
+
+  function overlaps(a: ReturnType<typeof getBounds>, b: ReturnType<typeof getBounds>) {
+    return a.some(ba => b.some(bb =>
+      ba.minX < bb.maxX && ba.maxX > bb.minX && ba.minY < bb.maxY && ba.maxY > bb.minY
+    ))
+  }
+
+  // Phase 1: assign radial lanes — planets within 10° get different rings
+  const placed: { angle: number; inset: number }[] = []
+  const insets = new Map<string, number>()
+  for (const [name, angle] of nameAnglePairs) {
+    let lane = 0
+    while (true) {
+      const testInset = Math.min(lane * LANE_STEP, MAX_INSET)
+      const conflict = placed.some(p => p.inset === testInset && angSep(angle, p.angle) < 10)
+      if (!conflict || testInset >= MAX_INSET) {
+        insets.set(name, testInset)
+        placed.push({ angle, inset: testInset })
+        break
+      }
+      lane++
+    }
+  }
+
+  function boxOverlap(a: Box[], b: Box) {
+    return a.some(ba => ba.minX < b.maxX && ba.maxX > b.minX && ba.minY < b.maxY && ba.maxY > b.minY)
+  }
+
+  // Phase 2: angular spreading for any remaining bounding-box overlaps, including obstacles
+  const state = new Map(nameAnglePairs.map(([name, angle]) => [name, { angle, inset: insets.get(name) ?? 0 }]))
+  for (let iter = 0; iter < 300; iter++) {
+    let moved = false
+
+    // Avoid fixed obstacles (house numbers)
+    for (const name of names) {
+      const p = state.get(name)!
+      const bounds = getBounds(p.angle, p.inset)
+      for (const obs of obstacles) {
+        if (boxOverlap(bounds, obs)) {
+          const obsCX = (obs.minX + obs.maxX) / 2
+          const obsCY = (obs.minY + obs.maxY) / 2
+          const obsAngle = Math.atan2(obsCY - CY, obsCX - CX) * (180 / Math.PI)
+          let sep = ((p.angle - obsAngle) + 360) % 360
+          if (sep > 180) sep -= 360
+          p.angle += (Math.sign(sep) || 1) * 0.5
+          moved = true
+        }
+      }
+    }
+
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        const a = state.get(names[i])!
+        const b = state.get(names[j])!
+        if (overlaps(getBounds(a.angle, a.inset), getBounds(b.angle, b.inset))) {
+          let sep = ((b.angle - a.angle) + 360) % 360
+          if (sep > 180) sep -= 360
+          const dir = Math.sign(sep) || 1
+          a.angle -= dir * 0.3
+          b.angle += dir * 0.3
+          moved = true
+        }
+      }
+    }
+    if (!moved) break
+  }
+
+  return state
+}
+
 type WheelData = { planets: Record<string, [number]>; cusps: number[]; aspects: any[] }
 
 export function ChartWheel({ data }: { data: WheelData }) {
   const ascDeg = data.cusps[0] ?? 0
+  const houseObstacles: Box[] = data.cusps.map((_, i) => {
+    const pt = polar(houseMidAngle(data.cusps, i, ascDeg), R_INNER + 10)
+    return { minX: pt.x - 8, maxX: pt.x + 8, minY: pt.y - 8, maxY: pt.y + 8 }
+  })
+  const planetLayout = layoutPlanets(
+    Object.entries(data.planets).map(([name, [deg]]) => [name, eclToAngle(deg, ascDeg)]),
+    houseObstacles
+  )
 
   return (
     <svg width={SIZE} height={SIZE} style={{ display: 'block', margin: '0 auto' }}>
@@ -105,7 +205,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
 
       {/* House numbers */}
       {data.cusps.map((_cuspDeg, i) => {
-        const mid = polar(houseMidAngle(data.cusps, i, ascDeg), (R_INNER + R_HOUSE_OUTER) / 2)
+        const mid = polar(houseMidAngle(data.cusps, i, ascDeg), R_INNER + 10)
         return (
           <text key={i} x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
             fontSize={10} fill="rgba(255,255,255,0.45)">{i + 1}</text>
@@ -121,13 +221,30 @@ export function ChartWheel({ data }: { data: WheelData }) {
         )
       })}
 
+      {/* Planet notches on inner ring and inside of house ring */}
+      {Object.entries(data.planets).map(([name, [deg]]) => {
+        const angle = eclToAngle(deg, ascDeg)
+        const i1 = polar(angle, R_INNER)
+        const i2 = polar(angle, R_INNER + 4)
+        const o1 = polar(angle, R_HOUSE_OUTER)
+        const o2 = polar(angle, R_HOUSE_OUTER - 4)
+        return (
+          <g key={name}>
+            <line x1={i1.x} y1={i1.y} x2={i2.x} y2={i2.y}
+              stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+            <line x1={o1.x} y1={o1.y} x2={o2.x} y2={o2.y}
+              stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+          </g>
+        )
+      })}
+
       {/* Aspect lines */}
       {data.aspects.map((asp: any, i: number) => {
         const fromDeg = data.planets[asp.point?.name]?.[0]
         const toDeg = data.planets[asp.toPoint?.name]?.[0]
         if (fromDeg == null || toDeg == null) return null
-        const p1 = polar(eclToAngle(fromDeg, ascDeg), R_INNER - 6)
-        const p2 = polar(eclToAngle(toDeg, ascDeg), R_INNER - 6)
+        const p1 = polar(eclToAngle(fromDeg, ascDeg), R_INNER)
+        const p2 = polar(eclToAngle(toDeg, ascDeg), R_INNER)
         const color = ASPECT_COLORS[asp.aspect?.name?.toLowerCase()] ?? 'rgba(255,255,255,0.2)'
         return (
           <line key={i} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
@@ -137,14 +254,14 @@ export function ChartWheel({ data }: { data: WheelData }) {
 
       {/* Planet glyphs and arc-minute labels */}
       {Object.entries(data.planets).map(([name, [deg]]) => {
-        const angle = eclToAngle(deg, ascDeg)
-        const pg = polar(angle, R_PLANET)
-        const pl = polar(angle, R_LABEL)
+        const { angle, inset } = planetLayout.get(name) ?? { angle: eclToAngle(deg, ascDeg), inset: 0 }
+        const pg = polar(angle, R_PLANET - inset)
+        const pl = polar(angle, R_LABEL - inset)
         const glyph = PLANET_GLYPHS[name] ?? name.slice(0, 2)
         return (
           <g key={name}>
             <text x={pg.x} y={pg.y} textAnchor="middle" dominantBaseline="middle"
-              fontSize={14} fill="rgba(255,255,255,0.9)">{glyph}</text>
+              fontSize={16} fill="rgba(255,255,255,0.9)">{glyph}</text>
             <text x={pl.x} y={pl.y} textAnchor="middle" dominantBaseline="middle"
               fontSize={9} fill="rgba(255,255,255,0.55)">{formatArcMin(deg)}</text>
           </g>
