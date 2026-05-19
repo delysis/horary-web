@@ -149,8 +149,18 @@ function App() {
   })()
 
   function handleHour12Change(val: string) {
-    const h = Number(val) || 0
-    setTimeHour(amPm === 'AM' ? String(h === 12 ? 0 : h) : String(h === 12 ? 12 : h + 12))
+    let h = Number(val)
+    if (isNaN(h)) return
+    const oldH = Number(display12Hour)
+    // Wrap around
+    if (h > 12) h = 1
+    if (h < 1) h = 12
+    // Flip AM/PM when crossing between 11 and 12
+    let newAmPm = amPm
+    if (h === 12 && oldH === 11) newAmPm = amPm === 'AM' ? 'PM' : 'AM'
+    if (h === 11 && oldH === 12) newAmPm = amPm === 'AM' ? 'PM' : 'AM'
+    setAmPm(newAmPm)
+    setTimeHour(newAmPm === 'AM' ? String(h === 12 ? 0 : h) : String(h === 12 ? 12 : h + 12))
   }
 
   function handleAmPmChange(val: 'AM' | 'PM') {
@@ -357,7 +367,7 @@ function App() {
                   </>
                 ) : (
                   <>
-                    <input type="number" min={1} max={12} value={display12Hour} onChange={(e) => handleHour12Change(e.target.value)} style={{ width: '4ch' }} title="Hour" />
+                    <input type="number" value={display12Hour} onChange={(e) => handleHour12Change(e.target.value)} style={{ width: '4ch' }} title="Hour" />
                     <span>:</span>
                     <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={{ width: '4ch' }} title="Minute" />
                     <select value={amPm} onChange={(e) => handleAmPmChange(e.target.value as 'AM' | 'PM')}>

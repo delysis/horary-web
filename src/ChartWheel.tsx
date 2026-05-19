@@ -8,7 +8,7 @@ const PLANET_GLYPHS: Record<string, string> = {
 
 const PLANET_FONT_SIZES: Record<string, number> = {
   Pluto: 12,
-  Sun: 14, Moon: 14, Uranus: 16,
+  Sun: 14, Moon: 14, Uranus: 18,
 }
 
 
