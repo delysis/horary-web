@@ -8,7 +8,7 @@ const PLANET_GLYPHS: Record<string, string> = {
 
 const PLANET_FONT_SIZES: Record<string, number> = {
   Pluto: 12,
-  Sun: 14, Moon: 14,
+  Sun: 14, Moon: 14, Uranus: 16,
 }
 
 
@@ -45,6 +45,13 @@ function polar(angleDeg: number, r: number): { x: number; y: number } {
   return { x: CX + r * Math.cos(a), y: CY + r * Math.sin(a) }
 }
 
+function labelCenter(angle: number, inset: number): { x: number; y: number } {
+  const g = polar(angle, R_PLANET - inset)
+  const a = toRad(angle)
+  const gap = R_PLANET - R_LABEL
+  return { x: g.x - gap * Math.cos(a), y: g.y - gap * 0.75 * Math.sin(a) }
+}
+
 function formatArcMin(eclipticDeg: number): string {
   const whole = Math.floor(eclipticDeg)
   const inSign = whole % 30
@@ -75,7 +82,7 @@ function layoutPlanets(nameAnglePairs: [string, number][], obstacles: Box[] = []
 
   function getBounds(angle: number, inset: number) {
     const g = polar(angle, R_PLANET - inset)
-    const l = polar(angle, R_LABEL - inset)
+    const l = labelCenter(angle, inset)
     return [
       { minX: g.x - 7,  maxX: g.x + 7,  minY: g.y - 7, maxY: g.y + 7 },
       { minX: l.x - 13, maxX: l.x + 13, minY: l.y - 4, maxY: l.y + 4 },
@@ -157,7 +164,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
   const ascDeg = data.cusps[0] ?? 0
   const houseObstacles: Box[] = data.cusps.map((_, i) => {
     const pt = polar(houseMidAngle(data.cusps, i, ascDeg), R_INNER + 10)
-    return { minX: pt.x - 8, maxX: pt.x + 8, minY: pt.y - 8, maxY: pt.y + 8 }
+    return { minX: pt.x - 6, maxX: pt.x + 6, minY: pt.y - 6, maxY: pt.y + 6 }
   })
   const planetLayout = layoutPlanets(
     Object.entries(data.planets).map(([name, [deg]]) => [name, eclToAngle(deg, ascDeg)]),
@@ -261,7 +268,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
       {Object.entries(data.planets).map(([name, [deg]]) => {
         const { angle, inset } = planetLayout.get(name) ?? { angle: eclToAngle(deg, ascDeg), inset: 0 }
         const pg = polar(angle, R_PLANET - inset)
-        const pl = polar(angle, R_LABEL - inset)
+        const pl = labelCenter(angle, inset)
         const glyph = PLANET_GLYPHS[name] ?? name.slice(0, 2)
         return (
           <g key={name}>
