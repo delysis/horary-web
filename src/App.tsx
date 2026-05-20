@@ -55,6 +55,7 @@ function App() {
   const [showAspects, setShowAspects] = useState(() => localStorage.getItem('showAspects') === 'true')
   const [showAspectGrid, setShowAspectGrid] = useState(() => localStorage.getItem('showAspectGrid') === 'true')
   const [use24Hour, setUse24Hour] = useState(() => localStorage.getItem('use24Hour') === 'true')
+  const [nudgeUnit, setNudgeUnit] = useState<'minute'|'hour'|'day'|'week'|'month'|'year'>('day')
   const [locationInputMode, setLocationInputMode] = useState<'search' | 'coordinates'>('search')
   const settingsRef = useRef<HTMLDivElement>(null)
   const questionEditRef = useRef<HTMLTextAreaElement>(null)
@@ -168,6 +169,25 @@ function App() {
     const h = Number(timeHour) || 0
     if (val === 'AM' && h >= 12) setTimeHour(String(h - 12))
     if (val === 'PM' && h < 12) setTimeHour(String(h + 12))
+  }
+
+  function nudgeTime(direction: 1 | -1) {
+    const h = String(Number(timeHour) || 0).padStart(2, '0')
+    const m = String(Number(timeMinute) || 0).padStart(2, '0')
+    const dt = new Date(`${dateLocal}T${h}:${m}`)
+    if (nudgeUnit === 'minute') dt.setMinutes(dt.getMinutes() + direction)
+    else if (nudgeUnit === 'hour') dt.setHours(dt.getHours() + direction)
+    else if (nudgeUnit === 'day') dt.setDate(dt.getDate() + direction)
+    else if (nudgeUnit === 'week') dt.setDate(dt.getDate() + direction * 7)
+    else if (nudgeUnit === 'month') dt.setMonth(dt.getMonth() + direction)
+    else if (nudgeUnit === 'year') dt.setFullYear(dt.getFullYear() + direction)
+    const y = dt.getFullYear()
+    const mo = String(dt.getMonth() + 1).padStart(2, '0')
+    const d = String(dt.getDate()).padStart(2, '0')
+    setDateLocal(`${y}-${mo}-${d}`)
+    setTimeHour(String(dt.getHours()))
+    setTimeMinute(String(dt.getMinutes()).padStart(2, '0'))
+    setAmPm(dt.getHours() < 12 ? 'AM' : 'PM')
   }
 
   async function searchLocation() {
@@ -413,7 +433,19 @@ function App() {
 
       {(isEditing || locationSet) && chart.summary ? (
         <>
-          <div style={{ marginTop: 16, padding: 12, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, overflowX: 'auto' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+            <button onClick={() => nudgeTime(-1)}>◀</button>
+            <button onClick={() => nudgeTime(1)}>▶</button>
+            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment">
+              <option value="minute">Minute</option>
+              <option value="hour">Hour</option>
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+              <option value="year">Year</option>
+            </select>
+          </div>
+          <div style={{ marginTop: 12, padding: 12, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, overflowX: 'auto' }}>
             <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
             <ChartWheel data={chart.summary.astroChartData} />
           </div>
