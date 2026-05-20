@@ -27,6 +27,7 @@ function App() {
   const [amPm, setAmPm] = useState<'AM' | 'PM'>(Number(now.slice(11, 13)) < 12 ? 'AM' : 'PM')
 
   const [isEditing, setIsEditing] = useState(false)
+  const [castSnapshot, setCastSnapshot] = useState({ date: now.slice(0, 10), hour: now.slice(11, 13), minute: now.slice(14, 16), amPm: Number(now.slice(11, 13)) < 12 ? 'AM' as const : 'PM' as const })
   const [geolocating, setGeolocating] = useState(true)
   const [locationDetected, setLocationDetected] = useState(false)
   const [locationSet, setLocationSet] = useState(false)
@@ -56,6 +57,14 @@ function App() {
   const [showAspectGrid, setShowAspectGrid] = useState(() => localStorage.getItem('showAspectGrid') === 'true')
   const [use24Hour, setUse24Hour] = useState(() => localStorage.getItem('use24Hour') === 'true')
   const [nudgeUnit, setNudgeUnit] = useState<'minute'|'hour'|'day'|'week'|'month'|'year'>('day')
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem('darkMode')
+    return stored !== null ? stored === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(() => {
+    document.body.style.backgroundColor = darkMode ? '#242424' : '#ffffff'
+    document.body.style.color = darkMode ? 'rgba(255,255,255,0.87)' : '#213547'
+  }, [darkMode])
   const [locationInputMode, setLocationInputMode] = useState<'search' | 'coordinates'>('search')
   const settingsRef = useRef<HTMLDivElement>(null)
   const questionEditRef = useRef<HTMLTextAreaElement>(null)
@@ -126,6 +135,17 @@ function App() {
 
   useEffect(() => { detectLocation() }, [])
 
+  function saveCastSnapshot() {
+    setCastSnapshot({ date: dateLocal, hour: timeHour, minute: timeMinute, amPm })
+  }
+
+  function resetToCastTime() {
+    setDateLocal(castSnapshot.date)
+    setTimeHour(castSnapshot.hour)
+    setTimeMinute(castSnapshot.minute)
+    setAmPm(castSnapshot.amPm)
+  }
+
   function resetToNow() {
     const n = dtLocalNowValue()
     setDateLocal(n.slice(0, 10))
@@ -140,6 +160,7 @@ function App() {
     }
     setLocationName('')
     if (!detectedLocation.current) setLocationTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
+    saveCastSnapshot()
     setIsEditing(false)
   }
 
@@ -309,18 +330,22 @@ function App() {
   )
 
   return (
-    <div style={{ maxWidth: 568, margin: '0 auto', padding: 24, textAlign: 'left' }}>
+    <div className={darkMode ? 'night-mode' : ''} style={{ maxWidth: 568, margin: '0 auto', padding: 24, textAlign: 'left', minHeight: '100vh', background: darkMode ? '#242424' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', position: 'relative', zIndex: 200 }}>
         <h1 style={{ marginBottom: 4 }}>Horary Calculator</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button className="icon-btn" onClick={() => { const d = !darkMode; setDarkMode(d); localStorage.setItem('darkMode', String(d)) }} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.8, color: 'inherit' }} title={darkMode ? 'Switch to day mode' : 'Switch to night mode'}>
+            {darkMode ? '☀︎' : '☽︎'}
+          </button>
         <div style={{ position: 'relative' }} ref={settingsRef}>
-          <button onClick={() => setShowSettings(s => !s)} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7 }} title="Settings">⚙</button>
+          <button className="icon-btn" onClick={() => setShowSettings(s => !s)} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: 'inherit' }} title="Settings">⚙︎</button>
           {showSettings && (
-            <div style={{ position: 'absolute', right: 0, top: '100%', background: '#ffffff', color: '#000000', border: '1px solid #ccc', borderRadius: 8, padding: 12, minWidth: 220, zIndex: 9999 }}>
+            <div style={{ position: 'absolute', right: 0, top: '100%', background: darkMode ? '#1a1a1a' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, borderRadius: 8, padding: 12, minWidth: 220, zIndex: 9999 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isEditing} onChange={(e) => { setIsEditing(e.target.checked); if (!e.target.checked) resetToNow() }} />
+                <input type="checkbox" checked={isEditing} onChange={(e) => { if (!e.target.checked) saveCastSnapshot(); setIsEditing(e.target.checked); if (!e.target.checked) resetToNow() }} />
                 Look up past question
               </label>
-              <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '8px 0' }} />
+              <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
               {[['showAngles', 'Show angles', showAngles, setShowAngles], ['showHouses', 'Show houses', showHouses, setShowHouses], ['showPlanets', 'Show planets', showPlanets, setShowPlanets], ['showAspects', 'Show aspects list', showAspects, setShowAspects], ['showAspectGrid', 'Show aspects chart', showAspectGrid, setShowAspectGrid]].map(([key, label, value, setter]) => (
                 <label key={key as string} style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginBottom: 4 }}>
                   <input type="checkbox" checked={value as boolean} onChange={(e) => { localStorage.setItem(key as string, String(e.target.checked)); (setter as (v: boolean) => void)(e.target.checked) }} />
@@ -334,13 +359,14 @@ function App() {
                 />
                 Show all
               </label>
-              <hr style={{ border: 'none', borderTop: '1px solid #ddd', margin: '8px 0' }} />
+              <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
                 <input type="checkbox" checked={use24Hour} onChange={(e) => { localStorage.setItem('use24Hour', String(e.target.checked)); setUse24Hour(e.target.checked) }} />
                 Use 24-hour time
               </label>
             </div>
           )}
+        </div>
         </div>
       </div>
       <p style={{ marginTop: 0, marginBottom: 16, opacity: 0.6, fontSize: '0.9em' }}>House system: Regiomontanus</p>
@@ -435,7 +461,6 @@ function App() {
         <>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
             <button onClick={() => nudgeTime(-1)}>◀</button>
-            <button onClick={() => nudgeTime(1)}>▶</button>
             <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment">
               <option value="minute">Minute</option>
               <option value="hour">Hour</option>
@@ -444,10 +469,12 @@ function App() {
               <option value="month">Month</option>
               <option value="year">Year</option>
             </select>
+            <button onClick={() => nudgeTime(1)}>▶</button>
+            <button onClick={resetToCastTime}>Reset</button>
           </div>
-          <div style={{ marginTop: 12, padding: 12, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, overflowX: 'auto' }}>
+          <div style={{ marginTop: 12, padding: 12, border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, overflowX: 'auto' }}>
             <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
-            <ChartWheel data={chart.summary.astroChartData} />
+            <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
           </div>
         </>
       ) : null}
@@ -461,7 +488,7 @@ function App() {
           <>
           <div style={{ display: 'grid', gridTemplateColumns: (showAngles || showHouses) && (showPlanets || showAspects) ? '1fr 1fr' : '1fr', gap: 0 }}>
             {(showAngles || showHouses) && (
-              <div style={{ padding: '12px 6px 12px 12px', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, minWidth: 0 }}>
+              <div style={{ padding: '12px 6px 12px 12px', border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, minWidth: 0 }}>
                 {showAngles && (
                   <>
                     <h2 style={{ marginTop: 0 }}>Angles</h2>
@@ -489,7 +516,7 @@ function App() {
             )}
 
             {(showPlanets || showAspects) && (
-              <div style={{ padding: '12px 12px 12px 6px', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 12px 12px 6px', border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, minWidth: 0, overflow: 'hidden' }}>
                 {showPlanets && (
                   <>
                     <h2 style={{ marginTop: 0 }}>Planets</h2>
@@ -519,7 +546,7 @@ function App() {
             )}
           </div>
           {showAspectGrid && (
-            <div style={{ marginTop: 16, padding: 12, border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ marginTop: 16, padding: 12, border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, overflow: 'hidden' }}>
               <h2 style={{ marginTop: 0 }}>Aspects chart</h2>
               <AspectGrid
                 planets={chart.summary.planets.map(p => p.name)}

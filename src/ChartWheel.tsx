@@ -1,4 +1,4 @@
-const SIGN_GLYPHS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓']
+const SIGN_GLYPHS = ['♈︎', '♉︎', '♊︎', '♋︎', '♌︎', '♍︎', '♎︎', '♏︎', '♐︎', '♑︎', '♒︎', '♓︎']
 
 const PLANET_GLYPHS: Record<string, string> = {
   Sun: '☉', Moon: '☽', Mercury: '☿', Venus: '♀', Mars: '♂',
@@ -158,9 +158,34 @@ function layoutPlanets(nameAnglePairs: [string, number][], obstacles: Box[] = []
   return state
 }
 
-type WheelData = { planets: Record<string, [number]>; cusps: number[]; aspects: any[] }
+const DARK_THEME = {
+  ringOuter: '#1a1a2e', ringSign: '#16213e', ringHouse: '#0d1b2a', ringInner: '#242424',
+  stroke: 'rgba(255,255,255,0.2)', strokeAngle: 'rgba(255,255,255,0.5)',
+  signGlyph: 'rgba(255,255,255,0.6)',
+  houseNum: 'rgba(255,255,255,0.45)',
+  angleLabel: 'rgba(255,255,255,0.7)',
+  notch: 'rgba(255,255,255,0.7)',
+  aspectFallback: 'rgba(255,255,255,0.2)',
+  planetGlyph: 'rgba(255,255,255,0.9)',
+  planetLabel: 'rgba(255,255,255,0.55)',
+}
 
-export function ChartWheel({ data }: { data: WheelData }) {
+const LIGHT_THEME = {
+  ringOuter: '#c8cce0', ringSign: '#d8dcee', ringHouse: '#e4e8f4', ringInner: '#f0f0f8',
+  stroke: 'rgba(0,0,0,0.15)', strokeAngle: 'rgba(0,0,0,0.35)',
+  signGlyph: 'rgba(0,0,0,0.65)',
+  houseNum: 'rgba(0,0,0,0.45)',
+  angleLabel: 'rgba(0,0,0,0.65)',
+  notch: 'rgba(0,0,0,0.45)',
+  aspectFallback: 'rgba(0,0,0,0.15)',
+  planetGlyph: 'rgba(0,0,0,0.85)',
+  planetLabel: 'rgba(0,0,0,0.55)',
+}
+
+type WheelData = { planets: Record<string, number[]>; cusps: number[]; aspects: any[] }
+
+export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMode?: boolean }) {
+  const t = darkMode ? DARK_THEME : LIGHT_THEME
   const ascDeg = data.cusps[0] ?? 0
   const houseObstacles: Box[] = data.cusps.map((_, i) => {
     const pt = polar(houseMidAngle(data.cusps, i, ascDeg), R_INNER + 10)
@@ -174,15 +199,15 @@ export function ChartWheel({ data }: { data: WheelData }) {
   return (
     <svg width={SIZE} height={SIZE} style={{ display: 'block', margin: '0 auto' }}>
       {/* Ring fills */}
-      <circle cx={CX} cy={CY} r={R_OUTER} fill="#1a1a2e" />
-      <circle cx={CX} cy={CY} r={R_SIGN_INNER} fill="#16213e" />
-      <circle cx={CX} cy={CY} r={R_HOUSE_OUTER} fill="#0d1b2a" />
-      <circle cx={CX} cy={CY} r={R_INNER} fill="#242424" />
+      <circle cx={CX} cy={CY} r={R_OUTER} fill={t.ringOuter} />
+      <circle cx={CX} cy={CY} r={R_SIGN_INNER} fill={t.ringSign} />
+      <circle cx={CX} cy={CY} r={R_HOUSE_OUTER} fill={t.ringHouse} />
+      <circle cx={CX} cy={CY} r={R_INNER} fill={t.ringInner} />
 
       {/* Ring borders */}
       {[R_OUTER, R_SIGN_INNER, R_HOUSE_OUTER, R_INNER].map((r) => (
         <circle key={r} cx={CX} cy={CY} r={r} fill="none"
-          stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
+          stroke={t.stroke} strokeWidth={1} />
       ))}
 
       {/* Zodiac sign divisions and glyphs */}
@@ -195,9 +220,9 @@ export function ChartWheel({ data }: { data: WheelData }) {
         return (
           <g key={i}>
             <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-              stroke="rgba(255,255,255,0.2)" strokeWidth={1} />
+              stroke={t.stroke} strokeWidth={1} />
             <text x={pm.x} y={pm.y} textAnchor="middle" dominantBaseline="middle"
-              fontSize={15} fill="rgba(255,255,255,0.6)">{glyph}</text>
+              fontSize={15} fill={t.signGlyph}>{glyph}</text>
           </g>
         )
       })}
@@ -210,7 +235,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
         const p2 = polar(angle, R_HOUSE_OUTER)
         return (
           <line key={i} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-            stroke={isAngle ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)'}
+            stroke={isAngle ? t.strokeAngle : t.stroke}
             strokeWidth={isAngle ? 1.5 : 0.8} />
         )
       })}
@@ -220,7 +245,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
         const mid = polar(houseMidAngle(data.cusps, i, ascDeg), R_INNER + 10)
         return (
           <text key={i} x={mid.x} y={mid.y} textAnchor="middle" dominantBaseline="middle"
-            fontSize={10} fill="rgba(255,255,255,0.45)">{i + 1}</text>
+            fontSize={10} fill={t.houseNum}>{i + 1}</text>
         )
       })}
 
@@ -229,7 +254,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
         const p = polar(eclToAngle(data.cusps[idx] ?? 0, ascDeg), R_HOUSE_OUTER + 10)
         return (
           <text key={label} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle"
-            fontSize={9} fill="rgba(255,255,255,0.7)" fontWeight="bold">{label}</text>
+            fontSize={9} fill={t.angleLabel} fontWeight="bold">{label}</text>
         )
       })}
 
@@ -243,9 +268,9 @@ export function ChartWheel({ data }: { data: WheelData }) {
         return (
           <g key={name}>
             <line x1={i1.x} y1={i1.y} x2={i2.x} y2={i2.y}
-              stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+              stroke={t.notch} strokeWidth={1.5} />
             <line x1={o1.x} y1={o1.y} x2={o2.x} y2={o2.y}
-              stroke="rgba(255,255,255,0.7)" strokeWidth={1.5} />
+              stroke={t.notch} strokeWidth={1.5} />
           </g>
         )
       })}
@@ -258,7 +283,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
         if (asp.aspect?.name?.toLowerCase() === 'semisquare') return null
         const p1 = polar(eclToAngle(fromDeg, ascDeg), R_INNER)
         const p2 = polar(eclToAngle(toDeg, ascDeg), R_INNER)
-        const color = ASPECT_COLORS[asp.aspect?.name?.toLowerCase()] ?? 'rgba(255,255,255,0.2)'
+        const color = ASPECT_COLORS[asp.aspect?.name?.toLowerCase()] ?? t.aspectFallback
         return (
           <line key={i} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
             stroke={color} strokeWidth={0.9} opacity={0.65} />
@@ -274,9 +299,9 @@ export function ChartWheel({ data }: { data: WheelData }) {
         return (
           <g key={name}>
             <text x={pg.x} y={pg.y} textAnchor="middle" dominantBaseline="middle"
-              fontSize={PLANET_FONT_SIZES[name] ?? 24} fill="rgba(255,255,255,0.9)">{glyph}</text>
+              fontSize={PLANET_FONT_SIZES[name] ?? 24} fill={t.planetGlyph}>{glyph}</text>
             <text x={pl.x} y={pl.y} textAnchor="middle" dominantBaseline="middle"
-              fontSize={9} fill="rgba(255,255,255,0.55)">{formatArcMin(deg)}</text>
+              fontSize={9} fill={t.planetLabel}>{formatArcMin(deg)}</text>
           </g>
         )
       })}
