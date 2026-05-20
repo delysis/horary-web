@@ -472,7 +472,7 @@ function App() {
             <button onClick={() => nudgeTime(1)}>▶</button>
             <button onClick={resetToCastTime}>Reset</button>
           </div>
-          <div style={{ marginTop: 12, padding: 12, border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, overflowX: 'auto' }}>
+          <div style={{ marginTop: 12, padding: 12, border: 'none', borderRadius: 8, overflowX: 'auto' }}>
             <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
             <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
           </div>
@@ -488,7 +488,7 @@ function App() {
           <>
           <div style={{ display: 'grid', gridTemplateColumns: (showAngles || showHouses) && (showPlanets || showAspects) ? '1fr 1fr' : '1fr', gap: 0 }}>
             {(showAngles || showHouses) && (
-              <div style={{ padding: '12px 6px 12px 12px', border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, minWidth: 0 }}>
+              <div style={{ padding: '12px 6px 12px 12px', border: 'none', borderRadius: 8, minWidth: 0 }}>
                 {showAngles && (
                   <>
                     <h2 style={{ marginTop: 0 }}>Angles</h2>
@@ -516,7 +516,7 @@ function App() {
             )}
 
             {(showPlanets || showAspects) && (
-              <div style={{ padding: '12px 12px 12px 6px', border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, minWidth: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '12px 12px 12px 6px', border: 'none', borderRadius: 8, minWidth: 0, overflow: 'hidden' }}>
                 {showPlanets && (
                   <>
                     <h2 style={{ marginTop: 0 }}>Planets</h2>
@@ -546,7 +546,7 @@ function App() {
             )}
           </div>
           {showAspectGrid && (
-            <div style={{ marginTop: 16, padding: 12, border: darkMode ? 'none' : '1px solid rgba(0,0,0,0.15)', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ marginTop: 16, padding: 12, border: 'none', borderRadius: 8, overflow: 'hidden' }}>
               <h2 style={{ marginTop: 0 }}>Aspects chart</h2>
               <AspectGrid
                 planets={chart.summary.planets.map(p => p.name)}
