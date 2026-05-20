@@ -16,7 +16,7 @@ const ASPECT_COLORS: Record<string, string> = {
   conjunction: '#999',
   opposition: '#c55',
   square: '#c55',
-  trine: '#55c',
+  trine: '#5c5',
   sextile: '#5a5',
   quincunx: '#c85',
   semisextile: '#999',
@@ -255,6 +255,7 @@ export function ChartWheel({ data }: { data: WheelData }) {
         const fromDeg = data.planets[asp.point?.name]?.[0]
         const toDeg = data.planets[asp.toPoint?.name]?.[0]
         if (fromDeg == null || toDeg == null) return null
+        if (asp.aspect?.name?.toLowerCase() === 'semisquare') return null
         const p1 = polar(eclToAngle(fromDeg, ascDeg), R_INNER)
         const p2 = polar(eclToAngle(toDeg, ascDeg), R_INNER)
         const color = ASPECT_COLORS[asp.aspect?.name?.toLowerCase()] ?? 'rgba(255,255,255,0.2)'
