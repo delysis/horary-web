@@ -65,10 +65,11 @@ function App() {
     document.body.style.backgroundColor = darkMode ? '#242424' : '#ffffff'
     document.body.style.color = darkMode ? 'rgba(255,255,255,0.87)' : '#213547'
   }, [darkMode])
-  const [locationInputMode, setLocationInputMode] = useState<'search' | 'coordinates'>('search')
+  const [locationInputMode, setLocationInputMode] = useState<'search' | 'coordinates'>(() => localStorage.getItem('locationInputMode') === 'coordinates' ? 'coordinates' : 'search')
   const settingsRef = useRef<HTMLDivElement>(null)
   const questionEditRef = useRef<HTMLTextAreaElement>(null)
   const questionViewRef = useRef<HTMLTextAreaElement>(null)
+  const coordFallback = useRef<Record<string, string>>({})
 
   useLayoutEffect(() => {
     const ref = isEditing ? questionEditRef.current : questionViewRef.current
@@ -185,6 +186,17 @@ function App() {
     setTimeHour(newAmPm === 'AM' ? String(h === 12 ? 0 : h) : String(h === 12 ? 12 : h + 12))
   }
 
+  function handleDatePartChange(part: 'year' | 'month' | 'day', value: string) {
+    const [y, m, d] = dateLocal.split('-').map(Number)
+    let ny = y, nm = m, nd = d
+    if (part === 'year') ny = parseInt(value)
+    if (part === 'month') nm = parseInt(value)
+    if (part === 'day') nd = parseInt(value)
+    const maxDay = new Date(ny, nm, 0).getDate()
+    if (nd > maxDay) nd = maxDay
+    setDateLocal(`${String(ny).padStart(4, '0')}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`)
+  }
+
   function handleAmPmChange(val: 'AM' | 'PM') {
     setAmPm(val)
     const h = Number(timeHour) || 0
@@ -257,17 +269,6 @@ function App() {
 
   const locationFields = (
     <>
-      <div style={{ display: 'flex', gap: 16, marginBottom: 10, fontSize: '0.9em' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-          <input type="radio" name="locationInputMode" value="search" checked={locationInputMode === 'search'} onChange={() => { setLocationInputMode('search'); setLocationError('') }} />
-          Search by city
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-          <input type="radio" name="locationInputMode" value="coordinates" checked={locationInputMode === 'coordinates'} onChange={() => { setLocationInputMode('coordinates'); setLocationError('') }} />
-          Enter coordinates
-        </label>
-      </div>
-
       {locationInputMode === 'search' ? (
         <div style={{ marginBottom: 12 }}>
           <label>
@@ -279,7 +280,7 @@ function App() {
                 onChange={(e) => setLocationName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchLocation()}
                 placeholder="Search for a city or place"
-                style={{ flex: 1 }}
+                style={{ flex: 1, padding: '0.6em 0.8em' }}
               />
               <button onClick={searchLocation} disabled={locationSearching}>
                 {locationSearching ? 'Searching…' : 'Search'}
@@ -293,30 +294,30 @@ function App() {
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label>
-              Latitude (°, ′, ″)
+              Latitude
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                <input type="number" min={0} max={90} value={latDeg} onChange={(e) => setLatDeg(e.target.value)} style={{ width: 56 }} title="Degrees" />
+                <input type="number" min={0} max={90} value={latDeg} onFocus={() => { coordFallback.current.latDeg = latDeg }} onBlur={(e) => { if (e.target.value === '') setLatDeg(coordFallback.current.latDeg ?? '0') }} onChange={(e) => setLatDeg(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Degrees" />
                 <span>°</span>
-                <input type="number" min={0} max={59} value={latMin} onChange={(e) => setLatMin(e.target.value)} style={{ width: 56 }} title="Minutes" />
+                <input type="number" min={0} max={59} value={latMin} onFocus={() => { coordFallback.current.latMin = latMin }} onBlur={(e) => { if (e.target.value === '') setLatMin(coordFallback.current.latMin ?? '0') }} onChange={(e) => setLatMin(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Minutes" />
                 <span>′</span>
-                <input type="number" min={0} max={59} value={latSec} onChange={(e) => setLatSec(e.target.value)} style={{ width: 56 }} title="Seconds" />
+                <input type="number" min={0} max={59} value={latSec} onFocus={() => { coordFallback.current.latSec = latSec }} onBlur={(e) => { if (e.target.value === '') setLatSec(coordFallback.current.latSec ?? '0') }} onChange={(e) => setLatSec(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Seconds" />
                 <span>″</span>
-                <select value={latSign} onChange={(e) => setLatSign(e.target.value as 'N' | 'S')} style={{ marginLeft: 4 }}>
+                <select value={latSign} onChange={(e) => setLatSign(e.target.value as 'N' | 'S')} style={{ padding: '0.6em 0.8em' }}>
                   <option value="N">N</option>
                   <option value="S">S</option>
                 </select>
               </div>
             </label>
             <label>
-              Longitude (°, ′, ″)
+              Longitude
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                <input type="number" min={0} max={180} value={lonDeg} onChange={(e) => setLonDeg(e.target.value)} style={{ width: 56 }} title="Degrees" />
+                <input type="number" min={0} max={180} value={lonDeg} onFocus={() => { coordFallback.current.lonDeg = lonDeg }} onBlur={(e) => { if (e.target.value === '') setLonDeg(coordFallback.current.lonDeg ?? '0') }} onChange={(e) => setLonDeg(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Degrees" />
                 <span>°</span>
-                <input type="number" min={0} max={59} value={lonMin} onChange={(e) => setLonMin(e.target.value)} style={{ width: 56 }} title="Minutes" />
+                <input type="number" min={0} max={59} value={lonMin} onFocus={() => { coordFallback.current.lonMin = lonMin }} onBlur={(e) => { if (e.target.value === '') setLonMin(coordFallback.current.lonMin ?? '0') }} onChange={(e) => setLonMin(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Minutes" />
                 <span>′</span>
-                <input type="number" min={0} max={59} value={lonSec} onChange={(e) => setLonSec(e.target.value)} style={{ width: 56 }} title="Seconds" />
+                <input type="number" min={0} max={59} value={lonSec} onFocus={() => { coordFallback.current.lonSec = lonSec }} onBlur={(e) => { if (e.target.value === '') setLonSec(coordFallback.current.lonSec ?? '0') }} onChange={(e) => setLonSec(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Seconds" />
                 <span>″</span>
-                <select value={lonSign} onChange={(e) => setLonSign(e.target.value as 'E' | 'W')} style={{ marginLeft: 4 }}>
+                <select value={lonSign} onChange={(e) => setLonSign(e.target.value as 'E' | 'W')} style={{ padding: '0.6em 0.8em' }}>
                   <option value="E">E</option>
                   <option value="W">W</option>
                 </select>
@@ -364,6 +365,10 @@ function App() {
                 <input type="checkbox" checked={use24Hour} onChange={(e) => { localStorage.setItem('use24Hour', String(e.target.checked)); setUse24Hour(e.target.checked) }} />
                 Use 24-hour time
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginTop: 4 }}>
+                <input type="checkbox" checked={locationInputMode === 'coordinates'} onChange={(e) => { const m = e.target.checked ? 'coordinates' : 'search'; localStorage.setItem('locationInputMode', m); setLocationInputMode(m); setLocationError('') }} />
+                Enter coordinates manually
+              </label>
             </div>
           )}
         </div>
@@ -395,33 +400,50 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
             <label>
               Date
-              <input
-                type="date"
-                value={dateLocal}
-                onChange={(e) => setDateLocal(e.target.value)}
-                style={{ display: 'block', width: 'fit-content', marginTop: 4 }}
-              />
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+                {(() => {
+                  const [dy, dm, dd] = dateLocal.split('-').map(Number)
+                  const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
+                  const daysInMonth = new Date(dy, dm, 0).getDate()
+                  const selStyle = { padding: '0.6em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }
+                  return (<>
+                    <select value={dm} onChange={(e) => handleDatePartChange('month', e.target.value)} style={selStyle}>
+                      {months.map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
+                    </select>
+                    <select value={dd} onChange={(e) => handleDatePartChange('day', e.target.value)} style={selStyle}>
+                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <select value={dy} onChange={(e) => handleDatePartChange('year', e.target.value)} style={selStyle}>
+                      {Array.from({ length: new Date().getFullYear() - 1800 + 1 }, (_, i) => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </>)
+                })()}
+              </div>
             </label>
             <label>
               Time
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                {use24Hour ? (
-                  <>
-                    <input type="number" min={0} max={23} value={timeHour} onChange={(e) => setTimeHour(e.target.value)} style={{ width: '4ch' }} title="Hour" />
-                    <span>:</span>
-                    <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={{ width: '4ch' }} title="Minute" />
-                  </>
-                ) : (
-                  <>
-                    <input type="number" value={display12Hour} onChange={(e) => handleHour12Change(e.target.value)} style={{ width: '4ch' }} title="Hour" />
-                    <span>:</span>
-                    <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={{ width: '4ch' }} title="Minute" />
-                    <select value={amPm} onChange={(e) => handleAmPmChange(e.target.value as 'AM' | 'PM')}>
-                      <option value="AM">AM</option>
-                      <option value="PM">PM</option>
-                    </select>
-                  </>
-                )}
+                {(() => {
+                  const numStyle = { width: '3.5ch', padding: '0.6em 0.4em', fontSize: 'inherit', fontFamily: 'inherit', textAlign: 'center' as const }
+                  const selStyle = { padding: '0.6em 0.8em', fontSize: 'inherit', fontFamily: 'inherit' }
+                  return use24Hour ? (
+                    <>
+                      <input type="number" min={0} max={23} value={timeHour} onChange={(e) => setTimeHour(e.target.value)} style={numStyle} title="Hour" />
+                      <span>:</span>
+                      <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={numStyle} title="Minute" />
+                    </>
+                  ) : (
+                    <>
+                      <input type="number" value={display12Hour} onChange={(e) => handleHour12Change(e.target.value)} style={numStyle} title="Hour" />
+                      <span>:</span>
+                      <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={numStyle} title="Minute" />
+                      <select value={amPm} onChange={(e) => handleAmPmChange(e.target.value as 'AM' | 'PM')} style={selStyle}>
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </>
+                  )
+                })()}
               </div>
             </label>
           </div>
@@ -437,7 +459,7 @@ function App() {
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="What is your question?"
               rows={1}
-              style={{ display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box', resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit' }}
+              style={{ display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box', resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', minHeight: '2.7em', padding: '0.6em 0.8em' }}
             />
           </label>
         </div>
@@ -452,16 +474,28 @@ function App() {
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="What is your question?"
             rows={1}
-            style={{ display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box', resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit' }}
+            style={{ display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box', resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', minHeight: '2.7em', padding: '0.6em 0.8em' }}
           />
         </label>
       )}
 
       {(isEditing || locationSet) && chart.summary ? (
-        <>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 12, padding: 12, border: 'none', borderRadius: 8, overflowX: 'auto' }}>
+          <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
+          <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
+        </div>
+      ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        {(isEditing || locationSet) && chart.error ? (
+          <div style={{ padding: 12, border: '1px solid #c33', borderRadius: 8 }}>
+            <b>Error:</b> {chart.error}
+          </div>
+        ) : (isEditing || locationSet) && chart.summary ? (
+          <>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <button onClick={() => nudgeTime(-1)}>◀</button>
-            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment">
+            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment" style={{ padding: '0.6em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }}>
               <option value="minute">Minute</option>
               <option value="hour">Hour</option>
               <option value="day">Day</option>
@@ -472,20 +506,6 @@ function App() {
             <button onClick={() => nudgeTime(1)}>▶</button>
             <button onClick={resetToCastTime}>Reset</button>
           </div>
-          <div style={{ marginTop: 12, padding: 12, border: 'none', borderRadius: 8, overflowX: 'auto' }}>
-            <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
-            <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
-          </div>
-        </>
-      ) : null}
-
-      <div style={{ marginTop: 16 }}>
-        {(isEditing || locationSet) && chart.error ? (
-          <div style={{ padding: 12, border: '1px solid #c33', borderRadius: 8 }}>
-            <b>Error:</b> {chart.error}
-          </div>
-        ) : (isEditing || locationSet) && chart.summary ? (
-          <>
           <div style={{ display: 'grid', gridTemplateColumns: (showAngles || showHouses) && (showPlanets || showAspects) ? '1fr 1fr' : '1fr', gap: 0 }}>
             {(showAngles || showHouses) && (
               <div style={{ padding: '12px 6px 12px 12px', border: 'none', borderRadius: 8, minWidth: 0 }}>

@@ -11,7 +11,20 @@
   outline: none;
 }
 
-.night-mode input,
+input:not([type="radio"]):not([type="checkbox"]),
+select,
+textarea {
+  border-radius: 8px;
+  background-color: #f9f9f9;
+  border: 1px solid #ccc;
+}
+
+button:not(.icon-btn) {
+  border-color: #ccc;
+}
+
+/* Boost specificity to override the input rule above */
+.night-mode input:not([type="radio"]):not([type="checkbox"]),
 .night-mode select,
 .night-mode textarea {
   background-color: #2a2a2a;
