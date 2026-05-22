@@ -280,7 +280,7 @@ function App() {
                 onChange={(e) => setLocationName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && searchLocation()}
                 placeholder="Search for a city or place"
-                style={{ flex: 1, padding: '0.6em 0.8em' }}
+                style={{ flex: 1, padding: '0.5em 0.8em' }}
               />
               <button onClick={searchLocation} disabled={locationSearching}>
                 {locationSearching ? 'Searching…' : 'Search'}
@@ -288,7 +288,6 @@ function App() {
             </div>
             {locationError && <div style={{ color: '#c55', marginTop: 4 }}>{locationError}</div>}
           </label>
-          <div style={{ marginTop: 6, opacity: 0.7, fontSize: '0.9em' }}>Timezone: {locationTimezone}</div>
         </div>
       ) : (
         <div style={{ marginBottom: 12 }}>
@@ -296,13 +295,13 @@ function App() {
             <label>
               Latitude
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                <input type="number" min={0} max={90} value={latDeg} onFocus={() => { coordFallback.current.latDeg = latDeg }} onBlur={(e) => { if (e.target.value === '') setLatDeg(coordFallback.current.latDeg ?? '0') }} onChange={(e) => setLatDeg(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Degrees" />
+                <input type="number" min={0} max={90} value={latDeg} onFocus={() => { coordFallback.current.latDeg = latDeg }} onBlur={(e) => { if (e.target.value === '') setLatDeg(coordFallback.current.latDeg ?? '0') }} onChange={(e) => setLatDeg(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Degrees" />
                 <span>°</span>
-                <input type="number" min={0} max={59} value={latMin} onFocus={() => { coordFallback.current.latMin = latMin }} onBlur={(e) => { if (e.target.value === '') setLatMin(coordFallback.current.latMin ?? '0') }} onChange={(e) => setLatMin(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Minutes" />
+                <input type="number" min={0} max={59} value={latMin} onFocus={() => { coordFallback.current.latMin = latMin }} onBlur={(e) => { if (e.target.value === '') setLatMin(coordFallback.current.latMin ?? '0') }} onChange={(e) => setLatMin(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Minutes" />
                 <span>′</span>
-                <input type="number" min={0} max={59} value={latSec} onFocus={() => { coordFallback.current.latSec = latSec }} onBlur={(e) => { if (e.target.value === '') setLatSec(coordFallback.current.latSec ?? '0') }} onChange={(e) => setLatSec(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Seconds" />
+                <input type="number" min={0} max={59} value={latSec} onFocus={() => { coordFallback.current.latSec = latSec }} onBlur={(e) => { if (e.target.value === '') setLatSec(coordFallback.current.latSec ?? '0') }} onChange={(e) => setLatSec(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Seconds" />
                 <span>″</span>
-                <select value={latSign} onChange={(e) => setLatSign(e.target.value as 'N' | 'S')} style={{ padding: '0.6em 0.8em' }}>
+                <select value={latSign} onChange={(e) => setLatSign(e.target.value as 'N' | 'S')} style={{ padding: '0.5em 0.8em' }}>
                   <option value="N">N</option>
                   <option value="S">S</option>
                 </select>
@@ -311,20 +310,19 @@ function App() {
             <label>
               Longitude
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                <input type="number" min={0} max={180} value={lonDeg} onFocus={() => { coordFallback.current.lonDeg = lonDeg }} onBlur={(e) => { if (e.target.value === '') setLonDeg(coordFallback.current.lonDeg ?? '0') }} onChange={(e) => setLonDeg(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Degrees" />
+                <input type="number" min={0} max={180} value={lonDeg} onFocus={() => { coordFallback.current.lonDeg = lonDeg }} onBlur={(e) => { if (e.target.value === '') setLonDeg(coordFallback.current.lonDeg ?? '0') }} onChange={(e) => setLonDeg(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Degrees" />
                 <span>°</span>
-                <input type="number" min={0} max={59} value={lonMin} onFocus={() => { coordFallback.current.lonMin = lonMin }} onBlur={(e) => { if (e.target.value === '') setLonMin(coordFallback.current.lonMin ?? '0') }} onChange={(e) => setLonMin(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Minutes" />
+                <input type="number" min={0} max={59} value={lonMin} onFocus={() => { coordFallback.current.lonMin = lonMin }} onBlur={(e) => { if (e.target.value === '') setLonMin(coordFallback.current.lonMin ?? '0') }} onChange={(e) => setLonMin(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Minutes" />
                 <span>′</span>
-                <input type="number" min={0} max={59} value={lonSec} onFocus={() => { coordFallback.current.lonSec = lonSec }} onBlur={(e) => { if (e.target.value === '') setLonSec(coordFallback.current.lonSec ?? '0') }} onChange={(e) => setLonSec(e.target.value)} style={{ width: '6ch', padding: '0.6em 0.4em' }} title="Seconds" />
+                <input type="number" min={0} max={59} value={lonSec} onFocus={() => { coordFallback.current.lonSec = lonSec }} onBlur={(e) => { if (e.target.value === '') setLonSec(coordFallback.current.lonSec ?? '0') }} onChange={(e) => setLonSec(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Seconds" />
                 <span>″</span>
-                <select value={lonSign} onChange={(e) => setLonSign(e.target.value as 'E' | 'W')} style={{ padding: '0.6em 0.8em' }}>
+                <select value={lonSign} onChange={(e) => setLonSign(e.target.value as 'E' | 'W')} style={{ padding: '0.5em 0.8em' }}>
                   <option value="E">E</option>
                   <option value="W">W</option>
                 </select>
               </div>
             </label>
           </div>
-          <div style={{ marginTop: 6, opacity: 0.7, fontSize: '0.9em' }}>Timezone: {locationTimezone}</div>
         </div>
       )}
     </>
@@ -374,13 +372,11 @@ function App() {
         </div>
         </div>
       </div>
-      <p style={{ marginTop: 0, marginBottom: 16, opacity: 0.6, fontSize: '0.9em' }}>House system: Regiomontanus</p>
 
       {!isEditing && (
-        <div style={{ marginBottom: 16, opacity: 0.85 }}>
+        <div style={{ marginTop: 32, marginBottom: 16, opacity: 0.85 }}>
           <div><b>Date:</b> {parsed.dt.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })}</div>
           <div><b>Time:</b> {parsed.dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour })}</div>
-          <div><b>Timezone:</b> {locationTimezone}</div>
           {geolocating && <div style={{ opacity: 0.6, marginTop: 4 }}>Detecting location…</div>}
           {!geolocating && locationDetected && (
             <div><b>Location:</b> {detectedCityName || `${fmtDMS(latDeg, latMin, latSec, latSign)}, ${fmtDMS(lonDeg, lonMin, lonSec, lonSign)}`}</div>
@@ -396,7 +392,7 @@ function App() {
       )}
 
       {isEditing && (
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginTop: 32, marginBottom: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
             <label>
               Date
@@ -405,7 +401,7 @@ function App() {
                   const [dy, dm, dd] = dateLocal.split('-').map(Number)
                   const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
                   const daysInMonth = new Date(dy, dm, 0).getDate()
-                  const selStyle = { padding: '0.6em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }
+                  const selStyle = { padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }
                   return (<>
                     <select value={dm} onChange={(e) => handleDatePartChange('month', e.target.value)} style={selStyle}>
                       {months.map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
@@ -424,8 +420,8 @@ function App() {
               Time
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                 {(() => {
-                  const numStyle = { width: '3.5ch', padding: '0.6em 0.4em', fontSize: 'inherit', fontFamily: 'inherit', textAlign: 'center' as const }
-                  const selStyle = { padding: '0.6em 0.8em', fontSize: 'inherit', fontFamily: 'inherit' }
+                  const numStyle = { width: '3.5ch', padding: '0.5em 0.4em', fontSize: 'inherit', fontFamily: 'inherit', textAlign: 'center' as const }
+                  const selStyle = { padding: '0.5em 0.8em', fontSize: 'inherit', fontFamily: 'inherit' }
                   return use24Hour ? (
                     <>
                       <input type="number" min={0} max={23} value={timeHour} onChange={(e) => setTimeHour(e.target.value)} style={numStyle} title="Hour" />
@@ -451,32 +447,38 @@ function App() {
           <button style={{ marginTop: 12 }} onClick={resetToNow}>
             Use current time &amp; place
           </button>
-          <label style={{ display: 'block', marginTop: 16 }}>
+          <div style={{ marginTop: 16 }}>
             Question
-            <textarea
-              ref={questionEditRef}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What is your question?"
-              rows={1}
-              style={{ display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box', resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', minHeight: '2.7em', padding: '0.6em 0.8em' }}
-            />
-          </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 4 }}>
+              <textarea
+                ref={questionEditRef}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="What is your question?"
+                rows={1}
+                style={{ flex: 1, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', padding: '0.5em 0.8em' }}
+              />
+              <button onClick={saveCastSnapshot}>Submit</button>
+            </div>
+          </div>
         </div>
       )}
 
       {!isEditing && (
-        <label style={{ display: 'block', marginBottom: 16 }}>
+        <div style={{ marginBottom: 16 }}>
           Question
-          <textarea
-            ref={questionViewRef}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="What is your question?"
-            rows={1}
-            style={{ display: 'block', width: '100%', marginTop: 4, boxSizing: 'border-box', resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', minHeight: '2.7em', padding: '0.6em 0.8em' }}
-          />
-        </label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 4 }}>
+            <textarea
+              ref={questionViewRef}
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="What is your question?"
+              rows={1}
+              style={{ flex: 1, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', padding: '0.5em 0.8em' }}
+            />
+            <button onClick={saveCastSnapshot}>Submit</button>
+          </div>
+        </div>
       )}
 
       {(isEditing || locationSet) && chart.summary ? (
@@ -495,7 +497,7 @@ function App() {
           <>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <button onClick={() => nudgeTime(-1)}>◀</button>
-            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment" style={{ padding: '0.6em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }}>
+            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment" style={{ padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }}>
               <option value="minute">Minute</option>
               <option value="hour">Hour</option>
               <option value="day">Day</option>
