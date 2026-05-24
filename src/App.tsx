@@ -49,6 +49,7 @@ function App() {
   const [lonSec, setLonSec] = useState('')
   const [lonSign, setLonSign] = useState<'E' | 'W'>('W')
   const [question, setQuestion] = useState('')
+  const [submitError, setSubmitError] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [showAngles, setShowAngles] = useState(() => localStorage.getItem('showAngles') === 'true')
   const [showHouses, setShowHouses] = useState(() => localStorage.getItem('showHouses') === 'true')
@@ -137,6 +138,13 @@ function App() {
   useEffect(() => { detectLocation() }, [])
 
   function saveCastSnapshot() {
+    const h = String(Number(timeHour) || 0).padStart(2, '0')
+    const m = String(Number(timeMinute) || 0).padStart(2, '0')
+    if (new Date(`${dateLocal}T${h}:${m}`) > new Date()) {
+      setSubmitError('The date and time cannot be in the future.')
+      return
+    }
+    setSubmitError('')
     setCastSnapshot({ date: dateLocal, hour: timeHour, minute: timeMinute, amPm })
   }
 
@@ -195,6 +203,7 @@ function App() {
     const maxDay = new Date(ny, nm, 0).getDate()
     if (nd > maxDay) nd = maxDay
     setDateLocal(`${String(ny).padStart(4, '0')}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`)
+    setSubmitError('')
   }
 
   function handleAmPmChange(val: 'AM' | 'PM') {
@@ -341,7 +350,7 @@ function App() {
           {showSettings && (
             <div style={{ position: 'absolute', right: 0, top: '100%', background: darkMode ? '#1a1a1a' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, borderRadius: 8, padding: 12, minWidth: 220, zIndex: 9999 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isEditing} onChange={(e) => { if (!e.target.checked) saveCastSnapshot(); setIsEditing(e.target.checked); if (!e.target.checked) resetToNow() }} />
+                <input type="checkbox" checked={isEditing} onChange={(e) => { if (!e.target.checked) saveCastSnapshot(); setIsEditing(e.target.checked); if (!e.target.checked) { resetToNow(); setSubmitError('') } }} />
                 Look up past question
               </label>
               <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
@@ -399,18 +408,22 @@ function App() {
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                 {(() => {
                   const [dy, dm, dd] = dateLocal.split('-').map(Number)
+                  const now = new Date()
+                  const curYear = now.getFullYear(), curMonth = now.getMonth() + 1, curDay = now.getDate()
                   const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
                   const daysInMonth = new Date(dy, dm, 0).getDate()
+                  const maxMonth = dy === curYear ? curMonth : 12
+                  const maxDay = (dy === curYear && dm === curMonth) ? curDay : daysInMonth
                   const selStyle = { padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }
                   return (<>
                     <select value={dm} onChange={(e) => handleDatePartChange('month', e.target.value)} style={selStyle}>
-                      {months.map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
+                      {months.slice(0, maxMonth).map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
                     </select>
                     <select value={dd} onChange={(e) => handleDatePartChange('day', e.target.value)} style={selStyle}>
-                      {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                      {Array.from({ length: maxDay }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                     <select value={dy} onChange={(e) => handleDatePartChange('year', e.target.value)} style={selStyle}>
-                      {Array.from({ length: new Date().getFullYear() - 1800 + 1 }, (_, i) => new Date().getFullYear() - i).map(y => <option key={y} value={y}>{y}</option>)}
+                      {Array.from({ length: curYear - 1800 + 1 }, (_, i) => curYear - i).map(y => <option key={y} value={y}>{y}</option>)}
                     </select>
                   </>)
                 })()}
@@ -420,6 +433,9 @@ function App() {
               Time
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                 {(() => {
+                  const now = new Date()
+                  const [dy, dm, dd] = dateLocal.split('-').map(Number)
+                  const isToday = dy === now.getFullYear() && dm === now.getMonth() + 1 && dd === now.getDate()
                   const numStyle = { width: '3.5ch', padding: '0.5em 0.4em', fontSize: 'inherit', fontFamily: 'inherit', textAlign: 'center' as const }
                   const selStyle = { padding: '0.5em 0.8em', fontSize: 'inherit', fontFamily: 'inherit' }
                   return use24Hour ? (
@@ -435,7 +451,7 @@ function App() {
                       <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={numStyle} title="Minute" />
                       <select value={amPm} onChange={(e) => handleAmPmChange(e.target.value as 'AM' | 'PM')} style={selStyle}>
                         <option value="AM">AM</option>
-                        <option value="PM">PM</option>
+                        {now.getHours() >= 12 || !isToday ? <option value="PM">PM</option> : null}
                       </select>
                     </>
                   )
@@ -460,6 +476,7 @@ function App() {
               />
               <button onClick={saveCastSnapshot}>Submit</button>
             </div>
+            {submitError && <div style={{ color: '#c55', marginTop: 6, fontSize: '0.9em' }}>{submitError}</div>}
           </div>
         </div>
       )}
@@ -478,6 +495,7 @@ function App() {
             />
             <button onClick={saveCastSnapshot}>Submit</button>
           </div>
+          {submitError && <div style={{ color: '#c55', marginTop: 6, fontSize: '0.9em' }}>{submitError}</div>}
         </div>
       )}
 
