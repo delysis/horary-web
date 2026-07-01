@@ -1,0 +1,941 @@
+{
+  "profile": "traditional-horary-textbook-v1",
+  "pipelineVersion": "2026-07-01",
+  "sourceBasis": {
+    "summary": "Summarized traditional horary judgement process derived from the local OCR of John Frawley's The Horary Textbook. This file encodes procedure, not copied source prose.",
+    "pageReferenceNote": "Page numbers in sourcePages are printed book pages; main-text PDF page numbers are generally printed page + 9.",
+    "localPdfCandidates": [
+      "/Users/george/Downloads/The Horary Textbook - John Frawley.pdf",
+      "/Users/george/christian_mystics/The Horary Textbook - John Frawley.pdf"
+    ],
+    "localOcr": "/Users/george/christian_mystics/alexandria_pipeline/horary_ocr_20260517/The Horary Textbook - John Frawley.dots_ocr.md",
+    "ocrQa": {
+      "pagesWithText": 281,
+      "totalWords": 103631,
+      "needsReviewPages": 0
+    },
+    "primaryPages": [
+      "16-23",
+      "24-38",
+      "39-47",
+      "53-61",
+      "63-79",
+      "80-92",
+      "93-109",
+      "110-117",
+      "118-135",
+      "136-150"
+    ]
+  },
+  "cachePolicy": {
+    "stablePrefixKeyFields": [
+      "profile",
+      "pipelineVersion",
+      "promptVersion",
+      "schemaVersion",
+      "modelSha256",
+      "contextTokens",
+      "generationParams"
+    ],
+    "separateStablePromptFromVariablePayload": true,
+    "stablePromptIncludes": [
+      "global doctrine",
+      "microtask instructions",
+      "output schema",
+      "verifier checklist"
+    ],
+    "variablePayloadIncludes": [
+      "question text",
+      "chart facts",
+      "settings",
+      "risk classification"
+    ],
+    "kvCacheNote": "For in-process llama.cpp, cache the stable prompt prefix per microtask and invalidate on any key-field mismatch. For sidecar HTTP, this file still keeps prompts stable for later migration."
+  },
+  "globalRules": [
+    "Interpret only supplied deterministic chart facts; never recalculate positions, houses, aspects, dignities, lots, timing, or planetary hours.",
+    "Judge horary, not natal astrology. Start with the question, querent, quesited, and relevant house assignment.",
+    "Use traditional sign rulers for house rulership. Treat outer planets as secondary descriptive testimony only when supplied chart facts put them on a relevant cusp or significator.",
+    "Dignity, reception, and aspect are separate questions: dignity shows condition or capacity, reception shows inclination or motive, and aspect or placement supplies occasion or testimony.",
+    "Use the Moon as the querent's cosignificator unless it is already the main significator of the quesited. In relationship questions, use Sun and Venus as natural gender significators only when they are relevant and not already assigned.",
+    "Do not invent unidentified actors from house rulerships. If another planet is active, identify it cautiously from house rulership, placement, and receptions; if uncertain, say so.",
+    "Prefer the concrete house meaning over an abstract one. Distinguish a thing from its function: the object itself, the action done with it, and the person involved may belong to different houses.",
+    "Use turned houses only when the matter genuinely belongs to another person. Prefer a radical house when the matter is public, general, or not personally owned by the turned subject.",
+    "Every major interpretive claim must cite a supplied chart fact in plain language.",
+    "If facts needed for a pass are absent, mark the pass low confidence instead of inventing the fact."
+  ],
+  "checkerOutputContract": {
+    "shape": {
+      "claim": "One concise judgement claim.",
+      "polarity": "support|oppose|neutral|unclear",
+      "strength": "decisive|strong|moderate|minor",
+      "actors": "Querent, quesited, Moon, blocker, helper, house, or topic involved.",
+      "evidence": "Concrete supplied chart fact only.",
+      "rulePage": "Printed page reference when this claim depends on a rule in the source summary.",
+      "caveat": "Missing fact, ambiguity, contextual exception, or high-stakes limitation."
+    },
+    "rules": [
+      "Use one claim per testimony so parallel checkers can be reconciled without prose parsing.",
+      "Do not emit a decisive claim from a minor testimony unless the rule explicitly allows it.",
+      "If a testimony is absent from supplied chart facts, emit no claim or emit an unclear caveat; do not infer the missing astronomy."
+    ]
+  },
+  "houseAssignmentRules": [
+    {
+      "id": "cast_moment_and_place",
+      "rule": "The chart belongs to the moment and place at which the astrologer understands the question. In this app the chart facts are already cast; do not challenge the cast unless the supplied metadata is missing or inconsistent.",
+      "sourcePages": [
+        16,
+        17
+      ]
+    },
+    {
+      "id": "regiomontanus_default",
+      "rule": "Regiomontanus is the preferred horary house system. If the app settings use another house system, judge the supplied facts while noting lower confidence for traditional house doctrine.",
+      "sourcePages": [
+        24,
+        25
+      ]
+    },
+    {
+      "id": "five_degree_cusp_rule",
+      "rule": "A planet within about 5 degrees before the next house cusp may belong to that next house only when it is in the same sign as the cusp. This affects house placement, not sign placement.",
+      "sourcePages": [
+        26,
+        65
+      ]
+    },
+    {
+      "id": "one_ruler_per_house",
+      "rule": "The house ruler is the traditional ruler of the sign on the cusp. Do not use co-rulers. If the same planet must signify both parties and separation is needed, consider next-sign ruler, a planet on the cusp, or almuten only as fallback.",
+      "sourcePages": [
+        39,
+        41,
+        60
+      ]
+    }
+  ],
+  "commonHouseMap": [
+    {
+      "house": 1,
+      "core": "querent, body, immediate vehicle, the local situation, the group identified with the querent"
+    },
+    {
+      "house": 2,
+      "core": "movable possessions, money, sustenance, self-value, close adviser or lawyer acting in this case"
+    },
+    {
+      "house": 3,
+      "core": "siblings, cousins, neighbors, routine journeys, elementary knowledge, messages sent, rumors"
+    },
+    {
+      "house": 4,
+      "core": "father, parents, ancestry, home, land, immovable property, buried things, end of the matter when needed"
+    },
+    {
+      "house": 5,
+      "core": "children, pregnancy, sex as activity, pleasure, parties, creativity as one's product, profit from property"
+    },
+    {
+      "house": 6,
+      "core": "illness, hospitals as houses of illness, employees, servants, subordinates, small animals"
+    },
+    {
+      "house": 7,
+      "core": "partners, spouse, sweetheart, ex, desired partner, buyer or seller, client, opponent, open enemy, any otherwise unassigned person"
+    },
+    {
+      "house": 8,
+      "core": "death, other person's money, partner's esteem, general inheritance, anguish when querent's significator is there without topical reason"
+    },
+    {
+      "house": 9,
+      "core": "special journeys, foreign countries, religion, higher learning, teachers, priests, astrologers, dreams, predictions"
+    },
+    {
+      "house": 10,
+      "core": "king, government, judge, boss, career, public success, mother, formal marriage in arranged or dynastic contexts"
+    },
+    {
+      "house": 11,
+      "core": "friends, wages as boss's money, government grants and favors, lottery or windfall, hopes as obstruction when relevant"
+    },
+    {
+      "house": 12,
+      "core": "secret enemies, hidden things, self-undoing, vice, fears, prisons, large animals"
+    }
+  ],
+  "microTasks": [
+    {
+      "id": "question_scope",
+      "title": "Question Scope",
+      "phase": "setup",
+      "parallelGroup": null,
+      "objective": "Reduce the user's wording to the actual horary question, identify the querent, and state the default outcome if nothing changes.",
+      "compactPrompt": "Name the real question in one sentence. Identify the querent, whether the asker is asking for self, for another, or as a mouthpiece, and the default outcome if no chart testimony changes the situation.",
+      "detailedChecks": [
+        "Cut away irrelevant story detail and map the question to a recognizable form such as love, job, contest, deal, property, message, lost object, illness, money, travel, or weather.",
+        "If the question asks several related follow-ups, keep them under the same chart; if unrelated issues are mixed, flag ambiguity.",
+        "Treat every chart as judgeable; do not reject judgement because of early or late Ascendant, Saturn in the 7th, or similar considerations.",
+        "If the question is mechanical, repeated without genuine interest, or asks an unanswerable meta-question, lower confidence and ask for a better question."
+      ],
+      "outputKeys": [
+        "realQuestion",
+        "querent",
+        "defaultOutcome",
+        "ambiguities"
+      ],
+      "sourcePages": [
+        146,
+        150
+      ]
+    },
+    {
+      "id": "house_assignment",
+      "title": "House Assignment",
+      "phase": "setup",
+      "parallelGroup": null,
+      "objective": "Assign relevant houses for querent, quesited, money, opponents, helpers, or context before interpreting planets.",
+      "compactPrompt": "Select the house or turned house for each actor or thing. Prefer concrete meanings and explain thing-versus-function distinctions. If two assignments are plausible, carry both and rank them.",
+      "detailedChecks": [
+        "Use 1st for the querent unless the asker is relaying someone else's own question.",
+        "Use 7th for partners, desired partners, opponents, buyers, sellers, clients, and unassigned other people.",
+        "Use 10th for jobs, bosses, government, judges, and public success; do not use 6th for the querent's job.",
+        "Use 6th for illness, employees, servants, and small animals.",
+        "Use 4th for land, property, home, father, and sometimes the end of the matter.",
+        "For another person's thing, turn the chart only if that thing belongs to them in the question's reality.",
+        "For death and imprisonment concerning another person, check both radical and turned 8th or 12th."
+      ],
+      "outputKeys": [
+        "assignments",
+        "turnedHouses",
+        "assignmentConfidence"
+      ],
+      "sourcePages": [
+        24,
+        38,
+        146,
+        147
+      ]
+    },
+    {
+      "id": "significator_selection",
+      "title": "Significator Selection",
+      "phase": "setup",
+      "parallelGroup": null,
+      "objective": "Choose the planets that signify the main actors and supporting topics.",
+      "compactPrompt": "Select classical house rulers as primary significators. Add the Moon for the querent unless already used by the quesited. Use natural rulers only as secondary or when the chart strongly directs it.",
+      "detailedChecks": [
+        "Use one traditional sign ruler per house cusp.",
+        "If one planet rules both querent and quesited and an aspect is needed, consider the next sign ruler, a planet right on the cusp in the same sign, or almuten as fallback.",
+        "Moon usually cosignifies the querent and often describes the querent's emotional focus.",
+        "Natural rulers can supplement: Sun for men, Venus for women, Mercury for documents, Moon for lost objects, Mars for surgery, but accidental house rulership is primary.",
+        "Planets in a house affect it but do not rule it unless the special cusp fallback applies."
+      ],
+      "outputKeys": [
+        "primarySignificators",
+        "secondarySignificators",
+        "moonRole",
+        "fallbacks"
+      ],
+      "sourcePages": [
+        39,
+        47
+      ]
+    },
+    {
+      "id": "essential_dignity_pass",
+      "title": "Essential Dignity",
+      "phase": "analysis",
+      "parallelGroup": "condition",
+      "objective": "Assess how well each significator conforms to its own nature and how that condition describes the matter.",
+      "compactPrompt": "For each primary significator, summarize major dignity or debility first: sign, exaltation, detriment, fall, then triplicity, term, face, peregrine if supplied. Read the condition in context.",
+      "detailedChecks": [
+        "Strong sign or exaltation can behave well or show strong quality; detriment or fall can show corruption, harm, weakness of condition, or exaggerated badness depending on context.",
+        "Do not treat benefics as helpful when essentially debilitated or malefics as harmful when essentially strong without context.",
+        "Triplicity is moderate comfort. Term and face are minor and should not outweigh major dignity or debility.",
+        "Peregrine shows drifting or lack of direction unless travel/search context explains it.",
+        "A placement can be descriptive rather than morally positive or negative when it exactly matches the thing asked about."
+      ],
+      "outputKeys": [
+        "conditionFindings",
+        "contextualOverrides"
+      ],
+      "sourcePages": [
+        53,
+        62
+      ]
+    },
+    {
+      "id": "accidental_strength_pass",
+      "title": "Accidental Strength",
+      "phase": "analysis",
+      "parallelGroup": "condition",
+      "objective": "Assess whether each significator has the practical power to act.",
+      "compactPrompt": "Evaluate supplied accidental factors: angularity, relevant house placement, joy, retrograde, station, speed, combustion, cazimi, under beams, opposition to Sun, besiegement, Nodes, major fixed stars, Moon light, void Moon, via combusta.",
+      "detailedChecks": [
+        "Angular houses strengthen, 6th/8th/12th weaken, and other houses are neutral unless the question gives a good reason for the placement.",
+        "Retrograde is favorable for return/back questions but otherwise a serious problem; station is very weak and must be read with what the planet is turning toward or away from.",
+        "Fast planets have more impetus, except Saturn's excess speed can be contrary to its nature; slow planets are less able to act.",
+        "Combustion is extremely afflicting unless hiddenness is useful or the Sun conjunction itself is the relevant perfection. Same-sign combustion matters; under beams can cross signs.",
+        "Cazimi is highly strengthening and same-sign. Do not assume a combust planet becomes fine merely because it is heading toward cazimi.",
+        "North Node by conjunction increases or helps; South Node by conjunction decreases or harms. Nodes do not cast aspects.",
+        "A void Moon often means little will happen, but can be overruled by strong main significator testimony.",
+        "Moon in via combusta describes emotional turbulence more than raw weakness."
+      ],
+      "outputKeys": [
+        "capacityFindings",
+        "severeAfflictions",
+        "moonCondition"
+      ],
+      "sourcePages": [
+        63,
+        79
+      ]
+    },
+    {
+      "id": "reception_pass",
+      "title": "Reception And Motive",
+      "phase": "analysis",
+      "parallelGroup": "motive",
+      "objective": "Assess desire, motive, aversion, power, and shared interests from receptions.",
+      "compactPrompt": "Read each relevant planet's receptions toward the others. Sign is direct love or control, exaltation is inflated admiration, triplicity is friendship, term and face are minor interest, detriment is dislike, fall is exaggerated aversion. Negative reception can motivate as much as positive reception.",
+      "detailedChecks": [
+        "Reception is directional: a planet in another planet's dignity shows the first planet's attitude toward what the second signifies.",
+        "Mutual reception can help only to the degree that both planets have power to act.",
+        "If a planet is in its own dignity, note self-interest; this can explain motives in relationship and contest questions.",
+        "If both parties strongly value an unidentified planet, identify that planet cautiously; in relationship questions check whether it disposes the Part of Marriage if supplied.",
+        "Ambivalent reception is normal: one planet may show both liking and aversion through different dignity columns."
+      ],
+      "outputKeys": [
+        "motiveFindings",
+        "mutualReceptions",
+        "ambivalence"
+      ],
+      "sourcePages": [
+        80,
+        92
+      ]
+    },
+    {
+      "id": "perfection_pass",
+      "title": "Perfection",
+      "phase": "analysis",
+      "parallelGroup": "event",
+      "objective": "Determine whether the event can happen through exact applying contact or accepted placement testimony.",
+      "compactPrompt": "Look for exact applying Ptolemaic aspects or conjunctions between primary significators, then antiscia conjunction/opposition, then translation or collection. If the question is a state rather than an event, allow placement or condition testimony.",
+      "detailedChecks": [
+        "Use only conjunction, sextile, square, trine, and opposition. Ignore minor aspects.",
+        "Planets must be in signs capable of forming the aspect; an aspect that perfects only after sign change needs a meaningful change of circumstance and should be within a few degrees of the next sign.",
+        "Exact perfection matters. If a planet turns retrograde before perfection, the event fails unless another testimony supplies it.",
+        "The type of aspect is not inherently good or bad: dignity and reception decide whether the contact is desirable. Opposition often brings regret, separation, or excessive cost.",
+        "For most horaries, inspect the next aspect or next two if translation is involved; do not narrate a long chain of later aspects.",
+        "Placement can answer state questions, location questions, and some contest questions, but desire on a cusp is not automatically an event."
+      ],
+      "outputKeys": [
+        "directPerfections",
+        "indirectPerfections",
+        "placementTestimony",
+        "eventLikelihood"
+      ],
+      "sourcePages": [
+        93,
+        109,
+        110,
+        117
+      ]
+    },
+    {
+      "id": "blockage_pass",
+      "title": "Blockage",
+      "phase": "analysis",
+      "parallelGroup": "event",
+      "objective": "Check whether apparent perfection is prevented, delayed, or corrupted.",
+      "compactPrompt": "For each apparent perfection, check prohibition, frustration, refutation, station/sign change before perfection, and whether a third planet helps by translation/collection or blocks by getting there first.",
+      "detailedChecks": [
+        "Prohibition can occur when the applying planet meets another planet first, another planet reaches the target first, or another planet reaches the applying planet first.",
+        "Frustration occurs when the target planet completes another contact or changes sign before the applying planet perfects.",
+        "Refutation occurs when the applying planet turns away before exact contact.",
+        "Preventions do not always prevent; judge the strength, receptions, and context to decide if the obstacle is overcome.",
+        "The Moon's aspects rarely prohibit unless the Moon rules a house that makes the obstruction concrete.",
+        "Benefics can block as well as malefics if what they signify diverts the event."
+      ],
+      "outputKeys": [
+        "obstructions",
+        "overcomePossible",
+        "identifiedBlockingActors"
+      ],
+      "sourcePages": [
+        101,
+        106
+      ]
+    },
+    {
+      "id": "moon_story_pass",
+      "title": "Moon Story",
+      "phase": "analysis",
+      "parallelGroup": "condition",
+      "objective": "Summarize what the Moon shows about emotion, flow, and general unfolding.",
+      "compactPrompt": "State the Moon's role, condition, light, void status, via combusta status, recent separation, and next relevant application if supplied. Do not let the Moon override primary significators without reason.",
+      "detailedChecks": [
+        "The Moon often describes the querent's emotional state and the unfolding of the matter.",
+        "The Moon is stronger with useful light and increasing light, but full Moon is afflicted by opposition to the Sun.",
+        "Void Moon often means nothing much happens, especially when no stronger testimony contradicts it.",
+        "A long gap before the Moon's next aspect can act like voidness or stagnation.",
+        "If the Moon is main significator of the quesited, do not also treat it as querent cosignificator."
+      ],
+      "outputKeys": [
+        "moonRole",
+        "moonCondition",
+        "moonApplications"
+      ],
+      "sourcePages": [
+        41,
+        42,
+        73,
+        75
+      ]
+    },
+    {
+      "id": "contextual_modifiers_pass",
+      "title": "Contextual Modifiers",
+      "phase": "analysis",
+      "parallelGroup": "context",
+      "objective": "Use antiscia, fixed stars, Parts, outer planets, and planetary hour/day only when context and supplied facts make them relevant.",
+      "compactPrompt": "Check optional factors only after core testimonies. Antiscia can show hidden contact by conjunction or opposition. Fixed stars require conjunction to relevant significator or cusp. Parts must be directly relevant and their dispositors matter. Outer planets are secondary only.",
+      "detailedChecks": [
+        "Antiscia contacts by conjunction or opposition can perfect events or show hidden influence. Judge the planet by its bodily dignity, not by the antiscion sign.",
+        "Fixed stars do not cast aspects and should not be advanced by motion, except electional questions. Use only relevant conjunctions to significators or cusps.",
+        "Use Algol for loss of head or severe difficulty, Alcyone for regret or impaired sight, Aldebaran for a new start, Regulus for material success, Vindemiatrix for separation or overreach, Spica for protection, and Antares for endings or intense closure when relevant.",
+        "Do not introduce Parts unless the question directly calls for them. Parts do not cast aspects; planets apply to them. The dispositor of a Part is often more important than the Part itself.",
+        "Fortuna is secondary except for treasure, broad money questions, and lost objects when corroborated. Part of Marriage is useful for 1st/7th relationship quality, not the wedding event itself. Part of Divorce and Part of Resignation/Dismissal apply only when those topics are live.",
+        "Planetary hour/day agreement can describe radicality or tone if supplied, but do not reject a chart for lack of agreement."
+      ],
+      "outputKeys": [
+        "antiscia",
+        "fixedStars",
+        "parts",
+        "outerPlanets",
+        "planetaryHour"
+      ],
+      "sourcePages": [
+        110,
+        135
+      ]
+    },
+    {
+      "id": "timing_pass",
+      "title": "Timing",
+      "phase": "analysis",
+      "parallelGroup": "timing",
+      "objective": "If the event is likely, estimate timing from the event-giving testimony and question timeframe.",
+      "compactPrompt": "Only time an event after judging that it can happen. Use the degrees the applying planet must travel to exact perfection, then choose units from the question's natural short/middle/long range using applying planet sign and house, with volition as a modifier.",
+      "detailedChecks": [
+        "Use past-event calibration if the chart clearly shows a known past event.",
+        "Otherwise use degrees to exact perfection, not merely distance to the target's current position, unless moving-target timing is impossible or another testimony confirms the simpler measure.",
+        "Choose a consecutive range of time units that fits the question, such as hours/days/weeks or weeks/months/years.",
+        "Cardinal signs indicate the shortest unit, mutable signs the middle unit, fixed signs the longest unit.",
+        "For natural processes, cadent houses are fastest, succedent middle, angular slowest. If the actor has volition, power, and reception to act, angular can be fast and cadent can be slow.",
+        "Planetary speed adjusts the number of units a bit, not the type of unit. Double-bodied signs can make the number somewhat slower.",
+        "Do not use real-time ephemeris perfection as the event date except for specific long-range or named-date contexts."
+      ],
+      "outputKeys": [
+        "timingTestimony",
+        "degreeCount",
+        "unitRange",
+        "estimatedTiming",
+        "timingConfidence"
+      ],
+      "sourcePages": [
+        136,
+        145
+      ]
+    },
+    {
+      "id": "synthesis_pass",
+      "title": "Synthesis",
+      "phase": "synthesis",
+      "parallelGroup": null,
+      "objective": "Weigh testimonies into a concise answer, then explain the chart evidence and uncertainty.",
+      "compactPrompt": "Give a direct answer first when evidence supports it. Then state the strongest yes/no/condition testimonies, weighing house assignment, significators, dignity, reception, perfection, blockage, Moon, and timing. Keep uncertainty honest.",
+      "detailedChecks": [
+        "Do not count testimonies mechanically. A single severe testimony such as combustion, failed perfection, or wrong house assignment can outweigh several minor positives.",
+        "A good answer can be no, yes, yes with difficulty, yes but regret, no unless conditions change, unclear because house assignment or facts are missing, or symbolic-only for high-stakes topics.",
+        "Use confidence high only when house assignment is clear, significators are clear, and the event testimony is clean.",
+        "For high-stakes topics, keep the interpretation symbolic and add appropriate cautions."
+      ],
+      "outputKeys": [
+        "directAnswer",
+        "summary",
+        "confidence",
+        "cautions",
+        "followUpQuestions"
+      ],
+      "sourcePages": [
+        23,
+        53,
+        93,
+        146,
+        150
+      ]
+    },
+    {
+      "id": "adversarial_checker_pass",
+      "title": "Adversarial Check",
+      "phase": "verification",
+      "parallelGroup": null,
+      "objective": "Find unsupported claims, invented facts, overconfident timing, and missed blockers before final output.",
+      "compactPrompt": "Before final JSON, verify that every claim has chart evidence, no calculation was invented, no optional factor overrules core testimony without reason, and the answer respects high-stakes policy.",
+      "detailedChecks": [
+        "Reject any interpretation that uses a planet, aspect, dignity, reception, Part, star, or timing fact not supplied by the chart facts.",
+        "Check that the selected house and significator match the actual question, not a keyword trap.",
+        "Check that apparent perfection is exact and not prohibited, frustrated, or refuted by supplied facts.",
+        "Check that timing is omitted or low confidence if exact perfection distance is absent.",
+        "Check that the final direct answer is qualified when evidence is mixed."
+      ],
+      "outputKeys": [
+        "unsupportedClaims",
+        "missedBlockers",
+        "finalConfidence"
+      ],
+      "sourcePages": [
+        23,
+        93,
+        109,
+        136,
+        150
+      ]
+    }
+  ],
+  "domainModules": [
+    {
+      "id": "relationship",
+      "trigger": "Love, marriage, dating, ex, spouse, partner, desire, reconciliation, relationship survival.",
+      "primaryHouses": [
+        "1st for querent",
+        "7th for partner, spouse, sweetheart, ex, desired partner"
+      ],
+      "specialSignificators": [
+        "Moon for querent unless already assigned to quesited",
+        "Sun as male natural significator when relevant",
+        "Venus as female natural significator when relevant",
+        "Part of Marriage only for relationship quality between 1st and 7th when supplied"
+      ],
+      "checks": [
+        "Read receptions before event perfection; motive may be the whole answer in feeling questions.",
+        "For event questions such as marriage or reconciliation, require perfection between people unless placement/default outcome supplies a stronger answer.",
+        "Do not time marriage from the Part of Marriage; use contact between people.",
+        "Use Part of Divorce only when divorce is a live stated option."
+      ],
+      "sourcePages": [
+        129,
+        132,
+        191,
+        201
+      ]
+    },
+    {
+      "id": "job_career",
+      "trigger": "Job, career, employer, boss, promotion, application, dismissal, resignation.",
+      "primaryHouses": [
+        "1st for querent",
+        "10th for job, career, boss, employer, public success",
+        "11th for wages or money from the job",
+        "7th for rival candidate when a competition is explicit"
+      ],
+      "specialSignificators": [
+        "Part of Resignation and Dismissal only for keeping/leaving job when supplied",
+        "Part of Vocation or Fame only for vocational questions when supplied"
+      ],
+      "checks": [
+        "Do not use the 6th for the querent's job.",
+        "Use reception between job and querent to judge whether the job wants the querent, but weigh it against perfection and competitor testimony.",
+        "If dismissal is the issue, compare the querent and rival where relevant; worse condition can matter more than absolute weakness."
+      ],
+      "sourcePages": [
+        30,
+        132,
+        133,
+        222,
+        230
+      ]
+    },
+    {
+      "id": "lost_object",
+      "trigger": "Lost, missing, stolen, strayed, where is it, will I recover it.",
+      "primaryHouses": [
+        "2nd for querent's movable possession",
+        "6th for small animals",
+        "12th for large animals",
+        "Turned 2nd or animal house when the missing thing belongs to someone else"
+      ],
+      "specialSignificators": [
+        "Moon as natural significator of lost objects, especially animate lost things",
+        "Fortuna can supplement as treasure when supplied"
+      ],
+      "checks": [
+        "Use house placement, sign, direction, and condition for location and state.",
+        "Combust significator can show hidden or unseen object; recovery timing may use real time when it leaves combustion if other recovery testimony supports it.",
+        "Retrograde significator can support return."
+      ],
+      "sourcePages": [
+        43,
+        69,
+        129,
+        146,
+        154
+      ]
+    },
+    {
+      "id": "property_deal",
+      "trigger": "Buy, sell, lease, property, home sale, land deal, house condition, price.",
+      "primaryHouses": [
+        "1st for querent",
+        "7th for buyer, seller, or other party",
+        "4th for property itself",
+        "10th for price",
+        "8th for buyer's money when buyer is the other party"
+      ],
+      "checks": [
+        "For buy/sell questions, the central event is deal perfection between 1st and 7th, not merely property moving.",
+        "Use Lord 4 condition to describe the property.",
+        "Use Lord 10 condition for price; fixed signs can indicate price resistance.",
+        "A blocker ruling the other party's money can show financing failure."
+      ],
+      "sourcePages": [
+        167,
+        172
+      ]
+    },
+    {
+      "id": "contest_trial",
+      "trigger": "Contest, sports, election, trial, enemy, opponent, lawsuit, win or lose.",
+      "primaryHouses": [
+        "1st for querent or querent's side",
+        "7th for opponent or opposing side",
+        "10th for judge, verdict, authority, or public success where relevant",
+        "4th for end of matter or verdict where the question requires it"
+      ],
+      "checks": [
+        "Compare strength, dignity, afflictions, and receptions of the two sides.",
+        "Exaltation can matter strongly in contests because appearance, morale, or overperformance can win.",
+        "Combustion or severe affliction of one side can decide the contest.",
+        "Mutual reception with unrelated planets is not automatically strengthening because helpers do not play the match."
+      ],
+      "sourcePages": [
+        56,
+        68,
+        203,
+        215
+      ]
+    },
+    {
+      "id": "message_arrival",
+      "trigger": "Letter, phone call, email, visitor, arrival, will I hear from them.",
+      "primaryHouses": [
+        "Use the sender/person's house for contact with the person",
+        "Use the sender's turned 3rd for the message object when the object itself matters",
+        "Use 1st, Moon, 2nd, Ascendant, or 4th cusp as arrival targets only when context supports them"
+      ],
+      "checks": [
+        "Do not force radical 3rd if the real issue is contact from a 7th-house partner or 10th-house parent.",
+        "An aspect to the Ascendant shows arrival only when arrival is assumed or corroborated.",
+        "Very small separations can be timed in minutes when the question's timeframe is same-day arrival."
+      ],
+      "sourcePages": [
+        164,
+        166
+      ]
+    },
+    {
+      "id": "medical_death",
+      "trigger": "Illness, diagnosis, surgery, doctor, medicine, death, pregnancy loss, survival.",
+      "primaryHouses": [
+        "6th for illness",
+        "1st for patient if querent is patient",
+        "Turned 1st for another patient",
+        "7th for doctor only when treating the issue",
+        "8th for death"
+      ],
+      "specialSignificators": [
+        "Mars or Part of Surgery for surgery when supplied",
+        "Part of Death only as cautionary background, not sole death testimony"
+      ],
+      "checks": [
+        "High-stakes policy always applies: symbolic interpretation only, no medical advice.",
+        "Use both radical and turned 8th for another person's death question.",
+        "Do not make death claims from minor Parts alone.",
+        "Condition of significators can describe severity, but professional care is outside app scope."
+      ],
+      "sourcePages": [
+        134,
+        179,
+        190
+      ]
+    },
+    {
+      "id": "truth_rumor_dream",
+      "trigger": "Is it true, rumor, gossip, prediction, dream, prophecy.",
+      "primaryHouses": [
+        "3rd for ordinary rumor or information",
+        "9th for dream, prediction, prophecy, or higher knowledge"
+      ],
+      "checks": [
+        "Prefer the direct question if the wording hides a normal horary question.",
+        "Use fixity and angularity of relevant angles, rulers, Moon, and dispositor as solidity testimony.",
+        "A void Moon can show nothing comes of the information whether true or false."
+      ],
+      "sourcePages": [
+        164,
+        165,
+        216,
+        221
+      ]
+    },
+    {
+      "id": "money_windfall_tax",
+      "trigger": "Money, investment, bet, profit, tax, grant, rebate, lottery, other person's money.",
+      "primaryHouses": [
+        "2nd for querent's money",
+        "8th for other party's money or bookie's money",
+        "11th for gifts from authority, grants, government money, lottery or windfall",
+        "Turned 2nd for a specific person's money"
+      ],
+      "checks": [
+        "For contests or bets, look for contact between other people's money and querent or querent's money.",
+        "For lottery, use 11th unless there is a genuine scheme or contest against the operator.",
+        "For tax and government payments, distinguish entitlement process from discretionary favor."
+      ],
+      "sourcePages": [
+        156,
+        163,
+        231,
+        232
+      ]
+    },
+    {
+      "id": "weather_electional",
+      "trigger": "Weather, choose time, best day, election with horary.",
+      "primaryHouses": [
+        "Use the house of the event or place affected, then judge what affects that significator"
+      ],
+      "checks": [
+        "For weather, the event's significator describes the event, not automatically the weather; judge what acts upon it.",
+        "For electional-with-horary, identify the planet to strengthen, then look ahead for the nearest practical improvement and time by distance."
+      ],
+      "sourcePages": [
+        238,
+        242
+      ]
+    }
+  ],
+  "futureMultiCallPipeline": [
+    {
+      "id": "question_normalizer",
+      "owner": "small_llm",
+      "canRunInParallel": false,
+      "returns": [
+        "querent",
+        "realQuestion",
+        "timeframe",
+        "namedDates",
+        "clarificationNeeded"
+      ]
+    },
+    {
+      "id": "question_type_classifier",
+      "owner": "small_llm",
+      "canRunInParallel": false,
+      "returns": [
+        "stateOrEvent",
+        "domainModule",
+        "defaultOutcome"
+      ]
+    },
+    {
+      "id": "house_candidate_llm",
+      "owner": "small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "candidateHouses",
+        "turningRequired",
+        "ambiguity"
+      ]
+    },
+    {
+      "id": "turning_checker",
+      "owner": "deterministic_plus_small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "turnedHouse",
+        "belongsToJustification"
+      ]
+    },
+    {
+      "id": "significator_resolver",
+      "owner": "deterministic",
+      "canRunInParallel": false,
+      "returns": [
+        "primarySignificators",
+        "moonRole",
+        "sameRulerFallbacks"
+      ]
+    },
+    {
+      "id": "chart_feature_engine",
+      "owner": "deterministic",
+      "canRunInParallel": true,
+      "returns": [
+        "dignities",
+        "receptions",
+        "aspectsToPerfection",
+        "stations",
+        "speed",
+        "solarCondition",
+        "nodes",
+        "fixedStars",
+        "voidMoon",
+        "parts"
+      ]
+    },
+    {
+      "id": "essential_dignity_checker",
+      "owner": "small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "claims"
+      ]
+    },
+    {
+      "id": "reception_checker",
+      "owner": "small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "claims"
+      ]
+    },
+    {
+      "id": "accidental_strength_checker",
+      "owner": "small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "claims"
+      ]
+    },
+    {
+      "id": "perfection_graph_checker",
+      "owner": "deterministic_plus_small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "claims",
+        "candidateEventTestimonies"
+      ]
+    },
+    {
+      "id": "prevention_checker",
+      "owner": "deterministic_plus_small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "claims",
+        "blockers"
+      ]
+    },
+    {
+      "id": "domain_module_checker",
+      "owner": "small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "claims",
+        "domainCaveats"
+      ]
+    },
+    {
+      "id": "timing_checker",
+      "owner": "deterministic_plus_small_llm",
+      "canRunInParallel": true,
+      "returns": [
+        "timingClaim",
+        "degreeCount",
+        "unitRange",
+        "confidence"
+      ]
+    },
+    {
+      "id": "contradiction_resolver",
+      "owner": "small_llm",
+      "canRunInParallel": false,
+      "returns": [
+        "weightedClaims",
+        "directAnswer",
+        "confidence"
+      ]
+    },
+    {
+      "id": "final_judgement_writer",
+      "owner": "small_llm",
+      "canRunInParallel": false,
+      "returns": [
+        "schemaOutput"
+      ]
+    }
+  ],
+  "parallelGroups": [
+    {
+      "id": "condition",
+      "after": [
+        "significator_selection"
+      ],
+      "tasks": [
+        "essential_dignity_pass",
+        "accidental_strength_pass",
+        "moon_story_pass"
+      ],
+      "reason": "These passes read supplied condition facts and can be evaluated independently."
+    },
+    {
+      "id": "motive_event_context_timing",
+      "after": [
+        "significator_selection"
+      ],
+      "tasks": [
+        "reception_pass",
+        "perfection_pass",
+        "blockage_pass",
+        "contextual_modifiers_pass",
+        "timing_pass"
+      ],
+      "reason": "Reception, event contact, optional modifiers, and timing can be drafted in parallel, then reconciled in synthesis."
+    }
+  ],
+  "singleCallTraceRequirement": {
+    "minimumSteps": [
+      "question_scope",
+      "house_assignment",
+      "significator_selection",
+      "synthesis_pass"
+    ],
+    "preferredSteps": [
+      "essential_dignity_pass",
+      "accidental_strength_pass",
+      "reception_pass",
+      "perfection_pass",
+      "blockage_pass",
+      "moon_story_pass",
+      "timing_pass",
+      "adversarial_checker_pass"
+    ],
+    "maxTraceItems": 12
+  },
+  "verifierChecklist": [
+    "The direct answer follows from supplied chart evidence, not generic astrology.",
+    "The house assignment is stated or ambiguity is acknowledged.",
+    "The primary significators and Moon role are stated.",
+    "Dignity and accidental strength are distinguished where relevant.",
+    "Reception is directional and not confused with dignity.",
+    "Perfection is exact, applicable, and checked for prevention when supplied facts allow.",
+    "Optional testimonies such as antiscia, stars, Parts, and outer planets do not override core testimony without a reason.",
+    "Timing is omitted, approximate, or low confidence when exact perfection distance is not supplied.",
+    "High-stakes topics include caution and avoid professional advice.",
+    "Every key factor has concrete chart evidence."
+  ]
+}

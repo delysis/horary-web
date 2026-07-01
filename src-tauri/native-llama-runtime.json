@@ -1,0 +1,82 @@
+{
+  "version": "2026-07-01",
+  "backendId": "native-llama-cpp",
+  "preferred": true,
+  "status": "release-target",
+  "rustBinding": {
+    "crate": "llama-cpp-2",
+    "version": "0.1.150",
+    "cargoFeature": "native-llama",
+    "gpuFeatures": [
+      "native-llama-metal",
+      "native-llama-cuda",
+      "native-llama-vulkan",
+      "native-llama-dynamic-backends"
+    ]
+  },
+  "tauriBoundary": {
+    "frontendTransport": "tauri-ipc",
+    "frontendLoopbackHttp": false,
+    "streamTransport": "tauri-events"
+  },
+  "modelPolicy": {
+    "allowUserImportedGguf": true,
+    "requireRemoteCatalogModel": false,
+    "verifiedCatalogModelsMayBeEmpty": true
+  },
+  "capabilities": {
+    "inProcessWorker": true,
+    "continuousBatching": {
+      "enabled": true,
+      "defaultParallelSequences": 4,
+      "maxParallelSequences": 16,
+      "scheduler": "single native worker owns model/context and interleaves prefill/decode batches across queued microtask requests"
+    },
+    "kvCache": {
+      "enabled": true,
+      "tiers": [
+        {
+          "id": "hot",
+          "medium": "resident llama.cpp sequence state in the worker",
+          "purpose": "reuse stable system, schema, tradition, and microtask prompt prefixes across parallel horary passes"
+        },
+        {
+          "id": "cold",
+          "medium": "disk-backed llama.cpp sequence state files",
+          "purpose": "persist deterministic prompt prefixes between app launches"
+        }
+      ],
+      "invalidateOn": [
+        "modelSha256",
+        "llamaCppBindingVersion",
+        "contextTokens",
+        "promptVersion",
+        "schemaVersion",
+        "traditionProfile",
+        "judgementPipelineVersion",
+        "generationDefaults"
+      ]
+    },
+    "speculativeDecoding": {
+      "enabledWhenDraftModelPresent": true,
+      "nativeWorkerActive": true,
+      "preferredType": "draft-mtp",
+      "defaultDraftTokens": 3,
+      "implementationStatus": "native-worker-wraps-llama-cpp-common-draft-mtp-bridge",
+      "supportedFamilies": [
+        "gemma-4-e2b",
+        "gemma-4-e4b"
+      ]
+    },
+    "jsonConstrainedOutput": {
+      "required": true,
+      "fallbackValidation": "existing HoraryInterpretation schema validation"
+    }
+  },
+  "fallback": {
+    "backendId": "llama-server-sidecar",
+    "allowed": true,
+    "releaseBlocking": false,
+    "reason": "sidecar remains a development and compatibility fallback, not the primary native release gate"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "version": "2026-06-30",
+  "updatedAt": "2026-06-30",
+  "notes": "No remote model artifacts are enabled until release-time verification of artifact URL, license, checksum, size, and llama.cpp compatibility is complete.",
+  "models": []
+}

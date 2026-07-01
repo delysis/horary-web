@@ -1,33 +1,421 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/horary-web/icon-192.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1a1a2e" />
-    <meta name="description" content="In-browser horary astrology chart calculator" />
-    <link rel="manifest" href="/horary-web/manifest.json" />
-    <title>Horary Calculator</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        if (location.hostname === 'localhost') {
-          navigator.serviceWorker.getRegistrations().then(regs => {
-            if (regs.length > 0) { regs.forEach(r => r.unregister()); window.location.reload() }
-          })
-        } else {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/horary-web/sw.js')
-            let refreshing = false
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-              if (!refreshing) { refreshing = true; window.location.reload() }
-            })
-          })
-        }
-      }
-    </script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="description"
+    content="Comprehensive offline astrology calculator with natal charts, horary, and all major house systems. Works offline as a PWA." />
+  <title>Whorary — Astrology Calculator</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+</head>
+
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <h1><span class="star">✦</span> Whorary</h1>
+      <button id="settingsBtn" class="btn btn-icon btn-secondary" title="Settings" aria-label="Settings"
+        aria-controls="tab-settings" aria-expanded="false">⚙</button>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs" id="mainNav" role="tablist" aria-label="Whorary sections">
+      <button class="nav-tab active" id="tab-button-chart" data-tab="chart" role="tab" aria-selected="true" tabindex="0"
+        aria-controls="tab-chart"><span class="icon">◎</span> Chart</button>
+      <button class="nav-tab" id="tab-button-horary" data-tab="horary" role="tab" aria-selected="false" tabindex="-1"
+        aria-controls="tab-horary"><span class="icon">⏱</span> Horary</button>
+      <button class="nav-tab" id="tab-button-aspects" data-tab="aspects" role="tab" aria-selected="false" tabindex="-1"
+        aria-controls="tab-aspects"><span class="icon">△</span> Aspects</button>
+      <button class="nav-tab" id="tab-button-tables" data-tab="tables" role="tab" aria-selected="false" tabindex="-1"
+        aria-controls="tab-tables"><span class="icon">☰</span> Tables</button>
+      <button class="nav-tab" id="tab-button-settings" data-tab="settings" role="tab" aria-selected="false" tabindex="-1"
+        aria-controls="tab-settings"><span class="icon">⚙</span> Settings</button>
+    </nav>
+
+    <!-- Tab: Chart -->
+    <main class="tab-content">
+      <section class="tab-pane active" id="tab-chart" role="tabpanel" aria-labelledby="tab-button-chart">
+        <div class="two-col">
+          <!-- Input Form -->
+          <div>
+            <div class="panel panel-glow" style="margin-bottom:1rem">
+              <h3 style="margin-bottom:0.75rem">Chart Data</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="inputDate">Date</label>
+                  <input type="date" id="inputDate" class="form-input" />
+                  <div id="inputDateError" class="field-error" aria-live="polite" hidden></div>
+                </div>
+                <div class="form-group" style="flex:1.5">
+                  <label class="form-label" for="inputTime">Time</label>
+                  <input type="time" id="inputTime" class="form-input" value="12:00" step="60" />
+                  <div id="inputTimeError" class="field-error" aria-live="polite" hidden></div>
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label class="form-label" for="inputOffset">UTC Offset</label>
+                  <input type="number" id="inputOffset" class="form-input" value="0" step="0.5" min="-14" max="14"
+                    placeholder="-5" />
+                  <div id="inputOffsetError" class="field-error" aria-live="polite" hidden></div>
+                </div>
+              </div>
+              <div class="form-group autocomplete-wrapper">
+                <label class="form-label" for="inputCity">Location</label>
+                <input type="text" id="inputCity" class="form-input" placeholder="Start typing a city name…"
+                  autocomplete="off" />
+                <div class="autocomplete-list" id="cityList"></div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="inputLat">Latitude</label>
+                  <input type="number" id="inputLat" class="form-input" step="0.0001" min="-90" max="90"
+                    placeholder="51.5074" />
+                  <div id="inputLatError" class="field-error" aria-live="polite" hidden></div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="inputLng">Longitude</label>
+                  <input type="number" id="inputLng" class="form-input" step="0.0001" min="-180" max="180"
+                    placeholder="-0.1278" />
+                  <div id="inputLngError" class="field-error" aria-live="polite" hidden></div>
+                </div>
+              </div>
+              <div id="calcErrors" class="form-errors" role="alert" aria-live="polite" hidden></div>
+              <div class="form-group">
+                <label class="form-label" for="houseSystem">House System</label>
+                <select id="houseSystem" class="form-select"></select>
+              </div>
+              <button id="calcBtn" class="btn btn-primary" style="width:100%;margin-top:0.5rem">
+                ✦ Calculate Chart
+              </button>
+            </div>
+          </div>
+
+          <!-- Chart Wheel -->
+          <div>
+            <div class="chart-container" id="chartWheel"></div>
+          </div>
+        </div>
+
+        <!-- Planetary Positions Table -->
+        <div class="panel" style="margin-top:1rem" id="positionsPanel">
+          <h3 style="margin-bottom:0.75rem">Planetary Positions</h3>
+          <div class="scroll-x">
+            <table class="data-table" id="positionsTable">
+              <caption class="sr-only">Planetary positions</caption>
+              <thead>
+                <tr>
+                  <th scope="col" aria-label="Glyph"></th>
+                  <th scope="col">Planet</th>
+                  <th scope="col">Position</th>
+                  <th scope="col">Sign</th>
+                  <th scope="col">House</th>
+                  <th scope="col">Speed</th>
+                  <th scope="col">Dignity</th>
+                </tr>
+              </thead>
+              <tbody id="positionsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- House Cusps Table -->
+        <div class="panel" style="margin-top:1rem" id="cuspsPanel">
+          <h3 style="margin-bottom:0.75rem">House Cusps</h3>
+          <div class="scroll-x">
+            <table class="data-table" id="cuspsTable">
+              <caption class="sr-only">House cusps</caption>
+              <thead>
+                <tr>
+                  <th scope="col">House</th>
+                  <th scope="col">Cusp</th>
+                  <th scope="col">Sign</th>
+                  <th scope="col">Ruler</th>
+                </tr>
+              </thead>
+              <tbody id="cuspsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Horary -->
+      <section class="tab-pane" id="tab-horary" role="tabpanel" aria-labelledby="tab-button-horary" aria-hidden="true" hidden>
+        <div class="panel panel-glow horary-hero">
+          <div class="time-display" id="horaryTime">--:--:--</div>
+          <div class="date-display" id="horaryDate"></div>
+          <div class="location-display" id="horaryLocation">Location not set</div>
+          <button id="useLocationBtn" class="btn btn-secondary btn-sm" style="margin-top:0.75rem">
+            Use Browser Location
+          </button>
+        </div>
+        <div class="panel" style="margin-top:1rem">
+          <div class="form-group">
+            <label class="form-label" for="horaryQuestion">The Querent Asks…</label>
+            <textarea class="question-input" id="horaryQuestion"
+              placeholder="What is the question asked at this moment?"></textarea>
+          </div>
+          <button id="castNowBtn" class="btn btn-cast" style="margin-top:0.75rem">
+            ✦ Cast Now ✦
+          </button>
+          <div id="horaryErrors" class="form-errors" role="alert" aria-live="polite" hidden></div>
+        </div>
+
+        <div class="panel ai-panel" style="margin-top:1rem" id="aiPanel" data-tauri-only hidden>
+          <div class="ai-panel-header">
+            <h3>Local AI Interpretation</h3>
+            <span class="status-badge" id="aiRuntimeBadge">Desktop</span>
+          </div>
+          <div class="form-row ai-controls">
+            <div class="form-group ai-model-field">
+              <label class="form-label" for="aiModelSelect">Local Model</label>
+              <select id="aiModelSelect" class="form-select"></select>
+            </div>
+            <div class="ai-button-row">
+              <button id="refreshAiModelsBtn" class="btn btn-secondary btn-sm" type="button">Refresh</button>
+              <button id="startAiModelBtn" class="btn btn-secondary btn-sm" type="button">Start</button>
+              <button id="stopAiModelBtn" class="btn btn-secondary btn-sm" type="button">Stop</button>
+            </div>
+          </div>
+          <div class="ai-acquire">
+            <div class="form-row ai-controls">
+              <div class="form-group ai-model-field">
+                <label class="form-label" for="aiDownloadSelect">Model Catalog</label>
+                <select id="aiDownloadSelect" class="form-select"></select>
+              </div>
+              <div class="ai-button-row">
+                <button id="downloadAiModelBtn" class="btn btn-secondary btn-sm" type="button">Download</button>
+              </div>
+            </div>
+            <div class="form-row ai-controls">
+              <div class="form-group ai-model-field">
+                <label class="form-label" for="aiSidecarPath">Local AI Runtime Binary Path</label>
+                <input id="aiSidecarPath" class="form-input" type="text" autocomplete="off"
+                  placeholder="/opt/homebrew/bin/llama-server" />
+              </div>
+              <div class="ai-button-row">
+                <button id="importAiSidecarBtn" class="btn btn-secondary btn-sm" type="button">Install Runtime</button>
+              </div>
+            </div>
+            <div class="form-row ai-controls">
+              <div class="form-group ai-model-field">
+                <label class="form-label" for="aiImportPath">GGUF File Path</label>
+                <input id="aiImportPath" class="form-input" type="text" autocomplete="off"
+                  placeholder="/path/to/model.gguf" />
+              </div>
+              <div class="ai-button-row">
+                <button id="importAiModelBtn" class="btn btn-secondary btn-sm" type="button">Import</button>
+              </div>
+            </div>
+            <div class="status-line" id="aiAcquireStatus" aria-live="polite">No model acquisition activity</div>
+          </div>
+          <div class="status-line" id="aiModelStatus" aria-live="polite">Model status unavailable</div>
+          <button id="generateAiBtn" class="btn btn-primary" type="button" style="width:100%;margin-top:0.75rem">
+            Generate Interpretation
+          </button>
+          <button id="cancelAiBtn" class="btn btn-secondary" type="button" style="width:100%;margin-top:0.5rem" hidden>
+            Cancel Generation
+          </button>
+          <div id="aiErrors" class="form-errors" role="alert" aria-live="polite" hidden></div>
+          <div id="aiOutput" class="ai-output" hidden></div>
+        </div>
+
+        <div id="horaryChart" style="margin-top:1rem"></div>
+
+        <div class="panel" style="margin-top:1rem" id="horaryHistoryPane">
+          <h3 style="margin-bottom:0.5rem">Chart History</h3>
+          <ul class="history-list" id="horaryHistory"></ul>
+          <div class="empty-state" id="emptyHistory">
+            <div class="icon">📜</div>
+            <p>No horary charts yet. Cast your first chart above.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Aspects -->
+      <section class="tab-pane" id="tab-aspects" role="tabpanel" aria-labelledby="tab-button-aspects" aria-hidden="true" hidden>
+        <div class="panel panel-glow" id="aspectGridPanel">
+          <h3 style="margin-bottom:0.75rem">Aspect Grid</h3>
+          <div class="scroll-x" id="aspectGridContainer"></div>
+        </div>
+        <div class="panel" style="margin-top:1rem" id="aspectListPanel">
+          <h3 style="margin-bottom:0.5rem">Aspect List</h3>
+          <div class="form-row" style="margin-bottom:0.75rem">
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--text-dim)">
+              <input type="checkbox" id="majorOnlyToggle" /> Major only
+            </label>
+            <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--text-dim)">
+              <input type="checkbox" id="applyingOnlyToggle" /> Applying only
+            </label>
+          </div>
+          <div class="scroll-x">
+            <table class="data-table" id="aspectsTable">
+              <caption class="sr-only">Aspect list</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Planet</th>
+                  <th scope="col" aria-label="Aspect symbol"></th>
+                  <th scope="col">Aspect</th>
+                  <th scope="col" aria-label="Aspect symbol"></th>
+                  <th scope="col">Planet</th>
+                  <th scope="col">Orb</th>
+                  <th scope="col">Type</th>
+                </tr>
+              </thead>
+              <tbody id="aspectsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Tables -->
+      <section class="tab-pane" id="tab-tables" role="tabpanel" aria-labelledby="tab-button-tables" aria-hidden="true" hidden>
+        <div class="panel panel-glow">
+          <h3 style="margin-bottom:0.75rem">Essential Dignities</h3>
+          <div class="scroll-x">
+            <table class="data-table" id="dignitiesTable">
+              <caption class="sr-only">Essential dignities</caption>
+              <thead>
+                <tr>
+                  <th scope="col" aria-label="Glyph"></th>
+                  <th scope="col">Planet</th>
+                  <th scope="col">Domicile</th>
+                  <th scope="col">Exalt.</th>
+                  <th scope="col">Trip.</th>
+                  <th scope="col">Term</th>
+                  <th scope="col">Face</th>
+                  <th scope="col">Score</th>
+                </tr>
+              </thead>
+              <tbody id="dignitiesBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Reference Dignities -->
+        <div class="panel" style="margin-top:1rem">
+          <h3 style="margin-bottom:0.75rem">Dignities Reference</h3>
+          <div class="scroll-x">
+            <table class="data-table">
+              <caption class="sr-only">Traditional dignity reference</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Planet</th>
+                  <th scope="col">Domicile</th>
+                  <th scope="col">Exaltation</th>
+                  <th scope="col">Detriment</th>
+                  <th scope="col">Fall</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">☉ Sun</th>
+                  <td>♌ Leo</td>
+                  <td>♈ Aries</td>
+                  <td>♒ Aquarius</td>
+                  <td>♎ Libra</td>
+                </tr>
+                <tr>
+                  <th scope="row">☽ Moon</th>
+                  <td>♋ Cancer</td>
+                  <td>♉ Taurus</td>
+                  <td>♑ Capricorn</td>
+                  <td>♏ Scorpio</td>
+                </tr>
+                <tr>
+                  <th scope="row">☿ Mercury</th>
+                  <td>♊♍ Gem/Vir</td>
+                  <td>♍ Virgo</td>
+                  <td>♐♓ Sag/Pis</td>
+                  <td>♓ Pisces</td>
+                </tr>
+                <tr>
+                  <th scope="row">♀ Venus</th>
+                  <td>♉♎ Tau/Lib</td>
+                  <td>♓ Pisces</td>
+                  <td>♏♈ Sco/Ari</td>
+                  <td>♍ Virgo</td>
+                </tr>
+                <tr>
+                  <th scope="row">♂ Mars</th>
+                  <td>♈♏ Ari/Sco</td>
+                  <td>♑ Capricorn</td>
+                  <td>♎♉ Lib/Tau</td>
+                  <td>♋ Cancer</td>
+                </tr>
+                <tr>
+                  <th scope="row">♃ Jupiter</th>
+                  <td>♐♓ Sag/Pis</td>
+                  <td>♋ Cancer</td>
+                  <td>♊♍ Gem/Vir</td>
+                  <td>♑ Capricorn</td>
+                </tr>
+                <tr>
+                  <th scope="row">♄ Saturn</th>
+                  <td>♑♒ Cap/Aqu</td>
+                  <td>♎ Libra</td>
+                  <td>♋♌ Can/Leo</td>
+                  <td>♈ Aries</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Settings -->
+      <section class="tab-pane" id="tab-settings" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true" hidden>
+        <div class="setting-card panel">
+          <div class="setting-title">Default House System</div>
+          <div class="radio-group" id="settingsHouseSystem"></div>
+        </div>
+        <div class="setting-card panel">
+          <div class="setting-title">Planet Set</div>
+          <div class="radio-group" id="settingsPlanets">
+            <button class="radio-pill active" data-value="modern">Modern (all)</button>
+            <button class="radio-pill" data-value="classical">Classical 7</button>
+          </div>
+        </div>
+        <div class="setting-card panel">
+          <div class="setting-title">Aspect Policy</div>
+          <div class="aspect-settings" id="settingsAspects"></div>
+          <button id="resetAspectSettingsBtn" class="btn btn-secondary btn-sm" type="button">Reset Aspects</button>
+        </div>
+        <div class="setting-card panel">
+          <div class="setting-title">Settings Portability</div>
+          <div class="settings-portability">
+            <button id="exportSettingsBtn" class="btn btn-secondary btn-sm" type="button">⇩ Export Settings</button>
+            <button id="importSettingsBtn" class="btn btn-secondary btn-sm" type="button">⇧ Import Settings</button>
+            <input id="importSettingsFile" type="file" accept="application/json,.json" hidden />
+          </div>
+          <div id="settingsImportStatus" class="status-line" aria-live="polite"></div>
+        </div>
+        <div class="setting-card panel">
+          <div class="setting-title">About</div>
+          <p style="color:var(--text-dim);font-size:0.85rem;line-height:1.6">
+            <strong style="color:var(--gold)">Whorary v<span id="appVersion">1.0.0</span></strong> — A comprehensive offline astrology calculator.<br>
+            Works completely offline as a Progressive Web App.<br>
+            Calculations powered by VSOP87 & ELP2000 algorithms.<br>
+            Built with ♡ for the cosmic explorers.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Install Banner -->
+    <div class="install-banner" id="installBanner">
+      <p>📲 Add Whorary to your home screen for offline use!</p>
+      <div style="display:flex;gap:0.5rem">
+        <button id="installBtn" class="btn btn-primary btn-sm">Install</button>
+        <button class="dismiss" id="dismissInstall" type="button" aria-label="Dismiss install banner">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
 </html>

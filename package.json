@@ -1,37 +1,30 @@
 {
-  "name": "horary-web",
+  "name": "whorary",
+  "version": "1.0.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "description": "Comprehensive offline astrology calculator PWA",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "node scripts/lint.mjs",
+    "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "push": "git push && gh run watch"
-  },
-  "dependencies": {
-    "@astrodraw/astrochart": "^3.0.2",
-    "circular-natal-horoscope-js": "^1.1.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "test": "node --test \"src/**/*.test.js\"",
+    "test:coverage": "node --test --experimental-test-coverage \"src/**/*.test.js\"",
+    "check": "npm run lint && npm test && npm run build",
+    "check:tauri": "cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
+    "check:all": "npm run check && npm run test:coverage && npm audit && npm run check:tauri",
+    "check:release-assets": "node scripts/check-release-assets.mjs",
+    "check:native-llama": "node scripts/check-native-llama.mjs",
+    "tauri": "tauri",
+    "tauri:build:release": "tauri build --config src-tauri/tauri.release.conf.json"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "@vitest/coverage-v8": "^4.1.5",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
-    "jsdom": "^29.1.1",
-    "typescript": "~5.9.3",
-    "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1",
-    "vitest": "^4.1.5"
+    "@tauri-apps/cli": "^2.11.4",
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^0.21.1"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1"
   }
 }
