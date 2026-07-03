@@ -1,7 +1,7 @@
 import horaryInterpretationSchema from './horary-interpretation.schema.json' with { type: 'json' };
 
-export const INTERPRETATION_SCHEMA_VERSION = '2026-07-01';
-export const INTERPRETATION_PROMPT_VERSION = 'horary-interpretation-v2';
+export const INTERPRETATION_SCHEMA_VERSION = '2026-07-03';
+export const INTERPRETATION_PROMPT_VERSION = 'horary-interpretation-v4';
 export const INTERPRETATION_TRADITION_PROFILE = 'traditional-horary-textbook-v1';
 
 export const HORARY_INTERPRETATION_SCHEMA = horaryInterpretationSchema;

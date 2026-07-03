@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { buildHoraryInterpretationPrompt, classifyQuestionRisk } from '../promptBuilder.js';
+import {
+    buildDeterministicAssignments,
+    buildHoraryInterpretationPrompt,
+    buildQuestionContext,
+    classifyQuestionRisk,
+} from '../promptBuilder.js';
 import {
     buildJudgementPlan,
     HORARY_JUDGEMENT_PIPELINE,
@@ -25,8 +30,11 @@ const sampleInput = {
         location: { label: 'New York, US', latitude: 40.7128, longitude: -74.006 },
         ascendant: { sign: 'Libra', degree: 12.3 },
         midheaven: { sign: 'Cancer', degree: 15.1 },
-        houses: [{ number: 1, sign: 'Libra', degree: 12.3 }],
-        bodies: [{ name: 'Moon', sign: 'Capricorn', degree: 14.2, house: 4 }],
+        houses: [{ number: 1, sign: 'Libra', degree: 12.3, ruler: 'Venus' }],
+        bodies: [
+            { name: 'Moon', sign: 'Capricorn', degree: 14.2, house: 4 },
+            { name: 'Venus', sign: 'Gemini', degree: 16.4, house: 9 },
+        ],
         aspects: [{ planet1: 'Moon', aspectName: 'Trine', planet2: 'Venus', orb: 2.1, applying: true }],
         derived: { ascendantRuler: 'Venus' },
     },
@@ -53,11 +61,40 @@ test('buildHoraryInterpretationPrompt uses deterministic chart facts and forbids
     assert.ok(user.judgementPlan.futureMultiCallPipeline.some(step => step.id === 'reception_checker'));
     assert.ok(user.judgementPlan.parallelGroups.some(group => group.id === 'condition'));
     assert.match(system, /Do not calculate or recalculate planetary positions/);
+    assert.match(system, /questionContext house hints/);
+    assert.match(system, /deterministicAssignments as the authoritative mapping/);
+    assert.match(system, /chartEvidenceIndex\.canonicalFacts/);
     assert.match(system, /traditional horary judgement order/);
     assert.match(system, /querent and quesited/);
     assert.match(system, /judgementTrace/);
+    assert.match(system, /keyFactors must be a JSON array/);
+    assert.match(system, /Do not confuse house rulership with body placement/);
+    assert.match(system, /Use at most three followUpQuestions/);
     assert.match(system, new RegExp(`Prompt version: ${INTERPRETATION_PROMPT_VERSION.replaceAll('-', '\\-')}`));
     assert.match(system, new RegExp(`Tradition profile: ${INTERPRETATION_TRADITION_PROFILE.replaceAll('-', '\\-')}`));
+    assert.equal(user.questionContext.domainModule, 'ordinary');
+    assert.equal(user.questionContext.likelyAssignments[0].house, 1);
+    assert.deepEqual(user.deterministicAssignments[0], {
+        actor: 'querent',
+        house: 1,
+        houseSign: 'Libra',
+        significator: 'Venus',
+        significatorPlacement: {
+            name: 'Venus',
+            sign: 'Gemini',
+            house: 9,
+        },
+        canonicalEvidence: 'house 1 Libra ruler Venus; Venus Gemini house 9',
+        rationale: 'the asker',
+    });
+    assert.deepEqual(user.chartEvidenceIndex.bodyPlacements[0], {
+        name: 'Moon',
+        sign: 'Capricorn',
+        house: 4,
+    });
+    assert.equal(user.chartEvidenceIndex.applyingMajorAspects[0].aspectName, 'Trine');
+    assert.ok(user.chartEvidenceIndex.canonicalFacts.includes('house 1 Libra ruler Venus'));
+    assert.ok(user.chartEvidenceIndex.canonicalFacts.includes('Venus Gemini house 9'));
     assert.equal(user.chart.bodies[0].name, 'Moon');
     assert.equal(user.chart.aspects[0].applying, true);
 });
@@ -105,6 +142,41 @@ test('horary judgement pipeline exposes small-model microtasks and cache policy'
 test('classifyQuestionRisk flags high-stakes questions', () => {
     assert.equal(classifyQuestionRisk('Should I invest my savings in this stock?'), 'high_stakes');
     assert.equal(classifyQuestionRisk('Will I get the contract?'), 'ordinary');
+});
+
+test('buildQuestionContext supplies deterministic house hints for common horary domains', () => {
+    assert.equal(buildQuestionContext('Will I get the job offer?').domainModule, 'job_career');
+    assert.equal(buildQuestionContext('Will my ex come back?').domainModule, 'relationship');
+    assert.equal(buildQuestionContext('Where is my lost ring?').likelyAssignments[1].house, 2);
+    assert.equal(buildQuestionContext('Should I invest in this stock?').domainModule, 'financial_high_stakes');
+});
+
+test('buildDeterministicAssignments maps houses to rulers and actual ruler placements', () => {
+    const assignments = buildDeterministicAssignments(
+        {
+            likelyAssignments: [
+                { actor: 'job_or_offer', house: 10, rationale: 'career and employer' },
+            ],
+        },
+        {
+            houseRulers: [{ house: 10, sign: 'Cancer', ruler: 'Moon' }],
+            bodyPlacements: [{ name: 'Moon', sign: 'Virgo', house: 11 }],
+        },
+    );
+
+    assert.deepEqual(assignments, [{
+        actor: 'job_or_offer',
+        house: 10,
+        houseSign: 'Cancer',
+        significator: 'Moon',
+        significatorPlacement: {
+            name: 'Moon',
+            sign: 'Virgo',
+            house: 11,
+        },
+        canonicalEvidence: 'house 10 Cancer ruler Moon; Moon Virgo house 11',
+        rationale: 'career and employer',
+    }]);
 });
 
 test('high-stakes prompt includes professional-advice caution policy', () => {

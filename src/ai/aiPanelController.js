@@ -177,7 +177,7 @@ export function setupAiPanelController({
         try {
             state.aiStatus = await commandApi.startLlama({
                 modelId: selectedModel,
-                ctxSize: 8192,
+                ctxSize: 16384,
                 nGpuLayers: 'auto',
                 parallel: 4,
                 continuousBatching: true,

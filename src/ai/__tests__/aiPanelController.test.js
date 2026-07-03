@@ -161,7 +161,7 @@ test('setupAiPanelController starts and stops the selected model', async () => {
     assert.deepEqual(calls, [
         ['startLlama', {
             modelId: 'model-1',
-            ctxSize: 8192,
+            ctxSize: 16384,
             nGpuLayers: 'auto',
             parallel: 4,
             continuousBatching: true,

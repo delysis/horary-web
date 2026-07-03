@@ -58,6 +58,7 @@ pub struct NativeGenerateOptions {
     pub top_p: f32,
     pub seed: u32,
     pub prompt_cache_key: Option<String>,
+    pub prompt_cache_prefix: Option<String>,
     pub token_sink: Option<mpsc::Sender<String>>,
     pub cancel: Option<Arc<AtomicBool>>,
 }
@@ -70,6 +71,7 @@ impl Default for NativeGenerateOptions {
             top_p: 1.0,
             seed: 0,
             prompt_cache_key: None,
+            prompt_cache_prefix: None,
             token_sink: None,
             cancel: None,
         }
@@ -163,6 +165,7 @@ mod imp {
         last_logit_index: i32,
         pending_decode_token: Option<PendingDecodeToken>,
         prompt_cache_key: String,
+        prompt_cache_prefix_tokens: Option<usize>,
         prompt_cache_hit: bool,
         cold_cache_bytes: Option<usize>,
         token_sink: Option<mpsc::Sender<String>>,
@@ -768,6 +771,8 @@ mod imp {
         }
 
         let prompt_token_count = tokens.len();
+        let prompt_cache_prefix_tokens =
+            prompt_cache_prefix_tokens(model, &tokens, job.options.prompt_cache_prefix.as_deref())?;
         let sampler = build_sampler(&job.options);
         Ok(ActiveGeneration {
             seq_id: FIRST_REQUEST_SEQ_ID + i32::try_from(index).unwrap_or(i32::MAX),
@@ -782,6 +787,7 @@ mod imp {
             last_logit_index: -1,
             pending_decode_token: None,
             prompt_cache_key: job.options.prompt_cache_key.unwrap_or_default(),
+            prompt_cache_prefix_tokens,
             prompt_cache_hit: false,
             cold_cache_bytes: None,
             token_sink: job.options.token_sink,
@@ -1439,7 +1445,47 @@ mod imp {
     }
 
     fn cache_prefix_len(generation: &ActiveGeneration) -> usize {
-        generation.prompt_token_count.saturating_sub(1)
+        generation
+            .prompt_cache_prefix_tokens
+            .unwrap_or_else(|| generation.prompt_token_count.saturating_sub(1))
+            .min(generation.prompt_token_count.saturating_sub(1))
+    }
+
+    fn prompt_cache_prefix_tokens(
+        model: &LlamaModel,
+        prompt_tokens: &[LlamaToken],
+        prefix: Option<&str>,
+    ) -> LlamaResult<Option<usize>> {
+        let Some(prefix) = prefix.filter(|value| !value.trim().is_empty()) else {
+            return Ok(None);
+        };
+        let prefix_tokens = model
+            .str_to_token(prefix, AddBos::Always)
+            .map_err(|error| LlamaError {
+                message: format!("failed to tokenize native prompt cache prefix: {error}"),
+            })?;
+        if prefix_tokens.is_empty() {
+            return Ok(None);
+        }
+        let common_prefix_len = prefix_tokens
+            .iter()
+            .zip(prompt_tokens.iter())
+            .take_while(|(left, right)| left == right)
+            .count();
+        let usable_prefix_len = if common_prefix_len == prefix_tokens.len() {
+            common_prefix_len
+        } else {
+            common_prefix_len.saturating_sub(1)
+        };
+        if usable_prefix_len == 0 {
+            return Err(LlamaError {
+                message: "native prompt cache prefix must match the beginning of the prompt"
+                    .to_string(),
+            });
+        }
+        Ok(Some(
+            usable_prefix_len.min(prompt_tokens.len().saturating_sub(1)),
+        ))
     }
 
     fn normalized_prompt_cache_key(
@@ -1455,12 +1501,18 @@ mod imp {
         hasher.update([0]);
         hasher.update(config.launch.ctx_size.to_le_bytes());
         let requested = requested.trim();
-        if requested.is_empty() {
-            hasher.update(b"prompt\0");
-            hasher.update(generation.prompt.as_bytes());
-        } else {
-            hasher.update(b"task\0");
+        if let Some(prefix_len) = generation.prompt_cache_prefix_tokens {
+            hasher.update(b"prefix\0");
             hasher.update(requested.as_bytes());
+            hasher.update([0]);
+            for token in &generation.tokens[..prefix_len] {
+                hasher.update(token.0.to_le_bytes());
+            }
+        } else {
+            hasher.update(b"prompt\0");
+            hasher.update(requested.as_bytes());
+            hasher.update([0]);
+            hasher.update(generation.prompt.as_bytes());
         }
         format!("{:x}", hasher.finalize())
     }
@@ -1680,6 +1732,7 @@ mod integration_tests {
                 top_p: 1.0,
                 seed: 1,
                 prompt_cache_key: Some("native-gemma-gate".to_string()),
+                prompt_cache_prefix: Some("You are a deterministic test harness.".to_string()),
                 token_sink: None,
                 cancel: None,
             },
@@ -1694,6 +1747,7 @@ mod integration_tests {
                 top_p: 1.0,
                 seed: 1,
                 prompt_cache_key: Some("native-gemma-gate".to_string()),
+                prompt_cache_prefix: Some("You are a deterministic test harness.".to_string()),
                 token_sink: None,
                 cancel: None,
             },

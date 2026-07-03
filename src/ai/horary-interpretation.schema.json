@@ -11,10 +11,12 @@
   ],
   "properties": {
     "summary": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 640
     },
     "directAnswer": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 640
     },
     "confidence": {
       "type": "string",
@@ -42,10 +44,12 @@
             "type": "string"
           },
           "finding": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 360
           },
           "chartEvidence": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 220
           },
           "confidence": {
             "type": "string",
@@ -60,6 +64,8 @@
     },
     "keyFactors": {
       "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -70,27 +76,34 @@
         ],
         "properties": {
           "factor": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 120
           },
           "chartEvidence": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 220
           },
           "interpretation": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 360
           }
         }
       }
     },
     "cautions": {
       "type": "array",
+      "maxItems": 3,
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 260
       }
     },
     "followUpQuestions": {
       "type": "array",
+      "maxItems": 3,
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 180
       }
     }
   }
