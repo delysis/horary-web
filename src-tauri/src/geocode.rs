@@ -6,7 +6,9 @@ use std::{
 };
 
 const CITIES_JSON: &str = include_str!("../../src/data/cities.json");
+const US_LOCATIONS_JSON: &str = include_str!("../../src/data/us_locations.json");
 const PROVIDER_ID: &str = "bundled-cities";
+const US_POSTAL_PROVIDER_ID: &str = "bundled-us-postal";
 const DEFAULT_LIMIT: usize = 8;
 const MAX_LIMIT: usize = 50;
 const CACHE_SIZE: usize = 50;
@@ -35,6 +37,34 @@ struct CityRecord {
     lat: f64,
     lng: f64,
     tz: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct UsLocations {
+    zips: Vec<UsZipRecord>,
+    places: Vec<UsPlaceRecord>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UsZipRecord {
+    zip: String,
+    city: String,
+    state: String,
+    lat: f64,
+    lng: f64,
+    tz: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UsPlaceRecord {
+    city: String,
+    state: String,
+    lat: f64,
+    lng: f64,
+    tz: String,
+    zip_count: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,7 +136,7 @@ pub fn geocode_with_cache(
         return Ok(cached);
     }
 
-    let results = search_city_records(&query, limit)?;
+    let results = search_location_records(&query, limit)?;
     state.cache.lock().unwrap().insert(key, results.clone());
     Ok(results)
 }
@@ -120,25 +150,36 @@ pub fn reverse_geocode_local_city(
         .filter(|value| value.is_finite() && *value > 0.0)
         .unwrap_or(DEFAULT_REVERSE_MAX_DISTANCE_KM);
 
-    let nearest = city_records()?
+    let nearest_city = city_records()?
         .iter()
         .map(|city| {
             (
-                city,
+                city_to_candidate(city),
                 distance_km(req.latitude, req.longitude, city.lat, city.lng),
             )
         })
-        .min_by(|(_, a_distance), (_, b_distance)| {
-            a_distance
-                .partial_cmp(b_distance)
-                .unwrap_or(Ordering::Equal)
-        });
+        .min_by(compare_distance);
 
-    Ok(nearest.and_then(|(city, distance)| {
+    let nearest_us_place = us_location_records()?
+        .places
+        .iter()
+        .map(|place| {
+            (
+                us_place_to_candidate(place),
+                distance_km(req.latitude, req.longitude, place.lat, place.lng),
+            )
+        })
+        .min_by(compare_distance);
+
+    let nearest = [nearest_city, nearest_us_place]
+        .into_iter()
+        .flatten()
+        .min_by(compare_distance);
+
+    Ok(nearest.and_then(|(candidate, distance)| {
         if distance > max_distance_km {
             return None;
         }
-        let candidate = city_to_candidate(city);
         Some(LocationLabel {
             label: candidate.label,
             name: candidate.name,
@@ -150,6 +191,109 @@ pub fn reverse_geocode_local_city(
             distance_km: (distance * 1000.0).round() / 1000.0,
         })
     }))
+}
+
+fn search_location_records(query: &str, limit: usize) -> GeocodeResult<Vec<LocationCandidate>> {
+    let mut scored: Vec<(u16, LocationCandidate)> = Vec::new();
+    scored.extend(search_us_locations(query)?);
+    scored.extend(
+        search_city_records(query, limit)?
+            .into_iter()
+            .map(|candidate| {
+                (
+                    90 + city_match_rank(&candidate.name, query) as u16,
+                    candidate,
+                )
+            }),
+    );
+
+    scored.sort_by(|(a_score, a), (b_score, b)| {
+        a_score
+            .cmp(b_score)
+            .then_with(|| a.label.cmp(&b.label))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    let mut seen = HashMap::new();
+    let mut results = Vec::new();
+    for (_, candidate) in scored {
+        if seen.insert(candidate.id.clone(), ()).is_none() {
+            results.push(candidate);
+        }
+        if results.len() >= limit {
+            break;
+        }
+    }
+    Ok(results)
+}
+
+fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate)>> {
+    let parsed = parse_us_query(query);
+    if parsed.state.is_none() && parsed.zip.is_none() {
+        return Ok(Vec::new());
+    }
+    let records = us_location_records()?;
+    let mut scored = Vec::new();
+
+    if let Some(zip) = parsed.zip.as_deref() {
+        for record in &records.zips {
+            if record.zip == zip {
+                scored.push((0, us_zip_to_candidate(record)));
+            } else if zip.len() >= 3 && record.zip.starts_with(zip) {
+                scored.push((
+                    12 + (record.zip.len() - zip.len()) as u16,
+                    us_zip_to_candidate(record),
+                ));
+            }
+        }
+    }
+
+    let city_query = parsed.city_query.as_str();
+    if !city_query.is_empty() {
+        for place in &records.places {
+            if let Some(state) = parsed.state.as_deref() {
+                if place.state != state {
+                    continue;
+                }
+            }
+
+            let city = normalize_location_text(&place.city);
+            let rank = if city == city_query {
+                20
+            } else if city.starts_with(city_query) {
+                30
+            } else if city.contains(city_query) {
+                45
+            } else {
+                continue;
+            };
+            let state_bonus = if parsed.state.is_some() { 0 } else { 20 };
+            let zip_count_penalty = place.zip_count.min(30) as u16;
+            scored.push((
+                rank + state_bonus + zip_count_penalty,
+                us_place_to_candidate(place),
+            ));
+        }
+
+        for zip_record in &records.zips {
+            if let Some(state) = parsed.state.as_deref() {
+                if zip_record.state != state {
+                    continue;
+                }
+            }
+            let city = normalize_location_text(&zip_record.city);
+            let rank = if city == city_query {
+                70
+            } else if city.starts_with(city_query) {
+                80
+            } else {
+                continue;
+            };
+            scored.push((rank, us_zip_to_candidate(zip_record)));
+        }
+    }
+
+    Ok(scored)
 }
 
 fn search_city_records(query: &str, limit: usize) -> GeocodeResult<Vec<LocationCandidate>> {
@@ -183,6 +327,57 @@ fn city_records() -> GeocodeResult<&'static [CityRecord]> {
     }
 }
 
+fn us_location_records() -> GeocodeResult<&'static UsLocations> {
+    static US_LOCATIONS: OnceLock<Result<UsLocations, String>> = OnceLock::new();
+    match US_LOCATIONS.get_or_init(|| {
+        serde_json::from_str::<UsLocations>(US_LOCATIONS_JSON).map_err(|error| error.to_string())
+    }) {
+        Ok(locations) => Ok(locations),
+        Err(message) => Err(GeocodeError {
+            message: message.clone(),
+        }),
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ParsedUsQuery {
+    city_query: String,
+    state: Option<String>,
+    zip: Option<String>,
+}
+
+fn parse_us_query(query: &str) -> ParsedUsQuery {
+    let zip = query
+        .split(|ch: char| !ch.is_ascii_digit())
+        .find(|part| part.len() == 5)
+        .map(str::to_string);
+
+    let mut normalized = normalize_location_text(query);
+    if let Some(zip) = zip.as_deref() {
+        normalized = normalized.replace(zip, " ");
+    }
+
+    let mut state = None;
+    for (abbr, name) in US_STATES {
+        let normalized_name = normalize_location_text(name);
+        let padded = format!(" {normalized} ");
+        if padded.contains(&format!(" {} ", abbr.to_lowercase()))
+            || padded.contains(&format!(" {normalized_name} "))
+        {
+            state = Some((*abbr).to_string());
+            normalized = remove_word(&normalized, &abbr.to_lowercase());
+            normalized = normalized.replace(&normalized_name, " ");
+            break;
+        }
+    }
+
+    ParsedUsQuery {
+        city_query: normalize_location_text(&normalized),
+        state,
+        zip,
+    }
+}
+
 fn city_match_rank(name: &str, query: &str) -> u8 {
     let normalized_name = name.to_lowercase();
     if normalized_name.starts_with(query) {
@@ -195,7 +390,26 @@ fn city_match_rank(name: &str, query: &str) -> u8 {
 }
 
 fn normalize_query(query: &str) -> String {
-    query.trim().to_lowercase()
+    normalize_location_text(query)
+}
+
+fn normalize_location_text(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn remove_word(value: &str, word: &str) -> String {
+    value
+        .split_whitespace()
+        .filter(|part| *part != word)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn normalize_limit(limit: Option<usize>) -> usize {
@@ -216,6 +430,44 @@ fn city_to_candidate(city: &CityRecord) -> LocationCandidate {
     }
 }
 
+fn us_zip_to_candidate(record: &UsZipRecord) -> LocationCandidate {
+    let label = format!("{}, {} {}", record.city, record.state, record.zip);
+    LocationCandidate {
+        id: format!("us-zip-{}", record.zip),
+        label,
+        name: record.city.clone(),
+        country: "US".to_string(),
+        latitude: record.lat,
+        longitude: record.lng,
+        timezone: record.tz.clone(),
+        provider: US_POSTAL_PROVIDER_ID.to_string(),
+    }
+}
+
+fn us_place_to_candidate(place: &UsPlaceRecord) -> LocationCandidate {
+    let label = format!("{}, {}", place.city, place.state);
+    LocationCandidate {
+        id: format!(
+            "us-place-{}-{}",
+            place.state.to_lowercase(),
+            normalize_location_text(&place.city).replace(' ', "-")
+        ),
+        label,
+        name: place.city.clone(),
+        country: "US".to_string(),
+        latitude: place.lat,
+        longitude: place.lng,
+        timezone: place.tz.clone(),
+        provider: US_POSTAL_PROVIDER_ID.to_string(),
+    }
+}
+
+fn compare_distance<T>((_, a_distance): &(T, f64), (_, b_distance): &(T, f64)) -> Ordering {
+    a_distance
+        .partial_cmp(b_distance)
+        .unwrap_or(Ordering::Equal)
+}
+
 fn validate_coordinates(latitude: f64, longitude: f64) -> GeocodeResult<()> {
     if !latitude.is_finite() || !(-90.0..=90.0).contains(&latitude) {
         return Err(GeocodeError {
@@ -229,6 +481,60 @@ fn validate_coordinates(latitude: f64, longitude: f64) -> GeocodeResult<()> {
     }
     Ok(())
 }
+
+const US_STATES: &[(&str, &str)] = &[
+    ("AL", "Alabama"),
+    ("AK", "Alaska"),
+    ("AZ", "Arizona"),
+    ("AR", "Arkansas"),
+    ("CA", "California"),
+    ("CO", "Colorado"),
+    ("CT", "Connecticut"),
+    ("DE", "Delaware"),
+    ("DC", "District of Columbia"),
+    ("FL", "Florida"),
+    ("GA", "Georgia"),
+    ("HI", "Hawaii"),
+    ("ID", "Idaho"),
+    ("IL", "Illinois"),
+    ("IN", "Indiana"),
+    ("IA", "Iowa"),
+    ("KS", "Kansas"),
+    ("KY", "Kentucky"),
+    ("LA", "Louisiana"),
+    ("ME", "Maine"),
+    ("MD", "Maryland"),
+    ("MA", "Massachusetts"),
+    ("MI", "Michigan"),
+    ("MN", "Minnesota"),
+    ("MS", "Mississippi"),
+    ("MO", "Missouri"),
+    ("MT", "Montana"),
+    ("NE", "Nebraska"),
+    ("NV", "Nevada"),
+    ("NH", "New Hampshire"),
+    ("NJ", "New Jersey"),
+    ("NM", "New Mexico"),
+    ("NY", "New York"),
+    ("NC", "North Carolina"),
+    ("ND", "North Dakota"),
+    ("OH", "Ohio"),
+    ("OK", "Oklahoma"),
+    ("OR", "Oregon"),
+    ("PA", "Pennsylvania"),
+    ("RI", "Rhode Island"),
+    ("SC", "South Carolina"),
+    ("SD", "South Dakota"),
+    ("TN", "Tennessee"),
+    ("TX", "Texas"),
+    ("UT", "Utah"),
+    ("VT", "Vermont"),
+    ("VA", "Virginia"),
+    ("WA", "Washington"),
+    ("WV", "West Virginia"),
+    ("WI", "Wisconsin"),
+    ("WY", "Wyoming"),
+];
 
 fn distance_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let d_lat = (lat2 - lat1).to_radians();
@@ -327,6 +633,61 @@ mod tests {
         )
         .unwrap()
         .is_empty());
+    }
+
+    #[test]
+    fn geocodes_us_city_state_zip_offline() {
+        let state = GeocodeState::default();
+        let results = geocode_with_cache(
+            &state,
+            GeocodeRequest {
+                query: "Alexandria, VA 22301".to_string(),
+                limit: Some(8),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(results[0].label, "Alexandria, VA 22301");
+        assert_eq!(results[0].latitude, 38.82);
+        assert_eq!(results[0].longitude, -77.0589);
+        assert_eq!(results[0].timezone, "America/New_York");
+        assert_eq!(results[0].provider, US_POSTAL_PROVIDER_ID);
+    }
+
+    #[test]
+    fn geocodes_us_city_state_without_zip_offline() {
+        let state = GeocodeState::default();
+        let results = geocode_with_cache(
+            &state,
+            GeocodeRequest {
+                query: "Alexandria VA".to_string(),
+                limit: Some(3),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(results[0].label, "Alexandria, VA");
+        assert_eq!(results[0].timezone, "America/New_York");
+    }
+
+    #[test]
+    fn parses_us_location_queries() {
+        assert_eq!(
+            parse_us_query("Alexandria, VA 22301"),
+            ParsedUsQuery {
+                city_query: "alexandria".to_string(),
+                state: Some("VA".to_string()),
+                zip: Some("22301".to_string()),
+            }
+        );
+        assert_eq!(
+            parse_us_query("Alexandria Virginia"),
+            ParsedUsQuery {
+                city_query: "alexandria".to_string(),
+                state: Some("VA".to_string()),
+                zip: None,
+            }
+        );
     }
 
     #[test]

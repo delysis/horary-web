@@ -34,3 +34,4 @@ src-tauri/.tauri/
 src-tauri/target-*/
 
 artifacts/horary-reading-eval.json
+artifacts/horary-reading-eval-live.json

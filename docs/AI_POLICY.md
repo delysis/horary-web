@@ -1,10 +1,10 @@
 # AI Interpretation Policy
 
-Whorary's local AI interpretation boundary treats the AI as a symbolic interpreter only. The AI must never be the chart calculator.
+Horary's local AI interpretation boundary treats the AI as a symbolic interpreter only. The AI must never be the chart calculator.
 
 ## Required Boundary
 
-The deterministic chart engine computes:
+The active React adapter first asks the deterministic horary fact engine to compute:
 
 - Cast time and UTC time
 - Location
@@ -14,7 +14,9 @@ The deterministic chart engine computes:
 - Aspects and applying/separating phase
 - Essential and accidental dignities plus derived horary factors such as sect, Ascendant ruler, planetary day/hour, solar condition, receptions, void-of-course Moon, antiscia/contra-antiscia, translation/collection/prohibition/frustration candidates, and Part of Fortune
 
-The AI receives those facts and returns a symbolic interpretation. It must not calculate or recalculate positions, houses, aspects, dignities, or timing.
+If that richer path fails, the adapter falls back to display-summary facts from the upstream React chart calculation so the UI remains usable, but confidence should be lower because derived testimony may be absent.
+
+The AI receives supplied facts and returns a symbolic interpretation. It must not calculate or recalculate positions, houses, aspects, dignities, or timing.
 
 ## Output Shape
 

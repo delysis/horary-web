@@ -1,5 +1,10 @@
 import { signRuler } from '../astro/dignities.js';
-import { norm360, signInfo } from '../astro/utils.js';
+import { CLASSICAL_PLANETS, norm360, signInfo } from '../astro/utils.js';
+
+const DEFAULT_MAX_ASPECT_FACTS = 24;
+const DEFAULT_MAX_RECEPTION_FACTS = 12;
+const DEFAULT_MAX_TIMING_PATTERN_FACTS = 8;
+const CLASSICAL_BODY_SET = new Set(CLASSICAL_PLANETS);
 
 export function buildHoraryChartFacts(chart, options = {}) {
     const castDate = chart.date instanceof Date ? chart.date : null;
@@ -19,20 +24,19 @@ export function buildHoraryChartFacts(chart, options = {}) {
         midheaven: angleFact(chart.houses.mc),
         houses: buildHouseFacts(chart),
         bodies: buildBodyFacts(chart),
-        aspects: buildAspectFacts(chart),
+        aspects: buildAspectFacts(chart, options),
         derived: {
             zodiac: chart.zodiac || 'tropical',
             houseSystem: chart.houseSystem || 'regiomontanus',
             chartSect: chart.dayChart ? 'day' : 'night',
             ascendantRuler: signRuler(signInfo(chart.houses.asc).index),
             partOfFortune: lotFact(chart.lots?.partOfFortune),
-            accidentalDignities: buildAccidentalDignityFacts(chart),
-            receptions: buildReceptionFacts(chart),
+            receptions: buildReceptionFacts(chart, options),
             voidOfCourseMoon: voidOfCourseFact(chart.voidOfCourseMoon),
             antisciaContacts: buildAntisciaFacts(chart),
             solarConditions: buildSolarConditionFacts(chart),
             planetaryHour: planetaryHourFact(chart.planetaryHour),
-            timingPatterns: buildTimingPatternFacts(chart),
+            timingPatterns: buildTimingPatternFacts(chart, options),
         },
     };
 }
@@ -67,9 +71,7 @@ function buildHouseFacts(chart) {
         return {
             number: index + 1,
             sign: info.name,
-            glyph: info.glyph,
             degree: round(info.totalDegrees, 4),
-            absoluteLongitude: round(norm360(longitude), 4),
             ruler: signRuler(info.index),
         };
     });
@@ -83,38 +85,34 @@ function buildBodyFacts(chart) {
             return {
                 name,
                 sign: info.name,
-                glyph: info.glyph,
                 degree: round(info.totalDegrees, 4),
-                absoluteLongitude: round(norm360(position.longitude), 4),
                 house: position.house || null,
                 retrograde: Boolean(position.retrograde),
-                speed: typeof position.speed === 'number' ? round(position.speed, 6) : null,
                 dignity: summarizeDignity(chart.dignities?.[name]),
                 accidentalDignity: summarizeAccidentalDignity(chart.accidentalDignities?.[name]),
             };
         });
 }
 
-function buildAspectFacts(chart) {
-    return chart.aspects.map(aspect => ({
-        planet1: aspect.planet1,
-        aspectName: aspect.aspectName,
-        planet2: aspect.planet2,
-        orb: round(aspect.orb, 4),
-        applying: aspect.applying === true,
-        separating: aspect.separating === true,
-        exact: aspect.exact === true,
-        major: aspect.major === true,
-    }));
+function buildAspectFacts(chart, options) {
+    const maxAspects = boundedCount(options.maxAspectFacts, DEFAULT_MAX_ASPECT_FACTS);
+    return (chart.aspects || [])
+        .filter(aspect => aspect.major === true)
+        .filter(aspect => CLASSICAL_BODY_SET.has(aspect.planet1) && CLASSICAL_BODY_SET.has(aspect.planet2))
+        .slice(0, maxAspects)
+        .map(compactAspectFact);
 }
 
-function buildReceptionFacts(chart) {
-    return (chart.receptions || []).map(reception => ({
-        hostPlanet: reception.hostPlanet,
-        guestPlanet: reception.guestPlanet,
-        dignity: reception.dignity,
-        mutual: reception.mutual === true,
-    }));
+function buildReceptionFacts(chart, options) {
+    const maxReceptions = boundedCount(options.maxReceptionFacts, DEFAULT_MAX_RECEPTION_FACTS);
+    return (chart.receptions || [])
+        .slice(0, maxReceptions)
+        .map(reception => ({
+            hostPlanet: reception.hostPlanet,
+            guestPlanet: reception.guestPlanet,
+            dignity: reception.dignity,
+            mutual: reception.mutual === true,
+        }));
 }
 
 function buildAntisciaFacts(chart) {
@@ -134,26 +132,96 @@ function buildSolarConditionFacts(chart) {
     }));
 }
 
-function buildAccidentalDignityFacts(chart) {
-    return Object.fromEntries(Object.entries(chart.accidentalDignities || {}).map(([planet, dignity]) => [
-        planet,
-        summarizeAccidentalDignity(dignity),
-    ]));
+function buildTimingPatternFacts(chart, options) {
+    const maxTimingPatterns = boundedCount(options.maxTimingPatternFacts, DEFAULT_MAX_TIMING_PATTERN_FACTS);
+    return (chart.timingPatterns || [])
+        .slice(0, maxTimingPatterns)
+        .map(compactTimingPatternFact);
 }
 
-function buildTimingPatternFacts(chart) {
-    return (chart.timingPatterns || []).map(pattern => ({
-        ...pattern,
-    }));
+function compactTimingPatternFact(pattern) {
+    if (pattern.type === 'translation') {
+        return {
+            type: pattern.type,
+            mediator: pattern.mediator,
+            fromPlanet: pattern.fromPlanet,
+            toPlanet: pattern.toPlanet,
+            separatedAspect: compactAspectEvidence(pattern.separatedAspect),
+            applyingAspect: compactAspectEvidence(pattern.applyingAspect),
+            estimatedPerfectsWithinHours: nullableRound(pattern.estimatedPerfectsWithinHours),
+        };
+    }
+
+    if (pattern.type === 'collection') {
+        return {
+            type: pattern.type,
+            collector: pattern.collector,
+            planet1: pattern.planet1,
+            planet2: pattern.planet2,
+            aspect1: compactAspectEvidence(pattern.aspect1),
+            aspect2: compactAspectEvidence(pattern.aspect2),
+            estimatedFirstPerfectsWithinHours: nullableRound(pattern.estimatedFirstPerfectsWithinHours),
+            estimatedSecondPerfectsWithinHours: nullableRound(pattern.estimatedSecondPerfectsWithinHours),
+        };
+    }
+
+    if (pattern.type === 'prohibitionFrustration') {
+        return {
+            type: pattern.type,
+            planet1: pattern.planet1,
+            planet2: pattern.planet2,
+            sharedPlanet: pattern.sharedPlanet,
+            interveningPlanet: pattern.interveningPlanet,
+            directAspect: compactAspectEvidence(pattern.directAspect),
+            interveningAspect: compactAspectEvidence(pattern.interveningAspect),
+            directEstimatedPerfectsWithinHours: nullableRound(pattern.directEstimatedPerfectsWithinHours),
+            interveningEstimatedPerfectsWithinHours: nullableRound(pattern.interveningEstimatedPerfectsWithinHours),
+        };
+    }
+
+    return {
+        type: pattern.type || 'unknown',
+        planet1: pattern.planet1 || null,
+        planet2: pattern.planet2 || null,
+        estimatedPerfectsWithinHours: nullableRound(pattern.estimatedPerfectsWithinHours),
+    };
+}
+
+function compactAspectEvidence(aspect) {
+    if (!aspect) return null;
+    return {
+        planet1: aspect.planet1,
+        aspectName: aspect.aspectName,
+        planet2: aspect.planet2,
+        orb: nullableRound(aspect.orb),
+        applying: aspect.applying === true,
+        separating: aspect.separating === true,
+        estimatedPerfectsWithinHours: nullableRound(
+            aspect.estimatedPerfectsWithinHours ?? aspect.perfection?.perfectsWithinHours,
+        ),
+        blockedBySignBoundary: aspect.perfection?.blockedBySignBoundary === true,
+        stationBeforePerfection: aspect.perfection?.stationBeforePerfection === true,
+    };
+}
+
+function compactAspectFact(aspect) {
+    return {
+        planet1: aspect.planet1,
+        aspectName: aspect.aspectName,
+        planet2: aspect.planet2,
+        orb: round(aspect.orb, 4),
+        applying: aspect.applying === true,
+        separating: aspect.separating === true,
+        exact: aspect.exact === true,
+        major: true,
+    };
 }
 
 function angleFact(longitude) {
     const info = signInfo(longitude);
     return {
         sign: info.name,
-        glyph: info.glyph,
         degree: round(info.totalDegrees, 4),
-        absoluteLongitude: round(norm360(longitude), 4),
     };
 }
 
@@ -163,9 +231,7 @@ function lotFact(lot) {
     return {
         name: lot.name,
         sign: info.name,
-        glyph: info.glyph,
         degree: round(info.totalDegrees, 4),
-        absoluteLongitude: round(norm360(lot.longitude), 4),
         house: lot.house || null,
         formula: lot.formula,
     };
@@ -193,7 +259,6 @@ function planetaryHourFact(planetaryHour) {
         planetaryHourRuler: planetaryHour.planetaryHourRuler || null,
         startsAtUtc: planetaryHour.startsAtUtc || null,
         endsAtUtc: planetaryHour.endsAtUtc || null,
-        method: planetaryHour.method || null,
         reason: planetaryHour.reason || null,
     };
 }
@@ -233,6 +298,14 @@ function summarizeAccidentalDignity(dignity) {
 
 function round(value, precision = 4) {
     return Number(value.toFixed(precision));
+}
+
+function nullableRound(value, precision = 4) {
+    return Number.isFinite(value) ? round(value, precision) : null;
+}
+
+function boundedCount(value, fallback) {
+    return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
 }
 
 function formatNumber(value, precision) {

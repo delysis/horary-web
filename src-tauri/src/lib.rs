@@ -26,6 +26,11 @@ use native_llama_worker::{
     native_llama_health, native_llama_status, stop_native_llama, NativeLlamaHealth,
     NativeLlamaState,
 };
+use native_location::{
+    cancel_current_location_detection_from_state, get_current_location_native,
+    start_current_location_detection_from_state, CurrentLocation, CurrentLocationDetectionStarted,
+    CurrentLocationDetectionState, CurrentLocationError, CurrentLocationRequest,
+};
 use serde::Serialize;
 use storage::{
     delete_chart_from_dir, get_chart_from_dir, list_charts_from_dir, load_settings_from_dir,
@@ -41,7 +46,11 @@ mod llama;
 mod model_manifest;
 mod native_llama;
 mod native_llama_worker;
+mod native_location;
 mod storage;
+
+#[cfg(target_os = "macos")]
+const QUIT_MENU_ID: &str = "horary.quit";
 
 #[derive(Serialize)]
 struct AppInfo {
@@ -53,7 +62,7 @@ struct AppInfo {
 #[tauri::command]
 fn get_app_info() -> AppInfo {
     AppInfo {
-        product_name: "Whorary",
+        product_name: "Horary",
         version: env!("CARGO_PKG_VERSION"),
         runtime: "tauri",
     }
@@ -126,38 +135,80 @@ fn reverse_geocode_location(
 }
 
 #[tauri::command]
-fn list_models(app: tauri::AppHandle) -> Result<Vec<ModelInfo>, LlamaError> {
-    let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
-        message: error.to_string(),
-    })?;
-    list_models_in_dir(&app_data_dir)
+async fn get_current_location(
+    req: CurrentLocationRequest,
+) -> Result<CurrentLocation, CurrentLocationError> {
+    get_current_location_native(req).await
 }
 
 #[tauri::command]
-fn import_model(app: tauri::AppHandle, req: ImportModelRequest) -> Result<ModelInfo, LlamaError> {
-    let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
-        message: error.to_string(),
-    })?;
-    import_model_to_dir(&app_data_dir, req)
+fn start_current_location_detection(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CurrentLocationDetectionState>,
+    req: CurrentLocationRequest,
+) -> Result<CurrentLocationDetectionStarted, CurrentLocationError> {
+    start_current_location_detection_from_state(app, &state, req)
 }
 
 #[tauri::command]
-fn import_llama_sidecar(
+fn cancel_current_location_detection(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CurrentLocationDetectionState>,
+    detection_id: String,
+) -> Result<bool, CurrentLocationError> {
+    cancel_current_location_detection_from_state(app, &state, detection_id)
+}
+
+fn llama_worker_error(error: impl std::fmt::Display) -> LlamaError {
+    LlamaError {
+        message: format!("llama worker failed: {error}"),
+    }
+}
+
+#[tauri::command]
+async fn list_models(app: tauri::AppHandle) -> Result<Vec<ModelInfo>, LlamaError> {
+    let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
+        message: error.to_string(),
+    })?;
+    tauri::async_runtime::spawn_blocking(move || list_models_in_dir(&app_data_dir))
+        .await
+        .map_err(llama_worker_error)?
+}
+
+#[tauri::command]
+async fn import_model(
+    app: tauri::AppHandle,
+    req: ImportModelRequest,
+) -> Result<ModelInfo, LlamaError> {
+    let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
+        message: error.to_string(),
+    })?;
+    tauri::async_runtime::spawn_blocking(move || import_model_to_dir(&app_data_dir, req))
+        .await
+        .map_err(llama_worker_error)?
+}
+
+#[tauri::command]
+async fn import_llama_sidecar(
     app: tauri::AppHandle,
     req: ImportLlamaSidecarRequest,
 ) -> Result<LlamaSidecarStatus, LlamaError> {
     let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
         message: error.to_string(),
     })?;
-    install_llama_sidecar_to_dir(&app_data_dir, req)
+    tauri::async_runtime::spawn_blocking(move || install_llama_sidecar_to_dir(&app_data_dir, req))
+        .await
+        .map_err(llama_worker_error)?
 }
 
 #[tauri::command]
-fn get_model_info(app: tauri::AppHandle, model_id: String) -> Result<ModelInfo, LlamaError> {
+async fn get_model_info(app: tauri::AppHandle, model_id: String) -> Result<ModelInfo, LlamaError> {
     let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
         message: error.to_string(),
     })?;
-    get_model_by_id(&app_data_dir, &model_id)
+    tauri::async_runtime::spawn_blocking(move || get_model_by_id(&app_data_dir, &model_id))
+        .await
+        .map_err(llama_worker_error)?
 }
 
 #[tauri::command]
@@ -217,26 +268,34 @@ fn get_native_llama_health(
 }
 
 #[tauri::command]
-fn start_llama(
+async fn start_llama(
     app: tauri::AppHandle,
-    state: tauri::State<'_, LlamaState>,
-    native_state: tauri::State<'_, NativeLlamaState>,
     req: StartLlamaRequest,
 ) -> Result<LlamaStatus, LlamaError> {
     let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
         message: error.to_string(),
     })?;
-    #[cfg(feature = "native-llama")]
-    {
-        let _ = stop_llama_process(&state);
-        start_native_llama_in_dir(&app_data_dir, &native_state, req)
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(feature = "native-llama")]
+        {
+            let state = app.state::<LlamaState>();
+            let native_state = app.state::<NativeLlamaState>();
+            let _ = stop_llama_process(&state);
+            start_native_llama_in_dir(&app_data_dir, &native_state, req)
+        }
+        #[cfg(not(feature = "native-llama"))]
+        {
+            let state = app.state::<LlamaState>();
+            let resource_dir = app.path().resource_dir().ok();
+            start_llama_with_sidecar_dir(&app_data_dir, resource_dir.as_deref(), &state, req)
+        }
+    })
+    .await
+    .map_err(llama_worker_error)?;
+    if let Err(error) = &result {
+        log::error!("failed to start judgement engine: {}", error.message);
     }
-    #[cfg(not(feature = "native-llama"))]
-    {
-        let _ = native_state;
-        let resource_dir = app.path().resource_dir().ok();
-        start_llama_with_sidecar_dir(&app_data_dir, resource_dir.as_deref(), &state, req)
-    }
+    result
 }
 
 #[tauri::command]
@@ -283,13 +342,123 @@ fn cancel_interpretation_stream(
     cancel_interpretation_stream_from_state(&generation_state, generation_id)
 }
 
+fn stop_inference_workers(app: &tauri::AppHandle) {
+    let llama_state = app.state::<LlamaState>();
+    let native_state = app.state::<NativeLlamaState>();
+    let _ = stop_native_llama(&native_state);
+    let _ = stop_llama_process(&llama_state);
+}
+
+#[cfg(target_os = "macos")]
+fn exit_without_metal_destructors(code: i32) -> ! {
+    use std::os::raw::c_int;
+
+    extern "C" {
+        fn _exit(status: c_int) -> !;
+    }
+
+    unsafe { _exit(code as c_int) }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn exit_without_metal_destructors(code: i32) -> ! {
+    std::process::exit(code);
+}
+
+#[cfg(target_os = "macos")]
+fn build_macos_app_menu<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    let package_info = app.package_info();
+    let config = app.config();
+    let about_metadata = AboutMetadata {
+        name: Some("Horary".to_string()),
+        version: Some(package_info.version.to_string()),
+        copyright: config.bundle.copyright.clone(),
+        authors: config
+            .bundle
+            .publisher
+            .clone()
+            .map(|publisher| vec![publisher]),
+        ..Default::default()
+    };
+
+    let window_menu = Submenu::with_id_and_items(
+        app,
+        tauri::menu::WINDOW_SUBMENU_ID,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+
+    let help_menu =
+        Submenu::with_id_and_items(app, tauri::menu::HELP_SUBMENU_ID, "Help", true, &[])?;
+
+    Menu::with_items(
+        app,
+        &[
+            &Submenu::with_items(
+                app,
+                "Horary",
+                true,
+                &[
+                    &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::services(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::hide(app, None)?,
+                    &PredefinedMenuItem::hide_others(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(app, QUIT_MENU_ID, "Quit Horary", true, Some("Cmd+Q"))?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[&PredefinedMenuItem::close_window(app, None)?],
+            )?,
+            &Submenu::with_items(
+                app,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(app, None)?,
+                    &PredefinedMenuItem::redo(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::cut(app, None)?,
+                    &PredefinedMenuItem::copy(app, None)?,
+                    &PredefinedMenuItem::paste(app, None)?,
+                    &PredefinedMenuItem::select_all(app, None)?,
+                ],
+            )?,
+            &Submenu::with_items(
+                app,
+                "View",
+                true,
+                &[&PredefinedMenuItem::fullscreen(app, None)?],
+            )?,
+            &window_menu,
+            &help_menu,
+        ],
+    )
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(LlamaState::default())
         .manage(NativeLlamaState::default())
         .manage(AiGenerationState::default())
         .manage(GeocodeState::default())
+        .manage(CurrentLocationDetectionState::default())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -299,7 +468,20 @@ pub fn run() {
                 )?;
             }
             Ok(())
-        })
+        });
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .enable_macos_default_menu(false)
+        .menu(build_macos_app_menu)
+        .on_menu_event(|app, event| {
+            if event.id() == QUIT_MENU_ID {
+                stop_inference_workers(app);
+                exit_without_metal_destructors(0);
+            }
+        });
+
+    builder
         .invoke_handler(tauri::generate_handler![
             get_app_info,
             save_chart,
@@ -310,6 +492,9 @@ pub fn run() {
             save_settings,
             geocode_location,
             reverse_geocode_location,
+            get_current_location,
+            start_current_location_detection,
+            cancel_current_location_detection,
             list_models,
             import_model,
             import_llama_sidecar,
@@ -326,6 +511,12 @@ pub fn run() {
             start_interpretation_stream,
             cancel_interpretation_stream
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { code, .. } = event {
+                stop_inference_workers(app);
+                exit_without_metal_destructors(code.unwrap_or(0));
+            }
+        });
 }

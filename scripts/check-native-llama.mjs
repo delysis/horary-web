@@ -4,18 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { discoverGemmaGguf, discoverGemmaMtpGguf } from './native-llama-models.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const modelPath = process.env.WHORARY_NATIVE_LLAMA_TEST_MODEL || discoverGemmaGguf();
-const mtpModelPath = process.env.WHORARY_NATIVE_LLAMA_MTP_MODEL || discoverGemmaMtpGguf();
+const modelPath = process.env.HORARY_NATIVE_LLAMA_TEST_MODEL || discoverGemmaGguf();
+const mtpModelPath = process.env.HORARY_NATIVE_LLAMA_MTP_MODEL || discoverGemmaMtpGguf();
 if (!modelPath) {
-    console.error('Native llama gate failed: no cached Gemma GGUF found. Set WHORARY_NATIVE_LLAMA_TEST_MODEL to a local .gguf path.');
+    console.error('Native llama gate failed: no cached Gemma GGUF found. Set HORARY_NATIVE_LLAMA_TEST_MODEL to a local .gguf path.');
     process.exit(1);
 }
-if (process.env.WHORARY_NATIVE_LLAMA_REQUIRE_MTP === '1' && !mtpModelPath) {
-    console.error('Native llama MTP gate failed: no cached Gemma MTP GGUF found. Set WHORARY_NATIVE_LLAMA_MTP_MODEL to a local .gguf path.');
+if (process.env.HORARY_NATIVE_LLAMA_REQUIRE_MTP === '1' && !mtpModelPath) {
+    console.error('Native llama MTP gate failed: no cached Gemma MTP GGUF found. Set HORARY_NATIVE_LLAMA_MTP_MODEL to a local .gguf path.');
     process.exit(1);
 }
 
-const features = process.env.WHORARY_NATIVE_LLAMA_FEATURES
+const features = process.env.HORARY_NATIVE_LLAMA_FEATURES
     || (process.platform === 'darwin' ? 'native-llama-metal' : 'native-llama');
 const args = [
     'test',
@@ -36,8 +36,8 @@ const result = spawnSync('cargo', args, {
     stdio: 'inherit',
     env: {
         ...process.env,
-        WHORARY_NATIVE_LLAMA_TEST_MODEL: modelPath,
-        ...(mtpModelPath ? { WHORARY_NATIVE_LLAMA_MTP_MODEL: mtpModelPath } : {}),
+        HORARY_NATIVE_LLAMA_TEST_MODEL: modelPath,
+        ...(mtpModelPath ? { HORARY_NATIVE_LLAMA_MTP_MODEL: mtpModelPath } : {}),
     },
 });
 

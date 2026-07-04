@@ -12,8 +12,8 @@ export function createPwaManifest(basePath = '/') {
     const base = normalizePwaBase(basePath);
 
     return {
-        name: 'Whorary — Astrology Calculator',
-        short_name: 'Whorary',
+        name: 'Horary — Astrology Calculator',
+        short_name: 'Horary',
         description: 'Comprehensive offline astrology calculator with horary, natal charts, and all major house systems',
         theme_color: '#0a0a1a',
         background_color: '#0a0a1a',

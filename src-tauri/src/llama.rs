@@ -14,13 +14,14 @@ use std::{
     process::{Child, Command, Stdio},
     sync::Mutex,
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
 const MODELS_DIR: &str = "models";
 const LOGS_DIR: &str = "logs";
 const BINARIES_DIR: &str = "binaries";
 const KV_CACHE_DIR: &str = "kv-cache";
+const MODEL_INFO_CACHE_SUFFIX: &str = ".horary-model.json";
 const LLAMA_SERVER_BIN: &str = "llama-server";
 const LLAMA_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 const LLAMA_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -59,6 +60,14 @@ pub struct ModelInfo {
     pub filename: String,
     pub size_bytes: u64,
     pub sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct ModelInfoCache {
+    size_bytes: u64,
+    modified_unix_millis: u64,
+    sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -318,19 +327,40 @@ pub fn list_models_in_dir(app_data_dir: &Path) -> LlamaResult<Vec<ModelInfo>> {
             .unwrap_or("model")
             .to_string();
         let display_name = display_name_from_id(&id);
-        models.push(model_info_from_path(&path, id, display_name)?);
+        models.push(model_info_from_path_fast(&path, id, display_name)?);
     }
     models.sort_by(|a, b| a.display_name.cmp(&b.display_name));
     Ok(models)
 }
 
 pub fn get_model_by_id(app_data_dir: &Path, model_id: &str) -> LlamaResult<ModelInfo> {
-    list_models_in_dir(app_data_dir)?
-        .into_iter()
-        .find(|model| model.id == model_id)
-        .ok_or_else(|| LlamaError {
+    let dir = models_dir(app_data_dir);
+    if !dir.exists() {
+        return Err(LlamaError {
             message: format!("model not found: {model_id}"),
-        })
+        });
+    }
+
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("gguf") {
+            continue;
+        }
+        let id = path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("model")
+            .to_string();
+        if id == model_id {
+            let display_name = display_name_from_id(&id);
+            return model_info_from_path(&path, id, display_name);
+        }
+    }
+
+    Err(LlamaError {
+        message: format!("model not found: {model_id}"),
+    })
 }
 
 pub fn get_model_status(state: &LlamaState) -> LlamaResult<LlamaStatus> {
@@ -692,6 +722,14 @@ pub(crate) fn model_info_from_path(
     display_name: String,
 ) -> LlamaResult<ModelInfo> {
     let metadata = fs::metadata(path)?;
+    let sha256 = match read_cached_model_sha256(path, &metadata) {
+        Some(sha256) => sha256,
+        None => {
+            let sha256 = sha256_file(path)?;
+            write_model_info_cache(path, &metadata, &sha256)?;
+            sha256
+        }
+    };
     Ok(ModelInfo {
         id,
         display_name,
@@ -701,8 +739,75 @@ pub(crate) fn model_info_from_path(
             .unwrap_or("model.gguf")
             .to_string(),
         size_bytes: metadata.len(),
-        sha256: sha256_file(path)?,
+        sha256,
     })
+}
+
+pub(crate) fn model_info_from_path_fast(
+    path: &Path,
+    id: String,
+    display_name: String,
+) -> LlamaResult<ModelInfo> {
+    let metadata = fs::metadata(path)?;
+    Ok(ModelInfo {
+        id,
+        display_name,
+        filename: path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("model.gguf")
+            .to_string(),
+        size_bytes: metadata.len(),
+        sha256: read_cached_model_sha256(path, &metadata).unwrap_or_default(),
+    })
+}
+
+fn read_cached_model_sha256(path: &Path, metadata: &fs::Metadata) -> Option<String> {
+    let cache = fs::read_to_string(model_info_cache_path(path)).ok()?;
+    let cache: ModelInfoCache = serde_json::from_str(&cache).ok()?;
+    let sha256 = cache.sha256.trim();
+    if cache.size_bytes == metadata.len()
+        && cache.modified_unix_millis == modified_unix_millis(metadata)
+        && is_sha256_hex(sha256)
+    {
+        Some(sha256.to_ascii_lowercase())
+    } else {
+        None
+    }
+}
+
+fn write_model_info_cache(path: &Path, metadata: &fs::Metadata, sha256: &str) -> LlamaResult<()> {
+    let cache = ModelInfoCache {
+        size_bytes: metadata.len(),
+        modified_unix_millis: modified_unix_millis(metadata),
+        sha256: sha256.to_ascii_lowercase(),
+    };
+    let bytes = serde_json::to_vec_pretty(&cache).map_err(|error| LlamaError {
+        message: error.to_string(),
+    })?;
+    fs::write(model_info_cache_path(path), bytes)?;
+    Ok(())
+}
+
+fn model_info_cache_path(path: &Path) -> PathBuf {
+    let filename = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("model.gguf");
+    path.with_file_name(format!("{filename}{MODEL_INFO_CACHE_SUFFIX}"))
+}
+
+fn modified_unix_millis(metadata: &fs::Metadata) -> u64 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|char| char.is_ascii_hexdigit())
 }
 
 pub(crate) fn sanitize_model_id(value: &str) -> LlamaResult<String> {
@@ -852,7 +957,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "whorary-llama-test-{name}-{}",
+            "horary-llama-test-{name}-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -922,6 +1027,38 @@ mod tests {
         assert_eq!(imported.display_name, "Gemma Test Q4");
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].sha256, imported.sha256);
+    }
+
+    #[test]
+    fn lists_uncached_models_without_hashing_file_contents() {
+        let app_dir = temp_dir("fast-list");
+        let dir = models_dir(&app_dir);
+        fs::create_dir_all(&dir).unwrap();
+        let model = dir.join("legacy-model.gguf");
+        write_model(&model);
+
+        let models = list_models_in_dir(&app_dir).unwrap();
+
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "legacy-model");
+        assert_eq!(models[0].sha256, "");
+        assert!(!model_info_cache_path(&model).exists());
+    }
+
+    #[test]
+    fn explicit_model_lookup_hashes_and_caches_uncached_models() {
+        let app_dir = temp_dir("lookup-caches");
+        let dir = models_dir(&app_dir);
+        fs::create_dir_all(&dir).unwrap();
+        let model = dir.join("legacy-model.gguf");
+        write_model(&model);
+
+        let info = get_model_by_id(&app_dir, "legacy-model").unwrap();
+        let listed = list_models_in_dir(&app_dir).unwrap();
+
+        assert_eq!(info.sha256.len(), 64);
+        assert_eq!(listed[0].sha256, info.sha256);
+        assert!(model_info_cache_path(&model).exists());
     }
 
     #[test]

@@ -6,7 +6,7 @@ export function resolveAppVersion(version = readInjectedAppVersion()) {
 }
 
 function readInjectedAppVersion() {
-    return typeof __WHORARY_APP_VERSION__ === 'string' ? __WHORARY_APP_VERSION__ : '';
+    return typeof __HORARY_APP_VERSION__ === 'string' ? __HORARY_APP_VERSION__ : '';
 }
 
 export const APP_VERSION = resolveAppVersion();

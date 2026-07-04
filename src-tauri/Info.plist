@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSLocationUsageDescription</key>
+  <string>Horary uses your current location to cast a chart for the place where the question is asked.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Horary uses your current location to cast a chart for the place where the question is asked.</string>
+</dict>
+</plist>

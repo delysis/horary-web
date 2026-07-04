@@ -5,6 +5,7 @@ import {
     buildHoraryChartFacts,
     formatUtcOffset,
 } from '../chartFacts.js';
+import { calculateChart } from '../../astro/chart.js';
 
 const chart = {
     date: new Date('2026-06-30T16:00:00.000Z'),
@@ -147,9 +148,40 @@ test('buildHoraryChartFacts emits deterministic model evidence', () => {
     assert.equal(facts.bodies[0].dignity.triplicityRuler, true);
     assert.equal(facts.bodies[0].accidentalDignity.angularity, 'angular');
     assert.equal(facts.bodies[0].accidentalDignity.score, 5);
-    assert.equal(facts.derived.accidentalDignities.Moon.factors[0].type, 'angularity');
     assert.equal(facts.aspects[0].orb, 2.1235);
     assert.equal(facts.aspects[0].applying, true);
+});
+
+test('buildHoraryChartFacts keeps native judgement payload compact', () => {
+    const generatedChart = calculateChart({
+        date: new Date('2026-07-04T18:46:00.000Z'),
+        lat: 38.8048,
+        lng: -77.0469,
+        localDate: '2026-07-04',
+        localTime: '14:46',
+        houseSystem: 'regiomontanus',
+        planetSet: 'classical',
+    });
+    const facts = buildHoraryChartFacts(generatedChart, {
+        timezone: 'America/New_York',
+        locationLabel: 'Alexandria, VA',
+        localTime: '2026-07-04 14:46 America/New_York',
+    });
+    const encoded = JSON.stringify(facts);
+
+    assert.ok(Buffer.byteLength(encoded) < 8_000);
+    assert.deepEqual(facts.bodies.map(body => body.name), [
+        'Sun',
+        'Moon',
+        'Mercury',
+        'Venus',
+        'Mars',
+        'Jupiter',
+        'Saturn',
+    ]);
+    assert.ok(facts.aspects.every(aspect => aspect.major === true));
+    assert.ok(!encoded.includes('"perfection"'));
+    assert.ok(!encoded.includes('"method"'));
 });
 
 test('buildHoraryChartFacts derives local time and timezone from chart input metadata', () => {

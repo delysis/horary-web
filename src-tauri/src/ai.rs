@@ -302,14 +302,14 @@ pub fn start_interpretation_stream_from_native_state(
     let task_generation_id = generation_id.clone();
 
     thread::Builder::new()
-        .name("whorary-native-ai-stream".to_string())
+        .name("horary-native-ai-stream".to_string())
         .spawn(move || {
             let (token_tx, token_rx) = std::sync::mpsc::channel::<String>();
             let (done_tx, done_rx) = std::sync::mpsc::channel::<Result<String, AiError>>();
             let app_for_generation = app_for_task.clone();
             let cancel_for_generation = Arc::clone(&cancel);
             thread::Builder::new()
-                .name("whorary-native-ai-generate".to_string())
+                .name("horary-native-ai-generate".to_string())
                 .spawn(move || {
                     let native_state = app_for_generation.state::<NativeLlamaState>();
                     let result = generate_native(
@@ -1551,14 +1551,35 @@ fn judgement_plan() -> Value {
                 .map(|task| {
                     json!({
                         "id": task.get("id").cloned().unwrap_or(Value::Null),
-                        "title": task.get("title").cloned().unwrap_or(Value::Null),
-                        "phase": task.get("phase").cloned().unwrap_or(Value::Null),
-                        "parallelGroup": task.get("parallelGroup").cloned().unwrap_or(Value::Null),
-                        "objective": task.get("objective").cloned().unwrap_or(Value::Null),
                         "instruction": task.get("compactPrompt").cloned().unwrap_or(Value::Null),
-                        "outputKeys": task.get("outputKeys").cloned().unwrap_or_else(|| json!([])),
                     })
                 })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let house_map = pipeline
+        .get("commonHouseMap")
+        .and_then(Value::as_array)
+        .map(|houses| {
+            houses
+                .iter()
+                .map(|house| {
+                    format!(
+                        "{}: {}",
+                        value_label(house.get("house")),
+                        value_label(house.get("core"))
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let house_rules = pipeline
+        .get("houseAssignmentRules")
+        .and_then(Value::as_array)
+        .map(|rules| {
+            rules
+                .iter()
+                .filter_map(|rule| rule.get("rule").and_then(Value::as_str))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
@@ -1572,21 +1593,10 @@ fn judgement_plan() -> Value {
             .and_then(|source| source.get("summary"))
             .cloned()
             .unwrap_or(Value::Null),
-        "cachePolicy": pipeline.get("cachePolicy").cloned().unwrap_or_else(|| json!({})),
-        "checkerOutputContract": pipeline
-            .get("checkerOutputContract")
-            .cloned()
-            .unwrap_or_else(|| json!({})),
         "globalRules": pipeline.get("globalRules").cloned().unwrap_or_else(|| json!([])),
-        "houseAssignmentRules": pipeline.get("houseAssignmentRules").cloned().unwrap_or_else(|| json!([])),
-        "commonHouseMap": pipeline.get("commonHouseMap").cloned().unwrap_or_else(|| json!([])),
+        "houseAssignmentRules": house_rules,
+        "commonHouseMap": house_map,
         "microTasks": micro_tasks,
-        "domainModules": pipeline.get("domainModules").cloned().unwrap_or_else(|| json!([])),
-        "futureMultiCallPipeline": pipeline
-            .get("futureMultiCallPipeline")
-            .cloned()
-            .unwrap_or_else(|| json!([])),
-        "parallelGroups": pipeline.get("parallelGroups").cloned().unwrap_or_else(|| json!([])),
         "traceRequirement": pipeline
             .get("singleCallTraceRequirement")
             .cloned()
@@ -1728,6 +1738,7 @@ fn emit_stream_complete(
 }
 
 fn emit_stream_error(app: &tauri::AppHandle, generation_id: &str, message: &str) {
+    log::error!("judgement generation {generation_id} failed: {message}");
     let _ = app.emit(
         AI_STREAM_ERROR_EVENT,
         InterpretationStreamMessage {
@@ -1872,8 +1883,8 @@ mod horary_reading_eval_tests {
 
     #[test]
     fn native_gemma_reads_horary_fixtures_with_reviewable_traces() {
-        let Some(model_path) = std::env::var_os("WHORARY_NATIVE_LLAMA_TEST_MODEL") else {
-            eprintln!("skipping horary reading eval: WHORARY_NATIVE_LLAMA_TEST_MODEL is unset");
+        let Some(model_path) = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL") else {
+            eprintln!("skipping horary reading eval: HORARY_NATIVE_LLAMA_TEST_MODEL is unset");
             return;
         };
         let model_path = PathBuf::from(model_path);
@@ -1882,7 +1893,7 @@ mod horary_reading_eval_tests {
             "horary reading eval model does not exist: {}",
             model_path.to_string_lossy()
         );
-        let mtp_model_path = std::env::var_os("WHORARY_NATIVE_LLAMA_MTP_MODEL")
+        let mtp_model_path = std::env::var_os("HORARY_NATIVE_LLAMA_MTP_MODEL")
             .map(PathBuf::from)
             .filter(|path| path.is_file());
         let mtp_enabled = mtp_model_path.is_some();
@@ -1891,7 +1902,7 @@ mod horary_reading_eval_tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        let cache_dir = std::env::temp_dir().join(format!("whorary-horary-eval-{millis}"));
+        let cache_dir = std::env::temp_dir().join(format!("horary-horary-eval-{millis}"));
         fs::create_dir_all(&cache_dir).unwrap();
 
         let state = NativeLlamaState::default();
@@ -2023,7 +2034,7 @@ mod horary_reading_eval_tests {
             health: serde_json::to_value(&health).unwrap(),
             cases: case_reports,
         };
-        if let Some(report_path) = std::env::var_os("WHORARY_HORARY_EVAL_REPORT") {
+        if let Some(report_path) = std::env::var_os("HORARY_READING_EVAL_REPORT") {
             let report_path = PathBuf::from(report_path);
             if let Some(parent) = report_path.parent() {
                 fs::create_dir_all(parent).unwrap();
@@ -2910,16 +2921,15 @@ mod tests {
             .unwrap()
             .iter()
             .any(|task| task["id"] == "house_assignment"));
-        assert!(user["judgementPlan"]["domainModules"]
+        assert!(user["judgementPlan"]["commonHouseMap"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|module| module["id"] == "relationship"));
-        assert!(user["judgementPlan"]["futureMultiCallPipeline"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|step| step["id"] == "reception_checker"));
+            .any(|house| house.as_str().unwrap_or_default().starts_with("7:")));
+        assert!(user["judgementPlan"].get("domainModules").is_none());
+        assert!(user["judgementPlan"]
+            .get("futureMultiCallPipeline")
+            .is_none());
         assert!(system.contains("judgementTrace"));
         assert_eq!(user["chart"]["bodies"][0]["name"], "Moon");
         assert!(user["chart"].get("ignoredField").is_none());

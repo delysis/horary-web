@@ -5,8 +5,8 @@ import {
     normalizeAspectSettings,
 } from './aspectSettings.js';
 
-export const HOUSE_SYSTEM_STORAGE_KEY = 'whorary_house';
-export const PLANET_SET_STORAGE_KEY = 'whorary_planets';
+export const HOUSE_SYSTEM_STORAGE_KEY = 'horary_house';
+export const PLANET_SET_STORAGE_KEY = 'horary_planets';
 export const SETTINGS_SCHEMA_VERSION = 1;
 export const SUPPORTED_PLANET_SETS = Object.freeze(['classical', 'modern']);
 

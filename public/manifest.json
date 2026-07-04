@@ -1,0 +1,24 @@
+{
+  "name": "Horary Calculator",
+  "short_name": "Horary",
+  "description": "In-browser horary astrology chart calculator",
+  "start_url": "/horary-web/",
+  "scope": "/horary-web/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "/horary-web/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/horary-web/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

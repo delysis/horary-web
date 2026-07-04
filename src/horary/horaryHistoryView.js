@@ -27,7 +27,7 @@ export function renderHoraryHistoryMarkup(
 }
 
 export function safeHistoryExportFilename(value) {
-    return `whorary-${safeFilePart(value)}.json`;
+    return `horary-${safeFilePart(value)}.json`;
 }
 
 export function safeFilePart(value) {

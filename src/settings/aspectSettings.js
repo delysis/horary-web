@@ -1,6 +1,6 @@
 import { DEFAULT_HORARY_SETTINGS } from '../astro/horarySettings.js';
 
-export const ASPECT_SETTINGS_STORAGE_KEY = 'whorary_aspects';
+export const ASPECT_SETTINGS_STORAGE_KEY = 'horary_aspects';
 export const MIN_ASPECT_ORB = 0;
 export const MAX_ASPECT_ORB = 30;
 

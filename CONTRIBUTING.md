@@ -22,7 +22,7 @@ Use `npm run check:all` for the same required local verification sequence in one
 
 `npm run check:release-assets` is a release gate, not a development gate. It validates the native llama.cpp runtime profile, `llama-cpp-2` feature wiring, any present fallback sidecar binaries/checksums, and any enabled verified model manifest entries.
 
-`npm run check:native-llama` is the hardware-backed native inference gate. It requires a local cached Gemma GGUF or `WHORARY_NATIVE_LLAMA_TEST_MODEL=/path/to/model.gguf`. Use `WHORARY_NATIVE_LLAMA_REQUIRE_MTP=1` when validating that an MTP draft GGUF is available for the release target.
+`npm run check:native-llama` is the hardware-backed native inference gate. It requires a local cached Gemma GGUF or `HORARY_NATIVE_LLAMA_TEST_MODEL=/path/to/model.gguf`. Use `HORARY_NATIVE_LLAMA_REQUIRE_MTP=1` when validating that an MTP draft GGUF is available for the release target.
 
 For desktop packaging changes on macOS, also run:
 

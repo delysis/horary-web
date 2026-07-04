@@ -225,7 +225,7 @@ test('setupHoraryController loads and exports saved horary history entries', asy
     assert.deepEqual(calls.facts.options, { locationLabel: 'Paris' });
     assert.equal(calls.renderedChart.normalized, true);
     assert.equal(calls.controls, 1);
-    assert.equal(calls.downloaded.filename, 'whorary-will-it-work.json');
+    assert.equal(calls.downloaded.filename, 'horary-will-it-work.json');
     assert.deepEqual(calls.downloaded.payload, {
         exportedAt: '2026-06-30T15:00:00.000Z',
         source: 'web',

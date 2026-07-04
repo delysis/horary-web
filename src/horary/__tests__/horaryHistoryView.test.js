@@ -50,8 +50,8 @@ test('renderHoraryHistoryMarkup enables load when desktop storage or renderable 
 
 test('history export filename helpers normalize unsafe and empty question text', () => {
     assert.equal(safeFilePart('  Will <it> work?!  '), 'will-it-work');
-    assert.equal(safeHistoryExportFilename('  Will <it> work?!  '), 'whorary-will-it-work.json');
-    assert.equal(safeHistoryExportFilename('***'), 'whorary-chart.json');
+    assert.equal(safeHistoryExportFilename('  Will <it> work?!  '), 'horary-will-it-work.json');
+    assert.equal(safeHistoryExportFilename('***'), 'horary-chart.json');
     assert.equal(
         safeFilePart('a'.repeat(100)),
         'a'.repeat(80),

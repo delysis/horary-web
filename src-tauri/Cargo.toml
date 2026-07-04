@@ -1,8 +1,8 @@
 [package]
-name = "whorary"
+name = "horary"
 version = "0.1.0"
-description = "Whorary desktop shell"
-authors = ["Whorary contributors"]
+description = "Horary desktop shell"
+authors = ["Horary contributors"]
 license = ""
 repository = ""
 edition = "2021"
@@ -19,10 +19,11 @@ native-llama-vulkan = ["native-llama", "llama-cpp-2/vulkan"]
 native-llama-dynamic-backends = ["native-llama", "llama-cpp-2/dynamic-backends"]
 
 [lib]
-name = "whorary_lib"
+name = "horary_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
+cc = "1.2"
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]

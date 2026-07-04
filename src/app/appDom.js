@@ -1,6 +1,6 @@
 import { APP_VERSION, resolveAppVersion } from './version.js';
 
-export const LEGACY_ZODIAC_STORAGE_KEY = 'whorary_zodiac';
+export const LEGACY_ZODIAC_STORAGE_KEY = 'horary_zodiac';
 
 export function showHoraryError(message, { documentRef = globalThis.document } = {}) {
     const el = documentRef?.getElementById?.('horaryErrors');

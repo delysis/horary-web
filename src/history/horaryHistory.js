@@ -1,4 +1,4 @@
-export const HORARY_HISTORY_STORAGE_KEY = 'whorary_horary_history';
+export const HORARY_HISTORY_STORAGE_KEY = 'horary_horary_history';
 export const MAX_HORARY_HISTORY_ENTRIES = 50;
 
 export function loadWebHoraryHistory(storage = globalThis.localStorage) {

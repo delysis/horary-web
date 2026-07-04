@@ -68,7 +68,7 @@ test('setupSettingsController exports settings through injected download handler
 
     await exportButton.dispatch('click').pending;
 
-    assert.equal(harness.downloads[0].filename, 'whorary-settings.json');
+    assert.equal(harness.downloads[0].filename, 'horary-settings.json');
     assert.equal(harness.downloads[0].payload.schemaVersion, 1);
     assert.equal(harness.downloads[0].payload.settings.houseSystem, 'regiomontanus');
     assert.equal(status.textContent, 'Settings exported.');
@@ -79,7 +79,7 @@ test('setupSettingsController imports normalized settings and recalculates only 
     const harness = createSettingsHarness({ hasChart: true });
     const input = harness.documentRef.getElementById('importSettingsFile');
     const status = harness.documentRef.getElementById('settingsImportStatus');
-    input.value = '/tmp/whorary-settings.json';
+    input.value = '/tmp/horary-settings.json';
     input.files = [{
         text: async () => JSON.stringify({
             settings: {

@@ -374,7 +374,7 @@ mod imp {
         let draft_model_id = config.draft.as_ref().map(|draft| draft.model_id.clone());
 
         let join = thread::Builder::new()
-            .name("whorary-native-llama".to_string())
+            .name("horary-native-llama".to_string())
             .spawn(move || worker_main(config, command_rx, ready_tx, stats_for_thread))
             .map_err(|error| LlamaError {
                 message: format!("failed to spawn native llama worker: {error}"),
@@ -439,9 +439,9 @@ mod imp {
             .filter(|value| !value.is_empty())
         {
             let path =
-                std::env::var_os("WHORARY_NATIVE_LLAMA_MTP_MODEL").ok_or_else(|| LlamaError {
+                std::env::var_os("HORARY_NATIVE_LLAMA_MTP_MODEL").ok_or_else(|| LlamaError {
                     message: format!(
-                        "draftModelId '{model_id}' requires WHORARY_NATIVE_LLAMA_MTP_MODEL in native llama tests"
+                        "draftModelId '{model_id}' requires HORARY_NATIVE_LLAMA_MTP_MODEL in native llama tests"
                     ),
                 })?;
             return Ok(Some(NativeDraftConfig {
@@ -1494,7 +1494,7 @@ mod imp {
         requested: &str,
     ) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(b"whorary-native-prompt-cache\0");
+        hasher.update(b"horary-native-prompt-cache\0");
         hasher.update(config.model_sha256.as_bytes());
         hasher.update([0]);
         hasher.update(NATIVE_LLAMA_BINDING_VERSION.as_bytes());
@@ -1687,8 +1687,8 @@ mod integration_tests {
 
     #[test]
     fn native_llama_generates_tokens_from_real_cached_gemma() {
-        let Some(model_path) = std::env::var_os("WHORARY_NATIVE_LLAMA_TEST_MODEL") else {
-            eprintln!("skipping real native llama gate: WHORARY_NATIVE_LLAMA_TEST_MODEL is unset");
+        let Some(model_path) = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL") else {
+            eprintln!("skipping real native llama gate: HORARY_NATIVE_LLAMA_TEST_MODEL is unset");
             return;
         };
         let model_path = PathBuf::from(model_path);
@@ -1702,11 +1702,11 @@ mod integration_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        let cache_dir = std::env::temp_dir().join(format!("whorary-native-llama-gate-{millis}"));
+        let cache_dir = std::env::temp_dir().join(format!("horary-native-llama-gate-{millis}"));
         fs::create_dir_all(&cache_dir).unwrap();
 
         let state = NativeLlamaState::default();
-        let mtp_enabled = std::env::var_os("WHORARY_NATIVE_LLAMA_MTP_MODEL").is_some();
+        let mtp_enabled = std::env::var_os("HORARY_NATIVE_LLAMA_MTP_MODEL").is_some();
         let mut req = start_request("gemma-gate");
         if mtp_enabled {
             req.draft_model_id = Some("gemma-gate-assistant".to_string());

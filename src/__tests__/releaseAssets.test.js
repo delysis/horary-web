@@ -20,7 +20,7 @@ llama-cpp-2 = { version = "0.1.150", default-features = false, optional = true }
 `;
 
 function createReleaseProject(t, overrides = {}) {
-    const root = mkdtempSync(join(tmpdir(), 'whorary-release-assets-'));
+    const root = mkdtempSync(join(tmpdir(), 'horary-release-assets-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
 
     mkdirSync(join(root, 'src-tauri'), { recursive: true });

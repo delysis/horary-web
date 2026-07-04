@@ -1,15 +1,17 @@
 {
-  "name": "whorary",
-  "version": "1.0.0",
+  "name": "horary-web",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Comprehensive offline astrology calculator PWA",
+  "description": "Horary astrology chart calculator with native local AI interpretation",
   "scripts": {
     "dev": "vite",
-    "lint": "node scripts/lint.mjs",
-    "build": "vite build",
+    "lint": "eslint . && node scripts/lint.mjs",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --test \"src/**/*.test.js\"",
+    "test": "vitest run && node --test \"src/**/*.test.js\"",
+    "test:react": "vitest run",
+    "test:node": "node --test \"src/**/*.test.js\"",
     "test:coverage": "node --test --experimental-test-coverage \"src/**/*.test.js\"",
     "check": "npm run lint && npm test && npm run build",
     "check:tauri": "cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
@@ -22,10 +24,27 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
-    "vite": "^6.2.0",
-    "vite-plugin-pwa": "^0.21.1"
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "jsdom": "^29.1.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "tz-lookup": "^6.1.25",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.5"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1"
+    "@astrodraw/astrochart": "^3.0.2",
+    "@tauri-apps/api": "^2.11.1",
+    "circular-natal-horoscope-js": "^1.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   }
 }

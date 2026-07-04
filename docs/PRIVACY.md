@@ -2,17 +2,17 @@
 
 ## Summary
 
-Whorary is local-first in its current form. Chart calculation runs locally in the browser/webview. City search uses the bundled city catalog in the browser build and the Tauri backend in desktop builds. Browser builds keep horary history in browser storage; desktop builds save chart history, settings, and local model data under the operating system app data directory.
+Horary is local-first in its current form. Chart calculation runs locally in the browser/webview. City search uses the bundled city catalog in the browser build and the Tauri backend in desktop builds. Desktop AI interpretation uses local GGUF models behind Tauri IPC. Browser builds keep settings in browser storage; desktop builds save settings and local model data under the operating system app data directory.
 
 ## Browser Geolocation
 
-The app requests browser geolocation only when the user clicks `Use Browser Location` in the Horary tab. Opening the Horary tab does not request location.
+The current upstream React UI requests browser geolocation when the app opens so it can prefill the chart location.
 
 When location is granted:
 
 - The browser provides latitude and longitude to the app.
 - The coordinates are copied into the latitude/longitude inputs.
-- The coordinates are not sent to Nominatim, timeapi.io, or any other geocoding/timezone service by this app.
+- The coordinates are matched locally against the bundled city catalog for a nearby city/timezone label.
 
 If the user denies location, they can enter coordinates manually or select a bundled city.
 
@@ -36,7 +36,7 @@ The CSS intentionally avoids Google Fonts imports, so loading the app does not m
 
 ## PWA Service Worker
 
-For web builds, `vite-plugin-pwa` precaches app assets and handles same-origin app files. The About panel displays the package version injected into the web build so users can identify the loaded app version. For Tauri builds, PWA generation is disabled through `TAURI_ENV_PLATFORM`.
+For web builds, the checked-in service worker handles same-origin app files for GitHub Pages deployment. For Tauri builds, the Vite base path switches to relative assets through `TAURI_ENV_PLATFORM`.
 
 ## Local Storage
 
@@ -44,14 +44,13 @@ The web app stores:
 
 - House system setting
 - Planet set setting
-- Aspect enable/orb settings
-- Horary chart history
+- Display and location input preferences
 
 These values are stored in the browser's `localStorage` for the current origin.
 
 ## Desktop App Data
 
-The Tauri desktop shell saves charts and settings through native commands. Saved horary chart history is written to `charts.sqlite3`, and house-system/planet-set/aspect-policy settings are written to `settings.json`, under the operating system app data directory for the Whorary application. Existing `charts.json` history is migrated into SQLite on first chart storage access. These files stay local unless the user backs up, syncs, or shares that directory outside the app.
+The Tauri desktop shell saves settings and model data through native commands. The native storage layer also supports saved horary chart history in `charts.sqlite3` for the fuller desktop workflow. These files stay local unless the user backs up, syncs, or shares that directory outside the app.
 
 The Horary history export action creates a local JSON download in the browser/webview. That file contains the saved question, chart factors, coordinates, and calculation settings for that saved chart.
 

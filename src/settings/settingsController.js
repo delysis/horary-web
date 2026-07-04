@@ -139,7 +139,7 @@ export function setupSettingsController({
     };
 
     const onExportSettingsClick = () => {
-        downloadJson('whorary-settings.json', exportableSettingsPayload(getSettings()));
+        downloadJson('horary-settings.json', exportableSettingsPayload(getSettings()));
         setImportStatus('Settings exported.');
     };
 
