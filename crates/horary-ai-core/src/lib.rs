@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-pub const INTERPRETATION_SCHEMA_VERSION: &str = "2026-07-03";
+pub const INTERPRETATION_SCHEMA_VERSION: &str = "2026-09-14";
 pub const INTERPRETATION_PROMPT_VERSION: &str = "horary-interpretation-v7";
 pub const INTERPRETATION_TRADITION_PROFILE: &str = "traditional-horary-textbook-v1";
 pub const MAX_INTERPRETATION_TOKENS: u32 = 3072;

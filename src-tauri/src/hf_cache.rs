@@ -9,7 +9,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -334,10 +334,12 @@ async fn download_async(
         .ok_or_else(|| error("Missing artifact size"))?;
     let mut file = OpenOptions::new()
         .create(true)
-        .append(true)
+        .truncate(false)
+        .write(true)
         .read(true)
         .open(partial)?;
     let mut done = file.metadata()?.len();
+    file.seek(SeekFrom::End(0))?;
     if done > expected {
         return Err(error("Partial model exceeds its pinned size; remove the corrupt .incomplete file before retrying."));
     }
@@ -376,7 +378,10 @@ async fn download_async(
         }
     } else if response.status() == reqwest::StatusCode::OK {
         // A server may ignore Range. Restart only when it sent a full response.
+        // Windows append-only handles cannot truncate; use read/write access
+        // and explicit offsets for both fresh downloads and resumptions.
         file.set_len(0)?;
+        file.seek(SeekFrom::Start(0))?;
         done = 0;
     } else {
         return Err(error(format!(
