@@ -504,10 +504,10 @@ const display12Hour = (() => {
     <>
       {locationInputMode === 'search' ? (
         <div style={{ marginBottom: 12 }}>
-          <label>
-            Location
+          <label htmlFor="location-search">Location</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               <input
+                id="location-search"
                 type="text"
                 value={locationName}
                 onChange={(e) => setLocationName(e.target.value)}
@@ -528,7 +528,6 @@ const display12Hour = (() => {
             >
               Enter coordinates manually
             </button>
-          </label>
         </div>
       ) : (
         <div style={{ marginBottom: 12 }}>

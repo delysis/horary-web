@@ -43,6 +43,8 @@ it('settings toggle closes reliably and Escape returns focus to its opener', asy
     await act(async () => cast.click())
     expect(container.textContent).toContain('Set the location before casting')
     const input = container.querySelector<HTMLInputElement>('input[placeholder="Search for a city or place"]')!
+    expect(input.labels?.[0]?.textContent).toBe('Location')
+    expect(input.labels?.[0]?.querySelector('button')).toBeNull()
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'London')
       input.dispatchEvent(new Event('input', { bubbles: true }))
