@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-pub const INTERPRETATION_SCHEMA_VERSION: &str = "2026-09-14";
+pub const INTERPRETATION_SCHEMA_VERSION: &str = "2026-09-14.2";
 pub const INTERPRETATION_PROMPT_VERSION: &str = "horary-interpretation-v7";
 pub const INTERPRETATION_TRADITION_PROFILE: &str = "traditional-horary-textbook-v1";
 pub const MAX_INTERPRETATION_TOKENS: u32 = 3072;
@@ -1153,8 +1153,38 @@ fn chart_field(chart: &Value, field: &str) -> Option<Value> {
 }
 
 pub fn interpretation_schema() -> Value {
-    serde_json::from_str(INTERPRETATION_SCHEMA_JSON)
-        .expect("shared horary interpretation schema must be valid JSON")
+    let mut schema: Value = serde_json::from_str(INTERPRETATION_SCHEMA_JSON)
+        .expect("shared horary interpretation schema must be valid JSON");
+    let item = schema["properties"]["judgementTrace"]["items"].clone();
+    let fixed = |id: &str| {
+        let mut step = item.clone();
+        step["properties"]["stepId"] = json!({"type": "string", "const": id});
+        step
+    };
+    let mut analysis = item.clone();
+    analysis["properties"]["stepId"] = json!({"type": "string", "enum": [
+        "essential_dignity_pass", "accidental_strength_pass", "reception_pass",
+        "perfection_pass", "blockage_pass", "moon_story_pass",
+        "contextual_modifiers_pass", "timing_pass", "adversarial_checker_pass"
+    ]});
+    // Exact tuples are supported by the pinned upstream schema converter.
+    // Keep required identification first and synthesis last, with zero to two
+    // decisive analysis steps between them. A prompt alone cannot ensure this.
+    let alternatives: Vec<Value> = (0..=2)
+        .map(|extra| {
+            let mut steps = vec![
+                fixed("question_scope"),
+                fixed("house_assignment"),
+                fixed("significator_selection"),
+            ];
+            steps.extend((0..extra).map(|_| analysis.clone()));
+            steps.push(fixed("synthesis_pass"));
+            json!({"type": "array", "minItems": steps.len(),
+                "maxItems": steps.len(), "prefixItems": steps})
+        })
+        .collect();
+    schema["properties"]["judgementTrace"] = json!({"type": "array", "oneOf": alternatives});
+    schema
 }
 
 pub fn judgement_plan() -> Value {
@@ -1272,6 +1302,32 @@ fn extract_json_object(content: &str) -> Result<&str, AiError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn constrained_trace_always_has_identification_and_final_synthesis() {
+        let schema = interpretation_schema();
+        for variant in schema["properties"]["judgementTrace"]["oneOf"]
+            .as_array()
+            .unwrap()
+        {
+            let steps = variant["prefixItems"].as_array().unwrap();
+            assert!((4..=6).contains(&steps.len()));
+            for (index, id) in [
+                "question_scope",
+                "house_assignment",
+                "significator_selection",
+            ]
+            .iter()
+            .enumerate()
+            {
+                assert_eq!(steps[index]["properties"]["stepId"]["const"], *id);
+            }
+            assert_eq!(
+                steps.last().unwrap()["properties"]["stepId"]["const"],
+                "synthesis_pass"
+            );
+            assert_eq!(variant["minItems"], variant["maxItems"]);
+        }
+    }
     #[test]
     fn recovery_prompt_preserves_moons_object_role_and_requires_timing_reasoning() {
         let prompt = build_interpretation_prompt(&sample_request("Where is my lost ring?"))
