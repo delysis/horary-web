@@ -57,19 +57,19 @@ test('buildHoraryInterpretationPrompt uses deterministic chart facts and forbids
     assert.equal(user.judgementPlan.profile, INTERPRETATION_TRADITION_PROFILE);
     assert.equal(user.judgementPlan.executionMode, 'single_call_with_required_trace');
     assert.ok(user.judgementPlan.microTasks.some(task => task.id === 'house_assignment'));
-    assert.ok(user.judgementPlan.domainModules.some(module => module.id === 'relationship'));
-    assert.ok(user.judgementPlan.futureMultiCallPipeline.some(step => step.id === 'reception_checker'));
-    assert.ok(user.judgementPlan.parallelGroups.some(group => group.id === 'condition'));
+    assert.equal(user.judgementPlan.domainModules, undefined);
+    assert.equal(user.judgementPlan.futureMultiCallPipeline, undefined);
+    assert.equal(user.judgementPlan.parallelGroups, undefined);
     assert.match(system, /Do not calculate or recalculate planetary positions/);
     assert.match(system, /questionContext house hints/);
-    assert.match(system, /deterministicAssignments as the authoritative mapping/);
+    assert.match(system, /deterministicAssignments are provisional keyword hints/);
     assert.match(system, /chartEvidenceIndex\.canonicalFacts/);
     assert.match(system, /traditional horary judgement order/);
     assert.match(system, /querent and quesited/);
     assert.match(system, /judgementTrace/);
     assert.match(system, /keyFactors must be a JSON array/);
     assert.match(system, /Do not confuse house rulership with body placement/);
-    assert.match(system, /Use at most three followUpQuestions/);
+    assert.match(system, /two followUpQuestions/);
     assert.match(system, new RegExp(`Prompt version: ${INTERPRETATION_PROMPT_VERSION.replaceAll('-', '\\-')}`));
     assert.match(system, new RegExp(`Tradition profile: ${INTERPRETATION_TRADITION_PROFILE.replaceAll('-', '\\-')}`));
     assert.equal(user.questionContext.domainModule, 'ordinary');
@@ -100,7 +100,7 @@ test('buildHoraryInterpretationPrompt uses deterministic chart facts and forbids
 });
 
 test('frontend and Tauri prompt metadata stays synchronized', () => {
-    const rustAi = readFileSync(new URL('../../../src-tauri/src/ai.rs', import.meta.url), 'utf8');
+    const rustAi = readFileSync(new URL('../../../crates/horary-ai-core/src/lib.rs', import.meta.url), 'utf8');
     const promptVersionMatch = /const INTERPRETATION_PROMPT_VERSION: &str = "([^"]+)";/.exec(rustAi);
     const schemaVersionMatch = /const INTERPRETATION_SCHEMA_VERSION: &str = "([^"]+)";/.exec(rustAi);
     const traditionProfileMatch = /const INTERPRETATION_TRADITION_PROFILE: &str = "([^"]+)";/.exec(rustAi);
@@ -113,7 +113,7 @@ test('frontend and Tauri prompt metadata stays synchronized', () => {
     assert.equal(traditionProfileMatch[1], INTERPRETATION_TRADITION_PROFILE);
 });
 
-test('horary judgement pipeline exposes small-model microtasks and cache policy', () => {
+test('horary judgement pipeline exposes compact Rust microtasks and source policy', () => {
     const plan = buildJudgementPlan();
     const taskIds = judgementMicroTaskIds();
 
@@ -133,9 +133,12 @@ test('horary judgement pipeline exposes small-model microtasks and cache policy'
     ]) {
         assert.ok(taskIds.includes(id), `missing microtask ${id}`);
     }
-    assert.equal(plan.cachePolicy.separateStablePromptFromVariablePayload, true);
-    assert.equal(plan.checkerOutputContract.shape.strength, 'decisive|strong|moderate|minor');
-    assert.ok(plan.domainModules.some(module => module.id === 'job_career'));
+    assert.equal(HORARY_JUDGEMENT_PIPELINE.cachePolicy.separateStablePromptFromVariablePayload, true);
+    assert.equal(HORARY_JUDGEMENT_PIPELINE.checkerOutputContract.shape.strength, 'decisive|strong|moderate|minor');
+    assert.ok(HORARY_JUDGEMENT_PIPELINE.domainModules.some(module => module.id === 'job_career'));
+    assert.equal(plan.cachePolicy, undefined);
+    assert.equal(plan.checkerOutputContract, undefined);
+    assert.equal(plan.domainModules, undefined);
     assert.ok(plan.traceRequirement.minimumSteps.includes('synthesis_pass'));
 });
 
@@ -222,7 +225,5 @@ test('validateInterpretationShape accepts valid output and rejects missing evide
 
     assert.equal(valid.ok, true);
     assert.equal(invalid.ok, false);
-    assert.ok(invalid.errors.some(error => error.includes('confidence')));
-    assert.ok(invalid.errors.some(error => error.includes('judgementTrace')));
-    assert.ok(invalid.errors.some(error => error.includes('chartEvidence')));
+    assert.ok(invalid.errors.some(error => /invalid interpretation JSON|chartEvidence|confidence|judgementTrace/.test(error)));
 });

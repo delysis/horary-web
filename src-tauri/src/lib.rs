@@ -16,8 +16,7 @@ use llama::{
     LlamaStatus, ModelInfo, StartLlamaRequest,
 };
 use model_manifest::{
-    bundled_model_manifest, download_manifest_model_to_dir, DownloadModelRequest, ModelManifest,
-    ModelManifestError,
+    bundled_model_manifest, DownloadModelRequest, ModelManifest, ModelManifestError,
 };
 use native_llama::{native_llama_runtime_info, NativeLlamaRuntimeInfo};
 #[cfg(feature = "native-llama")]
@@ -41,6 +40,7 @@ use tauri::Manager;
 
 mod ai;
 mod geocode;
+mod hf_cache;
 mod inference;
 mod llama;
 mod model_manifest;
@@ -170,9 +170,16 @@ async fn list_models(app: tauri::AppHandle) -> Result<Vec<ModelInfo>, LlamaError
     let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
         message: error.to_string(),
     })?;
-    tauri::async_runtime::spawn_blocking(move || list_models_in_dir(&app_data_dir))
-        .await
-        .map_err(llama_worker_error)?
+    tauri::async_runtime::spawn_blocking(move || {
+        list_models_in_dir(&app_data_dir).map(|models| {
+            models
+                .into_iter()
+                .filter(|model| !llama::is_draft_model_id(&model.id))
+                .collect()
+        })
+    })
+    .await
+    .map_err(llama_worker_error)?
 }
 
 #[tauri::command]
@@ -219,15 +226,43 @@ fn get_model_manifest() -> Result<ModelManifest, ModelManifestError> {
 #[tauri::command]
 async fn download_model(
     app: tauri::AppHandle,
+    state: tauri::State<'_, hf_cache::AcquisitionState>,
     req: DownloadModelRequest,
-) -> Result<ModelInfo, ModelManifestError> {
+) -> Result<(), ModelManifestError> {
+    if req.model_id != hf_cache::RECOMMENDED_ID {
+        return Err(ModelManifestError {
+            message: "Choose the recommended model pair".into(),
+        });
+    }
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|error| ModelManifestError {
             message: error.to_string(),
         })?;
-    download_manifest_model_to_dir(&app_data_dir, req).await
+    let acquisition = state.0.clone();
+    acquisition.begin()?;
+    tauri::async_runtime::spawn_blocking(move || acquisition.run(&app_data_dir))
+        .await
+        .map_err(|e| ModelManifestError {
+            message: e.to_string(),
+        })?
+}
+
+#[tauri::command]
+fn get_model_setup_status(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, hf_cache::AcquisitionState>,
+) -> Result<hf_cache::AcquisitionProgress, ModelManifestError> {
+    let dir = app.path().app_data_dir().map_err(|e| ModelManifestError {
+        message: e.to_string(),
+    })?;
+    state.0.status(&dir)
+}
+
+#[tauri::command]
+fn pause_model_setup(state: tauri::State<'_, hf_cache::AcquisitionState>) {
+    state.0.cancel();
 }
 
 #[tauri::command]
@@ -272,6 +307,9 @@ async fn start_llama(
     app: tauri::AppHandle,
     req: StartLlamaRequest,
 ) -> Result<LlamaStatus, LlamaError> {
+    if llama::is_draft_model_id(&req.model_id) {
+        return Err(LlamaError { message: "This file is a draft helper. Choose the full GGUF model; its paired helper will be used automatically.".into() });
+    }
     let app_data_dir = app.path().app_data_dir().map_err(|error| LlamaError {
         message: error.to_string(),
     })?;
@@ -345,24 +383,12 @@ fn cancel_interpretation_stream(
 fn stop_inference_workers(app: &tauri::AppHandle) {
     let llama_state = app.state::<LlamaState>();
     let native_state = app.state::<NativeLlamaState>();
-    let _ = stop_native_llama(&native_state);
-    let _ = stop_llama_process(&llama_state);
-}
-
-#[cfg(target_os = "macos")]
-fn exit_without_metal_destructors(code: i32) -> ! {
-    use std::os::raw::c_int;
-
-    extern "C" {
-        fn _exit(status: c_int) -> !;
+    if let Err(error) = stop_native_llama(&native_state) {
+        log::error!("Native model shutdown failed: {}", error.message);
     }
-
-    unsafe { _exit(code as c_int) }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn exit_without_metal_destructors(code: i32) -> ! {
-    std::process::exit(code);
+    if let Err(error) = stop_llama_process(&llama_state) {
+        log::error!("Sidecar shutdown failed: {}", error.message);
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -454,7 +480,9 @@ fn build_macos_app_menu<R: tauri::Runtime>(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(LlamaState::default())
+        .manage(hf_cache::AcquisitionState::default())
         .manage(NativeLlamaState::default())
         .manage(AiGenerationState::default())
         .manage(GeocodeState::default())
@@ -476,8 +504,7 @@ pub fn run() {
         .menu(build_macos_app_menu)
         .on_menu_event(|app, event| {
             if event.id() == QUIT_MENU_ID {
-                stop_inference_workers(app);
-                exit_without_metal_destructors(0);
+                app.exit(0);
             }
         });
 
@@ -501,6 +528,8 @@ pub fn run() {
             get_model_info,
             get_model_manifest,
             download_model,
+            get_model_setup_status,
+            pause_model_setup,
             get_model_status,
             get_llama_sidecar_info,
             get_native_llama_runtime_info,
@@ -514,9 +543,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { code, .. } = event {
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
                 stop_inference_workers(app);
-                exit_without_metal_destructors(code.unwrap_or(0));
             }
         });
 }

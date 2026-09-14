@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# Horary
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A local-first horary chart calculator and experimental judgement workspace, based on [Eileen’s original app](https://github.com/Winterdust408/horary-web). This fork keeps her chart wheel, day/night themes, location workflow, and display controls while making the interpretation method open to review.
 
-Currently, two official plugins are available:
+The desktop app uses **Rust and Tauri**, with the existing React interface. It runs without Python, Node.js, a terminal, or a hosted AI account. Development uses Rust, Node.js, and the platform’s native build tools; no Python environment is required.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## For Eileen
 
-## React Compiler
+Start with [the review guide](docs/REVIEW_GUIDE.md). Enter a question, choose the astrologer’s location, and cast. **The method & evidence** exposes the book-based instructions and calculated testimony. Export a reading to accompany your own notes, or use the optional local review notebook.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+AI is optional. Choose **Set up a local reading**, then select **Set up local model**. Horary downloads the pinned Gemma 4 12B QAT model and matching multimodal projector directly from Hugging Face, verifies them, and uses the shared Hugging Face cache without a second copy. No CLI, account, or existing weights are required. Setup supports pause/resume; readings work offline afterward. The calculator and method inspector also work without a model.
 
-## Expanding the ESLint configuration
+Review builds are attached to successful [CI runs](https://github.com/delysis/horary-web/actions/workflows/ci.yml). Choose the run for the review branch and download its desktop artifact. These are unsigned development builds, not a signed public release. The macOS artifact contains `Horary.app`; Windows contains `horary.exe`.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Develop
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Install a current stable Rust toolchain, Node.js 22+, and [Tauri’s native prerequisites](https://v2.tauri.app/start/prerequisites/). On macOS, Xcode Command Line Tools and CMake are needed for the native model backend.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack --version 0.13.1 --locked
+npm ci
+npm run tauri -- dev --features native-llama-metal  # Apple Silicon / Metal
+# Or: npm run tauri -- dev                       # native CPU backend
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+`npm run dev` runs the browser calculator. Rust supplies the shared prompt, validation, calendar/timezone, and review-record code through WebAssembly. The frontend build generates the necessary bindings automatically.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```sh
+npm run check:all
+npm run check:release-assets
+npm run check:native-llama       # needs a local compatible GGUF
+npm run check:horary-readings    # needs the same local model
 ```
+
+Set `HORARY_NATIVE_LLAMA_TEST_MODEL` to the full model path if automatic discovery does not find it. Native-kit is pinned to an immutable revision; see [model and runtime provenance](docs/MODEL_PROVENANCE.md). Speculative decoding and image/audio attachments are not implemented in this reading interface.
+
+Build the native macOS review app with:
+
+```sh
+npm run tauri -- build --debug --features native-llama-metal --bundles app
+```
+
+The app appears under `src-tauri/target/debug/bundle/macos/Horary.app`. macOS 11+ is required. Native inference is enabled by default; no separate inference server is needed.
+
+## Boundaries to review
+
+- The same calculated chart supplies the wheel, tables, and AI facts. UTC resolution uses the selected IANA timezone, with explicit handling of ambiguous or nonexistent civil times.
+- The astronomical engine is an approximation checked against the committed JPL and Swiss Ephemeris fixtures. Those tests cover specific dates and tolerances, not every possible chart or professional ephemeris precision.
+- House suggestions and the traditional interpretation scaffold are provisional. They have not received Eileen’s subject-matter sign-off.
+- The current interpretation is one model call with a compact report of decisive steps. A reported “adversarial check” is part of that same call, not an independent verifier.
+- Structured model output is validated. This does not establish the truth of its prose or the correctness of its astrological judgment.
+
+See [architecture](docs/ARCHITECTURE.md), [privacy](docs/PRIVACY.md), [AI policy](docs/AI_POLICY.md), and [verification](docs/VERIFICATION.md).

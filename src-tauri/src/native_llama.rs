@@ -1,15 +1,13 @@
-#[cfg(feature = "native-llama")]
-use llama_cpp_2::llama_backend::LlamaBackend;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-pub const NATIVE_LLAMA_BACKEND: &str = "native llama.cpp";
+pub const NATIVE_LLAMA_BACKEND: &str = "llama-native-kit";
 pub const NATIVE_LLAMA_BINDING_CRATE: &str = "llama-cpp-2";
-pub const NATIVE_LLAMA_BINDING_VERSION: &str = "0.1.150";
+pub const NATIVE_LLAMA_BINDING_VERSION: &str = "0.1.154";
 pub const NATIVE_LLAMA_DEFAULT_PARALLEL_SEQUENCES: u32 = 4;
 pub const NATIVE_LLAMA_MAX_PARALLEL_SEQUENCES: u32 = 16;
 pub const NATIVE_LLAMA_DEFAULT_DRAFT_TOKENS: u32 = 3;
-pub const NATIVE_LLAMA_MTP_RUNTIME_AVAILABLE: bool = true;
+pub const NATIVE_LLAMA_MTP_RUNTIME_AVAILABLE: bool = false;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -93,13 +91,13 @@ pub fn native_llama_runtime_info() -> NativeLlamaRuntimeInfo {
         compiled: cfg!(feature = "native-llama"),
         supports_gpu_offload: native_gpu_offload_support(),
         continuous_batching: NativeLlamaContinuousBatching {
-            enabled: true,
-            default_parallel_sequences: NATIVE_LLAMA_DEFAULT_PARALLEL_SEQUENCES,
-            max_parallel_sequences: NATIVE_LLAMA_MAX_PARALLEL_SEQUENCES,
+            enabled: false,
+            default_parallel_sequences: 1,
+            max_parallel_sequences: 1,
         },
         kv_cache: NativeLlamaKvCache {
             hot_resident_sequence_cache: true,
-            cold_disk_sequence_cache: true,
+            cold_disk_sequence_cache: false,
         },
         speculative_decoding: NativeLlamaSpeculativeDecoding {
             mtp_when_draft_model_present: NATIVE_LLAMA_MTP_RUNTIME_AVAILABLE,
@@ -108,10 +106,11 @@ pub fn native_llama_runtime_info() -> NativeLlamaRuntimeInfo {
             default_draft_tokens: NATIVE_LLAMA_DEFAULT_DRAFT_TOKENS,
         },
         worker_plan: NativeLlamaWorkerPlan {
-            scheduler: "single-owner worker thread with batched prefill/decode slots",
-            request_ordering: "parallel microtask requests may interleave decode, but each request emits tokens in sequence order",
-            hot_cache_tier: "resident llama.cpp sequence state keyed by stable prompt prefix",
-            cold_cache_tier: "disk sequence-state file keyed by native_llama_cache_key",
+            scheduler: "native-kit owned worker with one reading at a time",
+            request_ordering: "one constrained reading; ordered output events",
+            hot_cache_tier:
+                "native-kit memory cache; controlled readings do not promise prefix reuse",
+            cold_cache_tier: "disabled; private reading caches stay in memory",
             cache_key_fields: &[
                 "modelSha256",
                 "bindingCrate",
@@ -163,9 +162,7 @@ fn update_hash_field(hasher: &mut Sha256, key: &str, value: &str) {
 
 #[cfg(feature = "native-llama")]
 fn native_gpu_offload_support() -> Option<bool> {
-    let mut backend = LlamaBackend::init().ok()?;
-    backend.void_logs();
-    Some(backend.supports_gpu_offload())
+    Some(cfg!(all(target_os = "macos", target_arch = "aarch64")))
 }
 
 #[cfg(not(feature = "native-llama"))]
@@ -181,7 +178,7 @@ mod tests {
         NativeLlamaCacheKeyMaterial {
             model_sha256: "a".repeat(64),
             binding_crate: "llama-cpp-2".to_string(),
-            binding_version: "0.1.150".to_string(),
+            binding_version: "0.1.154".to_string(),
             context_tokens: 8192,
             prompt_version: "horary-interpretation-v2".to_string(),
             schema_version: "2026-07-01".to_string(),
@@ -195,14 +192,14 @@ mod tests {
     fn native_runtime_info_describes_release_target() {
         let info = native_llama_runtime_info();
 
-        assert_eq!(info.backend, "native llama.cpp");
+        assert_eq!(info.backend, "llama-native-kit");
         assert_eq!(info.binding_crate, "llama-cpp-2");
-        assert!(info.continuous_batching.enabled);
-        assert_eq!(info.continuous_batching.default_parallel_sequences, 4);
+        assert!(!info.continuous_batching.enabled);
+        assert_eq!(info.continuous_batching.default_parallel_sequences, 1);
         assert!(info.kv_cache.hot_resident_sequence_cache);
-        assert!(info.kv_cache.cold_disk_sequence_cache);
-        assert!(info.speculative_decoding.mtp_when_draft_model_present);
-        assert!(info.speculative_decoding.native_runtime_available);
+        assert!(!info.kv_cache.cold_disk_sequence_cache);
+        assert!(!info.speculative_decoding.mtp_when_draft_model_present);
+        assert!(!info.speculative_decoding.native_runtime_available);
         assert_eq!(info.speculative_decoding.preferred_type, "draft-mtp");
         assert!(info
             .worker_plan

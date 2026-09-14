@@ -6,17 +6,14 @@ authors = ["Horary contributors"]
 license = ""
 repository = ""
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.92"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = []
-native-llama = ["dep:llama-cpp-2", "llama-cpp-2/common", "llama-cpp-2/sampler"]
-native-llama-metal = ["native-llama", "llama-cpp-2/metal"]
-native-llama-cuda = ["native-llama", "llama-cpp-2/cuda"]
-native-llama-vulkan = ["native-llama", "llama-cpp-2/vulkan"]
-native-llama-dynamic-backends = ["native-llama", "llama-cpp-2/dynamic-backends"]
+default = ["native-llama"]
+native-llama = ["dep:llama-native-engine", "dep:llama-native-host", "dep:llama-native-types"]
+native-llama-metal = ["native-llama"]
 
 [lib]
 name = "horary_lib"
@@ -30,13 +27,22 @@ tauri-build = { version = "2.6.3", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
+fs2 = "0.4"
+tempfile = "3"
+tokio = { version = "1", features = ["time", "macros"] }
+dirs = "6"
 log = "0.4"
+sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
+horary-ai-core = { path = "../crates/horary-ai-core" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
-llama-cpp-2 = { version = "0.1.150", default-features = false, optional = true }
+tauri-plugin-dialog = "2"
+llama-native-engine = { git = "https://github.com/delysis/native-platform.git", rev = "1d43858953938cb28e935de7c2f107eede69ddf9", optional = true }
+llama-native-host = { git = "https://github.com/delysis/native-platform.git", rev = "1d43858953938cb28e935de7c2f107eede69ddf9", optional = true }
+llama-native-types = { git = "https://github.com/delysis/native-platform.git", rev = "1d43858953938cb28e935de7c2f107eede69ddf9", optional = true }
 
-[patch.crates-io]
-llama-cpp-2 = { path = "../vendor/llama-cpp-2" }
-llama-cpp-sys-2 = { path = "../vendor/llama-cpp-sys-2" }
+# Reviewer builds still verify multi-gigabyte weights at normal hashing speed.
+[profile.dev.package.sha2]
+opt-level = 3

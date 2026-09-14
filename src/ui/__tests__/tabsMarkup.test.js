@@ -33,15 +33,10 @@ test('generated horary data tables expose captions and scoped headers', () => {
 });
 
 test('keyboard focus remains visible on buttons and form controls', () => {
-    for (const selector of [
-        'button:focus-visible',
-        'input:not([type="radio"]):not([type="checkbox"])',
-        'textarea',
-    ]) {
-        assert.match(css, new RegExp(escapeRegExp(selector)));
-    }
-
-    assert.match(css, /outline:\s*4px auto -webkit-focus-ring-color/);
+    // The shared selector covers every keyboard-focusable control, including
+    // disclosure summaries and links, rather than just individual form types.
+    assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*2px solid #[a-f0-9]+/);
+    assert.match(css, /outline-offset:\s*3px/);
 });
 
 test('field error helper associates validation errors with fields', () => {
@@ -50,7 +45,3 @@ test('field error helper associates validation errors with fields', () => {
     assert.match(fieldErrorsJs, /input\.removeAttribute\?\.\('aria-invalid'\)/);
     assert.match(fieldErrorsJs, /input\.removeAttribute\?\.\('aria-describedby'\)/);
 });
-
-function escapeRegExp(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}

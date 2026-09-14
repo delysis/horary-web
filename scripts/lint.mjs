@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 const root = process.cwd();
 const tauriConfigPath = join(root, 'src-tauri', 'tauri.conf.json');
 const tauriCapabilitiesPath = join(root, 'src-tauri', 'capabilities', 'default.json');
-const ignoredDirs = new Set(['node_modules', 'dist', 'target', '.git']);
+const ignoredDirs = new Set(['node_modules', 'dist', 'target', 'generated', 'litert', '.git']);
 const jsFiles = [];
 const textFiles = [];
 const browserRuntimeFiles = [];
@@ -14,7 +14,7 @@ const requiredTauriCspDirectives = [
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
-    "connect-src ipc: http://ipc.localhost",
+    "connect-src 'self' ipc: http://ipc.localhost",
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
@@ -75,8 +75,8 @@ const forbiddenBrowserRuntimePatterns = [
         message: 'browser runtime must not reference external geocoding/timezone providers',
     },
     {
-        pattern: /https?:\/\/(?!www\.w3\.org\/2000\/svg\b)/i,
-        message: 'browser runtime must not embed remote HTTP(S) URLs',
+        pattern: remoteHttpPatternOutsideApprovedModels,
+        message: 'browser runtime must not embed remote HTTP(S) URLs in application code',
     },
 ];
 
@@ -94,7 +94,8 @@ for (const file of textFiles) {
 for (const file of browserRuntimeFiles) {
     const text = readFileSync(file, 'utf8');
     for (const { pattern, message } of forbiddenBrowserRuntimePatterns) {
-        if (pattern.test(text)) {
+        const violates = typeof pattern === 'function' ? pattern(text) : pattern.test(text);
+        if (violates) {
             console.error(`${relative(root, file)} violates browser network policy: ${message}`);
             failed = true;
         }
@@ -135,7 +136,7 @@ function checkTauriCapabilities() {
     if (!capabilities) return;
 
     const permissions = capabilities.permissions || [];
-    const allowedPermissions = ['core:default'];
+    const allowedPermissions = ['core:default', 'dialog:allow-open'];
     const extraPermissions = permissions.filter(permission => !allowedPermissions.includes(permission));
     const missingPermissions = allowedPermissions.filter(permission => !permissions.includes(permission));
 
@@ -162,9 +163,17 @@ function isBrowserRuntimeFile(path) {
     if (rel.includes(`${sep()}__tests__${sep()}`) || rel.includes(`${sep()}__fixtures__${sep()}`)) {
         return false;
     }
-    return /\.(?:js|mjs|html|css)$/.test(rel);
+    return /\.(?:js|mjs|ts|tsx|html|css)$/.test(rel);
 }
 
 function sep() {
     return process.platform === 'win32' ? '\\' : '/';
+}
+
+function remoteHttpPatternOutsideApprovedModels(text) {
+    const matches = text.match(/https?:\/\/[^\s'"`<>)]+/gi) || [];
+    return matches.some(url => {
+        if (/^https?:\/\/www\.w3\.org\/2000\/svg\b/i.test(url)) return false;
+        return true;
+    });
 }

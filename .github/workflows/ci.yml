@@ -17,10 +17,19 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-pack --version 0.13.1 --locked
       - run: npm ci
       - run: npm run check
       - run: npm audit
       - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horary-web-review
+          path: dist
 
   tauri:
     name: Tauri (${{ matrix.os }})
@@ -28,16 +37,20 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       TAURI_ENV_PLATFORM: ${{ matrix.tauriPlatform }}
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
             tauriPlatform: darwin
+            features: native-llama-metal
           - os: windows-latest
             tauriPlatform: windows
+            features: native-llama
           - os: ubuntu-latest
             tauriPlatform: linux
+            features: native-llama
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,6 +60,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          targets: wasm32-unknown-unknown
+      - run: cargo install wasm-pack --version 0.13.1 --locked
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
         run: |
@@ -65,5 +80,22 @@ jobs:
       - run: npm run check:tauri
       - name: Verify Tauri frontend asset mode
         run: npm run build
-      - name: Build debug desktop binary
-        run: npm run tauri -- build --debug --no-bundle
+      - name: Verify native backend compilation
+        run: cargo test --manifest-path src-tauri/Cargo.toml --features ${{ matrix.features }}
+      - name: Build macOS review app
+        if: runner.os == 'macOS'
+        run: npm run tauri -- build --debug --features native-llama-metal --bundles app
+      - name: Archive macOS review app
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent src-tauri/target/debug/bundle/macos/Horary.app Horary-macOS-review.zip
+      - name: Build Windows or Linux review binary
+        if: runner.os != 'macOS'
+        run: npm run tauri -- build --debug --no-bundle --features native-llama
+      - uses: actions/upload-artifact@v4
+        with:
+          name: horary-desktop-review-${{ runner.os }}
+          path: |
+            Horary-macOS-review.zip
+            src-tauri/target/debug/horary.exe
+            src-tauri/target/debug/horary
+          if-no-files-found: error

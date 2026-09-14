@@ -1,160 +1,29 @@
-# Scaffolded Horary Process
+# Reading process
 
-This document explains the judgement scaffold used by the local AI pipeline. It encodes procedure from the local traditional horary source summary without bundling or quoting the source text.
+The working authority is John Frawley, *The Horary Textbook* (2005). The private OCR was checked against the source; neither the OCR nor the book is distributed. References in the app are printed pages. In the reviewed scan, PDF page = printed page + 9.
 
-## Whole Pipeline
+## From question to reading
 
-```mermaid
-flowchart TD
-  A["User question"] --> B["Cast chart from app state"]
-  B --> C["Deterministic chart facts"]
-  C --> D["Question risk classifier"]
-  C --> E["Question context and house hints"]
-  E --> F["Deterministic assignments"]
-  C --> G["Chart evidence index"]
-  F --> H["Judgement plan"]
-  G --> H
-  D --> H
-  H --> I["Local small LLM call or parallel microtasks"]
-  I --> J["Structured JSON interpretation"]
-  J --> K["Shape and risk validation"]
-  K --> L["React output"]
-```
+1. Understand the question. Use the astrologer's place and the moment of understanding; clarify an ambiguous question before choosing actors. The app makes this moment explicit and allows a historical chart.
+2. Cast once. Resolve the entered civil time with its IANA timezone, reject nonexistent times, and distinguish repeated times. Use tropical positions, Regiomontanus houses, and traditional rulers. Display and interpretation share these facts.
+3. Identify the relevant houses and significators. Keyword suggestions are provisional. The Moon normally co-signifies the querent unless already assigned to the quesited. Turning houses requires ownership/context, not mechanical application to every question.
+4. Consider essential condition, accidental ability, and reception separately. The Rust method module uses the book's dignity table, qualitative house capacity, directed positive and negative receptions, the same-sign combustion rule, and the approximate five-degree next-cusp rule.
+5. Inspect relevant occasions and impediments. An applying aspect is not sufficient by itself. Upcoming major contacts are searched independently of display orbs; the event table identifies sign changes and its bounded coverage. Context determines whether an intervening contact is an impediment. No numeric strength total or automatic radicality veto decides the answer.
+6. Answer the actual question. Locating an object differs from promising its recovery. Interpret symbolic timing only against a plausible timeframe. Missing data should produce uncertainty, not invented evidence.
+7. Review. The reading's reported steps and cited facts are inspectable alongside the instructions and printed page references. These are reports from one model call, not independent agents or verification passes.
 
-The model is never asked to calculate a chart. It receives facts, chooses how to weigh them, and must cite supplied evidence for each claim.
+## What runs
 
-## Deterministic Inputs
+`crates/horary-ai-core` owns the method rules, event bracketing, question hints, prompt, output validation, and review records. The same Rust runs natively and as WASM. Existing JavaScript supplies the astronomical positions and cusps; its accuracy limits remain material near boundaries.
 
-```mermaid
-flowchart LR
-  A["Date, time, location"] --> B["Houses and angles"]
-  A --> C["Body positions"]
-  B --> D["House rulers"]
-  C --> E["Aspects"]
-  C --> F["Dignity and condition facts when available"]
-  C --> G["Moon, receptions, timing candidates when available"]
-  D --> H["Canonical evidence strings"]
-  E --> H
-  F --> H
-  G --> H
-```
+The model receives supplied facts, a canonical evidence index, provisional house suggestions, and the checked-in procedure. Native-kit applies the model's own chat template and a JSON-schema constraint. Users see ordinary prose; the structured representation connects statements to their evidence. Schema validity does not establish astrological correctness.
 
-The evidence index gives the model short, copyable facts such as house ruler, body placement, applying aspect, timing candidate, and void Moon status. If a fact is missing, the model must say it is missing or mark confidence low.
+The current application uses one constrained model call. The catalog retains detailed steps so Eileen can inspect the intended method, but does not imply parallel execution. Model weights stay resident between readings. No persisted prompt KV cache, speculative decoder, independent checker, or automatic expert sign-off is claimed.
 
-## Setup Passes
+## Bounds of the calculation
 
-```mermaid
-flowchart TD
-  A["Question scope"] --> B["House assignment"]
-  B --> C["Significator selection"]
-  C --> D["Moon role"]
-  D --> E["Analysis passes"]
-```
+Motion is sampled hourly for seven days. Major aspect and ingress crossings are interpolated within each interval. A reversal wholly inside an interval can remain unresolved. The Moon is declared void only when its sign exit is covered and no major contact is found before that exit; otherwise the result remains unknown. Event hours are astronomical intervals, not dates for the real-world outcome.
 
-Setup is serial because later judgement depends on it:
+Translation, collection, prohibition, frustration, and refranation require contextual evaluation. The event candidates do not certify any of those judgments. Antiscia, fixed stars, lots, and legacy astronomical features need separate source/precision review before treating them as decisive.
 
-- `question_scope`: reduce the wording to the actual horary question and identify whose question it is.
-- `house_assignment`: assign the querent, quesited, money, opponents, helpers, property, illness, or other concrete topics.
-- `significator_selection`: use traditional house rulers first, then the Moon and natural rulers only where appropriate.
-- `moon_role`: decide whether the Moon is querent co-significator, quesited significator, or descriptive flow testimony.
-
-## Parallel Analysis
-
-```mermaid
-flowchart TD
-  A["Significators fixed"] --> B["Essential dignity"]
-  A --> C["Accidental strength"]
-  A --> D["Reception and motive"]
-  A --> E["Perfection"]
-  A --> F["Blockage"]
-  A --> G["Moon story"]
-  A --> H["Context modifiers"]
-  A --> I["Timing"]
-  B --> J["Synthesis"]
-  C --> J
-  D --> J
-  E --> J
-  F --> J
-  G --> J
-  H --> J
-  I --> J
-```
-
-These passes are designed to become separate small-model calls:
-
-- `essential_dignity_pass`: condition, competence, corruption, or fitness of each significator.
-- `accidental_strength_pass`: practical power to act, including angularity, retrograde, speed, combustion, cazimi, under beams, and severe houses when supplied.
-- `reception_pass`: motive and inclination, kept directional and separate from dignity.
-- `perfection_pass`: whether the event can happen by exact applying contact, conjunction, translation, collection, antiscion testimony, or placement testimony.
-- `blockage_pass`: prohibition, frustration, refutation, sign change, station, or third-party interference.
-- `moon_story_pass`: the Moon's condition, void status, recent separation, next application, and emotional flow.
-- `contextual_modifiers_pass`: Parts, fixed stars, antiscia, outer planets, and planetary hour only after core testimony.
-- `timing_pass`: timing only after event likelihood is established.
-
-Each pass should return narrow claims, not finished prose.
-
-## Synthesis And Check
-
-```mermaid
-flowchart TD
-  A["Claims from passes"] --> B["Contradiction resolver"]
-  B --> C["Weighted direct answer"]
-  C --> D["Final judgement writer"]
-  D --> E["Adversarial checker"]
-  E --> F{"Valid?"}
-  F -- "yes" --> G["Return JSON"]
-  F -- "no" --> H["Reject or regenerate"]
-```
-
-The final answer is not a vote count. A single severe blocker can outweigh several minor positives. A clean perfection with good reception can outweigh weak descriptive noise. High-stakes questions stay symbolic and include cautions.
-
-## Output Contract
-
-The local model must return:
-
-- `summary`
-- `directAnswer` for ordinary questions when evidence supports one
-- `confidence`
-- `judgementTrace`
-- `keyFactors`
-- `cautions`
-- `followUpQuestions`
-
-Every `judgementTrace` item must include a step id, finding, concrete chart evidence, and confidence. Every `keyFactors` item must include a factor, concrete chart evidence, and interpretation.
-
-## Cache Shape
-
-```mermaid
-flowchart LR
-  A["Stable prompt prefix"] --> C["Hot KV cache"]
-  A --> D["Cold disk KV cache"]
-  B["Variable payload"] --> E["Decode request"]
-  C --> E
-  D --> E
-  E --> F["Tokens"]
-```
-
-Stable prefix contents:
-
-- global doctrine
-- microtask instructions
-- output schema
-- verifier checklist
-- prompt, schema, and tradition-profile versions
-
-Variable payload contents:
-
-- question text
-- chart facts
-- settings
-- risk classification
-- deterministic assignments
-
-Cache keys include model hash, binding/build identity, context size, generation settings, prompt version, schema version, and tradition profile. Any mismatch invalidates the cache.
-
-## Review Questions For Eileen
-
-- Are the house assignment defaults right for the kinds of questions users will actually ask?
-- Are there domain modules missing from the first release?
-- Should the final prose be more terse, more teaching-oriented, or more client-facing?
-- Which high-stakes question categories should be blocked outright rather than answered symbolically?
+See [method audit](METHOD_AUDIT.md) for implemented rules and remaining review boundaries.

@@ -1,12 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { calculateChart, dmsToDecimal, dtLocalNowValue, formatDeg } from './chartCalc'
+import { calculateChart, dtLocalNowValue, formatDeg } from './chartCalc'
 import { ChartWheel } from './ChartWheel'
 import { AspectGrid } from './AspectGrid'
 import { AiPanel } from './AiPanel'
-import { buildAiChartFacts } from './aiChartFacts'
+import { ReviewNotes } from './ReviewNotes'
+import { MethodReview } from './MethodReview'
+import type { HoraryInterpretation } from './tauriBridge'
+import { resolveChartTime, validateDms, nudge_chart_time, applyBookMethod } from './ai/aiCoreWasm'
+import tzlookup from 'tz-lookup'
 import { buildHoraryChartFacts } from './ai/chartFacts.js'
-import { calculateChart as calculateAdvancedHoraryChart } from './astro/chart.js'
-import { reverseLocalCity, searchLocalCities } from './localCities'
+import { getAllPositions } from './astro/planets.js'
+import { dateToJD } from './astro/time.js'
+import { reverseLocalCity, searchLocalCities, type LocalCity } from './localCities'
 import { LOCATION_DETECT_TIMEOUT_MS, browserPermissionResetHint, locationFailureMessage, locationUnsupportedMessage } from './locationMessages'
 import {
   cancelCurrentLocationDetection,
@@ -50,8 +55,11 @@ function App() {
 
   const [locationName, setLocationName] = useState('')
   const [detectedCityName, setDetectedCityName] = useState('')
+  const [locationCandidates, setLocationCandidates] = useState<LocalCity[]>([])
   const [locationSearching, setLocationSearching] = useState(false)
   const [locationError, setLocationError] = useState('')
+  const [timeOccurrence, setTimeOccurrence] = useState('')
+  const [enableJudgement, setEnableJudgement] = useState(false)
   const [locationTimezone, setLocationTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone)
 
   const [latDeg, setLatDeg] = useState('')
@@ -62,14 +70,15 @@ function App() {
   const [lonMin, setLonMin] = useState('')
   const [lonSec, setLonSec] = useState('')
   const [lonSign, setLonSign] = useState<'E' | 'W'>('W')
+  const [reviewInterpretation, setReviewInterpretation] = useState<HoraryInterpretation | null>(null)
   const [question, setQuestion] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [judgementActive, setJudgementActive] = useState(false)
   const [judgementRequestId, setJudgementRequestId] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
-  const [showAngles, setShowAngles] = useState(() => localStorage.getItem('showAngles') === 'true')
+  const [showAngles, setShowAngles] = useState(() => localStorage.getItem('showAngles') !== 'false')
   const [showHouses, setShowHouses] = useState(() => localStorage.getItem('showHouses') === 'true')
-  const [showPlanets, setShowPlanets] = useState(() => localStorage.getItem('showPlanets') === 'true')
+  const [showPlanets, setShowPlanets] = useState(() => localStorage.getItem('showPlanets') !== 'false')
   const [showAspects, setShowAspects] = useState(() => localStorage.getItem('showAspects') === 'true')
   const [showAspectGrid, setShowAspectGrid] = useState(() => localStorage.getItem('showAspectGrid') === 'true')
   const [use24Hour, setUse24Hour] = useState(() => localStorage.getItem('use24Hour') === 'true')
@@ -79,12 +88,11 @@ function App() {
     return stored !== null ? stored === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches
   })
   useEffect(() => {
-    document.body.style.backgroundColor = darkMode ? '#242424' : '#ffffff'
-    document.body.style.color = darkMode ? 'rgba(255,255,255,0.87)' : '#213547'
+    document.body.style.backgroundColor = darkMode ? '#171e22' : '#f6f3ed'
+    document.body.style.color = darkMode ? '#e9e6df' : '#283c3d'
   }, [darkMode])
   const [locationInputMode, setLocationInputMode] = useState<'search' | 'coordinates'>(() => localStorage.getItem('locationInputMode') === 'coordinates' ? 'coordinates' : 'search')
   const settingsRef = useRef<HTMLDivElement>(null)
-  const questionEditRef = useRef<HTMLTextAreaElement>(null)
   const questionViewRef = useRef<HTMLTextAreaElement>(null)
   const coordFallback = useRef<Record<string, string>>({})
   const locationRequestId = useRef(0)
@@ -96,19 +104,30 @@ function App() {
   } | null>(null)
 
   useLayoutEffect(() => {
-    const ref = isEditing ? questionEditRef.current : questionViewRef.current
+    const ref = questionViewRef.current
     if (ref) { ref.style.height = 'auto'; ref.style.height = ref.scrollHeight + 'px' }
   }, [question, isEditing])
 
   useEffect(() => {
     if (!showSettings) return
     function handleClickOutside(e: MouseEvent) {
+      if ((e.target as Element).closest('[aria-controls="chart-inspector"]')) return
       if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
         setShowSettings(false)
       }
     }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setShowSettings(false)
+        document.querySelector<HTMLButtonElement>('[aria-controls="chart-inspector"]')?.focus()
+      }
+    }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
   }, [showSettings])
 
   useEffect(() => {
@@ -146,14 +165,14 @@ function App() {
     setLatSign(lat >= 0 ? 'N' : 'S')
     setLonDeg(lo.deg); setLonMin(lo.min); setLonSec(lo.sec)
     setLonSign(lon >= 0 ? 'E' : 'W')
-    let tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    let tz = tzlookup(lat, lon)
     let cityName = ''
     if (isTauriRuntime()) {
       try {
         const label = await reverseGeocodeLocationNative(lat, lon)
         if (label?.timezone) tz = label.timezone
         if (label?.label) cityName = label.label
-      } catch { /* keep system timezone */ }
+      } catch { /* keep offline coordinate timezone */ }
     } else {
       const label = reverseLocalCity(lat, lon)
       if (label?.timezone) tz = label.timezone
@@ -161,6 +180,7 @@ function App() {
     }
     if (requestId != null && requestId !== locationRequestId.current) return
     setLocationTimezone(tz)
+    if (!isEditing) applyNow(tz)
     detectedLocation.current = {
       latDeg: ld.deg, latMin: ld.min, latSec: ld.sec, latSign: lat >= 0 ? 'N' : 'S',
       lonDeg: lo.deg, lonMin: lo.min, lonSec: lo.sec, lonSign: lon >= 0 ? 'E' : 'W',
@@ -168,7 +188,7 @@ function App() {
     }
     setDetectedCityName(cityName)
     setLocationDetected(true)
-    setLocationSet(true)
+    setLocationSet(true); setSubmitError('')
     setGeolocating(false)
   }
 
@@ -296,9 +316,8 @@ function App() {
   }
 
   function saveCastSnapshot() {
-    const h = String(Number(timeHour) || 0).padStart(2, '0')
-    const m = String(Number(timeMinute) || 0).padStart(2, '0')
-    if (new Date(`${dateLocal}T${h}:${m}`) > new Date()) {
+    if (parsed.error) { setSubmitError(parsed.error); return false }
+    if (parsed.dt > new Date()) {
       setSubmitError('The date and time cannot be in the future.')
       return false
     }
@@ -308,16 +327,14 @@ function App() {
   }
 
   function generateJudgement() {
+    if (!locationSet) { setSubmitError('Set the location before casting a chart.'); return }
     if (!saveCastSnapshot()) return
+    if (chart.error) { setSubmitError(chart.error); return }
+    if (!enableJudgement) return
     if (!question.trim()) {
       setSubmitError('Write the horary question before generating a judgement.')
       return
     }
-    if (!isEditing && !locationSet) {
-      setSubmitError('Set the location before generating a judgement.')
-      return
-    }
-    setSubmitError('')
     setJudgementRequestId(requestId => requestId + 1)
   }
 
@@ -328,21 +345,28 @@ function App() {
     setAmPm(castSnapshot.amPm)
   }
 
+  function applyNow(timezone: string) {
+    const n = dtLocalNowValue(timezone)
+    const snapshot = { date: n.slice(0, 10), hour: n.slice(11, 13), minute: n.slice(14, 16), amPm: Number(n.slice(11, 13)) < 12 ? 'AM' as const : 'PM' as const }
+    setDateLocal(snapshot.date); setTimeHour(snapshot.hour); setTimeMinute(snapshot.minute); setAmPm(snapshot.amPm)
+    setCastSnapshot(snapshot)
+    setTimeOccurrence('')
+  }
+
   function resetToNow() {
-    const n = dtLocalNowValue()
-    setDateLocal(n.slice(0, 10))
-    setTimeHour(n.slice(11, 13))
-    setTimeMinute(n.slice(14, 16))
-    setAmPm(Number(n.slice(11, 13)) < 12 ? 'AM' : 'PM')
-    if (detectedLocation.current) {
-      const d = detectedLocation.current
+    const d = detectedLocation.current
+    const timezone = d?.timezone || locationTimezone
+    applyNow(timezone)
+    if (d) {
       setLatDeg(d.latDeg); setLatMin(d.latMin); setLatSec(d.latSec); setLatSign(d.latSign)
       setLonDeg(d.lonDeg); setLonMin(d.lonMin); setLonSec(d.lonSec); setLonSign(d.lonSign)
-      setLocationTimezone(d.timezone)
+      setLocationSet(true); setSubmitError('')
+      setLocationDetected(true)
+      setDetectedCityName(reverseLocalCity(validateDms(d.latDeg, d.latMin, d.latSec, d.latSign), validateDms(d.lonDeg, d.lonMin, d.lonSec, d.lonSign))?.label || '')
     }
+    setLocationTimezone(timezone)
     setLocationName('')
-    if (!detectedLocation.current) setLocationTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
-    saveCastSnapshot()
+    setSubmitError('')
     setIsEditing(false)
   }
 
@@ -386,23 +410,12 @@ const display12Hour = (() => {
     if (val === 'PM' && h < 12) setTimeHour(String(h + 12))
   }
 
-  function nudgeTime(direction: 1 | -1) {
-    const h = String(Number(timeHour) || 0).padStart(2, '0')
-    const m = String(Number(timeMinute) || 0).padStart(2, '0')
-    const dt = new Date(`${dateLocal}T${h}:${m}`)
-    if (nudgeUnit === 'minute') dt.setMinutes(dt.getMinutes() + direction)
-    else if (nudgeUnit === 'hour') dt.setHours(dt.getHours() + direction)
-    else if (nudgeUnit === 'day') dt.setDate(dt.getDate() + direction)
-    else if (nudgeUnit === 'week') dt.setDate(dt.getDate() + direction * 7)
-    else if (nudgeUnit === 'month') dt.setMonth(dt.getMonth() + direction)
-    else if (nudgeUnit === 'year') dt.setFullYear(dt.getFullYear() + direction)
-    const y = dt.getFullYear()
-    const mo = String(dt.getMonth() + 1).padStart(2, '0')
-    const d = String(dt.getDate()).padStart(2, '0')
-    setDateLocal(`${y}-${mo}-${d}`)
-    setTimeHour(String(dt.getHours()))
-    setTimeMinute(String(dt.getMinutes()).padStart(2, '0'))
-    setAmPm(dt.getHours() < 12 ? 'AM' : 'PM')
+  function nudgeTime(direction: number) {
+    try {
+      const next = nudge_chart_time(`${dateLocal}T${timeHour.padStart(2, '0')}:${timeMinute.padStart(2, '0')}`, nudgeUnit, direction)
+      setDateLocal(next.slice(0, 10)); setTimeHour(next.slice(11, 13)); setTimeMinute(next.slice(14, 16))
+      setAmPm(Number(next.slice(11, 13)) < 12 ? 'AM' : 'PM'); setTimeOccurrence(''); setSubmitError('')
+    } catch (error) { setSubmitError(String(error)) }
   }
 
   function useManualCoordinates() {
@@ -411,126 +424,81 @@ const display12Hour = (() => {
       return
     }
 
-    const lat = dmsToDecimal(Number(latDeg) || 0, Number(latMin) || 0, Number(latSec) || 0, latSign)
-    const lon = dmsToDecimal(Number(lonDeg) || 0, Number(lonMin) || 0, Number(lonSec) || 0, lonSign)
-    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-      setLocationError('Latitude must be between 0° and 90°.')
-      return
-    }
-    if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
-      setLocationError('Longitude must be between 0° and 180°.')
-      return
-    }
+    let lat: number, lon: number
+    try {
+      lat = validateDms(latDeg, latMin, latSec, latSign)
+      lon = validateDms(lonDeg, lonMin, lonSec, lonSign)
+    } catch (error) { setLocationError(String(error)); return }
 
     locationRequestId.current += 1
     cancelActiveNativeLocationDetection()
     setGeolocating(false)
     setGeoError('')
     setLocationError('')
-    setLocationTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
+    setLocationTimezone(tzlookup(lat, lon))
+    if (!isEditing) applyNow(tzlookup(lat, lon))
     setDetectedCityName(`${fmtDMS(latDeg || '0', latMin || '00', latSec || '00', latSign)}, ${fmtDMS(lonDeg || '0', lonMin || '00', lonSec || '00', lonSign)}`)
     setLocationDetected(true)
-    setLocationSet(true)
+    setLocationSet(true); setSubmitError('')
+  }
+
+  function chooseLocation(result: LocalCity) {
+    locationRequestId.current++
+    cancelActiveNativeLocationDetection()
+    setGeolocating(false)
+    const lat = result.latitude, lon = result.longitude
+    const ld = decimalToDMS(lat), lo = decimalToDMS(lon)
+    setLatDeg(ld.deg); setLatMin(ld.min); setLatSec(ld.sec); setLatSign(lat >= 0 ? 'N' : 'S')
+    setLonDeg(lo.deg); setLonMin(lo.min); setLonSec(lo.sec); setLonSign(lon >= 0 ? 'E' : 'W')
+    const timezone = result.timezone || tzlookup(lat, lon)
+    setLocationTimezone(timezone)
+    if (!isEditing) applyNow(timezone)
+    setLocationSet(true); setSubmitError(''); setLocationDetected(true); setDetectedCityName(result.label)
+    setLocationCandidates([]); setLocationError(''); setGeoError('')
   }
 
   async function searchLocation() {
     if (!locationName.trim() || locationSearching) return
-    locationRequestId.current += 1
+    const requestId = ++locationRequestId.current
     cancelActiveNativeLocationDetection()
-    setGeolocating(false)
-    setLocationSearching(true)
-    setLocationError('')
-    setGeoError('')
+    setGeolocating(false); setLocationSearching(true); setLocationError(''); setLocationCandidates([])
     try {
-      if (isTauriRuntime()) {
-        const data = await geocodeLocationNative(locationName)
-        if (!data.length) { setLocationError('Location not found.'); return }
-        const result = data[0]
-        const lat = result.latitude
-        const lon = result.longitude
-        const ld = decimalToDMS(lat)
-        const lo = decimalToDMS(lon)
-        setLatDeg(ld.deg); setLatMin(ld.min); setLatSec(ld.sec)
-        setLatSign(lat >= 0 ? 'N' : 'S')
-        setLonDeg(lo.deg); setLonMin(lo.min); setLonSec(lo.sec)
-        setLonSign(lon >= 0 ? 'E' : 'W')
-        setLocationSet(true)
-        setLocationDetected(true)
-        setDetectedCityName(result.label)
-        setLocationTimezone(result.timezone || locationTimezone)
-        return
-      }
-      const data = searchLocalCities(locationName, 1)
-      if (!data.length) { setLocationError('Location not found.'); return }
-      const lat = data[0].latitude
-      const lon = data[0].longitude
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) { setLocationError('Invalid coordinates returned.'); return }
-      const ld = decimalToDMS(lat)
-      const lo = decimalToDMS(lon)
-      setLatDeg(ld.deg); setLatMin(ld.min); setLatSec(ld.sec)
-      setLatSign(lat >= 0 ? 'N' : 'S')
-      setLonDeg(lo.deg); setLonMin(lo.min); setLonSec(lo.sec)
-      setLonSign(lon >= 0 ? 'E' : 'W')
-      setLocationSet(true)
-      setLocationDetected(true)
-      setDetectedCityName(data[0].label)
-      setLocationTimezone(data[0].timezone || locationTimezone)
-    } catch {
-      setLocationError('Search failed. The offline location index could not be read.')
-    } finally {
-      setLocationSearching(false)
-    }
+      const data = isTauriRuntime() ? await geocodeLocationNative(locationName) : searchLocalCities(locationName, 8)
+      if (requestId !== locationRequestId.current) return
+      if (!data.length) { setLocationError('No match in the offline city list. Enter coordinates manually.'); return }
+      setLocationCandidates(data)
+    } catch { setLocationError('The offline location index could not be read. Enter coordinates manually.') }
+    finally { setLocationSearching(false) }
   }
 
   const parsed = useMemo(() => {
-    const h = String(Number(timeHour) || 0).padStart(2, '0')
-    const m = String(Number(timeMinute) || 0).padStart(2, '0')
-    const dt = new Date(`${dateLocal}T${h}:${m}`)
-    const latDec = dmsToDecimal(Number(latDeg) || 0, Number(latMin) || 0, Number(latSec) || 0, latSign)
-    const lonDec = dmsToDecimal(Number(lonDeg) || 0, Number(lonMin) || 0, Number(lonSec) || 0, lonSign)
-    return { dt, lat: latDec, lon: lonDec }
-  }, [dateLocal, timeHour, timeMinute, latDeg, latMin, latSec, latSign, lonDeg, lonMin, lonSec, lonSign])
-
-  const chart = useMemo(() => calculateChart(parsed.dt, parsed.lat, parsed.lon), [parsed])
-  const aiChartFacts = useMemo(() => {
-    if (!chart.summary) return null
-
-    const locationLabel = detectedCityName || locationName || `${fmtDMS(latDeg, latMin, latSec, latSign)}, ${fmtDMS(lonDeg, lonMin, lonSec, lonSign)}`
-    const localHour = String(Number(timeHour) || 0).padStart(2, '0')
-    const localMinute = String(Number(timeMinute) || 0).padStart(2, '0')
+    let dt = new Date(NaN)
     try {
-      const horaryChart = (calculateAdvancedHoraryChart as unknown as (input: {
-        date: Date
-        lat: number
-        lng: number
-        localDate: string
-        localTime: string
-        houseSystem: string
-        planetSet: string
-      }) => unknown)({
-        date: parsed.dt,
-        lat: parsed.lat,
-        lng: parsed.lon,
-        localDate: dateLocal,
-        localTime: `${localHour}:${localMinute}`,
-        houseSystem: 'regiomontanus',
-        planetSet: 'classical',
-      })
-      return (buildHoraryChartFacts as (chart: unknown, options: Record<string, unknown>) => unknown)(horaryChart, {
-        locationLabel,
-        timezone: locationTimezone,
-        localTime: `${dateLocal} ${localHour}:${localMinute} ${locationTimezone}`,
-      })
-    } catch {
-      return buildAiChartFacts(chart.summary, {
-        dt: parsed.dt,
-        lat: parsed.lat,
-        lon: parsed.lon,
-        timezone: locationTimezone,
-        locationLabel,
-      })
-    }
-  }, [chart.summary, dateLocal, detectedCityName, latDeg, latMin, latSec, latSign, locationName, locationTimezone, lonDeg, lonMin, lonSec, lonSign, parsed.dt, parsed.lat, parsed.lon, timeHour, timeMinute])
+      if (!timeHour.trim() || !timeMinute.trim()) throw new Error('Enter both an hour and a minute.')
+      dt = resolveChartTime(`${dateLocal}T${timeHour.padStart(2, '0')}:${timeMinute.padStart(2, '0')}`, locationTimezone, timeOccurrence)
+      const lat = validateDms(latDeg, latMin, latSec, latSign)
+      const lon = validateDms(lonDeg, lonMin, lonSec, lonSign)
+      return { dt, lat, lon, error: '' }
+    } catch (error) { return { dt, lat: NaN, lon: NaN, error: String(error) } }
+  }, [dateLocal, timeHour, timeMinute, locationTimezone, timeOccurrence, latDeg, latMin, latSec, latSign, lonDeg, lonMin, lonSec, lonSign])
+
+  const chart = useMemo(() => calculateChart(parsed.dt, parsed.lat, parsed.lon, locationTimezone), [parsed, locationTimezone])
+  const aiChartFacts = useMemo(() => {
+    if (!chart.horary) return null
+    const facts = buildHoraryChartFacts(chart.horary, {
+      locationLabel: `${parsed.lat}, ${parsed.lon}`,
+      timezone: locationTimezone,
+      localTime: `${dateLocal} ${timeHour.padStart(2, '0')}:${timeMinute.padStart(2, '0')} ${locationTimezone}`,
+    })
+    const names = ['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn']
+    const jd = dateToJD(parsed.dt)
+    const motionSamples = Array.from({ length: 169 }, (_, hours) => ({ hours,
+      positions: Object.fromEntries(Object.entries(getAllPositions(jd + hours / 24, names)).map(([name, position]) => [name, position.longitude])),
+    }))
+    return applyBookMethod({ ...facts, motionSamples })
+  }, [chart.horary, dateLocal, locationTimezone, parsed, timeHour, timeMinute])
+
+  useEffect(() => { setReviewInterpretation(null) }, [question, aiChartFacts])
 
   const locationFields = (
     <>
@@ -551,6 +519,7 @@ const display12Hour = (() => {
                 {locationSearching ? 'Searching…' : 'Search'}
               </button>
             </div>
+            {locationCandidates.length ? <ul aria-label="Choose a location">{locationCandidates.map((candidate, i) => <li key={i}><button type="button" onClick={() => chooseLocation(candidate)}>{candidate.label}</button></li>)}</ul> : null}
             {locationError && <div style={{ color: '#c55', marginTop: 4 }}>{locationError}</div>}
             <button
               type="button"
@@ -598,103 +567,109 @@ const display12Hour = (() => {
           <button onClick={useManualCoordinates} style={{ marginTop: 12 }}>
             Use coordinates
           </button>
+          <button type="button" onClick={() => { localStorage.setItem('locationInputMode', 'search'); setLocationInputMode('search'); setLocationError('') }} style={{ marginLeft: 8 }}>
+            Search for a city
+          </button>
           {locationError && <div style={{ color: '#c55', marginTop: 4 }}>{locationError}</div>}
         </div>
       )}
+      <label style={{ display: 'block', marginTop: 12 }}>
+        Timezone
+        <input aria-label="Timezone" value={locationTimezone} onChange={e => { setLocationTimezone(e.target.value); setTimeOccurrence('') }} style={{ width: '100%' }} />
+      </label>
+      {parsed.error.includes('occurs twice') || timeOccurrence ? <label>
+        Repeated local time
+        <select aria-label="Repeated local time" value={timeOccurrence} onChange={e => setTimeOccurrence(e.target.value)}>
+          <option value="">Choose occurrence</option><option value="earlier">First occurrence</option><option value="later">Second occurrence</option>
+        </select>
+      </label> : null}
     </>
   )
 
   return (
-    <div className={darkMode ? 'night-mode' : ''} style={{ maxWidth: 568, margin: '0 auto', padding: 24, textAlign: 'left', minHeight: '100vh', background: darkMode ? '#242424' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', position: 'relative', zIndex: 200 }}>
-        <h1 style={{ marginBottom: 4 }}>Horary Calculator</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button className="icon-btn" onClick={() => { const d = !darkMode; setDarkMode(d); localStorage.setItem('darkMode', String(d)) }} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.8, color: 'inherit' }} title={darkMode ? 'Switch to day mode' : 'Switch to night mode'}>
-            {darkMode ? '☀︎' : '☽︎'}
-          </button>
-        <div style={{ position: 'relative' }} ref={settingsRef}>
-          <button className="icon-btn" onClick={() => setShowSettings(s => !s)} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: 'inherit' }} title="Settings">⚙︎</button>
-          {showSettings && (
-            <div style={{ position: 'absolute', right: 0, top: '100%', background: darkMode ? '#1a1a1a' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, borderRadius: 8, padding: 12, minWidth: 220, zIndex: 9999 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isEditing} onChange={(e) => { if (!e.target.checked) saveCastSnapshot(); setIsEditing(e.target.checked); if (!e.target.checked) { resetToNow(); setSubmitError('') } }} />
-                Look up past question
-              </label>
-              <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
-              {[['showAngles', 'Show angles', showAngles, setShowAngles], ['showHouses', 'Show houses', showHouses, setShowHouses], ['showPlanets', 'Show planets', showPlanets, setShowPlanets], ['showAspects', 'Show aspects list', showAspects, setShowAspects], ['showAspectGrid', 'Show aspects chart', showAspectGrid, setShowAspectGrid]].map(([key, label, value, setter]) => (
-                <label key={key as string} style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginBottom: 4 }}>
-                  <input type="checkbox" checked={value as boolean} onChange={(e) => { localStorage.setItem(key as string, String(e.target.checked)); (setter as (v: boolean) => void)(e.target.checked) }} />
-                  {label as string}
-                </label>
-              ))}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginTop: 4 }}>
-                <input type="checkbox"
-                  checked={showAngles && showHouses && showPlanets && showAspects && showAspectGrid}
-                  onChange={(e) => { const v = e.target.checked; localStorage.setItem('showAngles', String(v)); localStorage.setItem('showHouses', String(v)); localStorage.setItem('showPlanets', String(v)); localStorage.setItem('showAspects', String(v)); localStorage.setItem('showAspectGrid', String(v)); setShowAngles(v); setShowHouses(v); setShowPlanets(v); setShowAspects(v); setShowAspectGrid(v) }}
-                />
-                Show all
-              </label>
-              <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                <input type="checkbox" checked={use24Hour} onChange={(e) => { localStorage.setItem('use24Hour', String(e.target.checked)); setUse24Hour(e.target.checked) }} />
-                Use 24-hour time
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginTop: 4 }}>
-                <input type="checkbox" checked={locationInputMode === 'coordinates'} onChange={(e) => { const m = e.target.checked ? 'coordinates' : 'search'; localStorage.setItem('locationInputMode', m); setLocationInputMode(m); setLocationError('') }} />
-                Enter coordinates manually
-              </label>
-            </div>
-          )}
-        </div>
-        </div>
-      </div>
-
-      {!isEditing && (
-        <div style={{ marginTop: 32, marginBottom: 16, opacity: 0.85 }}>
-          <div><b>Date:</b> {parsed.dt.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-          <div><b>Time:</b> {parsed.dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour })}</div>
-          {geolocating && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 12, flexWrap: 'wrap' }}>
-                <span style={{ opacity: 0.6 }}>Detecting location…</span>
-                <button onClick={cancelDetectLocation} style={{ padding: '0.25em 0.7em' }}>
-                  Cancel
-                </button>
+    <div className={`horary-app ${darkMode ? 'night-mode' : ''} ${showSettings ? 'inspector-open' : ''}`}>
+      <header className="app-toolbar">
+        <a className="wordmark" href="#question">Horary<span aria-hidden="true">✦</span></a>
+        <span className="toolbar-caption">A question. A moment. A chart.</span>
+        <button aria-expanded={showSettings} aria-controls="chart-inspector" className="quiet-button" onClick={() => setShowSettings(s => !s)}>Chart settings</button>
+      </header>
+      <main className="reading-workspace">
+        <section className="question-composer" id="question">
+          <label htmlFor="horary-question" className="eyebrow">What is your question?</label>
+          <textarea id="horary-question" ref={questionViewRef} value={question} onChange={e => setQuestion(e.target.value)}
+            placeholder="Where is the lost ring?" rows={2} onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); generateJudgement() } }} />
+          <div className="cast-bar">
+            <button className="cast-context quiet-button" onClick={() => { setIsEditing(true); setShowSettings(true) }}>
+              {locationSet ? detectedCityName || 'Selected location' : 'Choose the astrologer’s location'}<span> · {dateLocal} · {timeHour.padStart(2, '0')}:{timeMinute.padStart(2, '0')} · {locationTimezone}</span>
+            </button>
+            <button className="primary-button" onClick={generateJudgement} disabled={judgementActive}>{judgementActive ? 'Reading…' : enableJudgement ? 'Read chart' : 'Cast chart'}</button>
+          </div>
+          {submitError ? <p role="alert" className="ai-error">{submitError}</p> : null}
+          {!locationSet ? <div className="first-location">
+            <p>Use the place where the astrologer understands the question.</p>
+            {locationFields}
+            <button disabled={geolocating} onClick={detectLocation}>{geolocating ? 'Finding your location…' : 'Use my location'}</button>
+            {geolocating ? <button onClick={cancelDetectLocation}>Cancel</button> : null}
+            {geoError ? <p role="alert" className="ai-error">{geoError}{browserPermissionResetHint(navigator.userAgent, isTauriRuntime())}</p> : null}
+          </div> : null}
+        </section>
+        {locationSet && chart.summary ? <div className="chart-reading-layout">
+          <section className="chart-stage" aria-label="Horary chart">
+            <div className="section-heading"><span className="eyebrow">The chart</span><span className="subtle">Regiomontanus · Tropical</span></div>
+            <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
+            <div className="chart-caption"><span>ASC {chart.summary.ascendant}</span><span>MC {chart.summary.midheaven}</span></div>
+            <details className="time-explorer"><summary>Explore this moment</summary>
+              <p>Move the chart to inspect a nearby time. The reading clears when its evidence changes.</p>
+              <div className="time-explorer-controls">
+                <button aria-label="Earlier" onClick={() => nudgeTime(-1)}>←</button>
+                <select value={nudgeUnit} onChange={e => setNudgeUnit(e.target.value as typeof nudgeUnit)} aria-label="Time increment">
+                  {['minute','hour','day','week','month','year'].map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                </select>
+                <button aria-label="Later" onClick={() => nudgeTime(1)}>→</button><button onClick={resetToCastTime}>Original moment</button>
               </div>
-              {locationFields}
-            </>
-          )}
-          {!geolocating && locationDetected && (
-            <div><b>Location:</b> {detectedCityName || `${fmtDMS(latDeg, latMin, latSec, latSign)}, ${fmtDMS(lonDeg, lonMin, lonSec, lonSign)}`}</div>
-          )}
-          {!geolocating && !locationDetected && (
-            <>
-              <button onClick={detectLocation} style={{ marginBottom: geoError ? 6 : 12 }}>Detect my location</button>
-              {geoError && (
-                <div style={{ color: '#c55', marginBottom: 10, fontSize: '0.9em', lineHeight: 1.35, overflowWrap: 'anywhere' }}>
-                  {geoError}{browserPermissionResetHint(navigator.userAgent, isTauriRuntime())}
-                </div>
-              )}
-              {locationFields}
-            </>
-          )}
-        </div>
-      )}
-
-      {isEditing && (
-        <div style={{ marginTop: 32, marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+            </details>
+          </section>
+          <section className="reading-stage" aria-label="Reading">
+            {enableJudgement ? <AiPanel requestId={judgementRequestId} question={question} chartFacts={aiChartFacts} darkMode={darkMode}
+              onActivityChange={setJudgementActive} onInterpretationChange={setReviewInterpretation} />
+              : <div className="reading-invitation"><span className="eyebrow">The reading</span><h2>Start with the question.</h2>
+                <p>Read the chart yourself, or invite a local model to offer an interpretation using Frawley’s method.</p>
+                <button onClick={() => setEnableJudgement(true)}>Set up a local reading</button>
+                <p className="subtle">Your question stays on this device.</p>
+              </div>}
+          </section>
+        </div> : <div className="empty-reading" aria-hidden="true"><span>☉</span><p>Every chart begins with a particular moment.</p></div>}
+        {locationSet && (parsed.error || chart.error) ? <p role="alert" className="ai-error">{parsed.error || chart.error}</p> : null}
+        {locationSet && chart.summary ? <div className="study-tools">
+          <details><summary>Chart tables</summary>
+            {showAngles ? <p>ASC {chart.summary.ascendant} · DSC {chart.summary.descendant} · MC {chart.summary.midheaven} · IC {chart.summary.ic}</p> : null}
+            {showHouses ? <table className="evidence-table"><thead><tr><th>House</th><th>Cusp</th></tr></thead><tbody>{chart.summary.houses.map(h => <tr key={h.house}><td>{h.house}</td><td>{h.sign} {h.formatted || formatDeg(h.eclipticDegrees)}</td></tr>)}</tbody></table> : null}
+            {showPlanets ? <table className="evidence-table"><thead><tr><th>Planet</th><th>Position</th></tr></thead><tbody>{chart.summary.planets.map(p => <tr key={p.key}><td>{p.name}</td><td>{p.sign} {p.formatted}</td></tr>)}</tbody></table> : null}
+            {showAspects ? <table className="evidence-table"><thead><tr><th>Aspect</th><th>Orb</th><th>Motion</th></tr></thead><tbody>{chart.summary.aspectsList.map((a,i) => <tr key={i}><td>{a.from} {a.type} {a.to}</td><td>{a.orb}</td><td>{a.applying === null ? 'Exact' : a.applying ? 'Applying' : 'Separating'}</td></tr>)}</tbody></table> : null}
+            {showAspectGrid ? <AspectGrid planets={chart.summary.planets.map(p => p.name)} aspects={chart.summary.aspectsList} /> : null}
+          </details>
+          <details><summary>The method &amp; evidence</summary>
+            <MethodReview question={question} chart={aiChartFacts} interpretation={enableJudgement ? reviewInterpretation : null} />
+          </details>
+          <details><summary>My review notes</summary><ReviewNotes question={question} chart={aiChartFacts} interpretation={enableJudgement ? reviewInterpretation : null} /></details>
+        </div> : null}
+        <footer className="workspace-footer"><span>Following John Frawley · The Horary Textbook</span><span>Working edition for Eileen’s review</span></footer>
+      </main>
+      {showSettings ? <aside className="chart-inspector" id="chart-inspector" aria-label="Chart settings" ref={settingsRef}>
+        <div className="inspector-heading"><h2>Chart settings</h2><button aria-label="Close settings" onClick={() => setShowSettings(false)}>×</button></div>
+        <p className="subtle">Cast for the moment and place where the astrologer understands the question. Frawley, pp. 137–141.</p>
+        <label className="toggle-row"><input type="checkbox" checked={isEditing} onChange={e => { setIsEditing(e.target.checked); if (!e.target.checked) resetToNow() }} />Set a particular moment</label>
+        {isEditing ? <>          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
             <label>
               Date
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                 {(() => {
                   const [dy, dm, dd] = dateLocal.split('-').map(Number)
-                  const now = new Date()
-                  const curYear = now.getFullYear(), curMonth = now.getMonth() + 1, curDay = now.getDate()
+                  const curYear = Number(dtLocalNowValue(locationTimezone).slice(0, 4))
                   const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
                   const daysInMonth = new Date(dy, dm, 0).getDate()
-                  const maxMonth = dy === curYear ? curMonth : 12
-                  const maxDay = (dy === curYear && dm === curMonth) ? curDay : daysInMonth
+                  const maxMonth = 12
+                  const maxDay = daysInMonth
                   const selStyle = { padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }
                   return (<>
                     <select value={dm} onChange={(e) => handleDatePartChange('month', e.target.value)} style={selStyle}>
@@ -714,9 +689,6 @@ const display12Hour = (() => {
               Time
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
                 {(() => {
-                  const now = new Date()
-                  const [dy, dm, dd] = dateLocal.split('-').map(Number)
-                  const isToday = dy === now.getFullYear() && dm === now.getMonth() + 1 && dd === now.getDate()
                   const numStyle = { width: '3.5ch', padding: '0.5em 0.4em', fontSize: 'inherit', fontFamily: 'inherit', textAlign: 'center' as const }
                   const selStyle = { padding: '0.5em 0.8em', fontSize: 'inherit', fontFamily: 'inherit' }
                   return use24Hour ? (
@@ -732,7 +704,7 @@ const display12Hour = (() => {
                       <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={numStyle} title="Minute" />
                       <select value={amPm} onChange={(e) => handleAmPmChange(e.target.value as 'AM' | 'PM')} style={selStyle}>
                         <option value="AM">AM</option>
-                        {now.getHours() >= 12 || !isToday ? <option value="PM">PM</option> : null}
+                        <option value="PM">PM</option>
                       </select>
                     </>
                   )
@@ -740,158 +712,17 @@ const display12Hour = (() => {
               </div>
             </label>
           </div>
-          {locationFields}
-          <button style={{ marginTop: 12 }} onClick={resetToNow}>
-            Use current time &amp; place
-          </button>
-          <div style={{ marginTop: 16 }}>
-            Question
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 4 }}>
-              <textarea
-                ref={questionEditRef}
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="What is your question?"
-                rows={1}
-                style={{ flex: 1, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', padding: '0.5em 0.8em' }}
-              />
-              <button onClick={generateJudgement} disabled={judgementActive}>
-                {judgementActive ? 'Working...' : 'Generate Judgement'}
-              </button>
-            </div>
-            {submitError && <div style={{ color: '#c55', marginTop: 6, fontSize: '0.9em' }}>{submitError}</div>}
-          </div>
-        </div>
-      )}
-
-      {!isEditing && (
-        <div style={{ marginBottom: 16 }}>
-          Question
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 4 }}>
-            <textarea
-              ref={questionViewRef}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What is your question?"
-              rows={1}
-              style={{ flex: 1, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', padding: '0.5em 0.8em' }}
-            />
-            <button onClick={generateJudgement} disabled={judgementActive}>
-              {judgementActive ? 'Working...' : 'Generate Judgement'}
-            </button>
-          </div>
-          {submitError && <div style={{ color: '#c55', marginTop: 6, fontSize: '0.9em' }}>{submitError}</div>}
-        </div>
-      )}
-
-      {(isEditing || locationSet) && chart.summary ? (
-        <div style={{ marginTop: 12, padding: 12, border: 'none', borderRadius: 8, overflowX: 'auto' }}>
-          <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
-          <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
-        </div>
-      ) : null}
-
-      {(isEditing || locationSet) && chart.summary ? (
-        <AiPanel
-          requestId={judgementRequestId}
-          question={question}
-          chartFacts={aiChartFacts}
-          darkMode={darkMode}
-          onActivityChange={setJudgementActive}
-        />
-      ) : null}
-
-      <div style={{ marginTop: 16 }}>
-        {(isEditing || locationSet) && chart.error ? (
-          <div style={{ padding: 12, border: '1px solid #c33', borderRadius: 8 }}>
-            <b>Error:</b> {chart.error}
-          </div>
-        ) : (isEditing || locationSet) && chart.summary ? (
-          <>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-            <button onClick={() => nudgeTime(-1)}>◀</button>
-            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment" style={{ padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }}>
-              <option value="minute">Minute</option>
-              <option value="hour">Hour</option>
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-              <option value="year">Year</option>
-            </select>
-            <button onClick={() => nudgeTime(1)}>▶</button>
-            <button onClick={resetToCastTime}>Reset</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: (showAngles || showHouses) && (showPlanets || showAspects) ? '1fr 1fr' : '1fr', gap: 0 }}>
-            {(showAngles || showHouses) && (
-              <div style={{ padding: '12px 6px 12px 12px', border: 'none', borderRadius: 8, minWidth: 0 }}>
-                {showAngles && (
-                  <>
-                    <h2 style={{ marginTop: 0 }}>Angles</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      <li><b>ASC:</b> {chart.summary.ascendant}</li>
-                      <li><b>DSC:</b> {chart.summary.descendant}</li>
-                      <li><b>MC:</b> {chart.summary.midheaven}</li>
-                      <li><b>IC:</b> {chart.summary.ic}</li>
-                    </ul>
-                  </>
-                )}
-                {showHouses && (
-                  <>
-                    <h2 style={{ marginTop: showAngles ? 16 : 0 }}>Houses</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      {chart.summary.houses.map((h) => (
-                        <li key={h.house}>
-                          <b>House {h.house}:</b> {h.sign} {h.formatted || formatDeg(h.eclipticDegrees)}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-
-            {(showPlanets || showAspects) && (
-              <div style={{ padding: '12px 12px 12px 6px', border: 'none', borderRadius: 8, minWidth: 0, overflow: 'hidden' }}>
-                {showPlanets && (
-                  <>
-                    <h2 style={{ marginTop: 0 }}>Planets</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      {chart.summary.planets.map((p) => (
-                        <li key={p.key}>
-                          <b>{p.name}:</b> {p.sign} {p.formatted || formatDeg(p.eclipticDegrees)}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {showAspects && (
-                  <>
-                    <h2 style={{ marginTop: showPlanets ? 16 : 0 }}>Aspects</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      {chart.summary.aspectsList.length === 0 && <li>No aspects found with default orbs.</li>}
-                      {chart.summary.aspectsList.map((a, idx) => (
-                        <li key={`${a.from}-${a.to}-${idx}`}>
-                          <b>{a.from}</b> {a.type.charAt(0).toUpperCase() + a.type.slice(1)} <b>{a.to}</b> {a.orb}{a.applying != null ? ` — ${a.applying ? 'applying' : 'separating'}` : ''}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          {showAspectGrid && (
-            <div style={{ marginTop: 16, padding: 12, border: 'none', borderRadius: 8, overflow: 'hidden' }}>
-              <h2 style={{ marginTop: 0 }}>Aspects chart</h2>
-              <AspectGrid
-                planets={chart.summary.planets.map(p => p.name)}
-                aspects={chart.summary.aspectsList}
-              />
-            </div>
-          )}
-          </>
-        ) : null}
-      </div>
+</> : <p>{dateLocal} · {timeHour}:{timeMinute}</p>}
+        <button onClick={resetToNow}>Use current time</button>
+        {locationSet ? locationFields : null}
+        {locationDetected ? <p className="subtle">{detectedCityName}</p> : null}
+        <details><summary>Display</summary>
+          <label className="toggle-row"><input type="checkbox" checked={darkMode} onChange={e => { setDarkMode(e.target.checked); localStorage.setItem('darkMode',String(e.target.checked)) }} />Night palette</label>
+          <label className="toggle-row"><input type="checkbox" checked={use24Hour} onChange={e => { setUse24Hour(e.target.checked); localStorage.setItem('use24Hour',String(e.target.checked)) }} />24-hour time</label>
+          {[['showAngles','Angles',showAngles,setShowAngles],['showHouses','Houses',showHouses,setShowHouses],['showPlanets','Planets',showPlanets,setShowPlanets],['showAspects','Aspects',showAspects,setShowAspects],['showAspectGrid','Aspect grid',showAspectGrid,setShowAspectGrid]].map(([key,label,value,setter]) => <label className="toggle-row" key={key as string}><input type="checkbox" checked={value as boolean} onChange={e => { localStorage.setItem(key as string,String(e.target.checked)); (setter as (v:boolean)=>void)(e.target.checked) }} />{label as string}</label>)}
+        </details>
+        <details><summary>Local interpretation</summary><label className="toggle-row"><input type="checkbox" checked={enableJudgement} onChange={e => setEnableJudgement(e.target.checked)} />Enable model readings</label><p className="subtle">Optional. The chart and its calculated evidence work without a model.</p></details>
+      </aside> : null}
     </div>
   )
 }

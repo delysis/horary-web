@@ -1,19 +1,9 @@
-use crate::llama::{
-    model_info_from_path, models_dir, sanitize_model_id, sha256_file, LlamaError, ModelInfo,
-};
+use crate::llama::{sanitize_model_id, LlamaError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
-use std::{
-    collections::HashSet,
-    fs::{self, File},
-    io::{self, Write},
-    path::Path,
-    time::Duration,
-};
+use std::{collections::HashSet, io};
 
 const BUNDLED_MODEL_MANIFEST: &str = include_str!("../model-manifest.json");
-const DOWNLOADS_DIR: &str = "downloads";
 const DEFAULT_TEMPERATURE_MAX: f64 = 2.0;
 const DEFAULT_MAX_TOKENS_MAX: u64 = 16_384;
 
@@ -109,6 +99,8 @@ pub struct ModelManifestSource {
     pub repo: Option<String>,
     #[serde(default)]
     pub filename: Option<String>,
+    #[serde(default)]
+    pub revision: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -125,179 +117,6 @@ pub fn parse_model_manifest(input: &str) -> ModelManifestResult<ModelManifest> {
     let manifest: ModelManifest = serde_json::from_str(input)?;
     validate_manifest(&manifest)?;
     Ok(manifest)
-}
-
-pub async fn download_manifest_model_to_dir(
-    app_data_dir: &Path,
-    req: DownloadModelRequest,
-) -> ModelManifestResult<ModelInfo> {
-    let manifest = bundled_model_manifest()?;
-    let entry = manifest
-        .models
-        .iter()
-        .find(|model| model.id == req.model_id)
-        .ok_or_else(|| ModelManifestError {
-            message: format!("manifest model not found: {}", req.model_id),
-        })?;
-    download_manifest_entry_to_dir(app_data_dir, entry).await
-}
-
-async fn download_manifest_entry_to_dir(
-    app_data_dir: &Path,
-    entry: &ModelManifestEntry,
-) -> ModelManifestResult<ModelInfo> {
-    validate_downloadable_entry(entry)?;
-    let url = entry
-        .source
-        .as_ref()
-        .and_then(|source| source.url.as_deref())
-        .ok_or_else(|| ModelManifestError {
-            message: format!("manifest model is not downloadable: {}", entry.id),
-        })?;
-
-    let download_dir = app_data_dir.join(DOWNLOADS_DIR);
-    fs::create_dir_all(&download_dir)?;
-    let temp_path = download_dir.join(format!("{}.part", entry.id));
-    download_url_to_file(
-        url,
-        &temp_path,
-        entry.size_bytes,
-        entry.sha256.as_deref().unwrap(),
-    )
-    .await?;
-    install_verified_model_file(app_data_dir, entry, &temp_path)
-}
-
-pub fn install_verified_model_file(
-    app_data_dir: &Path,
-    entry: &ModelManifestEntry,
-    source_path: &Path,
-) -> ModelManifestResult<ModelInfo> {
-    validate_downloadable_entry(entry)?;
-    if !source_path.is_file() {
-        return Err(ModelManifestError {
-            message: format!(
-                "model download file not found: {}",
-                source_path.to_string_lossy()
-            ),
-        });
-    }
-
-    if let Some(expected_size) = entry.size_bytes {
-        let actual_size = fs::metadata(source_path)?.len();
-        if actual_size != expected_size {
-            return Err(ModelManifestError {
-                message: format!(
-                    "downloaded model size mismatch for {}: expected {}, got {}",
-                    entry.id, expected_size, actual_size
-                ),
-            });
-        }
-    }
-
-    let actual_sha = sha256_file(source_path)?;
-    let expected_sha = entry.sha256.as_deref().unwrap();
-    if !actual_sha.eq_ignore_ascii_case(expected_sha) {
-        return Err(ModelManifestError {
-            message: format!(
-                "downloaded model checksum mismatch for {}: expected {}, got {}",
-                entry.id, expected_sha, actual_sha
-            ),
-        });
-    }
-
-    let target_dir = models_dir(app_data_dir);
-    fs::create_dir_all(&target_dir)?;
-    let target = target_dir.join(format!("{}.gguf", entry.id));
-    fs::copy(source_path, &target)?;
-    let _ = fs::remove_file(source_path);
-    Ok(model_info_from_path(
-        &target,
-        entry.id.clone(),
-        entry.display_name.clone(),
-    )?)
-}
-
-async fn download_url_to_file(
-    url: &str,
-    target: &Path,
-    expected_size: Option<u64>,
-    expected_sha256: &str,
-) -> ModelManifestResult<()> {
-    validate_download_url(url)?;
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let _ = fs::remove_file(target);
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60 * 60))
-        .no_proxy()
-        .build()?;
-    let mut response = client.get(url).send().await?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(ModelManifestError {
-            message: format!("model download failed with HTTP {status}"),
-        });
-    }
-    if let (Some(actual), Some(expected)) = (response.content_length(), expected_size) {
-        if actual != expected {
-            return Err(ModelManifestError {
-                message: format!(
-                    "model download size header mismatch: expected {}, got {}",
-                    expected, actual
-                ),
-            });
-        }
-    }
-
-    let mut file = File::create(target)?;
-    let mut hasher = Sha256::new();
-    let mut downloaded = 0_u64;
-
-    while let Some(chunk) = response.chunk().await? {
-        downloaded += chunk.len() as u64;
-        if let Some(expected) = expected_size {
-            if downloaded > expected {
-                let _ = fs::remove_file(target);
-                return Err(ModelManifestError {
-                    message: format!(
-                        "model download exceeded expected size: expected {}, got at least {}",
-                        expected, downloaded
-                    ),
-                });
-            }
-        }
-        hasher.update(&chunk);
-        file.write_all(&chunk)?;
-    }
-    file.flush()?;
-
-    if let Some(expected) = expected_size {
-        if downloaded != expected {
-            let _ = fs::remove_file(target);
-            return Err(ModelManifestError {
-                message: format!(
-                    "model download size mismatch: expected {}, got {}",
-                    expected, downloaded
-                ),
-            });
-        }
-    }
-
-    let actual_sha = format!("{:x}", hasher.finalize());
-    if !actual_sha.eq_ignore_ascii_case(expected_sha256) {
-        let _ = fs::remove_file(target);
-        return Err(ModelManifestError {
-            message: format!(
-                "model download checksum mismatch: expected {}, got {}",
-                expected_sha256, actual_sha
-            ),
-        });
-    }
-
-    Ok(())
 }
 
 fn validate_manifest(manifest: &ModelManifest) -> ModelManifestResult<()> {
@@ -538,40 +357,20 @@ fn default_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "horary-manifest-test-{name}-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    fn sha256_hex(bytes: &[u8]) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-        format!("{:x}", hasher.finalize())
-    }
-
-    fn default_params() -> Value {
-        serde_json::json!({
-            "temperature": 0.4,
-            "top_p": 0.9,
-            "max_tokens": 1200
-        })
-    }
-
     #[test]
-    fn parses_empty_bundled_manifest() {
+    fn parses_pinned_recommended_pair() {
         let manifest = bundled_model_manifest().unwrap();
 
-        assert_eq!(manifest.version, "2026-06-30");
-        assert!(manifest.models.is_empty());
+        assert_eq!(manifest.models.len(), 2);
+        assert!(manifest.models.iter().all(|m| m
+            .source
+            .as_ref()
+            .unwrap()
+            .revision
+            .as_ref()
+            .unwrap()
+            .len()
+            == 40));
     }
 
     #[test]
@@ -684,42 +483,5 @@ mod tests {
             .unwrap_err()
             .message
             .contains("https or loopback"));
-    }
-
-    #[test]
-    fn installs_verified_model_file_into_registry() {
-        let app_dir = temp_dir("install");
-        let source = app_dir.join("download.part");
-        let bytes = b"small gguf placeholder for manifest install tests";
-        fs::write(&source, bytes).unwrap();
-        let entry = ModelManifestEntry {
-            id: "tiny-test-model".to_string(),
-            display_name: "Tiny Test Model".to_string(),
-            format: "gguf".to_string(),
-            family: Some("test".to_string()),
-            source: Some(ModelManifestSource {
-                source_type: "url".to_string(),
-                url: Some("https://example.com/tiny-test-model.gguf".to_string()),
-                repo: None,
-                filename: Some("tiny-test-model.gguf".to_string()),
-            }),
-            sha256: Some(sha256_hex(bytes)),
-            size_bytes: Some(bytes.len() as u64),
-            license: Some("Apache-2.0".to_string()),
-            min_ram_gb: Some(1),
-            recommended_ram_gb: Some(2),
-            default_context_tokens: Some(8192),
-            default_params: Some(default_params()),
-            notes: None,
-            enabled: true,
-        };
-
-        let model = install_verified_model_file(&app_dir, &entry, &source).unwrap();
-
-        assert_eq!(model.id, "tiny-test-model");
-        assert_eq!(model.display_name, "Tiny Test Model");
-        assert_eq!(model.filename, "tiny-test-model.gguf");
-        assert_eq!(model.sha256, entry.sha256.unwrap());
-        assert!(!source.exists());
     }
 }

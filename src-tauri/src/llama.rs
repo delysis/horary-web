@@ -310,11 +310,11 @@ pub fn import_model_to_dir(app_data_dir: &Path, req: ImportModelRequest) -> Llam
 
 pub fn list_models_in_dir(app_data_dir: &Path) -> LlamaResult<Vec<ModelInfo>> {
     let dir = models_dir(app_data_dir);
+    let mut models = crate::hf_cache::registered_models(app_data_dir)?;
     if !dir.exists() {
-        return Ok(Vec::new());
+        return Ok(models);
     }
 
-    let mut models = Vec::new();
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -327,13 +327,25 @@ pub fn list_models_in_dir(app_data_dir: &Path) -> LlamaResult<Vec<ModelInfo>> {
             .unwrap_or("model")
             .to_string();
         let display_name = display_name_from_id(&id);
-        models.push(model_info_from_path_fast(&path, id, display_name)?);
+        if !models.iter().any(|m| m.id == id) {
+            models.push(model_info_from_path_fast(&path, id, display_name)?);
+        }
     }
     models.sort_by(|a, b| a.display_name.cmp(&b.display_name));
     Ok(models)
 }
 
+/// Paired MTP files use the same `-assistant` suffix as automatic draft lookup.
+/// They remain available internally, but cannot serve as a primary model.
+pub fn is_draft_model_id(model_id: &str) -> bool {
+    model_id.to_ascii_lowercase().ends_with("-assistant")
+        || model_id.to_ascii_lowercase().ends_with("-projector")
+}
+
 pub fn get_model_by_id(app_data_dir: &Path, model_id: &str) -> LlamaResult<ModelInfo> {
+    if let Some(model) = crate::hf_cache::verify_registered(app_data_dir, model_id)? {
+        return Ok(model);
+    }
     let dir = models_dir(app_data_dir);
     if !dir.exists() {
         return Err(LlamaError {
@@ -618,7 +630,7 @@ pub(crate) fn resolve_optional_draft_model_path(
     }
 }
 
-fn normalize_gpu_layers(value: Option<&str>) -> LlamaResult<String> {
+pub(crate) fn normalize_gpu_layers(value: Option<&str>) -> LlamaResult<String> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok("auto".to_string());
     };
@@ -703,6 +715,9 @@ pub(crate) fn resolve_model_path(app_data_dir: &Path, filename: &str) -> LlamaRe
         return Err(LlamaError {
             message: "invalid model filename".to_string(),
         });
+    }
+    if let Some(path) = crate::hf_cache::registered_path(app_data_dir, filename)? {
+        return Ok(fs::canonicalize(path)?);
     }
     let base = models_dir(app_data_dir);
     let model = base.join(filename);
@@ -954,6 +969,13 @@ fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paired_speculative_helpers_are_not_primary_models() {
+        assert!(is_draft_model_id("gemma-4-e2b-it-q6-k-assistant"));
+        assert!(is_draft_model_id("GEMMA-ASSISTANT"));
+        assert!(!is_draft_model_id("gemma-4-e2b-it-q6-k"));
+    }
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(

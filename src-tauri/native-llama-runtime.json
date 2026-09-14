@@ -1,17 +1,14 @@
 {
-  "version": "2026-07-01",
-  "backendId": "native-llama-cpp",
+  "version": "2026-09-14",
+  "backendId": "llama-native-kit",
   "preferred": true,
   "status": "release-target",
   "rustBinding": {
     "crate": "llama-cpp-2",
-    "version": "0.1.150",
+    "version": "0.1.154",
     "cargoFeature": "native-llama",
     "gpuFeatures": [
-      "native-llama-metal",
-      "native-llama-cuda",
-      "native-llama-vulkan",
-      "native-llama-dynamic-backends"
+      "native-llama-metal"
     ]
   },
   "tauriBoundary": {
@@ -27,46 +24,28 @@
   "capabilities": {
     "inProcessWorker": true,
     "continuousBatching": {
-      "enabled": true,
-      "defaultParallelSequences": 4,
-      "maxParallelSequences": 16,
-      "scheduler": "single native worker owns model/context and interleaves prefill/decode batches across queued microtask requests"
+      "enabled": false,
+      "defaultParallelSequences": 1,
+      "maxParallelSequences": 1,
+      "scheduler": "One native-kit controlled reading at a time"
     },
     "kvCache": {
       "enabled": true,
       "tiers": [
         {
           "id": "hot",
-          "medium": "resident llama.cpp sequence state in the worker",
-          "purpose": "reuse stable system, schema, tradition, and microtask prompt prefixes across parallel horary passes"
-        },
-        {
-          "id": "cold",
-          "medium": "disk-backed llama.cpp sequence state files",
-          "purpose": "persist deterministic prompt prefixes between app launches"
+          "medium": "native-kit memory cache",
+          "purpose": "resident model reuse; controlled reading prefix reuse is not promised"
         }
-      ],
-      "invalidateOn": [
-        "modelSha256",
-        "llamaCppBindingVersion",
-        "contextTokens",
-        "promptVersion",
-        "schemaVersion",
-        "traditionProfile",
-        "judgementPipelineVersion",
-        "generationDefaults"
       ]
     },
     "speculativeDecoding": {
-      "enabledWhenDraftModelPresent": true,
-      "nativeWorkerActive": true,
+      "enabledWhenDraftModelPresent": false,
+      "nativeWorkerActive": false,
       "preferredType": "draft-mtp",
       "defaultDraftTokens": 3,
-      "implementationStatus": "native-worker-wraps-llama-cpp-common-draft-mtp-bridge",
-      "supportedFamilies": [
-        "gemma-4-e2b",
-        "gemma-4-e4b"
-      ]
+      "implementationStatus": "Not exposed by the pinned native-kit controlled generation API",
+      "supportedFamilies": []
     },
     "jsonConstrainedOutput": {
       "required": true,
@@ -78,5 +57,9 @@
     "allowed": true,
     "releaseBlocking": false,
     "reason": "sidecar remains a development and compatibility fallback, not the primary native release gate"
+  },
+  "nativeKit": {
+    "repository": "https://github.com/delysis/native-platform.git",
+    "revision": "1d43858953938cb28e935de7c2f107eede69ddf9"
   }
 }

@@ -1,16 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  cancelInterpretationStream,
-  getModelStatus,
-  isTauriRuntime,
-  listenAiInterpretationEvents,
-  listModels,
-  startInterpretationStream,
-  startLlama,
-  type HoraryInterpretation,
-  type ModelInfo,
-  type ModelStatus,
-} from './tauriBridge.ts'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createJudgementEngine, type JudgementEngine } from './ai/judgementEngine.ts'
+import { chooseNativeModelFile, isTauriRuntime, RECOMMENDED_MODEL_ID, type HoraryInterpretation } from './tauriBridge.ts'
+import { ModelSetup } from './ModelSetup'
 
 type AiPanelProps = {
   requestId: number
@@ -18,147 +9,61 @@ type AiPanelProps = {
   chartFacts: unknown | null
   darkMode: boolean
   onActivityChange?: (active: boolean) => void
+  onInterpretationChange?: (interpretation: HoraryInterpretation | null) => void
 }
 
-export function AiPanel({ requestId, question, chartFacts, darkMode, onActivityChange }: AiPanelProps) {
-  const runtime = useMemo(() => isTauriRuntime(), [])
-  const [models, setModels] = useState<ModelInfo[]>([])
-  const [status, setStatus] = useState<ModelStatus | null>(null)
+export function AiPanel({ requestId, question, chartFacts, darkMode, onActivityChange, onInterpretationChange }: AiPanelProps) {
+  const engine = useRef<JudgementEngine | null>(null)
   const [busy, setBusy] = useState(false)
-  const [streaming, setStreaming] = useState(false)
-  const [generationId, setGenerationId] = useState<string | null>(null)
+  const [setupBusy, setSetupBusy] = useState(false)
   const [interpretation, setInterpretation] = useState<HoraryInterpretation | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const generationIdRef = useRef<string | null>(null)
+  const [modelPath, setModelPath] = useState('')
+  const [modelName, setModelName] = useState('')
   const handledRequestId = useRef(0)
+  const attempt = useRef(0)
 
-  const refreshEngineState = useCallback(async () => {
-    const [nextModels, nextStatus] = await Promise.all([listModels(), getModelStatus()])
-    setModels(nextModels)
-    setStatus(nextStatus)
-    return { models: nextModels, status: nextStatus }
+  useEffect(() => {
+    const current = createJudgementEngine()
+    engine.current = current
+    return () => { current.dispose(); engine.current = null }
   }, [])
 
   useEffect(() => {
-    if (!runtime) return
-    let mounted = true
-    let unlisten: (() => void) | null = null
-
-    async function init() {
-      try {
-        unlisten = await listenAiInterpretationEvents({
-          complete(payload) {
-            if (payload.generationId !== generationIdRef.current) return
-            setInterpretation(payload.interpretation)
-            setStreaming(false)
-            setBusy(false)
-            setGenerationId(null)
-            generationIdRef.current = null
-            setMessage('')
-          },
-          error(payload) {
-            if (payload.generationId !== generationIdRef.current) return
-            setError(readingErrorMessage(payload.message))
-            setMessage('')
-            setStreaming(false)
-            setBusy(false)
-            setGenerationId(null)
-            generationIdRef.current = null
-          },
-          cancelled(payload) {
-            if (payload.generationId !== generationIdRef.current) return
-            setMessage(payload.message || 'Judgement cancelled.')
-            setStreaming(false)
-            setBusy(false)
-            setGenerationId(null)
-            generationIdRef.current = null
-          },
-        })
-        if (mounted) await refreshEngineState()
-      } catch (eventError) {
-        console.error('Judgement engine discovery failed', eventError)
-      }
-    }
-
-    init()
-    return () => {
-      mounted = false
-      unlisten?.()
-    }
-  }, [refreshEngineState, runtime])
-
-  const ensureJudgementEngine = useCallback(async () => {
-    let nextStatus = status
-    let nextModels = models
-    if (!nextStatus || nextModels.length === 0) {
-      const refreshed = await refreshEngineState()
-      nextStatus = refreshed.status
-      nextModels = refreshed.models
-    }
-    if (nextStatus.running) return
-
-    const model = nextModels[0]
-    if (!model) {
-      throw new Error('Judgement is not installed in this copy of Horary.')
-    }
-
-    setMessage('Preparing judgement...')
-    const started = await startLlama({
-      modelId: model.id,
-      ctxSize: 16384,
-      nGpuLayers: 'auto',
-      parallel: 2,
-      continuousBatching: true,
-      cacheRamMb: 4096,
-      cacheIdleSlots: true,
-      coldKvCache: true,
-      specDraftNMax: 3,
-    })
-    setStatus(started)
-  }, [models, refreshEngineState, status])
-
-  const handleGenerate = useCallback(async () => {
-    if (busy || streaming) return
-    if (!chartFacts) {
-      setError('Cast a chart before generating a judgement.')
-      return
-    }
-    if (!question.trim()) {
-      setError('Write the horary question before generating a judgement.')
-      return
-    }
-
-    setBusy(true)
-    setStreaming(false)
+    attempt.current++
+    engine.current?.cancel()
     setInterpretation(null)
     setError('')
-    setMessage('Preparing judgement...')
+    setMessage('')
+  }, [question, chartFacts])
+
+  useEffect(() => { onInterpretationChange?.(interpretation) }, [interpretation, onInterpretationChange])
+  useEffect(() => {
+    onActivityChange?.(busy || setupBusy)
+    return () => onActivityChange?.(false)
+  }, [busy, setupBusy, onActivityChange])
+
+  const handleGenerate = useCallback(async () => {
+    const current = engine.current
+    if (!current || current.status().running || setupBusy) return
+    if (!chartFacts || !question.trim()) { setError('Cast a chart and write the question first.'); return }
+    const id = ++attempt.current
+    setBusy(true)
+    setInterpretation(null)
+    setError('')
+    setMessage('Preparing a local reading…')
     try {
-      await ensureJudgementEngine()
-      setMessage('Reading the chart...')
-      const started = await startInterpretationStream({
-        question,
-        chart: chartFacts,
-        settings: {
-          tradition: 'traditional',
-          houseSystem: 'regiomontanus',
-          zodiac: 'tropical',
-          tone: 'plain',
-        },
-      })
-      generationIdRef.current = started.generationId
-      setGenerationId(started.generationId)
-      setStreaming(true)
-    } catch (generateError) {
-      generationIdRef.current = null
-      setGenerationId(null)
-      setStreaming(false)
-      setBusy(false)
-      setError(readingErrorMessage(generateError))
-      setMessage('')
+      const result = await current.generate({ question, chart: chartFacts, settings: {
+        tradition: 'traditional', houseSystem: 'regiomontanus', zodiac: 'tropical', tone: 'plain',
+      } }, { token: () => { if (id === attempt.current) setMessage('Reading the chart…') } })
+      if (id === attempt.current && engine.current === current) setInterpretation(result)
+    } catch (err) {
+      if (id === attempt.current && engine.current === current) setError(errorMessage(err))
+    } finally {
+      if (engine.current === current) { setBusy(false); setMessage('') }
     }
-  }, [busy, chartFacts, ensureJudgementEngine, question, streaming])
+  }, [chartFacts, question, setupBusy])
 
   useEffect(() => {
     if (!requestId || requestId === handledRequestId.current) return
@@ -166,102 +71,74 @@ export function AiPanel({ requestId, question, chartFacts, darkMode, onActivityC
     void handleGenerate()
   }, [handleGenerate, requestId])
 
-  useEffect(() => {
-    onActivityChange?.(busy || streaming)
-  }, [busy, onActivityChange, streaming])
-
-  async function handleCancel() {
-    if (!generationId) return
-    setMessage('Cancelling judgement...')
+  async function selectModel(model: File | string) {
+    const current = engine.current
+    if (!current) return
+    setBusy(true); setError(''); setMessage('Opening local model…')
     try {
-      await cancelInterpretationStream(generationId)
-    } catch (cancelError) {
-      setError(readingErrorMessage(cancelError))
-    }
+      await current.useModel(model)
+      if (engine.current === current) setModelName(typeof model === 'string' ? model.split(/[\\/]/).pop() || model : model.name)
+    } catch (err) { if (engine.current === current) setError(errorMessage(err)) }
+    finally { if (engine.current === current) { setBusy(false); setMessage('') } }
   }
-
-  if (!runtime || (!message && !error && !streaming && !interpretation)) return null
 
   return (
     <section className={`ai-panel ${darkMode ? 'night' : ''}`} aria-label="Horary judgement">
-      <div className="ai-panel-header">
-        <h2>Judgement</h2>
+      <h2>Judgement</h2>
+      <p className="ai-help">An experimental local reading for review. Eileen’s judgement and corrections guide its development.</p>
+      {isTauriRuntime() ? <ModelSetup disabled={busy} onActivityChange={setSetupBusy} onReady={() => {
+        engine.current?.useInstalledModel(RECOMMENDED_MODEL_ID)
+        setModelName('Gemma 4 12B QAT')
+      }} /> : null}
+      <details>
+        <summary>Advanced model setup{modelName ? ` · ${modelName}` : ''}</summary>
+        {isTauriRuntime() ? <div>
+          <p>Use an instruction-tuned GGUF model. An already installed model is used automatically.</p>
+          <button disabled={busy} onClick={() => { void chooseNativeModelFile().then(path => { if (path) { setModelPath(path); return selectModel(path) } }).catch(err => setError(errorMessage(err))) }}>Choose model file…</button>
+          <label>Local GGUF file path<input aria-label="Local GGUF file path" value={modelPath} onChange={e => setModelPath(e.target.value)} disabled={busy} /></label>
+          <button disabled={busy || !modelPath.trim()} onClick={() => void selectModel(modelPath)}>Import model</button>
+        </div> : <div>
+          <p>Choose a compatible Gemma instruction model in .litertlm format. Your question and file stay on this device. WebGPU is required; large models may exceed your device’s memory.</p>
+          <label>Local model file<input aria-label="Local model file" type="file" accept=".litertlm" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void selectModel(file) }} /></label>
+        </div>}
+      </details>
+      <div className="ai-action-row">
+        <button disabled={busy || setupBusy || !question.trim()} onClick={() => void handleGenerate()}>Read chart</button>
+        {busy ? <button onClick={() => { setMessage('Cancelling…'); engine.current?.cancel() }}>Cancel</button> : null}
       </div>
-
-      {message ? (
-        <div className="ai-status-line" aria-live="polite">
-          {busy || streaming ? <span className="ai-busy-dot" aria-hidden="true" /> : null}
-          {message}
-        </div>
-      ) : null}
-
-      {streaming ? (
-        <div className="ai-action-row">
-          <button onClick={handleCancel} disabled={!generationId}>
-            Cancel
-          </button>
-        </div>
-      ) : null}
-
-      {error ? <div className="ai-error">{error}</div> : null}
+      {message ? <p role="status">{message}</p> : null}
+      {error ? <p role="alert" className="ai-error">{error}</p> : null}
       {interpretation ? <InterpretationView interpretation={interpretation} /> : null}
     </section>
   )
 }
 
 function InterpretationView({ interpretation }: { interpretation: HoraryInterpretation }) {
-  return (
-    <div className="ai-output">
-      <h3>Summary</h3>
-      <p>{interpretation.summary}</p>
-      {interpretation.directAnswer ? (
-        <>
-          <h3>Answer</h3>
-          <p>{interpretation.directAnswer}</p>
-        </>
-      ) : null}
-      <h3>Reasoning</h3>
-      {interpretation.judgementTrace.map(step => (
-        <div className="ai-factor" key={`${step.stepId}-${step.chartEvidence}`}>
-          <strong>{step.stepId}</strong>
-          <div className="ai-evidence">{step.chartEvidence}</div>
-          <p>{step.finding}</p>
-        </div>
-      ))}
-      <h3>Key Factors</h3>
-      {interpretation.keyFactors.map(factor => (
-        <div className="ai-factor" key={`${factor.factor}-${factor.chartEvidence}`}>
-          <strong>{factor.factor}</strong>
-          <div className="ai-evidence">{factor.chartEvidence}</div>
-          <p>{factor.interpretation}</p>
-        </div>
-      ))}
-      <InlineList title="Cautions" items={interpretation.cautions} />
-      <InlineList title="Follow Up Questions" items={interpretation.followUpQuestions} />
-    </div>
-  )
+  return <div className="ai-output">
+    <p>{interpretation.directAnswer || interpretation.summary}</p>
+    {interpretation.directAnswer && interpretation.summary !== interpretation.directAnswer ? <p>{interpretation.summary}</p> : null}
+    <p className="ai-help">Model confidence: {interpretation.confidence}. This is not a calibrated probability.</p>
+    <InlineList title="Cautions" items={interpretation.cautions} />
+    <InlineList title="Questions to clarify" items={interpretation.followUpQuestions} />
+    <details>
+      <summary>Chart evidence and interpretation</summary>
+      {interpretation.keyFactors.map((factor, index) => <div className="ai-factor" key={index}>
+        <strong>{factor.factor}</strong><div className="ai-evidence">{factor.chartEvidence}</div><p>{factor.interpretation}</p>
+      </div>)}
+      <details><summary>Review the experimental method</summary>
+        {interpretation.judgementTrace.map((step, index) => <div className="ai-factor" key={index}>
+          <strong>{step.stepId.replaceAll('_', ' ')}</strong><div className="ai-evidence">{step.chartEvidence}</div><p>{step.finding}</p>
+        </div>)}
+      </details>
+    </details>
+  </div>
 }
 
 function InlineList({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) return null
-  return (
-    <>
-      <h3>{title}</h3>
-      <ul>{items.map(item => <li key={item}>{item}</li>)}</ul>
-    </>
-  )
+  if (!items.length) return null
+  return <><h3>{title}</h3><ul>{items.map((item, index) => <li key={index}>{item}</li>)}</ul></>
 }
-
-function readingErrorMessage(error: unknown) {
-  const raw = error instanceof Error ? error.message : String(error)
-  if (/prompt plus max tokens|exceeds ctxSize|context/i.test(raw)) {
-    return 'The chart evidence is too large to read cleanly. Please try again.'
-  }
-  if (/invalid interpretation JSON|interpretation.*JSON|judgementTrace|keyFactors|chartEvidence/i.test(raw)) {
-    return 'The judgement could not be read cleanly. Please try again.'
-  }
-  if (/model|gguf|llama|native|backend|runtime|inference/i.test(raw)) {
-    return 'The judgement engine is not ready. Please try again in a moment.'
-  }
-  return raw
+function errorMessage(error: unknown) {
+  if (error && typeof error === 'object' && 'message' in error) return String(error.message)
+  return String(error)
 }

@@ -10,14 +10,7 @@ const validNativeRuntimeProfile = JSON.parse(
     readFileSync(new URL('../../src-tauri/native-llama-runtime.json', import.meta.url), 'utf8'),
 );
 
-const validCargoToml = `
-[features]
-native-llama = ["dep:llama-cpp-2", "llama-cpp-2/common", "llama-cpp-2/sampler"]
-native-llama-metal = ["native-llama", "llama-cpp-2/metal"]
-
-[dependencies]
-llama-cpp-2 = { version = "0.1.150", default-features = false, optional = true }
-`;
+const validCargoToml = readFileSync(new URL('../../src-tauri/Cargo.toml', import.meta.url), 'utf8');
 
 function createReleaseProject(t, overrides = {}) {
     const root = mkdtempSync(join(tmpdir(), 'horary-release-assets-'));
@@ -80,7 +73,7 @@ test('release asset gate makes sidecar artifacts mandatory when the native runti
     assert.equal(result.ok, false);
     assert.equal(result.nativeRuntimeReady, false);
     assert.equal(result.sidecarRequired, true);
-    assertIssue(result, 'llama-cpp-2 version must be 0.1.150');
+    assertIssue(result, 'llama-cpp-2 version must be 0.1.154');
     assertIssue(result, 'must keep frontend inference transport on Tauri IPC');
     assertIssue(result, 'bundle.externalBin');
     assertIssue(result, 'Missing release sidecar binary');

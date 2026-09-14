@@ -1,31 +1,23 @@
 {
   "profile": "traditional-horary-textbook-v1",
-  "pipelineVersion": "2026-07-01",
+  "pipelineVersion": "2026-09-10",
   "sourceBasis": {
-    "summary": "Summarized traditional horary judgement process derived from the local OCR of John Frawley's The Horary Textbook. This file encodes procedure, not copied source prose.",
-    "pageReferenceNote": "Page numbers in sourcePages are printed book pages; main-text PDF page numbers are generally printed page + 9.",
-    "localPdfCandidates": [
-      "/Users/george/Downloads/The Horary Textbook - John Frawley.pdf",
-      "/Users/george/christian_mystics/The Horary Textbook - John Frawley.pdf"
-    ],
-    "localOcr": "/Users/george/christian_mystics/alexandria_pipeline/horary_ocr_20260517/The Horary Textbook - John Frawley.dots_ocr.md",
-    "ocrQa": {
-      "pagesWithText": 281,
-      "totalWords": 103631,
-      "needsReviewPages": 0
-    },
+    "summary": "Procedural paraphrases checked against John Frawley's The Horary Textbook (2005), using a private local OCR. The book and OCR are not distributed with the app.",
+    "pageReferenceNote": "sourcePages are printed book pages. In the checked 281-page scan, main-text PDF page = printed page + 9. OCR page headings refer to PDF pages.",
+    "edition": "2005",
     "primaryPages": [
-      "16-23",
-      "24-38",
-      "39-47",
-      "53-61",
-      "63-79",
-      "80-92",
-      "93-109",
-      "110-117",
-      "118-135",
-      "136-150"
-    ]
+      "7-14",
+      "15-29",
+      "30-38",
+      "44-53",
+      "54-70",
+      "71-83",
+      "84-100",
+      "101-108",
+      "109-126",
+      "127-141"
+    ],
+    "verification": "Rules remain subject to SME review; OCR is not a guarantee of accurate transcription."
   },
   "cachePolicy": {
     "stablePrefixKeyFields": [
@@ -50,7 +42,7 @@
       "settings",
       "risk classification"
     ],
-    "kvCacheNote": "For in-process llama.cpp, cache the stable prompt prefix per microtask and invalidate on any key-field mismatch. For sidecar HTTP, this file still keeps prompts stable for later migration."
+    "kvCacheNote": "The pinned native-kit runtime keeps the model resident and uses memory-only caching. Prefix reuse is not promised for the constrained reading call; no disk prompt cache is written."
   },
   "globalRules": [
     "Interpret only supplied deterministic chart facts; never recalculate positions, houses, aspects, dignities, lots, timing, or planetary hours.",
@@ -62,7 +54,12 @@
     "Prefer the concrete house meaning over an abstract one. Distinguish a thing from its function: the object itself, the action done with it, and the person involved may belong to different houses.",
     "Use turned houses only when the matter genuinely belongs to another person. Prefer a radical house when the matter is public, general, or not personally owned by the turned subject.",
     "Every major interpretive claim must cite a supplied chart fact in plain language.",
-    "If facts needed for a pass are absent, mark the pass low confidence instead of inventing the fact."
+    "If facts needed for a pass are absent, mark the pass low confidence instead of inventing the fact.",
+    "Read receptions from guest toward host: a planet occupying another planet’s dignity indicates the guest’s inclination toward that host. Include detriment and fall; opposite directions can differ. Do not turn any mutual reception into an automatic positive.",
+    "Use named essential conditions and qualitative accidental capacity, not summed strength scores. House 3 and 9 are neutral for capacity, though cadent for timing; houses 6, 8 and 12 are weak unless context explains the placement.",
+    "A location question need not promise recovery or an event. Void Moon and lack of a perfection do not establish that a lost object has no location.",
+    "Display orbs do not bound future event relevance. Distinguish an astronomical interval from a symbolic prediction of days or weeks; timing needs a plausible timeframe and question context.",
+    "Only supplied computed facts may be called verified. Missing or bounded event searches cannot prove that an event never occurs. A potential intervening aspect is not by itself a contextual veto."
   ],
   "checkerOutputContract": {
     "shape": {
@@ -85,33 +82,33 @@
       "id": "cast_moment_and_place",
       "rule": "The chart belongs to the moment and place at which the astrologer understands the question. In this app the chart facts are already cast; do not challenge the cast unless the supplied metadata is missing or inconsistent.",
       "sourcePages": [
-        16,
-        17
+        7,
+        8
       ]
     },
     {
       "id": "regiomontanus_default",
       "rule": "Regiomontanus is the preferred horary house system. If the app settings use another house system, judge the supplied facts while noting lower confidence for traditional house doctrine.",
       "sourcePages": [
-        24,
-        25
+        15,
+        16
       ]
     },
     {
       "id": "five_degree_cusp_rule",
       "rule": "A planet within about 5 degrees before the next house cusp may belong to that next house only when it is in the same sign as the cusp. This affects house placement, not sign placement.",
       "sourcePages": [
-        26,
-        65
+        17,
+        56
       ]
     },
     {
       "id": "one_ruler_per_house",
       "rule": "The house ruler is the traditional ruler of the sign on the cusp. Do not use co-rulers. If the same planet must signify both parties and separation is needed, consider next-sign ruler, a planet on the cusp, or almuten only as fallback.",
       "sourcePages": [
-        39,
-        41,
-        60
+        30,
+        32,
+        51
       ]
     }
   ],
@@ -186,8 +183,8 @@
         "ambiguities"
       ],
       "sourcePages": [
-        146,
-        150
+        137,
+        141
       ]
     },
     {
@@ -212,10 +209,10 @@
         "assignmentConfidence"
       ],
       "sourcePages": [
-        24,
-        38,
-        146,
-        147
+        15,
+        29,
+        137,
+        138
       ]
     },
     {
@@ -239,8 +236,8 @@
         "fallbacks"
       ],
       "sourcePages": [
-        39,
-        47
+        30,
+        38
       ]
     },
     {
@@ -262,8 +259,8 @@
         "contextualOverrides"
       ],
       "sourcePages": [
-        53,
-        62
+        44,
+        53
       ]
     },
     {
@@ -289,8 +286,8 @@
         "moonCondition"
       ],
       "sourcePages": [
-        63,
-        79
+        54,
+        70
       ]
     },
     {
@@ -313,8 +310,8 @@
         "ambivalence"
       ],
       "sourcePages": [
-        80,
-        92
+        71,
+        83
       ]
     },
     {
@@ -339,10 +336,10 @@
         "eventLikelihood"
       ],
       "sourcePages": [
-        93,
-        109,
-        110,
-        117
+        84,
+        100,
+        101,
+        108
       ]
     },
     {
@@ -366,8 +363,8 @@
         "identifiedBlockingActors"
       ],
       "sourcePages": [
-        101,
-        106
+        92,
+        97
       ]
     },
     {
@@ -390,10 +387,10 @@
         "moonApplications"
       ],
       "sourcePages": [
-        41,
-        42,
-        73,
-        75
+        32,
+        33,
+        64,
+        66
       ]
     },
     {
@@ -419,8 +416,8 @@
         "planetaryHour"
       ],
       "sourcePages": [
-        110,
-        135
+        101,
+        126
       ]
     },
     {
@@ -447,8 +444,8 @@
         "timingConfidence"
       ],
       "sourcePages": [
-        136,
-        145
+        127,
+        136
       ]
     },
     {
@@ -472,11 +469,11 @@
         "followUpQuestions"
       ],
       "sourcePages": [
-        23,
-        53,
-        93,
-        146,
-        150
+        14,
+        44,
+        84,
+        137,
+        141
       ]
     },
     {
@@ -499,11 +496,11 @@
         "finalConfidence"
       ],
       "sourcePages": [
-        23,
-        93,
-        109,
-        136,
-        150
+        14,
+        84,
+        100,
+        127,
+        141
       ]
     }
   ],
@@ -528,10 +525,10 @@
         "Use Part of Divorce only when divorce is a live stated option."
       ],
       "sourcePages": [
-        129,
-        132,
-        191,
-        201
+        120,
+        123,
+        182,
+        192
       ]
     },
     {
@@ -553,11 +550,11 @@
         "If dismissal is the issue, compare the querent and rival where relevant; worse condition can matter more than absolute weakness."
       ],
       "sourcePages": [
-        30,
-        132,
-        133,
-        222,
-        230
+        21,
+        123,
+        124,
+        213,
+        221
       ]
     },
     {
@@ -579,11 +576,11 @@
         "Retrograde significator can support return."
       ],
       "sourcePages": [
-        43,
-        69,
-        129,
-        146,
-        154
+        34,
+        60,
+        120,
+        137,
+        145
       ]
     },
     {
@@ -603,8 +600,8 @@
         "A blocker ruling the other party's money can show financing failure."
       ],
       "sourcePages": [
-        167,
-        172
+        158,
+        163
       ]
     },
     {
@@ -623,10 +620,10 @@
         "Mutual reception with unrelated planets is not automatically strengthening because helpers do not play the match."
       ],
       "sourcePages": [
-        56,
-        68,
-        203,
-        215
+        47,
+        59,
+        194,
+        206
       ]
     },
     {
@@ -643,8 +640,8 @@
         "Very small separations can be timed in minutes when the question's timeframe is same-day arrival."
       ],
       "sourcePages": [
-        164,
-        166
+        155,
+        157
       ]
     },
     {
@@ -668,9 +665,9 @@
         "Condition of significators can describe severity, but professional care is outside app scope."
       ],
       "sourcePages": [
-        134,
-        179,
-        190
+        125,
+        170,
+        181
       ]
     },
     {
@@ -686,10 +683,10 @@
         "A void Moon can show nothing comes of the information whether true or false."
       ],
       "sourcePages": [
-        164,
-        165,
-        216,
-        221
+        155,
+        156,
+        207,
+        212
       ]
     },
     {
@@ -707,10 +704,10 @@
         "For tax and government payments, distinguish entitlement process from discretionary favor."
       ],
       "sourcePages": [
-        156,
-        163,
-        231,
-        232
+        147,
+        154,
+        222,
+        223
       ]
     },
     {
@@ -724,8 +721,8 @@
         "For electional-with-horary, identify the planet to strengthen, then look ahead for the nearest practical improvement and time by distance."
       ],
       "sourcePages": [
-        238,
-        242
+        229,
+        233
       ]
     }
   ],
@@ -924,7 +921,7 @@
       "timing_pass",
       "adversarial_checker_pass"
     ],
-    "maxTraceItems": 12
+    "maxTraceItems": 6
   },
   "verifierChecklist": [
     "The direct answer follows from supplied chart evidence, not generic astrology.",

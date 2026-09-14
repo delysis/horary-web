@@ -1,6 +1,21 @@
 use crate::inference::{active_inference_connection, local_inference_http_client};
 use crate::llama::{LlamaError, LlamaState};
 use crate::native_llama_worker::{generate_native, NativeGenerateOptions, NativeLlamaState};
+#[cfg(all(test, feature = "native-llama"))]
+use horary_ai_core::judgement_plan as core_judgement_plan;
+use horary_ai_core::{
+    build_interpretation_prompt as core_build_interpretation_prompt,
+    native_prompt_text as core_native_prompt_text,
+    parse_interpretation_content as core_parse_interpretation_content,
+    validate_interpretation_for_risk as core_validate_interpretation_for_risk,
+    InterpretationPrompt, INTERPRETATION_TEMPERATURE, MAX_INTERPRETATION_TOKENS,
+};
+#[cfg(test)]
+use horary_ai_core::{
+    classify_question_risk, interpretation_schema as core_interpretation_schema,
+    INTERPRETATION_PROMPT_VERSION, INTERPRETATION_SCHEMA_VERSION, INTERPRETATION_TRADITION_PROFILE,
+};
+pub use horary_ai_core::{HoraryInterpretation, HoraryInterpretationRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -13,14 +28,6 @@ use std::{
 };
 use tauri::{Emitter, Manager};
 
-const INTERPRETATION_SCHEMA_VERSION: &str = "2026-07-03";
-const INTERPRETATION_PROMPT_VERSION: &str = "horary-interpretation-v4";
-const INTERPRETATION_TRADITION_PROFILE: &str = "traditional-horary-textbook-v1";
-const INTERPRETATION_SCHEMA_JSON: &str =
-    include_str!("../../src/ai/horary-interpretation.schema.json");
-const JUDGEMENT_PIPELINE_JSON: &str = include_str!("../../src/ai/horary-judgement-pipeline.json");
-const MAX_INTERPRETATION_TOKENS: u32 = 1200;
-const INTERPRETATION_TEMPERATURE: f32 = 0.0;
 const MAX_MODEL_OUTPUT_ERROR_CHARS: usize = 600;
 pub const AI_STREAM_TOKEN_EVENT: &str = "ai-interpretation-token";
 pub const AI_STREAM_COMPLETE_EVENT: &str = "ai-interpretation-complete";
@@ -40,12 +47,43 @@ impl From<LlamaError> for AiError {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct HoraryInterpretationRequest {
-    pub question: String,
-    pub chart: Value,
-    pub settings: Option<Value>,
+impl From<horary_ai_core::AiError> for AiError {
+    fn from(value: horary_ai_core::AiError) -> Self {
+        Self {
+            message: value.message,
+        }
+    }
+}
+
+fn build_interpretation_prompt(
+    req: &HoraryInterpretationRequest,
+) -> Result<InterpretationPrompt, AiError> {
+    core_build_interpretation_prompt(req).map_err(AiError::from)
+}
+
+fn native_prompt_text(prompt: &InterpretationPrompt) -> Result<String, AiError> {
+    core_native_prompt_text(prompt).map_err(AiError::from)
+}
+
+fn parse_interpretation_content(content: &str) -> Result<HoraryInterpretation, AiError> {
+    core_parse_interpretation_content(content).map_err(AiError::from)
+}
+
+fn validate_interpretation_for_risk(
+    value: &HoraryInterpretation,
+    risk: &str,
+) -> Result<(), AiError> {
+    core_validate_interpretation_for_risk(value, risk).map_err(AiError::from)
+}
+
+#[cfg(test)]
+fn interpretation_schema() -> Value {
+    core_interpretation_schema()
+}
+
+#[cfg(all(test, feature = "native-llama"))]
+fn judgement_plan() -> Value {
+    core_judgement_plan()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -73,56 +111,6 @@ pub struct InterpretationStreamComplete {
 pub struct InterpretationStreamMessage {
     pub generation_id: String,
     pub message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct HoraryInterpretation {
-    pub summary: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub direct_answer: Option<String>,
-    pub confidence: String,
-    #[serde(default)]
-    pub judgement_trace: Vec<InterpretationTraceStep>,
-    pub key_factors: Vec<InterpretationKeyFactor>,
-    #[serde(default)]
-    pub cautions: Vec<String>,
-    #[serde(default)]
-    pub follow_up_questions: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct InterpretationKeyFactor {
-    pub factor: String,
-    pub chart_evidence: String,
-    pub interpretation: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct InterpretationTraceStep {
-    pub step_id: String,
-    pub finding: String,
-    pub chart_evidence: String,
-    pub confidence: String,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct InterpretationPrompt {
-    pub prompt_version: &'static str,
-    pub schema_version: &'static str,
-    pub tradition_profile: &'static str,
-    pub risk: String,
-    pub response_format: Value,
-    pub messages: Vec<ChatMessage>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct ChatMessage {
-    pub role: &'static str,
-    pub content: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,17 +215,15 @@ pub fn generate_interpretation_from_native_state(
     let prompt = build_interpretation_prompt(&req)?;
     let risk = prompt.risk.clone();
     let prompt_text = native_prompt_text(&prompt)?;
-    let prompt_cache_prefix = native_prompt_cache_prefix(&prompt)?;
     let result = generate_native(
         state,
         prompt_text,
         NativeGenerateOptions {
             max_tokens: MAX_INTERPRETATION_TOKENS,
+            response_schema: Some(horary_ai_core::interpretation_schema().to_string()),
             temperature: INTERPRETATION_TEMPERATURE,
             top_p: 1.0,
             seed: 0x5752_5952,
-            prompt_cache_key: Some(native_interpretation_cache_key(&prompt)),
-            prompt_cache_prefix: Some(prompt_cache_prefix),
             token_sink: None,
             cancel: None,
         },
@@ -293,11 +279,9 @@ pub fn start_interpretation_stream_from_native_state(
 ) -> Result<InterpretationStreamStarted, AiError> {
     let prompt = build_interpretation_prompt(&req)?;
     let prompt_text = native_prompt_text(&prompt)?;
-    let prompt_cache_prefix = native_prompt_cache_prefix(&prompt)?;
     let risk = prompt.risk.clone();
     let generation_id = new_generation_id();
     let cancel = generation_state.start_generation(generation_id.clone())?;
-    let cache_key = native_interpretation_cache_key(&prompt);
     let app_for_task = app.clone();
     let task_generation_id = generation_id.clone();
 
@@ -317,11 +301,12 @@ pub fn start_interpretation_stream_from_native_state(
                         prompt_text,
                         NativeGenerateOptions {
                             max_tokens: MAX_INTERPRETATION_TOKENS,
+                            response_schema: Some(
+                                horary_ai_core::interpretation_schema().to_string(),
+                            ),
                             temperature: INTERPRETATION_TEMPERATURE,
                             top_p: 1.0,
                             seed: 0x5752_5952,
-                            prompt_cache_key: Some(cache_key),
-                            prompt_cache_prefix: Some(prompt_cache_prefix),
                             token_sink: Some(token_tx),
                             cancel: Some(cancel_for_generation),
                         },
@@ -563,1048 +548,6 @@ fn stream_native_generation_events(
     }
 }
 
-pub fn build_interpretation_prompt(
-    req: &HoraryInterpretationRequest,
-) -> Result<InterpretationPrompt, AiError> {
-    if req.question.trim().is_empty() {
-        return Err(AiError {
-            message: "question is required for interpretation".to_string(),
-        });
-    }
-    if !req.chart.is_object() {
-        return Err(AiError {
-            message: "chart facts must be a JSON object".to_string(),
-        });
-    }
-
-    let risk = classify_question_risk(&req.question).to_string();
-    let chart_facts = build_chart_facts(&req.chart);
-    let question_context = question_context(&req.question);
-    let chart_evidence_index = chart_evidence_index(&chart_facts);
-    let deterministic_assignments =
-        deterministic_assignments(&question_context, &chart_evidence_index);
-    let user_payload = json!({
-        "promptVersion": INTERPRETATION_PROMPT_VERSION,
-        "schemaVersion": INTERPRETATION_SCHEMA_VERSION,
-        "traditionProfile": INTERPRETATION_TRADITION_PROFILE,
-        "question": req.question,
-        "risk": risk,
-        "questionContext": question_context,
-        "chartEvidenceIndex": chart_evidence_index,
-        "deterministicAssignments": deterministic_assignments,
-        "chart": chart_facts,
-        "settings": req.settings.clone().unwrap_or_else(|| json!({})),
-        "judgementPlan": judgement_plan(),
-    });
-
-    let system_content = [
-        "You interpret horary astrology charts from supplied deterministic chart facts.".to_string(),
-        "Do not calculate or recalculate planetary positions, house cusps, aspects, dignity, or timing.".to_string(),
-        "Use only the chart facts provided in the user message as evidence.".to_string(),
-        "Use supplied questionContext house hints to scaffold house assignment; if you depart from a hint, explain the supplied chart fact or wording that forced the departure.".to_string(),
-        "Use deterministicAssignments as the authoritative mapping from question actors to houses, house rulers, and ruler placements; do not infer a different significator unless the supplied question wording or chart facts explicitly require it.".to_string(),
-        "For chartEvidence fields, copy or semicolon-combine short phrases from chartEvidenceIndex.canonicalFacts or deterministicAssignments.canonicalEvidence. Never cite raw JSON, a label alone, or an invented body placement.".to_string(),
-        traditional_horary_doctrine().to_string(),
-        "Follow the supplied judgementPlan step by step and include a compact judgementTrace showing the decisive steps.".to_string(),
-        "The judgementTrace is an audit trail: each item must name a stepId, a finding, concrete chartEvidence, and confidence.".to_string(),
-        "Tie every key factor to a concrete chart fact.".to_string(),
-        "Keep confidence humble and evidence-based.".to_string(),
-        interpretation_output_guardrails().to_string(),
-        format!("Prompt version: {INTERPRETATION_PROMPT_VERSION}."),
-        format!("Output schema version: {INTERPRETATION_SCHEMA_VERSION}."),
-        format!("Tradition profile: {INTERPRETATION_TRADITION_PROFILE}."),
-        high_stakes_policy(&risk).to_string(),
-        "Return only JSON matching the supplied schema.".to_string(),
-    ]
-    .join("\n");
-
-    Ok(InterpretationPrompt {
-        prompt_version: INTERPRETATION_PROMPT_VERSION,
-        schema_version: INTERPRETATION_SCHEMA_VERSION,
-        tradition_profile: INTERPRETATION_TRADITION_PROFILE,
-        risk: risk.clone(),
-        response_format: json!({
-            "type": "json_schema",
-            "json_schema": {
-                "name": "horary_interpretation",
-                "strict": true,
-                "schema": interpretation_schema(),
-            },
-        }),
-        messages: vec![
-            ChatMessage {
-                role: "system",
-                content: system_content,
-            },
-            ChatMessage {
-                role: "user",
-                content: serde_json::to_string_pretty(&user_payload).map_err(|error| AiError {
-                    message: format!("failed to serialize interpretation prompt: {error}"),
-                })?,
-            },
-        ],
-    })
-}
-
-fn native_prompt_text(prompt: &InterpretationPrompt) -> Result<String, AiError> {
-    let (prefix, request, suffix) = native_prompt_sections(prompt)?;
-    Ok(format!("{prefix}{request}{suffix}"))
-}
-
-fn native_prompt_cache_prefix(prompt: &InterpretationPrompt) -> Result<String, AiError> {
-    let (prefix, _, _) = native_prompt_sections(prompt)?;
-    Ok(prefix)
-}
-
-fn native_prompt_sections(
-    prompt: &InterpretationPrompt,
-) -> Result<(String, String, String), AiError> {
-    let system = prompt
-        .messages
-        .iter()
-        .filter(|message| message.role == "system")
-        .map(|message| message.content.as_str())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let user = prompt
-        .messages
-        .iter()
-        .filter(|message| message.role != "system")
-        .map(|message| format!("{}:\n{}", message.role, message.content))
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let schema = serde_json::to_string(&prompt.response_format).map_err(|error| AiError {
-        message: format!("failed to serialize native response format: {error}"),
-    })?;
-
-    Ok((
-        format!(
-            "<start_of_turn>user\nSystem instructions:\n{system}\n\nResponse format:\n{schema}\n\nRequest:\n"
-        ),
-        user,
-        "\n<end_of_turn>\n<start_of_turn>model\n".to_string(),
-    ))
-}
-
-fn native_interpretation_cache_key(prompt: &InterpretationPrompt) -> String {
-    [
-        "horary-interpretation",
-        prompt.prompt_version,
-        prompt.schema_version,
-        prompt.tradition_profile,
-        "temperature-0.0",
-        "max-tokens-1200",
-    ]
-    .join(":")
-}
-
-pub fn classify_question_risk(question: &str) -> &'static str {
-    let text = question.to_ascii_lowercase();
-    if text.contains("urgent danger") {
-        return "high_stakes";
-    }
-
-    if text
-        .split(|char: char| !char.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .any(is_high_stakes_token)
-    {
-        "high_stakes"
-    } else {
-        "ordinary"
-    }
-}
-
-pub fn parse_interpretation_content(content: &str) -> Result<HoraryInterpretation, AiError> {
-    let candidate = strip_code_fence(content.trim());
-    parse_interpretation_json(candidate)
-        .or_else(|_| extract_json_object(content).and_then(parse_interpretation_json))
-}
-
-fn parse_interpretation_json(content: &str) -> Result<HoraryInterpretation, AiError> {
-    let mut value = parse_interpretation_value(content)?;
-    normalize_interpretation_value(&mut value);
-    let interpretation: HoraryInterpretation =
-        serde_json::from_value(value).map_err(|error| AiError {
-            message: format!("local model returned invalid interpretation JSON: {error}"),
-        })?;
-    validate_interpretation_shape(&interpretation)?;
-    Ok(interpretation)
-}
-
-fn parse_interpretation_value(content: &str) -> Result<Value, AiError> {
-    match serde_json::from_str(content) {
-        Ok(value) => Ok(value),
-        Err(original_error) => {
-            let repaired = repair_common_json_punctuation(content);
-            match serde_json::from_str(&repaired) {
-                Ok(value) => Ok(value),
-                Err(repair_error) => extract_json_object(&repaired)
-                    .and_then(|balanced| {
-                        serde_json::from_str(balanced).map_err(|balanced_error| AiError {
-                            message: format!(
-                                "local model returned invalid interpretation JSON: {original_error}; repair failed: {repair_error}; balanced repair also failed: {balanced_error}"
-                            ),
-                        })
-                    }),
-            }
-        }
-    }
-}
-
-fn normalize_interpretation_value(value: &mut Value) {
-    let Some(object) = value.as_object_mut() else {
-        return;
-    };
-    if !object.contains_key("summary") {
-        if let Some(direct_answer) = object.get("directAnswer").and_then(Value::as_str) {
-            object.insert(
-                "summary".to_string(),
-                Value::String(direct_answer.to_string()),
-            );
-        }
-    }
-    if !object.contains_key("directAnswer") {
-        if let Some(summary) = object.get("summary").and_then(Value::as_str) {
-            object.insert(
-                "directAnswer".to_string(),
-                Value::String(summary.to_string()),
-            );
-        }
-    }
-    if let Some(trace) = object.get_mut("judgementTrace") {
-        normalize_judgement_trace(trace);
-        normalize_repeated_semicolon_evidence(trace, &["chartEvidence"]);
-    }
-    if let Some(key_factors) = object.get_mut("keyFactors") {
-        normalize_key_factors(key_factors);
-        normalize_repeated_semicolon_evidence(key_factors, &["factor", "chartEvidence"]);
-    }
-    if let Some(cautions) = object.get_mut("cautions").and_then(Value::as_array_mut) {
-        cautions.truncate(3);
-    }
-    if let Some(follow_up_questions) = object
-        .get_mut("followUpQuestions")
-        .and_then(Value::as_array_mut)
-    {
-        follow_up_questions.truncate(3);
-    }
-}
-
-fn normalize_judgement_trace(value: &mut Value) {
-    let Value::Array(steps) = value else {
-        return;
-    };
-    for step in steps {
-        let Value::Object(step_object) = step else {
-            continue;
-        };
-        if step_object
-            .get("stepId")
-            .and_then(Value::as_str)
-            .map_or(true, |value| value.trim().is_empty())
-        {
-            if let Some(step_id) = step_object.get("step").and_then(Value::as_str) {
-                step_object.insert("stepId".to_string(), Value::String(step_id.to_string()));
-            }
-        }
-    }
-}
-
-fn normalize_key_factors(value: &mut Value) {
-    if let Value::Object(map) = value {
-        let normalized = map
-            .iter()
-            .map(|(factor_name, factor_value)| {
-                let mut factor = factor_value.clone();
-                if let Value::Object(factor_object) = &mut factor {
-                    factor_object
-                        .entry("factor".to_string())
-                        .or_insert_with(|| Value::String(factor_name.clone()));
-                }
-                factor
-            })
-            .collect::<Vec<_>>();
-        *value = Value::Array(normalized);
-    }
-
-    let Value::Array(items) = value else {
-        return;
-    };
-    for (index, item) in items.iter_mut().enumerate() {
-        let Value::Object(factor_object) = item else {
-            continue;
-        };
-        if factor_object
-            .get("factor")
-            .and_then(Value::as_str)
-            .map_or(true, |value| value.trim().is_empty())
-        {
-            let fallback = factor_object
-                .get("chartEvidence")
-                .and_then(Value::as_str)
-                .filter(|value| !value.trim().is_empty())
-                .map(ToString::to_string)
-                .unwrap_or_else(|| format!("Key factor {}", index + 1));
-            factor_object.insert("factor".to_string(), Value::String(fallback));
-        }
-    }
-    let mut seen = std::collections::HashSet::new();
-    items.retain(|item| {
-        if let Value::Object(factor_object) = item {
-            let key = [
-                factor_object
-                    .get("factor")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default(),
-                factor_object
-                    .get("chartEvidence")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default(),
-            ]
-            .join("\n");
-            if !key.trim().is_empty() {
-                return seen.insert(key);
-            }
-        }
-        true
-    });
-    items.truncate(4);
-}
-
-fn normalize_repeated_semicolon_evidence(value: &mut Value, fields: &[&str]) {
-    let Value::Array(items) = value else {
-        return;
-    };
-    for item in items {
-        let Value::Object(object) = item else {
-            continue;
-        };
-        for field in fields {
-            let Some(field_value) = object.get_mut(*field) else {
-                continue;
-            };
-            let Some(text) = field_value.as_str() else {
-                continue;
-            };
-            let normalized = dedupe_semicolon_segments(text);
-            if normalized != text {
-                *field_value = Value::String(normalized);
-            }
-        }
-    }
-}
-
-fn dedupe_semicolon_segments(text: &str) -> String {
-    if !text.contains(';') {
-        return text.to_string();
-    }
-    let mut seen = std::collections::HashSet::new();
-    let mut segments = Vec::new();
-    for segment in text
-        .split(';')
-        .map(str::trim)
-        .filter(|segment| !segment.is_empty())
-    {
-        let key = segment.to_ascii_lowercase();
-        if seen.insert(key) {
-            segments.push(segment.to_string());
-        }
-    }
-    if segments.is_empty() {
-        text.to_string()
-    } else {
-        segments.join("; ")
-    }
-}
-
-fn repair_common_json_punctuation(content: &str) -> String {
-    let mut content = content.replace("\"step\": \"stepId\":", "\"stepId\":");
-    for field in ["keyFactors", "cautions", "followUpQuestions"] {
-        content = content.replace(
-            &format!("]\n  }},\n  \"{field}\""),
-            &format!("],\n  \"{field}\""),
-        );
-        content = content.replace(
-            &format!("]\n  }}\n  \"{field}\""),
-            &format!("],\n  \"{field}\""),
-        );
-    }
-    let mut repaired = String::with_capacity(content.len() + 8);
-    let mut depth = 0_i32;
-    let mut in_string = false;
-    let mut escaped = false;
-    let mut top_level_value_closed = false;
-
-    for character in content.chars() {
-        if !in_string && top_level_value_closed {
-            if character.is_whitespace() {
-                repaired.push(character);
-                continue;
-            }
-            if depth == 1 && character == ']' {
-                continue;
-            }
-            if character == '"' {
-                repaired.push(',');
-            }
-            top_level_value_closed = false;
-        }
-
-        repaired.push(character);
-
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                in_string = false;
-            }
-            continue;
-        }
-
-        match character {
-            '"' => in_string = true,
-            '{' | '[' => depth += 1,
-            '}' | ']' => {
-                depth -= 1;
-                if depth == 1 {
-                    top_level_value_closed = true;
-                }
-            }
-            ',' => top_level_value_closed = false,
-            _ => {}
-        }
-    }
-
-    repaired
-}
-
-fn validate_interpretation_shape(value: &HoraryInterpretation) -> Result<(), AiError> {
-    let mut errors = Vec::new();
-    if value.summary.trim().is_empty() {
-        errors.push("summary must be a non-empty string.");
-    }
-    if let Some(direct_answer) = &value.direct_answer {
-        if direct_answer.trim().is_empty() {
-            errors.push("directAnswer must not be empty when present.");
-        }
-    }
-    if !matches!(value.confidence.as_str(), "low" | "medium" | "high") {
-        errors.push("confidence must be low, medium, or high.");
-    }
-    if value.judgement_trace.is_empty() {
-        errors.push("judgementTrace must be a non-empty array.");
-    }
-    for (index, step) in value.judgement_trace.iter().enumerate() {
-        if step.step_id.trim().is_empty() {
-            errors.push(match index {
-                0 => "judgementTrace[0].stepId must be a non-empty string.",
-                _ => "judgementTrace stepId must be a non-empty string.",
-            });
-        }
-        if step.finding.trim().is_empty() {
-            errors.push(match index {
-                0 => "judgementTrace[0].finding must be a non-empty string.",
-                _ => "judgementTrace finding must be a non-empty string.",
-            });
-        }
-        if step.chart_evidence.trim().is_empty() {
-            errors.push(match index {
-                0 => "judgementTrace[0].chartEvidence must be a non-empty string.",
-                _ => "judgementTrace chartEvidence must be a non-empty string.",
-            });
-        }
-        if !matches!(step.confidence.as_str(), "low" | "medium" | "high") {
-            errors.push(match index {
-                0 => "judgementTrace[0].confidence must be low, medium, or high.",
-                _ => "judgementTrace confidence must be low, medium, or high.",
-            });
-        }
-    }
-    if value.key_factors.is_empty() {
-        errors.push("keyFactors must be a non-empty array.");
-    }
-    if value.key_factors.len() > 4 {
-        errors.push("keyFactors must contain at most four items.");
-    }
-    if value.cautions.len() > 3 {
-        errors.push("cautions must contain at most three items.");
-    }
-    if value.follow_up_questions.len() > 3 {
-        errors.push("followUpQuestions must contain at most three items.");
-    }
-    for (index, factor) in value.key_factors.iter().enumerate() {
-        if factor.factor.trim().is_empty() {
-            errors.push(match index {
-                0 => "keyFactors[0].factor must be a non-empty string.",
-                _ => "keyFactors factor must be a non-empty string.",
-            });
-        }
-        if factor.chart_evidence.trim().is_empty() {
-            errors.push(match index {
-                0 => "keyFactors[0].chartEvidence must be a non-empty string.",
-                _ => "keyFactors chartEvidence must be a non-empty string.",
-            });
-        }
-        if factor.interpretation.trim().is_empty() {
-            errors.push(match index {
-                0 => "keyFactors[0].interpretation must be a non-empty string.",
-                _ => "keyFactors interpretation must be a non-empty string.",
-            });
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(AiError {
-            message: errors.join(" "),
-        })
-    }
-}
-
-fn validate_interpretation_for_risk(
-    value: &HoraryInterpretation,
-    risk: &str,
-) -> Result<(), AiError> {
-    if risk == "high_stakes"
-        && value
-            .cautions
-            .iter()
-            .all(|caution| caution.trim().is_empty())
-    {
-        Err(AiError {
-            message: "high-stakes interpretations must include at least one caution".to_string(),
-        })
-    } else {
-        Ok(())
-    }
-}
-
-fn is_high_stakes_token(token: &str) -> bool {
-    matches!(
-        token,
-        "cancer"
-            | "diagnosis"
-            | "illness"
-            | "disease"
-            | "surgery"
-            | "miscarriage"
-            | "death"
-            | "die"
-            | "dying"
-            | "suicide"
-            | "lawsuit"
-            | "court"
-            | "custody"
-            | "criminal"
-            | "legal"
-            | "arrest"
-            | "visa"
-            | "invest"
-            | "investment"
-            | "stock"
-            | "crypto"
-            | "mortgage"
-            | "loan"
-            | "debt"
-            | "tax"
-            | "emergency"
-            | "unsafe"
-            | "abuse"
-            | "violence"
-    ) || token.starts_with("pregnan")
-        || token.starts_with("deport")
-        || token.starts_with("bankrupt")
-}
-
-fn traditional_horary_doctrine() -> &'static str {
-    "Write in a traditional horary judgement order, not as generic natal astrology. Identify the querent and quesited from the question context and supplied house/significator facts. Prioritize classical significators, the Moon, house rulership, applying Ptolemaic aspects, reception, essential dignity, accidental strength, and perfection or its blockage. Treat void Moon, prohibition, frustration, translation, collection, combustion, under-beams, cazimi, and planetary hour/day as judgement conditions when supplied. Use outer planets only as secondary descriptive testimony unless the supplied chart facts make them unavoidable. Give a concise direct judgement first when the evidence supports one, then explain the chart testimony and uncertainty."
-}
-
-fn high_stakes_policy(risk: &str) -> &'static str {
-    if risk != "high_stakes" {
-        return "For ordinary questions, provide symbolic interpretation without deterministic claims.";
-    }
-
-    "This question may involve medical, legal, financial, emergency, pregnancy, death, or safety concerns. Do not present deterministic claims or professional advice. Give symbolic chart interpretation only and include a caution directing the user to qualified professionals or emergency support where appropriate."
-}
-
-fn interpretation_output_guardrails() -> &'static str {
-    "Return one top-level JSON object with summary, directAnswer when the question is ordinary, confidence, judgementTrace, keyFactors, cautions, and followUpQuestions. keyFactors must be a JSON array of objects with factor, chartEvidence, and interpretation; never return keyFactors as an object keyed by planet, topic, or testimony. judgementTrace must include question_scope, house_assignment, significator_selection, and synthesis_pass; synthesis_pass chartEvidence must cite concrete supplied chart facts, not only missing evidence. Use deterministicAssignments for house_assignment and significator_selection before weighing interpretation; if significatorPlacement is null, write placement unavailable rather than inventing one. Do not confuse house rulership with body placement: a planet rules a house when the house ruler names it, and a planet is in a house only when that body fact lists that house. Each chartEvidence string must be one concise line under 30 words, must not repeat a phrase, and must not contain unescaped raw JSON quotes. If perfection or blockage evidence is absent, cite canonical absence facts such as no applying major aspects supplied or no timing perfection supplied, plus any void Moon fact; never cite empty-array labels such as antisciaContacts: []. Keep summary and directAnswer under 90 words each; keep findings and interpretations under 35 words each. Use at most three followUpQuestions."
-}
-
-fn question_context(question: &str) -> Value {
-    let text = question.to_ascii_lowercase();
-    if contains_any(
-        &text,
-        &[
-            "job",
-            "career",
-            "offer",
-            "employer",
-            "boss",
-            "promotion",
-            "application",
-        ],
-    ) {
-        return context(
-            "job_career",
-            vec![
-                assignment("querent", 1, "the asker and their capacity to act"),
-                assignment(
-                    "job_or_offer",
-                    10,
-                    "career, employer, boss, public success, and job offers",
-                ),
-                assignment(
-                    "wages_or_benefit",
-                    11,
-                    "money or benefit from the job when relevant",
-                ),
-            ],
-        );
-    }
-    if contains_any(
-        &text,
-        &[
-            "ex",
-            "spouse",
-            "partner",
-            "relationship",
-            "reconcile",
-            "reconciliation",
-            "marry",
-            "marriage",
-            "dating",
-            "lover",
-        ],
-    ) {
-        return context(
-            "relationship",
-            vec![
-                assignment("querent", 1, "the asker"),
-                assignment(
-                    "partner_or_ex",
-                    7,
-                    "partner, spouse, sweetheart, ex, or desired other person",
-                ),
-            ],
-        );
-    }
-    if contains_any(
-        &text,
-        &[
-            "lost",
-            "missing",
-            "misplaced",
-            "find",
-            "recover",
-            "ring",
-            "wallet",
-            "phone",
-            "keys",
-        ],
-    ) {
-        return context(
-            "lost_object",
-            vec![
-                assignment("querent", 1, "the asker"),
-                assignment(
-                    "lost_movable_possession",
-                    2,
-                    "the querent's movable possession",
-                ),
-            ],
-        );
-    }
-    if contains_any(
-        &text,
-        &[
-            "invest",
-            "investment",
-            "stock",
-            "crypto",
-            "savings",
-            "portfolio",
-            "loan",
-            "debt",
-            "mortgage",
-            "tax",
-        ],
-    ) {
-        return context(
-            "financial_high_stakes",
-            vec![
-                assignment("querent", 1, "the asker"),
-                assignment(
-                    "savings_or_own_money",
-                    2,
-                    "the querent's money and movable assets",
-                ),
-                assignment(
-                    "risk_or_other_party_money",
-                    8,
-                    "other people's money, debt, fear, or loss exposure when relevant",
-                ),
-            ],
-        );
-    }
-    context("ordinary", vec![assignment("querent", 1, "the asker")])
-}
-
-fn contains_any(text: &str, needles: &[&str]) -> bool {
-    needles.iter().any(|needle| text.contains(needle))
-}
-
-fn context(domain_module: &str, likely_assignments: Vec<Value>) -> Value {
-    json!({
-        "domainModule": domain_module,
-        "likelyAssignments": likely_assignments,
-        "caution": "Question-context hints are scaffolding for house assignment only; final judgement must still cite supplied chart facts.",
-    })
-}
-
-fn assignment(actor: &str, house: u8, rationale: &str) -> Value {
-    json!({
-        "actor": actor,
-        "house": house,
-        "rationale": rationale,
-    })
-}
-
-fn build_chart_facts(chart: &Value) -> Value {
-    json!({
-        "castLocalTime": chart_field(chart, "castLocalTime").unwrap_or(Value::Null),
-        "castUtcTime": chart_field(chart, "castUtcTime").unwrap_or(Value::Null),
-        "timezone": chart_field(chart, "timezone").unwrap_or(Value::Null),
-        "location": chart_field(chart, "location").unwrap_or(Value::Null),
-        "ascendant": chart_field(chart, "ascendant").unwrap_or(Value::Null),
-        "midheaven": chart_field(chart, "midheaven").unwrap_or(Value::Null),
-        "houses": chart_field(chart, "houses").unwrap_or_else(|| json!([])),
-        "bodies": chart_field(chart, "bodies").unwrap_or_else(|| json!([])),
-        "aspects": chart_field(chart, "aspects").unwrap_or_else(|| json!([])),
-        "derived": chart_field(chart, "derived").unwrap_or_else(|| json!({})),
-    })
-}
-
-fn chart_evidence_index(chart: &Value) -> Value {
-    let house_rulers = chart
-        .get("houses")
-        .and_then(Value::as_array)
-        .map(|houses| {
-            houses
-                .iter()
-                .map(|house| {
-                    json!({
-                        "house": house.get("number").cloned().unwrap_or(Value::Null),
-                        "sign": house.get("sign").cloned().unwrap_or(Value::Null),
-                        "ruler": house.get("ruler").cloned().unwrap_or(Value::Null),
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let body_placements = chart
-        .get("bodies")
-        .and_then(Value::as_array)
-        .map(|bodies| {
-            bodies
-                .iter()
-                .map(|body| {
-                    json!({
-                        "name": body.get("name").cloned().unwrap_or(Value::Null),
-                        "sign": body.get("sign").cloned().unwrap_or(Value::Null),
-                        "house": body.get("house").cloned().unwrap_or(Value::Null),
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let applying_major_aspects = chart
-        .get("aspects")
-        .and_then(Value::as_array)
-        .map(|aspects| {
-            aspects
-                .iter()
-                .filter(|aspect| {
-                    aspect.get("applying").and_then(Value::as_bool) == Some(true)
-                        && aspect.get("major").and_then(Value::as_bool) != Some(false)
-                })
-                .map(|aspect| {
-                    json!({
-                        "planet1": aspect.get("planet1").cloned().unwrap_or(Value::Null),
-                        "aspectName": aspect.get("aspectName").cloned().unwrap_or(Value::Null),
-                        "planet2": aspect.get("planet2").cloned().unwrap_or(Value::Null),
-                        "orb": aspect.get("orb").cloned().unwrap_or(Value::Null),
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let timing_patterns = chart
-        .get("derived")
-        .and_then(|derived| derived.get("timingPatterns"))
-        .cloned()
-        .unwrap_or_else(|| json!([]));
-    let void_of_course_moon = chart
-        .get("derived")
-        .and_then(|derived| derived.get("voidOfCourseMoon"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let canonical_facts = canonical_chart_facts(
-        &house_rulers,
-        &body_placements,
-        &applying_major_aspects,
-        &timing_patterns,
-        &void_of_course_moon,
-    );
-
-    json!({
-        "houseRulers": house_rulers,
-        "bodyPlacements": body_placements,
-        "applyingMajorAspects": applying_major_aspects,
-        "timingPatterns": timing_patterns,
-        "voidOfCourseMoon": void_of_course_moon,
-        "canonicalFacts": canonical_facts,
-    })
-}
-
-fn deterministic_assignments(question_context: &Value, chart_evidence_index: &Value) -> Value {
-    let assignments = question_context
-        .get("likelyAssignments")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let houses = chart_evidence_index
-        .get("houseRulers")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let bodies = chart_evidence_index
-        .get("bodyPlacements")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-
-    Value::Array(
-        assignments
-            .iter()
-            .map(|assignment| {
-                let house_number = assignment.get("house").and_then(Value::as_i64);
-                let house = house_number.and_then(|number| {
-                    houses
-                        .iter()
-                        .find(|house| house.get("house").and_then(Value::as_i64) == Some(number))
-                });
-                let significator = house
-                    .and_then(|house| house.get("ruler"))
-                    .and_then(Value::as_str);
-                let placement = significator.and_then(|name| {
-                    bodies
-                        .iter()
-                        .find(|body| body.get("name").and_then(Value::as_str) == Some(name))
-                });
-                let canonical_evidence = canonical_assignment_evidence(house, placement);
-
-                json!({
-                    "actor": assignment.get("actor").cloned().unwrap_or(Value::Null),
-                    "house": assignment.get("house").cloned().unwrap_or(Value::Null),
-                    "houseSign": house
-                        .and_then(|house| house.get("sign"))
-                        .cloned()
-                        .unwrap_or(Value::Null),
-                    "significator": significator
-                        .map(|value| Value::String(value.to_string()))
-                        .unwrap_or(Value::Null),
-                    "significatorPlacement": placement.cloned().unwrap_or(Value::Null),
-                    "canonicalEvidence": canonical_evidence,
-                    "rationale": assignment.get("rationale").cloned().unwrap_or(Value::Null),
-                })
-            })
-            .collect(),
-    )
-}
-
-fn canonical_chart_facts(
-    house_rulers: &[Value],
-    body_placements: &[Value],
-    applying_major_aspects: &[Value],
-    timing_patterns: &Value,
-    void_of_course_moon: &Value,
-) -> Vec<String> {
-    let mut facts = Vec::new();
-    for house in house_rulers {
-        facts.push(format!(
-            "house {} {} ruler {}",
-            value_label(house.get("house")),
-            value_label(house.get("sign")),
-            value_label(house.get("ruler"))
-        ));
-    }
-    for body in body_placements {
-        facts.push(format!(
-            "{} {} house {}",
-            value_label(body.get("name")),
-            value_label(body.get("sign")),
-            value_label(body.get("house"))
-        ));
-    }
-    for aspect in applying_major_aspects {
-        facts.push(format!(
-            "{} {} {} applying orb {}",
-            value_label(aspect.get("planet1")),
-            value_label(aspect.get("aspectName")),
-            value_label(aspect.get("planet2")),
-            value_label(aspect.get("orb"))
-        ));
-    }
-    if applying_major_aspects.is_empty() {
-        facts.push("no applying major aspects supplied".to_string());
-    }
-    for timing in timing_patterns.as_array().into_iter().flatten() {
-        facts.push(canonical_timing_pattern(timing));
-    }
-    if timing_patterns
-        .as_array()
-        .map_or(true, |timing_patterns| timing_patterns.is_empty())
-    {
-        facts.push("no timing perfection supplied".to_string());
-    }
-    if !void_of_course_moon.is_null() {
-        facts.push(format!(
-            "voidOfCourseMoon isVoid {}",
-            void_of_course_moon
-                .get("isVoid")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        ));
-    }
-    facts
-}
-
-fn canonical_assignment_evidence(house: Option<&Value>, placement: Option<&Value>) -> String {
-    let mut parts = Vec::new();
-    if let Some(house) = house {
-        parts.push(format!(
-            "house {} {} ruler {}",
-            value_label(house.get("house")),
-            value_label(house.get("sign")),
-            value_label(house.get("ruler"))
-        ));
-    }
-    if let Some(placement) = placement {
-        parts.push(format!(
-            "{} {} house {}",
-            value_label(placement.get("name")),
-            value_label(placement.get("sign")),
-            value_label(placement.get("house"))
-        ));
-    }
-    parts.join("; ")
-}
-
-fn canonical_timing_pattern(pattern: &Value) -> String {
-    format!(
-        "timing {} {} {} {} {}h",
-        value_label(pattern.get("type")),
-        value_label(pattern.get("planet1")),
-        value_label(pattern.get("aspectName")),
-        value_label(pattern.get("planet2")),
-        pattern
-            .get("estimatedPerfectsWithinHours")
-            .or_else(|| pattern.get("perfectsWithinHours"))
-            .map(|value| value_label(Some(value)))
-            .unwrap_or_else(|| "unknown".to_string())
-    )
-}
-
-fn value_label(value: Option<&Value>) -> String {
-    match value {
-        Some(Value::String(value)) if !value.trim().is_empty() => value.clone(),
-        Some(Value::Number(value)) => value.to_string(),
-        Some(Value::Bool(value)) => value.to_string(),
-        _ => "unknown".to_string(),
-    }
-}
-
-fn chart_field(chart: &Value, field: &str) -> Option<Value> {
-    chart.get(field).cloned()
-}
-
-fn interpretation_schema() -> Value {
-    serde_json::from_str(INTERPRETATION_SCHEMA_JSON)
-        .expect("shared horary interpretation schema must be valid JSON")
-}
-
-fn judgement_plan() -> Value {
-    let pipeline: Value = serde_json::from_str(JUDGEMENT_PIPELINE_JSON)
-        .expect("shared horary judgement pipeline must be valid JSON");
-    let micro_tasks = pipeline
-        .get("microTasks")
-        .and_then(Value::as_array)
-        .map(|tasks| {
-            tasks
-                .iter()
-                .map(|task| {
-                    json!({
-                        "id": task.get("id").cloned().unwrap_or(Value::Null),
-                        "instruction": task.get("compactPrompt").cloned().unwrap_or(Value::Null),
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let house_map = pipeline
-        .get("commonHouseMap")
-        .and_then(Value::as_array)
-        .map(|houses| {
-            houses
-                .iter()
-                .map(|house| {
-                    format!(
-                        "{}: {}",
-                        value_label(house.get("house")),
-                        value_label(house.get("core"))
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let house_rules = pipeline
-        .get("houseAssignmentRules")
-        .and_then(Value::as_array)
-        .map(|rules| {
-            rules
-                .iter()
-                .filter_map(|rule| rule.get("rule").and_then(Value::as_str))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    json!({
-        "profile": pipeline.get("profile").cloned().unwrap_or(Value::Null),
-        "pipelineVersion": pipeline.get("pipelineVersion").cloned().unwrap_or(Value::Null),
-        "executionMode": "single_call_with_required_trace",
-        "sourceBasis": pipeline
-            .get("sourceBasis")
-            .and_then(|source| source.get("summary"))
-            .cloned()
-            .unwrap_or(Value::Null),
-        "globalRules": pipeline.get("globalRules").cloned().unwrap_or_else(|| json!([])),
-        "houseAssignmentRules": house_rules,
-        "commonHouseMap": house_map,
-        "microTasks": micro_tasks,
-        "traceRequirement": pipeline
-            .get("singleCallTraceRequirement")
-            .cloned()
-            .unwrap_or_else(|| json!({})),
-        "verifierChecklist": pipeline.get("verifierChecklist").cloned().unwrap_or_else(|| json!([])),
-    })
-}
-
 fn content_as_text(content: &Value) -> Option<String> {
     match content {
         Value::String(value) => Some(value.clone()),
@@ -1771,53 +714,6 @@ fn new_generation_id() -> String {
     format!("ai-{millis}")
 }
 
-fn strip_code_fence(content: &str) -> &str {
-    if !content.starts_with("```") {
-        return content;
-    }
-    let Some(first_newline) = content.find('\n') else {
-        return content;
-    };
-    let body = &content[first_newline + 1..];
-    body.strip_suffix("```").unwrap_or(body).trim()
-}
-
-fn extract_json_object(content: &str) -> Result<&str, AiError> {
-    let start = content.find('{').ok_or_else(|| AiError {
-        message: "local model response did not contain a JSON object".to_string(),
-    })?;
-    let mut depth = 0_i32;
-    let mut in_string = false;
-    let mut escaped = false;
-    for (offset, character) in content[start..].char_indices() {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                in_string = false;
-            }
-            continue;
-        }
-        match character {
-            '"' => in_string = true,
-            '{' => depth += 1,
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    let end = start + offset + character.len_utf8();
-                    return Ok(&content[start..end]);
-                }
-            }
-            _ => {}
-        }
-    }
-    Err(AiError {
-        message: "local model response did not contain a complete JSON object".to_string(),
-    })
-}
-
 fn truncate_for_error(content: &str) -> String {
     if content.chars().count() <= MAX_MODEL_OUTPUT_ERROR_CHARS {
         return content.to_string();
@@ -1919,6 +815,9 @@ mod horary_reading_eval_tests {
         let mut case_reports = Vec::new();
         let mut failures = Vec::new();
         for fixture in reading_fixtures() {
+            if std::env::var("HORARY_READING_EVAL_CASE").is_ok_and(|id| id != fixture.id) {
+                continue;
+            }
             let request = HoraryInterpretationRequest {
                 question: fixture.question.to_string(),
                 chart: fixture.chart.clone(),
@@ -1926,17 +825,15 @@ mod horary_reading_eval_tests {
             };
             let prompt = build_interpretation_prompt(&request).unwrap();
             let prompt_text = native_prompt_text(&prompt).unwrap();
-            let cache_prefix = native_prompt_cache_prefix(&prompt).unwrap();
             let generation = generate_native(
                 &state,
                 prompt_text,
                 NativeGenerateOptions {
                     max_tokens: MAX_INTERPRETATION_TOKENS,
+                    response_schema: Some(horary_ai_core::interpretation_schema().to_string()),
                     temperature: INTERPRETATION_TEMPERATURE,
                     top_p: 1.0,
                     seed: 0x5752_5952,
-                    prompt_cache_key: Some(native_interpretation_cache_key(&prompt)),
-                    prompt_cache_prefix: Some(cache_prefix),
                     token_sink: None,
                     cancel: None,
                 },
@@ -2024,8 +921,8 @@ mod horary_reading_eval_tests {
             );
         }
         assert!(
-            health.hot_cache_hits + health.cold_cache_hits > 0,
-            "horary eval did not exercise native prompt KV cache"
+            !case_reports.is_empty(),
+            "No reading fixtures matched the requested case"
         );
 
         let report = ReadingEvalReport {
@@ -2058,6 +955,12 @@ mod horary_reading_eval_tests {
         risk: &str,
         interpretation: &HoraryInterpretation,
     ) -> Vec<String> {
+        // Review the exact normalized facts supplied to the model, including
+        // the book's next-cusp house adjustment, rather than the raw fixture.
+        let fixture = ReadingFixture {
+            chart: horary_ai_core::book_method::apply(&fixture.chart),
+            ..fixture.clone()
+        };
         let known_steps = known_microtask_ids();
         let minimum_steps = minimum_trace_steps();
         let mut issues = Vec::new();
@@ -2324,6 +1227,15 @@ mod horary_reading_eval_tests {
 
     fn reading_fixtures() -> Vec<ReadingFixture> {
         vec![
+            ReadingFixture {
+                id: "full-london-chart",
+                question: "Where is the lost ring?",
+                chart: serde_json::from_str(include_str!(
+                    "../test-fixtures/full-london-chart.json"
+                ))
+                .unwrap(),
+                settings: eval_settings(),
+            },
             ReadingFixture {
                 id: "job-offer",
                 question: "Will I get the job offer?",
@@ -2864,7 +1776,7 @@ mod tests {
             "summary"
         );
         assert!(system.contains("Do not calculate or recalculate planetary positions"));
-        assert!(system.contains("deterministicAssignments as the authoritative mapping"));
+        assert!(system.contains("deterministicAssignments are provisional keyword hints"));
         assert!(system.contains("chartEvidenceIndex.canonicalFacts"));
         assert!(system.contains("traditional horary judgement order"));
         assert!(system.contains("querent and quesited"));

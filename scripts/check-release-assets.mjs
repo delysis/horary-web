@@ -143,14 +143,14 @@ function validateNativeRuntime(profile, paths, issues) {
     if (profile.preferred !== true) {
         runtimeIssues.push('native runtime profile must set preferred: true.');
     }
-    if (profile.backendId !== 'native-llama-cpp') {
-        runtimeIssues.push('native runtime profile backendId must be native-llama-cpp.');
+    if (profile.backendId !== 'llama-native-kit') {
+        runtimeIssues.push('native runtime profile backendId must be llama-native-kit.');
     }
     if (profile.rustBinding?.crate !== 'llama-cpp-2') {
         runtimeIssues.push('native runtime profile must use llama-cpp-2 Rust bindings.');
     }
-    if (profile.rustBinding?.version !== '0.1.150') {
-        runtimeIssues.push('native runtime profile llama-cpp-2 version must be 0.1.150.');
+    if (profile.rustBinding?.version !== '0.1.154') {
+        runtimeIssues.push('native runtime profile llama-cpp-2 version must be 0.1.154.');
     }
     if (profile.rustBinding?.cargoFeature !== 'native-llama') {
         runtimeIssues.push('native runtime profile must name the native-llama Cargo feature.');
@@ -164,41 +164,29 @@ function validateNativeRuntime(profile, paths, issues) {
     if (profile.capabilities?.inProcessWorker !== true) {
         runtimeIssues.push('native runtime profile must require an in-process worker.');
     }
-    if (profile.capabilities?.continuousBatching?.enabled !== true) {
-        runtimeIssues.push('native runtime profile must require continuous batching.');
+    if (profile.capabilities?.continuousBatching?.defaultParallelSequences !== 1 || profile.capabilities?.continuousBatching?.maxParallelSequences !== 1) {
+        runtimeIssues.push('native runtime profile must describe one resident reading sequence.');
     }
-    if (!Number.isInteger(profile.capabilities?.continuousBatching?.defaultParallelSequences) || profile.capabilities.continuousBatching.defaultParallelSequences < 2) {
-        runtimeIssues.push('native runtime profile must default to at least two parallel sequences.');
-    }
-    if (!Number.isInteger(profile.capabilities?.continuousBatching?.maxParallelSequences) || profile.capabilities.continuousBatching.maxParallelSequences < profile.capabilities.continuousBatching.defaultParallelSequences) {
-        runtimeIssues.push('native runtime profile must set maxParallelSequences greater than or equal to the default.');
-    }
-    const tiers = profile.capabilities?.kvCache?.tiers;
-    if (!Array.isArray(tiers) || !tiers.some(tier => tier.id === 'hot') || !tiers.some(tier => tier.id === 'cold')) {
-        runtimeIssues.push('native runtime profile must define hot and cold KV cache tiers.');
-    }
-    if (profile.capabilities?.speculativeDecoding?.preferredType !== 'draft-mtp') {
-        runtimeIssues.push('native runtime profile must prefer draft-mtp speculative decoding.');
-    }
-    if (profile.capabilities?.speculativeDecoding?.enabledWhenDraftModelPresent !== true) {
-        runtimeIssues.push('native runtime profile must enable draft-mtp when a draft model is present.');
-    }
-    if (profile.capabilities?.speculativeDecoding?.nativeWorkerActive !== true) {
-        runtimeIssues.push('native runtime profile must expose draft-mtp nativeWorkerActive: true for the native worker.');
-    }
-    if (typeof profile.capabilities?.speculativeDecoding?.implementationStatus !== 'string') {
-        runtimeIssues.push('native runtime profile must include speculativeDecoding.implementationStatus.');
+    if (profile.capabilities?.speculativeDecoding?.nativeWorkerActive !== false) {
+        runtimeIssues.push('native runtime profile must not advertise unimplemented speculative decoding.');
     }
     if (profile.capabilities?.jsonConstrainedOutput?.required !== true) {
         runtimeIssues.push('native runtime profile must require JSON-constrained output.');
     }
 
     const cargoToml = readText(paths.cargoToml, issues);
-    if (!cargoToml.includes('llama-cpp-2 = { version = "0.1.150"')) {
-        runtimeIssues.push('src-tauri/Cargo.toml must declare optional llama-cpp-2 0.1.150 dependency.');
+    const revision = profile.nativeKit?.revision;
+    if (!/^[a-f0-9]{40}$/.test(revision || '')) {
+        runtimeIssues.push('native-kit must have an immutable revision.');
     }
-    if (!cargoToml.includes('native-llama = ["dep:llama-cpp-2"')) {
-        runtimeIssues.push('src-tauri/Cargo.toml must declare a native-llama feature using llama-cpp-2.');
+    for (const crate of ['llama-native-engine', 'llama-native-host', 'llama-native-types']) {
+        const declaration = cargoToml.split('\n').find(line => line.startsWith(crate + ' = ')) || '';
+        if (!declaration.includes('rev = "' + revision + '"') || !declaration.includes('https://github.com/delysis/native-platform.git')) {
+            runtimeIssues.push('Cargo dependency ' + crate + ' must match the native-kit provenance pin.');
+        }
+        if (!cargoToml.includes('"dep:' + crate + '"')) {
+            runtimeIssues.push('native-llama must activate ' + crate + '.');
+        }
     }
     if (!cargoToml.includes('native-llama-metal')) {
         runtimeIssues.push('src-tauri/Cargo.toml must expose a native-llama-metal feature for Apple Silicon release builds.');

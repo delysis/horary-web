@@ -12,6 +12,15 @@ export type ModelInfo = {
   sha256: string
 }
 
+export const RECOMMENDED_MODEL_ID = 'gemma-4-12b-qat'
+export type ModelSetupStatus = {
+  active: boolean; ready: boolean; phase: string; modelName: string
+  completedBytes: number; totalBytes: number; message: string; cachePath: string
+}
+export function getModelSetupStatus() { return invokeTauri<ModelSetupStatus>('get_model_setup_status') }
+export function installRecommendedModel() { return invokeTauri<void>('download_model', { req: { modelId: RECOMMENDED_MODEL_ID } }) }
+export function pauseModelSetup() { return invokeTauri<void>('pause_model_setup') }
+
 export type ModelStatus = {
   running: boolean
   modelId?: string | null
@@ -206,6 +215,12 @@ export async function listModels() {
 
 export async function importModel(path: string) {
   return invokeTauri<ModelInfo>('import_model', { req: { path } })
+}
+
+export async function chooseNativeModelFile() {
+  const { open } = await import('@tauri-apps/plugin-dialog')
+  const path = await open({ multiple: false, directory: false, title: 'Choose a local instruction model', filters: [{ name: 'GGUF model', extensions: ['gguf'] }] })
+  return typeof path === 'string' ? path : null
 }
 
 export async function getModelStatus() {

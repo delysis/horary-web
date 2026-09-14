@@ -45,6 +45,7 @@
           },
           "finding": {
             "type": "string",
+            "description": "A short sentence explaining the finding for this question; never a step identifier or stage name.",
             "maxLength": 360
           },
           "chartEvidence": {

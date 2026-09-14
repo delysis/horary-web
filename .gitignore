@@ -3,6 +3,8 @@ dist/
 dist-ssr/
 coverage/
 .vite/
+src/generated/horary_ai_core_*/
+public/litert/
 
 logs/
 *.log
@@ -32,6 +34,7 @@ Thumbs.db
 src-tauri/target/
 src-tauri/.tauri/
 src-tauri/target-*/
+crates/horary-ai-core/target/
 
 artifacts/horary-reading-eval.json
 artifacts/horary-reading-eval-live.json

@@ -1,97 +1,37 @@
 # Architecture
 
-## Active Shape
+Horary uses a React view inside a Tauri 2 desktop application. The shared Rust crate is `crates/horary-ai-core`; its WebAssembly exports are built for browser/webview use and Node-based regression tests. There is no Python build or runtime dependency in the supported CPU/Metal application paths. The pinned CPU/Metal binding builds the native libraries without Python tooling.
 
-Horary is a Vite React app wrapped by a Tauri 2 desktop shell. The visible design and calculator workflow are owned by the upstream React files:
+## Chart authority
 
-```text
-index.html
-  |
-  v
-src/main.tsx
-  |
-  v
-src/App.tsx
-  |-- question, time, location, settings, chart display
-  |-- upstream ChartWheel and AspectGrid rendering
-  |-- native-only Local AI panel
-  |
-  +--> src/chartCalc.ts
-  |      upstream display chart calculation
-  |
-  +--> src/astro/*.js + src/ai/chartFacts.js
-         richer deterministic facts for AI prompts only
-```
+`src/App.tsx` resolves the entered civil time and IANA timezone through Rust (`chart_input.rs`) into a single UTC instant. The same module validates DMS components and performs calendar nudges without the host machine’s timezone affecting them.
 
-The React UI keeps Eileen's current upstream layout and controls. The added AI path is an adapter under the existing calculator, not a replacement frontend.
+`src/chartCalc.ts` adapts `src/astro/chart.js` to Eileen’s existing chart wheel and tables. That result also feeds `src/ai/chartFacts.js`. The previous separate display calculation and fallback AI chart are no longer used by the app. The active display aspect policy is five major aspects with a five-degree orb. Rust applies the source-specific method rules and independently brackets upcoming contacts from seven days of hourly ephemeris samples. The method inspector identifies sign changes and estimated timing. Other legacy standalone UI modules remain outside the React entrypoint.
 
-## Native Boundary
+The astronomical engine is approximate. The committed golden fixtures cover positions, house cusps, aspect phase, and motion edges at their recorded tolerances. The largest planetary tolerances are unsuitable for treating sign-boundary or exact-timing results as professionally certified; Eileen should compare such cases with her trusted ephemeris.
 
-The frontend talks to the desktop backend through Tauri IPC commands and Tauri events:
+## Interpretation
 
-```text
-React UI
-  |
-  | invoke(), listen()
-  v
-src/tauriBridge.ts
-  |
-  v
-src-tauri/src/lib.rs
-  |-- chart/settings storage commands
-  |-- bundled city geocoder commands
-  |-- model import/status/start/stop commands
-  |-- interpretation stream commands
-  |
-  v
-src-tauri/src/native_llama_worker.rs
-```
+`judgementEngine.ts` owns one active reading, cancellation, model setup, and cleanup. The desktop adapter uses Tauri IPC and filters events by generation ID, including events received before the start reply. The browser adapter uses a user-selected local LiteRT model and same-origin bundled runtime assets. It never selects a hosted inference fallback.
 
-The browser frontend never calls the local llama endpoint directly. The native build routes interpretation through in-process llama.cpp when compiled with `native-llama`; the sidecar path remains a fallback behind the same IPC surface.
+The Rust core owns prompt construction, provisional question/house hints, schema parsing, and risk checks. Tauri calls the same native crate; browser execution uses its WASM exports. Versioned prompt metadata and output limits are included in review evidence.
 
-## Local AI Flow
+Native inference is enabled by default through the pinned native-kit host and engine. The kit selects CPU/Metal by platform. Horary keeps one model resident and uses its own chat template with native schema-constrained sampling. Prompt caches remain memory-only; constrained readings do not promise prefix reuse. The API does not expose speculative decoding. Model/projector artifacts are distinct, and only full models appear in the picker. The old sidecar remains an explicit compatibility path for builds without native inference.
 
-```text
-Question + chart display state
-  |
-  v
-AI fact adapter
-  |-- full deterministic horary facts from src/astro/*.js when available
-  |-- display-summary fallback from src/chartCalc.ts
-  |
-  v
-Tauri start_interpretation_stream
-  |
-  v
-ai.rs prompt builder
-  |-- risk classifier
-  |-- question context and house hints
-  |-- chart evidence index
-  |-- deterministic assignments
-  |-- horary judgement plan
-  |
-  v
-native_llama_worker.rs
-  |-- continuous batching
-  |-- hot prompt cache
-  |-- cold disk KV cache
-  |-- MTP speculative decoding when a draft model is available
-  |
-  v
-schema validation and streamed React output
-```
+## Model acquisition
 
-## Test Gates
+The native Rust module `hf_cache.rs` implements the narrow pinned-artifact subset of the [Hub cache protocol](https://huggingface.co/docs/hub/cache). It uses reqwest, SHA-256, OS file locks and atomic publication. No CLI or Python is invoked. Cache hits require no network. Interrupted downloads retain bytes, validate HTTP range responses, and verify the complete digest before publication. Cancellation also interrupts pending network reads. On Unix snapshots are relative symlinks; on Windows they are hardlinks, so no symlink privileges or duplicate weights are needed. Filesystems without hardlink support produce an explicit error instead of silently copying weights.
 
-The main gates are:
+The app registers the cache location only after both model and projector pass verification; it loads blobs directly and verifies them again on model startup. Source revisions and hashes are in `src-tauri/model-manifest.json`. See [the model provenance record](MODEL_PROVENANCE.md).
 
-- `npm run check:all`: React/TypeScript build, JS/Rust tests, lint, audit, Rust fmt/clippy.
-- `HORARY_NATIVE_LLAMA_REQUIRE_MTP=1 npm run check:native-llama`: real local Gemma GGUF native llama.cpp gate.
-- `HORARY_NATIVE_LLAMA_REQUIRE_MTP=1 npm run check:horary-readings`: real local reading-eval gate over multiple horary scenarios.
-- `npm run tauri -- build --debug --features native-llama-metal`: native desktop bundle build on Apple Silicon/Metal.
+## Review interface
 
-## Release Notes
+`MethodReview.tsx` displays the checked-in process instructions, provisional house suggestions, and any corresponding model-reported steps. The current runtime sends this scaffold in one model call; the future multi-call plan is not presented as implemented.
 
-The app identity is `Horary`, bundle identifier `app.horary.desktop`, and Rust crate `horary`. Any old-name storage keys are treated as pre-release artifacts, not product identity.
+`ReviewNotes.tsx` captures a frozen question/chart/reading/method-step context. Rust validates stored review records before appending to them. Failed writes keep the draft visible and leave existing records intact. Export is a local JSON download, never an automatic upload.
 
-Remote model catalog entries remain disabled until a release artifact has a verified URL, license, size, checksum, RAM profile, context profile, and default generation parameters.
+## Packaging
+
+macOS builds target 11.0 or newer. Tauri’s packaged CSP permits the shared WASM module, same-origin assets, and IPC. The only added frontend capability is opening the native model chooser. Browser LiteRT binaries are excluded from native build output.
+
+Desktop CI builds the actual native backend through the pinned native-kit dependency and attaches reviewer artifacts. Signed/notarized distribution and model redistribution are separate release work, not represented as complete by a review artifact.
