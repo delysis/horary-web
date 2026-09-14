@@ -53,6 +53,9 @@ jobs:
             features: native-llama
     steps:
       - uses: actions/checkout@v4
+      - name: Allow the native dependency's Windows paths
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
       - uses: actions/setup-node@v4
         with:
           node-version: 22

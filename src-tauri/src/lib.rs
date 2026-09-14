@@ -19,6 +19,7 @@ use model_manifest::{
     bundled_model_manifest, DownloadModelRequest, ModelManifest, ModelManifestError,
 };
 use native_llama::{native_llama_runtime_info, NativeLlamaRuntimeInfo};
+mod review_export;
 #[cfg(feature = "native-llama")]
 use native_llama_worker::start_native_llama_in_dir;
 use native_llama_worker::{
@@ -510,6 +511,7 @@ pub fn run() {
 
     builder
         .invoke_handler(tauri::generate_handler![
+            review_export::export_review,
             get_app_info,
             save_chart,
             list_charts,

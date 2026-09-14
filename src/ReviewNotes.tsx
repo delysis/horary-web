@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MethodStep } from './MethodReview'
 import { read_review_notes_json, append_review_note_json } from './ai/aiCoreWasm'
-import type { HoraryInterpretation } from './tauriBridge'
+import { saveReviewExport, type HoraryInterpretation } from './tauriBridge.ts'
 
 export const REVIEW_NOTES_KEY = 'horary.reviewNotes.v1'
 export type ReviewNote = {
@@ -50,17 +50,15 @@ export function ReviewNotes({ question, chart, interpretation, reviewTarget }: R
     } catch { setError('Could not save review notes in this browser. Copy your note before leaving the page. Existing notes have been preserved.') }
   }
 
-  function exportNotes() {
+  async function exportNotes() {
     let latest: ReviewNote[]
     try { latest = JSON.parse(read_review_notes_json(localStorage.getItem(REVIEW_NOTES_KEY) || '[]')) }
     catch { setError('Could not read saved notes for export. Existing data has been preserved.'); return }
-    const file = new Blob([JSON.stringify({ format: 'horary-review-notes', version: 1, notes: latest }, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(file)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `horary-review-notes-${new Date().toISOString().slice(0, 10)}.json`
-    anchor.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    try {
+      const saved = await saveReviewExport(`horary-review-notes-${new Date().toISOString().slice(0, 10)}.json`, { format: 'horary-review-notes', version: 1, notes: latest })
+      setMessage(saved ? 'Review notes exported.' : 'Export cancelled.')
+    } catch (error) { setError(`Could not export review notes: ${String(error)}`) }
+
   }
 
   return <section className="review-notes" aria-label="Review notes">

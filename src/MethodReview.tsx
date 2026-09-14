@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import pipeline from './ai/horary-judgement-pipeline.json'
 import { buildInterpretationPrompt } from './ai/aiCoreWasm'
-import type { HoraryInterpretation } from './tauriBridge'
+import { saveReviewExport, type HoraryInterpretation } from './tauriBridge.ts'
 
 export type MethodStep = { id: string; title: string; instruction: string }
 type Assignment = { actor: string; house: number; significator: string | null; canonicalEvidence: string }
@@ -18,6 +18,7 @@ type MethodReviewProps = {
 
 export function MethodReview({ question, chart, interpretation }: MethodReviewProps) {
   const evidence = chart as EvidenceChart | null
+  const [exportMessage, setExportMessage] = useState('')
   const [assignments, setAssignments] = useState<Assignment[]>([])
   useEffect(() => {
     let current = true
@@ -31,15 +32,14 @@ export function MethodReview({ question, chart, interpretation }: MethodReviewPr
     return () => { current = false }
   }, [question, chart])
 
-  function exportReading() {
-    const file = new Blob([JSON.stringify({ format: 'horary-reading-review', version: 1, build: __HORARY_BUILD__,
-      exportedAt: new Date().toISOString(), question, chart, interpretation, method: pipeline }, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(file)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `horary-reading-${new Date().toISOString().slice(0, 10)}.json`
-    anchor.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  async function exportReading() {
+    try {
+      const saved = await saveReviewExport(`horary-reading-${new Date().toISOString().slice(0, 10)}.json`, {
+        format: 'horary-reading-review', version: 1, build: __HORARY_BUILD__, exportedAt: new Date().toISOString(),
+        question, chart, interpretation, method: pipeline,
+      })
+      setExportMessage(saved ? 'Reading exported.' : 'Export cancelled.')
+    } catch (error) { setExportMessage(`Could not export reading: ${String(error)}`) }
   }
 
   return <section className="method-review" aria-label="Reading method and evidence">
@@ -47,6 +47,7 @@ export function MethodReview({ question, chart, interpretation }: MethodReviewPr
     <p>Working from John Frawley’s <cite>The Horary Textbook</cite> (2005). Open a step to compare the method, its printed page references, and what this reading actually reported.</p>
     <p className="ai-help">The app calculates chart facts, then the model interprets them in one call. A model’s reported finding is an interpretation, not an independent verification. Keep notes in whatever form suits you; the export preserves this question, chart, reading, method, and app version alongside them.</p>
     <button disabled={!chart} onClick={exportReading}>Export this reading for review</button>
+    {exportMessage ? <p role="status">{exportMessage}</p> : null}
     <p className="ai-help">The file includes the question and location. Nothing is sent automatically.</p>
     <details>
       <summary>House suggestions for this question</summary>
@@ -80,7 +81,7 @@ export function MethodReview({ question, chart, interpretation }: MethodReviewPr
       <p>These are the supplied facts, including named dignities, directed receptions, and any adjustment for a planet near the next house cusp. They do not establish the interpretation.</p>
       <table><thead><tr><th>Planet</th><th>Placement</th><th>Essential condition</th><th>Ability &amp; visibility</th></tr></thead>
         <tbody>{evidence?.bodies?.filter(body => body.dignity).map(body => <tr key={body.name}>
-          <td>{body.name}</td><td>{body.sign} {body.degree.toFixed(2)}° · house {body.house}{body.geometricHouse !== body.house ? ` (advanced from ${body.geometricHouse} near cusp)` : ''}</td>
+          <td>{body.name}</td><td>{body.sign} {body.degree.toFixed(2)}° · house {body.house}{body.geometricHouse !== undefined && body.geometricHouse !== body.house ? ` (advanced from ${body.geometricHouse} near cusp)` : ''}</td>
           <td>{Object.entries(body.dignity || {}).filter(([, value]) => value === true).map(([key]) => key.replace(/Ruler$/, '').replace(/([A-Z])/g, ' $1').toLowerCase()).join(', ') || 'Not established'}</td>
           <td>{body.accidentalDignity?.houseCapacity || 'Unknown'} by house; {body.accidentalDignity?.solarCondition?.replace(/([A-Z])/g, ' $1').toLowerCase() || '—'}</td>
         </tr>)}</tbody>

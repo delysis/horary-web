@@ -21,6 +21,18 @@ export function getModelSetupStatus() { return invokeTauri<ModelSetupStatus>('ge
 export function installRecommendedModel() { return invokeTauri<void>('download_model', { req: { modelId: RECOMMENDED_MODEL_ID } }) }
 export function pauseModelSetup() { return invokeTauri<void>('pause_model_setup') }
 
+export async function saveReviewExport(filename: string, data: unknown): Promise<boolean> {
+  const content = JSON.stringify(data, null, 2)
+  if (isTauriRuntime()) return invokeTauri<boolean>('export_review', { filename, content })
+  const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return true
+}
+
 export type ModelStatus = {
   running: boolean
   modelId?: string | null

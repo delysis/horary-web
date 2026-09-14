@@ -28,7 +28,7 @@ The app registers the cache location only after both model and projector pass ve
 
 `MethodReview.tsx` displays the checked-in process instructions, provisional house suggestions, and any corresponding model-reported steps. The current runtime sends this scaffold in one model call; the future multi-call plan is not presented as implemented.
 
-`ReviewNotes.tsx` captures a frozen question/chart/reading/method-step context. Rust validates stored review records before appending to them. Failed writes keep the draft visible and leave existing records intact. Export is a local JSON download, never an automatic upload.
+`ReviewNotes.tsx` captures a frozen question/chart/reading/method-step context. Rust validates stored review records before appending to them. Failed writes keep the draft visible and leave existing records intact. Export uses an OS Save dialog and atomic Rust file writing on desktop, and a local JSON download in the browser. Neither uploads data.
 
 ## Packaging
 

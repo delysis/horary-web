@@ -497,11 +497,26 @@ mod integration_tests {
             &state,
             req.model_id.clone(),
             String::new(),
+            path.clone().into(),
+            PathBuf::new(),
+            req.clone(),
+        )
+        .unwrap();
+        let resident = state.running.lock().unwrap().as_ref().unwrap().clone();
+        start_native_llama_from_path(
+            &state,
+            req.model_id.clone(),
+            String::new(),
             path.into(),
             PathBuf::new(),
             req,
         )
         .unwrap();
+        assert!(Arc::ptr_eq(
+            &resident,
+            state.running.lock().unwrap().as_ref().unwrap()
+        ));
+        drop(resident);
         assert!(native_llama_status(&state).unwrap().running);
         let prompt = serde_json::json!([
             {"role":"system","content":"Return only a JSON object with answer set to ready."},
@@ -535,6 +550,33 @@ mod integration_tests {
         )
         .unwrap_err();
         assert!(error.message.contains("cancelled"));
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = mpsc::channel();
+        let live_prompt = serde_json::json!([{"role":"user","content":"Write a very long JSON string listing all numbers from one to one thousand in words."}]).to_string();
+        std::thread::scope(|scope| {
+            let worker = scope.spawn(|| {
+                generate_native(
+                    &state,
+                    live_prompt,
+                    NativeGenerateOptions {
+                        max_tokens: 1500,
+                        temperature: 0.0,
+                        response_schema: Some(r#"{"type":"string"}"#.into()),
+                        token_sink: Some(tx),
+                        cancel: Some(cancel.clone()),
+                        ..Default::default()
+                    },
+                )
+            });
+            let first_token = rx.recv_timeout(Duration::from_secs(30));
+            cancel.store(true, Ordering::Release);
+            let cancelled = worker.join().unwrap();
+            assert!(
+                first_token.is_ok(),
+                "The real generation must start before cancellation"
+            );
+            assert!(cancelled.unwrap_err().message.contains("cancelled"));
+        });
         assert!(native_llama_health(&state).unwrap().running);
         assert!(stop_native_llama(&state).unwrap());
         assert!(!native_llama_status(&state).unwrap().running);

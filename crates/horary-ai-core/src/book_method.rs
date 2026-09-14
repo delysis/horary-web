@@ -196,6 +196,12 @@ pub fn apply(chart: &Value) -> Value {
     for mut body in bodies.clone() {
         let name = body["name"].as_str().unwrap_or("").to_owned();
         if !PLANETS.contains(&name.as_str()) {
+            if let Some(fields) = body.as_object_mut() {
+                // The traditional table does not assign dignity or peregrine
+                // status to outer planets. Discard legacy synthetic scores.
+                fields.remove("dignity");
+                fields.remove("accidentalDignity");
+            }
             normalized.push(body);
             continue;
         }
@@ -369,6 +375,14 @@ pub fn evidence(chart: &Value) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn outer_planets_do_not_inherit_synthetic_traditional_dignities() {
+        let result = apply(
+            &json!({"bodies":[{"name":"Uranus","sign":"Gemini","degree":6.,"house":12,"dignity":{"peregrine":true,"score":0}}]}),
+        );
+        assert!(result["bodies"][0].get("dignity").is_none());
+        assert_eq!(result["bodies"][0]["house"], 12);
+    }
     #[test]
     fn printed_table_boundaries_faces_and_water_sect() {
         assert_eq!(rulers(0, 13.99, true)[3].1, "Venus");
