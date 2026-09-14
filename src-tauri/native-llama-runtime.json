@@ -1,0 +1,65 @@
+{
+  "version": "2026-09-14",
+  "backendId": "llama-native-kit",
+  "preferred": true,
+  "status": "release-target",
+  "rustBinding": {
+    "crate": "llama-cpp-2",
+    "version": "0.1.154",
+    "cargoFeature": "native-llama",
+    "gpuFeatures": [
+      "native-llama-metal"
+    ]
+  },
+  "tauriBoundary": {
+    "frontendTransport": "tauri-ipc",
+    "frontendLoopbackHttp": false,
+    "streamTransport": "tauri-events"
+  },
+  "modelPolicy": {
+    "allowUserImportedGguf": true,
+    "requireRemoteCatalogModel": false,
+    "verifiedCatalogModelsMayBeEmpty": true
+  },
+  "capabilities": {
+    "inProcessWorker": true,
+    "continuousBatching": {
+      "enabled": false,
+      "defaultParallelSequences": 1,
+      "maxParallelSequences": 1,
+      "scheduler": "One native-kit controlled reading at a time"
+    },
+    "kvCache": {
+      "enabled": true,
+      "tiers": [
+        {
+          "id": "hot",
+          "medium": "native-kit memory cache",
+          "purpose": "resident model reuse; controlled reading prefix reuse is not promised"
+        }
+      ]
+    },
+    "speculativeDecoding": {
+      "enabledWhenDraftModelPresent": false,
+      "nativeWorkerActive": false,
+      "preferredType": "draft-mtp",
+      "defaultDraftTokens": 3,
+      "implementationStatus": "Not exposed by the pinned native-kit controlled generation API",
+      "supportedFamilies": []
+    },
+    "jsonConstrainedOutput": {
+      "required": true,
+      "fallbackValidation": "existing HoraryInterpretation schema validation"
+    }
+  },
+  "fallback": {
+    "backendId": "llama-server-sidecar",
+    "allowed": true,
+    "releaseBlocking": false,
+    "reason": "sidecar remains a development and compatibility fallback, not the primary native release gate"
+  },
+  "nativeKit": {
+    "repository": "https://github.com/delysis/native-platform.git",
+    "revision": "1d43858953938cb28e935de7c2f107eede69ddf9"
+  }
+}
