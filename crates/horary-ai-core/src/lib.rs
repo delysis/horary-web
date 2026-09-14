@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
 
 pub const INTERPRETATION_SCHEMA_VERSION: &str = "2026-07-03";
-pub const INTERPRETATION_PROMPT_VERSION: &str = "horary-interpretation-v6";
+pub const INTERPRETATION_PROMPT_VERSION: &str = "horary-interpretation-v7";
 pub const INTERPRETATION_TRADITION_PROFILE: &str = "traditional-horary-textbook-v1";
 pub const MAX_INTERPRETATION_TOKENS: u32 = 3072;
 pub const INTERPRETATION_TEMPERATURE: f32 = 0.0;
@@ -252,6 +252,8 @@ pub fn build_interpretation_prompt(
         "The actor-to-house suggestions in deterministicAssignments are provisional keyword hints, not expert decisions. Check them against the actual question; explain departures and ask for clarification when the actor or topic is ambiguous. The supplied house rulers and body placements are facts, not choices.".to_string(),
         "For chartEvidence fields, copy or semicolon-combine short phrases from chartEvidenceIndex.canonicalFacts or deterministicAssignments.canonicalEvidence. Never cite raw JSON, a label alone, or an invented body placement.".to_string(),
         traditional_horary_doctrine().to_string(),
+        "Timing: astronomical hours until an aspect are NOT the event's predicted time. If you give hours, days, weeks, months or years, include a timing_pass explaining the supplied distance to perfection, the plausible unit range, and why sign, house and volition select that unit. Otherwise omit the forecast and say timing is not established. A small display orb alone does not mean soon.".to_string(),
+        "Lost objects (Frawley pp. 146-149): compare rulers of the 2nd and 4th for the querent's inanimate object; choose the better description and keep one primary location significator. For another person's object use their turned 2nd. The Moon may represent the lost object when applying to Lord 1 for recovery, or the querent when applying to the object's lord: explicitly name its role in that testimony. Do not confuse this role switch with two querent significators meeting. Detriment or fall does not automatically mean the object is damaged. Location symbols are possibilities to test against the actual surroundings, not known rooms or facts.".to_string(),
         "Follow the supplied judgementPlan step by step and include a compact judgementTrace showing the decisive steps.".to_string(),
         "The judgementTrace is an audit trail: each item must name a stepId, a finding, concrete chartEvidence, and confidence. A finding must explain what the step found in a short sentence; never repeat its stepId or merely name a stage.".to_string(),
         "Tie every key factor to a concrete chart fact.".to_string(),
@@ -1270,6 +1272,16 @@ fn extract_json_object(content: &str) -> Result<&str, AiError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn recovery_prompt_preserves_moons_object_role_and_requires_timing_reasoning() {
+        let prompt = build_interpretation_prompt(&sample_request("Where is my lost ring?"))
+            .expect("valid chart prompt");
+        let instructions = &prompt.messages[0].content;
+        assert!(instructions.contains("Moon may represent the lost object"));
+        assert!(instructions.contains("compare rulers of the 2nd and 4th"));
+        assert!(instructions.contains("include a timing_pass"));
+        assert!(instructions.contains("A small display orb alone does not mean soon"));
+    }
     #[test]
     fn house_hints_match_words_not_substrings() {
         for question in [

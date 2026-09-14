@@ -15,7 +15,7 @@ Working implementation checked against John Frawley, *The Horary Textbook* (2005
 | Void Moon and long gaps | 65–66 | Strict no-contact-before-exit status plus a separate review flag for a gap of roughly 15 degrees or more. The latter is contextual, not an automatic veto. |
 | Aspects and occasions | 84–100 | Display aspects retain their orb policy. Future candidates use all major crossings across hourly samples without a starting-orb filter. Sign changes are recorded. |
 | Timing | 127–136 | Interpolated astronomical hours are identified as estimates; they are not converted mechanically to symbolic dates. |
-| Lost objects | 146–155 | Distinguish location from recovery; a void Moon is not a veto on identifying a location. |
+| Lost objects | 146–156 | Compare Lords 2 and 4 for the querent's inanimate object; another owner's object uses the turned 2nd. Keep one main location significator. The Moon may signify the lost object applying to Lord 1 for recovery; name its role explicitly. Debility does not automatically mean damage. A void Moon is not a veto on identifying a location. |
 
 ## Regression evidence
 

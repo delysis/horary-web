@@ -14,6 +14,8 @@ Choose **Set up a local reading**, then **Set up local model**. The desktop app 
 
 **Pause setup** retains downloaded bytes, and **Resume model setup** continues. Already cached verified files work without a network connection. Once installed, **Read chart** produces an offline reading. You can cancel it; changing its question or chart clears the previous result. Advanced local GGUF import remains available in the reading setup details.
 
+A full chart can take several minutes to read on the tested machine. The interface remains usable during generation; **Cancel** stops the attempt. A completed reading still needs astrological review, including the Moon's role and the basis for any timing forecast.
+
 The reading interface currently accepts text and calculated chart facts. It does not yet accept image/audio attachments or use speculative decoding. A browser build uses a separate, optional local LiteRT model path; the packaged desktop application is the review target.
 
 ## Inspect and take notes

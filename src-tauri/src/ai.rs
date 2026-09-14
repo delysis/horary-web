@@ -1228,6 +1228,15 @@ mod horary_reading_eval_tests {
     fn reading_fixtures() -> Vec<ReadingFixture> {
         vec![
             ReadingFixture {
+                id: "london-recovery",
+                question: "Where is the lost ring, and will I recover it?",
+                chart: serde_json::from_str(include_str!(
+                    "../test-fixtures/london-recovery-chart.json"
+                ))
+                .unwrap(),
+                settings: eval_settings(),
+            },
+            ReadingFixture {
                 id: "full-london-chart",
                 question: "Where is the lost ring?",
                 chart: serde_json::from_str(include_str!(

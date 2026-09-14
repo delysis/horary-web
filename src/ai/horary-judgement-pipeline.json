@@ -434,7 +434,8 @@
         "Cardinal signs indicate the shortest unit, mutable signs the middle unit, fixed signs the longest unit.",
         "For natural processes, cadent houses are fastest, succedent middle, angular slowest. If the actor has volition, power, and reception to act, angular can be fast and cadent can be slow.",
         "Planetary speed adjusts the number of units a bit, not the type of unit. Double-bodied signs can make the number somewhat slower.",
-        "Do not use real-time ephemeris perfection as the event date except for specific long-range or named-date contexts."
+        "Do not use real-time ephemeris perfection as the event date except for specific long-range or named-date contexts.",
+        "A forecast in hours, days, weeks, months or years requires a reported timing step with distance, plausible units, sign/house and volition. Otherwise leave timing unestablished; a small display orb alone does not mean soon."
       ],
       "outputKeys": [
         "timingTestimony",
@@ -561,7 +562,7 @@
       "id": "lost_object",
       "trigger": "Lost, missing, stolen, strayed, where is it, will I recover it.",
       "primaryHouses": [
-        "2nd for querent's movable possession",
+        "Compare 2nd and 4th rulers for the querent's inanimate possession; choose the better description",
         "6th for small animals",
         "12th for large animals",
         "Turned 2nd or animal house when the missing thing belongs to someone else"
@@ -573,14 +574,22 @@
       "checks": [
         "Use house placement, sign, direction, and condition for location and state.",
         "Combust significator can show hidden or unseen object; recovery timing may use real time when it leaves combustion if other recovery testimony supports it.",
-        "Retrograde significator can support return."
+        "Retrograde significator can support return.",
+        "Keep one main location significator. The Moon can represent the lost object applying to Lord 1 for recovery, or the querent applying to the object's lord; state the role explicitly.",
+        "Detriment or fall does not automatically mean damage. Location symbols need comparison with actual surroundings."
       ],
       "sourcePages": [
-        34,
-        60,
-        120,
-        137,
-        145
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        156
       ]
     },
     {

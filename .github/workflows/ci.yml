@@ -20,6 +20,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.95.0'
+          components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - run: cargo install wasm-pack --version 0.13.1 --locked
       - run: npm ci
@@ -63,6 +64,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.95.0'
+          components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - run: cargo install wasm-pack --version 0.13.1 --locked
       - name: Install Linux Tauri dependencies
