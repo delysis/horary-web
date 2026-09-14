@@ -306,6 +306,7 @@ fn request_current_location(_timeout_ms: u64) -> Result<CurrentLocation, Current
     })
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn validate_coordinate(
     value: f64,
     min: f64,

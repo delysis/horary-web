@@ -2,7 +2,7 @@
 
 ## Setup
 
-Install stable Rust, Node.js 22+, CMake and the platform-specific Tauri prerequisites. No Python environment is required.
+Install Rust 1.95.0 (the CI toolchain), Node.js 22+, CMake and the platform-specific Tauri prerequisites. No Python environment is required.
 
 ```bash
 rustup target add wasm32-unknown-unknown

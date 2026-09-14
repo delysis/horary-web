@@ -19,7 +19,7 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          toolchain: '1.95.0'
           targets: wasm32-unknown-unknown
       - run: cargo install wasm-pack --version 0.13.1 --locked
       - run: npm ci
@@ -62,7 +62,7 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          toolchain: '1.95.0'
           targets: wasm32-unknown-unknown
       - run: cargo install wasm-pack --version 0.13.1 --locked
       - name: Install Linux Tauri dependencies
