@@ -197,7 +197,7 @@ export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMod
   )
 
   return (
-    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label="Horary chart wheel; exact positions are available in Chart tables" style={{ display: 'block', margin: '0 auto', maxWidth: '100%', height: 'auto' }}>
+    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label="Horary chart wheel; ask about any position" style={{ display: 'block', margin: '0 auto', maxWidth: '100%', height: 'auto' }}>
       {/* Ring fills */}
       <circle cx={CX} cy={CY} r={R_OUTER} fill={t.ringOuter} />
       <circle cx={CX} cy={CY} r={R_SIGN_INNER} fill={t.ringSign} />

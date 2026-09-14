@@ -12,5 +12,5 @@ it('scales the complete chart coordinate system at narrow widths', () => {
   const svg = container.querySelector('svg')!
   expect(svg.getAttribute('viewBox')).toBe('0 0 520 520')
   expect(svg.style.maxWidth).toBe('100%')
-  expect(svg.getAttribute('aria-label')).toContain('Chart tables')
+  expect(svg.getAttribute('aria-label')).toContain('ask about any position')
 })

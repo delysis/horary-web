@@ -1285,6 +1285,7 @@ mod horary_reading_eval_tests {
         })
     }
 
+    #[allow(clippy::too_many_arguments)] // Explicit independent fields in reading fixtures.
     fn base_chart(
         cast_utc: &str,
         asc_sign: &str,
@@ -1626,6 +1627,7 @@ mod horary_reading_eval_tests {
         chart
     }
 
+    #[allow(clippy::too_many_arguments)] // Explicit independent fields in planetary fixtures.
     fn body(
         name: &str,
         sign: &str,

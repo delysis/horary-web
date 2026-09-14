@@ -112,6 +112,13 @@ enum Action {
 }
 
 fn schema(session: &Session) -> String {
+    let turn_calls: Vec<&str> = session
+        .audit
+        .iter()
+        .rev()
+        .take_while(|entry| entry["event"] != "user_turn")
+        .filter_map(|entry| entry["call"]["action"].as_str())
+        .collect();
     let text = |max| json!({"type":"string","maxLength":max});
     let variant = |name: &str, fields: Vec<(&str, Value)>| {
         let mut props = serde_json::Map::new();
@@ -126,8 +133,10 @@ fn schema(session: &Session) -> String {
     let mut actions = vec![
         variant("say", vec![("message", text(1200))]),
         variant("find_place", vec![("query", text(100))]),
-        variant("read_evidence", vec![]),
     ];
+    if !turn_calls.contains(&"read_evidence") {
+        actions.push(variant("read_evidence", vec![]));
+    }
     // A conversational turn should leave room for the person's next thought.
     // The model cannot wander through more tools after two new passages.
     if session
@@ -136,6 +145,11 @@ fn schema(session: &Session) -> String {
         .filter(|s| s.after_message == session.messages.len())
         .count()
         >= 2
+        || turn_calls
+            .iter()
+            .filter(|action| **action == "write_scroll")
+            .count()
+            >= 2
     {
         return json!({"oneOf":[variant("say",vec![("message",text(700))])]}).to_string();
     }
@@ -146,6 +160,7 @@ fn schema(session: &Session) -> String {
         .map(|p| p.id.as_str())
         .collect();
     if !ids.is_empty()
+        && !turn_calls.contains(&"cast_chart")
         && (session.chart.is_none() || session.chart_after_message != session.messages.len())
     {
         actions.push(variant(
@@ -529,6 +544,41 @@ fn conversation_prompt(session: &Session, results: &[Value]) -> String {
     json!(messages).to_string()
 }
 
+// A failed inference has performed no tools. Recover once from the pinned
+// runtime's non-text-token decoding failure, keeping the same constrained
+// schema and prompt. Never replay an executed action or retry cancellation.
+fn generate_action(
+    cancelled: &AtomicBool,
+    audit: &mut Vec<Value>,
+    mut generate: impl FnMut(f32) -> Result<String, String>,
+) -> Result<Action, String> {
+    let mut temperature = 0.2;
+    for attempt in 0..2 {
+        if cancelled.load(Ordering::Acquire) {
+            return Err("Judgement cancelled.".into());
+        }
+        match generate(temperature) {
+            Ok(content) => {
+                if cancelled.load(Ordering::Acquire) {
+                    return Err("Judgement cancelled.".into());
+                }
+                return serde_json::from_str(&content)
+                    .map_err(|e| format!("The reader returned an incomplete action: {e}"));
+            }
+            Err(error)
+                if attempt == 0
+                    && error.contains("failed to decode controlled token: Unknown Token Type")
+                    && !cancelled.load(Ordering::Acquire) =>
+            {
+                audit.push(json!({"generation_retry":error,"selector":"greedy","attempt":2}));
+                temperature = 0.;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("the second attempt always returns")
+}
+
 fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
     let state = app.state::<ConversationState>();
     if state
@@ -579,21 +629,23 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
             session.status = "Considering your question…".into();
             state.publish(&mut session, &dir)?;
             let prompt = conversation_prompt(&session, &results);
-            let answer = generate_native(
-                &native,
-                prompt,
-                NativeGenerateOptions {
-                    max_tokens: 800,
-                    temperature: 0.2,
-                    response_schema: Some(schema(&session)),
-                    cancel: Some(state.cancelled.clone()),
-                    ..Default::default()
-                },
-            )
-            .map_err(|e| e.message)?;
+            let action_schema = schema(&session);
+            let action = generate_action(&state.cancelled, &mut session.audit, |temperature| {
+                generate_native(
+                    &native,
+                    prompt.clone(),
+                    NativeGenerateOptions {
+                        max_tokens: 800,
+                        temperature,
+                        response_schema: Some(action_schema.clone()),
+                        cancel: Some(state.cancelled.clone()),
+                        ..Default::default()
+                    },
+                )
+                .map(|answer| answer.content)
+                .map_err(|e| e.message)
+            })?;
             state.check()?;
-            let action: Action = serde_json::from_str(&answer.content)
-                .map_err(|e| format!("The reader returned an incomplete action: {e}"))?;
             if let Action::Say { message } = action {
                 if message.trim().is_empty() {
                     return Err("The reader returned an empty reply. Please try again.".into());
@@ -661,6 +713,76 @@ pub fn conversation_cancel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn token_decode_recovery_is_bounded_and_never_retries_cancellation() {
+        let failure = "decode_failed: failed to decode controlled token: Unknown Token Type";
+        let cancelled = AtomicBool::new(false);
+        let mut audit = Vec::new();
+        let mut temperatures = Vec::new();
+        let action = generate_action(&cancelled, &mut audit, |temperature| {
+            temperatures.push(temperature);
+            if temperatures.len() == 1 {
+                Err(failure.into())
+            } else {
+                Ok(r#"{"action":"say","message":"A short passage."}"#.into())
+            }
+        })
+        .unwrap();
+        assert!(matches!(action, Action::Say { .. }));
+        assert_eq!(temperatures, [0.2, 0.]);
+        assert_eq!(audit.len(), 1);
+        let mut calls = 0;
+        assert!(generate_action(&cancelled, &mut audit, |_| {
+            calls += 1;
+            Err(failure.into())
+        })
+        .is_err());
+        assert_eq!(calls, 2);
+        calls = 0;
+        assert!(generate_action(&cancelled, &mut audit, |_| {
+            calls += 1;
+            cancelled.store(true, Ordering::Release);
+            Err(failure.into())
+        })
+        .is_err());
+        assert_eq!(calls, 1);
+        cancelled.store(false, Ordering::Release);
+        calls = 0;
+        assert!(generate_action(&cancelled, &mut audit, |_| {
+            calls += 1;
+            Err("The model is unavailable.".into())
+        })
+        .is_err());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn revising_the_same_passage_still_returns_control_to_the_person() {
+        let mut session = Session::default();
+        session.audit.push(json!({"event":"user_turn"}));
+        session
+            .audit
+            .push(json!({"call":{"action":"write_scroll"},"result":{"written":true}}));
+        session
+            .audit
+            .push(json!({"call":{"action":"write_scroll"},"result":{"written":true}}));
+        let actions: Value = serde_json::from_str(&schema(&session)).unwrap();
+        assert_eq!(actions["oneOf"].as_array().unwrap().len(), 1);
+        assert_eq!(actions["oneOf"][0]["properties"]["action"]["const"], "say");
+        session.audit.push(json!({"event":"user_turn"}));
+        let next: Value = serde_json::from_str(&schema(&session)).unwrap();
+        assert!(next["oneOf"].as_array().unwrap().len() > 1);
+        session
+            .audit
+            .push(json!({"call":{"action":"read_evidence"}}));
+        let read: Value = serde_json::from_str(&schema(&session)).unwrap();
+        assert!(!read["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["properties"]["action"]["const"] == "read_evidence"));
+    }
+
     #[test]
     fn document_prose_does_not_repeat_model_markdown_headings() {
         assert_eq!(

@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn silence_and_accidental_taps_do_not_become_transcripts() {
         assert!(!super::has_sound(&vec![0; 32044]));
-        assert!(!super::has_sound(&vec![255; 100]));
+        assert!(!super::has_sound(&[255; 100]));
         let mut wav = vec![0; 44];
         for _ in 0..16000 {
             wav.extend_from_slice(&1000_i16.to_le_bytes());
