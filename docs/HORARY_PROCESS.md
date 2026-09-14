@@ -1,3 +1,5 @@
+> The active interface is now the single-document conversation prototype. See [conversation architecture](CONVERSATION.md). Earlier form-based interaction/validation descriptions below are historical and do not establish acceptance of the new conversation or audio path.
+
 # Reading process
 
 The working authority is John Frawley, *The Horary Textbook* (2005). The private OCR was checked against the source; neither the OCR nor the book is distributed. References in the app are printed pages. In the reviewed scan, PDF page = printed page + 9.

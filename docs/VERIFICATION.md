@@ -1,3 +1,15 @@
+## Single-document prototype — September 14
+
+The new document has no buttons, branding, settings, chart forms or technical progress messages. Browser inspection confirmed system dark appearance. Component checks cover the empty document, inline chart/testimony, explicit corrections, duplicate submission prevention, delivery failure, and preserving a new thought during a pending reply. Current local checks: 70 React tests, 199 JavaScript tests, 30 shared Rust core tests, 95 native tests (one separate hardware test ignored by default), TypeScript/build, ESLint, Clippy with warnings denied, and the release-asset gate.
+
+A real Gemma/projector/native-kit run transcribed a generated local WAV as “I am in London, where is my lost ring?” No microphone recording of the user was taken. Native microphone capture is wired and its bounded recorder tests pass; permission/device capture and a complete spoken interaction still need direct acceptance. macOS speech output uses its installed voice.
+
+Live tool evaluation caught and corrected three issues: invented place IDs (now sampler-bound to returned IDs), confusing loss time with the question-understanding moment (proper conversation messages and explicit current-step instructions), and qualified city names failing in the old picker geocoder (country-aware offline lookup). The completed hardware run resolved London, cast the chart using the current-question moment, wrote two passages and returned a final conversational reply (528.46 seconds). It also redundantly requested the unchanged chart and emitted repeated Markdown headings. The subsequent sampler now disallows recasting within the same user turn, hands control back after two new passages, and bounds each passage to 900 characters; prose cleanup removes repeated headings. Those later refinements have regressions and still need a fresh visible native check. Do not treat audio transcription or valid tool syntax as certification of astrological judgment.
+
+Restoring and correcting readings preserves prior versions; new questions get a new moment. A monotonic snapshot ID prevents stale UI polling from replacing newer content. Silence/accidental capture is rejected before generative transcription. Existing charts and notes remain untouched.
+
+> The active interface is now the single-document conversation prototype. See [conversation architecture](CONVERSATION.md). Earlier form-based interaction/validation descriptions below are historical and do not establish acceptance of the new conversation or audio path.
+
 # Verification record — 2026-09-14
 
 This is a development review handoff, not Eileen's approval of the astrology or a signed public release.

@@ -1,37 +1,31 @@
 # Architecture
 
-Horary uses a React view inside a Tauri 2 desktop application. The shared Rust crate is `crates/horary-ai-core`; its WebAssembly exports are built for browser/webview use and Node-based regression tests. There is no Python build or runtime dependency in the supported CPU/Metal application paths. The pinned CPU/Metal binding builds the native libraries without Python tooling.
+The current prototype is one unfolding document, rendered by React inside Tauri. `src/App.tsx` renders conversational passages and inserts charts and testimony at the moment they enter the reading. It has no branding, settings, buttons, or chart forms. Light/dark appearance follows the system. Editable earlier user passages propose explicit corrections rather than silently rewriting the record.
 
-## Chart authority
+## Native authority
 
-`src/App.tsx` resolves the entered civil time and IANA timezone through Rust (`chart_input.rs`) into a single UTC instant. The same module validates DMS components and performs calendar nudges without the host machine’s timezone affecting them.
+`src-tauri/src/conversation.rs` owns conversation persistence, model preparation and a bounded eight-action tool loop. The model speaks or chooses schema-constrained tools for offline place lookup, chart calculation, writing/replacing a reading section, inspecting evidence and restoring an earlier reading. No arbitrary command, path, network, or model-supplied ephemeris tool exists. Places must be resolved to IDs by the native geocoder. IANA/DST conversion and the chart calculation execute in safe Rust.
 
-`src/chartCalc.ts` adapts `src/astro/chart.js` to Eileen’s existing chart wheel and tables. That result also feeds `src/ai/chartFacts.js`. The previous separate display calculation and fallback AI chart are no longer used by the app. The active display aspect policy is five major aspects with a five-degree orb. Rust applies the source-specific method rules and independently brackets upcoming contacts from seven days of hourly ephemeris samples. The method inspector identifies sign changes and estimated timing. Other legacy standalone UI modules remain outside the React entrypoint.
+`crates/horary-ai-core/src/astronomy.rs` contains the inherited approximate ephemeris for the seven classical planets and Regiomontanus houses. Committed parity fixtures compare its positions/cusps with the existing calculator at three dates and locations. The corrected `book_method.rs` owns dignity, reception, solar conditions and cusp treatment. `events.rs` derives future event brackets from hourly samples. These approximations are not certified professional ephemerides or proof of every traditional event doctrine.
 
-The astronomical engine is approximate. The committed golden fixtures cover positions, house cusps, aspect phase, and motion edges at their recorded tolerances. The largest planetary tolerances are unsuitable for treating sign-boundary or exact-timing results as professionally certified; Eileen should compare such cases with her trusted ephemeris.
+The same calculated chart feeds the document and model evidence. Chart/question changes clear the current testimony and archive its previous version. Tool calls and outcomes are retained. Reading sections point to current evidence IDs. Restoring an earlier reading preserves the version being left. Atomic session snapshots have monotonic IDs so late UI responses cannot replace newer work.
 
-## Interpretation
+`conversation_prompt.txt` and `conversation_method.txt` are inspectable policy. The latter paraphrases the book and retains specific exceptions and limits. The private OCR is not distributed. Evidence pointers prove that a source was available, not that the model used it correctly.
 
-`judgementEngine.ts` owns one active reading, cancellation, model setup, and cleanup. The desktop adapter uses Tauri IPC and filters events by generation ID, including events received before the start reply. The browser adapter uses a user-selected local LiteRT model and same-origin bundled runtime assets. It never selects a hosted inference fallback.
+## Audio and inference
 
-The Rust core owns prompt construction, provisional question/house hints, schema parsing, and risk checks. Tauri calls the same native crate; browser execution uses its WASM exports. Versioned prompt metadata and output limits are included in review evidence.
+`microphone_capture.rs`, adapted from pinned native-platform code, owns CPAL microphone capture on a joined thread with bounded queues/memory. `voice.rs` passes a stopped WAV to Gemma through native-kit's media API, then returns the transcript as a visible conversation turn. Raw audio is held only in memory. Holding the document's speech invitation or Space starts capture; release finishes. Escape cancels. macOS spoken replies use the installed system speech utility without a shell or remote voice. Other platforms currently retain text replies.
 
-Native inference is enabled by default through the pinned native-kit host and engine. The kit selects CPU/Metal by platform. Horary keeps one model resident and uses its own chat template with native schema-constrained sampling. Prompt caches remain memory-only; constrained readings do not promise prefix reuse. The API does not expose speculative decoding. Model/projector artifacts are distinct, and only full models appear in the picker. The old sidecar remains an explicit compatibility path for builds without native inference.
+`native_llama_worker.rs` adapts pinned native-kit host/engine/types. The host keeps one model resident, verifies the model and projector, selects the model's real chat template, and constrains tool actions at sampling time. Speech transcription uses native multimodal generation. Cancellation and shutdown join owned work. Prompt caching is memory-only; controlled generation does not promise prefix reuse. The pinned API does not expose speculative decoding.
 
-## Model acquisition
+## Acquisition and storage
 
-The native Rust module `hf_cache.rs` implements the narrow pinned-artifact subset of the [Hub cache protocol](https://huggingface.co/docs/hub/cache). It uses reqwest, SHA-256, OS file locks and atomic publication. No CLI or Python is invoked. Cache hits require no network. Interrupted downloads retain bytes, validate HTTP range responses, and verify the complete digest before publication. Cancellation also interrupts pending network reads. On Unix snapshots are relative symlinks; on Windows they are hardlinks, so no symlink privileges or duplicate weights are needed. Filesystems without hardlink support produce an explicit error instead of silently copying weights.
+`hf_cache.rs` implements pinned immutable Hugging Face artifact acquisition with reqwest, SHA-256, OS blob locks, resumable partial files and atomic publication. It honors shared Hub cache variables and leaves refs/main untouched. Unix snapshots use relative symlinks, Windows uses hardlinks. Only a tiny cache registration is stored in app data. Model files are not copied into a second app cache.
 
-The app registers the cache location only after both model and projector pass verification; it loads blobs directly and verifies them again on model startup. Source revisions and hashes are in `src-tauri/model-manifest.json`. See [the model provenance record](MODEL_PROVENANCE.md).
+First conversation prepares the local reader automatically; its technical progress remains off the document. Stop can cancel acquisition or inference. The session is atomically saved as `conversation.json` in native app data, including messages, current chart, previous revisions and tool receipts. Existing legacy charts and notes are preserved.
 
-## Review interface
-
-`MethodReview.tsx` displays the checked-in process instructions, provisional house suggestions, and any corresponding model-reported steps. The current runtime sends this scaffold in one model call; the future multi-call plan is not presented as implemented.
-
-`ReviewNotes.tsx` captures a frozen question/chart/reading/method-step context. Rust validates stored review records before appending to them. Failed writes keep the draft visible and leave existing records intact. Export uses an OS Save dialog and atomic Rust file writing on desktop, and a local JSON download in the browser. Neither uploads data.
+The browser serves a visual preview. Legacy calculator/AI components remain in the repository for regression coverage, but are not the new entry point. The app has no hosted inference fallback, analytics or automatic sharing. All supported development and runtime paths require no Python.
 
 ## Packaging
 
-macOS builds target 11.0 or newer. Tauri’s packaged CSP permits the shared WASM module, same-origin assets, and IPC. The only added frontend capability is opening the native model chooser. Browser LiteRT binaries are excluded from native build output.
-
-Desktop CI builds the actual native backend through the pinned native-kit dependency and attaches reviewer artifacts. Signed/notarized distribution and model redistribution are separate release work, not represented as complete by a review artifact.
+macOS builds target 11.0 or newer. The microphone purpose is declared in Info.plist. Linux microphone builds require ALSA headers. CI builds the native backend on macOS, Windows and Linux; unsigned reviewer artifacts are separate from signing/notarization and product acceptance. See [verification](VERIFICATION.md).

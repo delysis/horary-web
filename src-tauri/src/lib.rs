@@ -40,15 +40,18 @@ use storage::{
 use tauri::Manager;
 
 mod ai;
+mod conversation;
 mod geocode;
 mod hf_cache;
 mod inference;
 mod llama;
+mod microphone_capture;
 mod model_manifest;
 mod native_llama;
 mod native_llama_worker;
 mod native_location;
 mod storage;
+mod voice;
 
 #[cfg(target_os = "macos")]
 const QUIT_MENU_ID: &str = "horary.quit";
@@ -382,6 +385,11 @@ fn cancel_interpretation_stream(
 }
 
 fn stop_inference_workers(app: &tauri::AppHandle) {
+    app.state::<conversation::ConversationState>()
+        .cancelled
+        .store(true, std::sync::atomic::Ordering::Release);
+    app.state::<hf_cache::AcquisitionState>().0.cancel();
+    app.state::<voice::VoiceState>().shutdown();
     let llama_state = app.state::<LlamaState>();
     let native_state = app.state::<NativeLlamaState>();
     if let Err(error) = stop_native_llama(&native_state) {
@@ -486,6 +494,8 @@ pub fn run() {
         .manage(hf_cache::AcquisitionState::default())
         .manage(NativeLlamaState::default())
         .manage(AiGenerationState::default())
+        .manage(conversation::ConversationState::default())
+        .manage(voice::VoiceState::default())
         .manage(GeocodeState::default())
         .manage(CurrentLocationDetectionState::default())
         .setup(|app| {
@@ -511,6 +521,14 @@ pub fn run() {
 
     builder
         .invoke_handler(tauri::generate_handler![
+            conversation::conversation_snapshot,
+            conversation::conversation_send,
+            conversation::conversation_cancel,
+            voice::voice_start,
+            voice::voice_finish,
+            voice::voice_cancel,
+            voice::voice_speak,
+            voice::voice_stop_speaking,
             review_export::export_review,
             get_app_info,
             save_chart,

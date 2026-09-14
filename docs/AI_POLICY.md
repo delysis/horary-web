@@ -1,3 +1,5 @@
+> The active interface is now the single-document conversation prototype. See [conversation architecture](CONVERSATION.md). Earlier form-based interaction/validation descriptions below are historical and do not establish acceptance of the new conversation or audio path.
+
 # Interpretation and review policy
 
 The model interprets a supplied chart. It must not calculate planetary positions, houses, aspects, dignities, or event timing. The visible chart and the interpretation facts now originate from the same calculation.

@@ -1,29 +1,13 @@
-# Reviewing Horary
+# Reviewing Horary with Eileen
 
-This version is a working application of John Frawley's *The Horary Textbook* (2005), intended for Eileen's assessment and correction. The model's reading is a proposal; Eileen remains the astrology authority.
+Open the native Horary app and tell it what you want to know. Use the microphone or type. There are no settings to configure and no chart form to complete. The first conversation prepares the local model; an empty machine downloads roughly 7.15 GB into the shared Hugging Face cache, without Python, a CLI, an account, or a duplicate app copy.
 
-## Cast a chart
+The app should ask natural questions when it needs context. The chart and the reading appear on a scroll as the conversation develops. Ask “Why did you choose that house?”, “What does the book say?”, or “What would change if this belonged to my sister?” Ask to revisit an earlier reading; the version being left is preserved. Earlier user passages can be edited to propose corrections.
 
-Enter the question and choose the astrologer's location from the offline city list. Use the place and moment at which the astrologer understands the question. **Chart settings → Set a particular moment** lets you enter a historical chart. Check the timezone; repeated civil times require a first/second occurrence, and nonexistent times are rejected.
+Hold the speech invitation on the page, or focus the page and hold Space. Release when finished. The recording is processed locally by the model. Its transcript appears in the conversation; correct a mishearing in your next turn. Spoken replies currently use the installed macOS voice. Text remains available throughout. Stop interrupts a reply or pauses model acquisition without discarding already completed work.
 
-**Cast chart** records the current moment for the calculator. **Explore this moment** moves the chart by minutes, hours, days, weeks, months or years; **Original moment** returns to the cast. The wheel and tables use the same underlying calculation as the reading. Display aspects and upcoming astronomical contacts are separate: display orbs do not limit the event search.
+Please keep your own notes about what feels right, what misrepresents your process, what it assumes, and where it asks an unnecessary question. The most useful examples include the question, the relevant response, and your preferred reasoning. You do not need to fill in a bug-report form.
 
-## Read locally
+Useful review cases: a lost object (your own versus someone else's); an ordinary job question; an ambiguous city; a historical chart; correcting ownership after a reading has started; asking for the exact testimony behind an answer. An answer that sounds convincing still needs your judgment. A valid evidence reference does not make an interpretation correct.
 
-Choose **Set up a local reading**, then **Set up local model**. The desktop app downloads Google's Gemma 4 12B IT QAT and its matching projector into the shared Hugging Face cache. No account, terminal, CLI, Python environment, or pre-existing weights are needed. Setup uses up to 7.15 GB of storage; 24 GB or more memory is recommended. Lower-memory machines may not fit the model and context.
-
-**Pause setup** retains downloaded bytes, and **Resume model setup** continues. Already cached verified files work without a network connection. Once installed, **Read chart** produces an offline reading. You can cancel it; changing its question or chart clears the previous result. Advanced local GGUF import remains available in the reading setup details.
-
-A full chart can take several minutes to read on the tested machine. The interface remains usable during generation; **Cancel** stops the attempt. A completed reading still needs astrological review, including the Moon's role and the basis for any timing forecast.
-
-The reading interface currently accepts text and calculated chart facts. It does not yet accept image/audio attachments or use speculative decoding. A browser build uses a separate, optional local LiteRT model path; the packaged desktop application is the review target.
-
-## Inspect and take notes
-
-Open **The method & evidence** below the chart. Each step shows its purpose, printed book references, instruction, and any finding reported by the model. **Calculated chart evidence** exposes named dignities, directed receptions, adjusted house placements, and upcoming contact estimates. The model reports selected steps from one call; it is not an independent verifier.
-
-Use whatever note-taking method suits you. **Export this reading for review** preserves the question, chart, model response, method and app version in a local JSON file that can accompany your notes. **My review notes** is an optional built-in notebook; it captures the chart and reading when you begin a note. Nothing is sent automatically.
-
-Useful first comparisons are a familiar chart, a turned-house question, a case where dignity and reception differ, a near-cusp planet, a void or long-gap Moon, and a case involving translation or prevention. Note unclear language and missing controls as well as astrology corrections.
-
-Review builds are unsigned development artifacts. They are not yet signed/notarized public releases. See [verification](VERIFICATION.md) for the actual checks and unresolved boundaries of this build.
+The app saves this conversation and earlier chart revisions locally. The legacy review notes are preserved. This development build is not a signed public release, and native voice and conversational quality need direct acceptance. See [the conversation design](CONVERSATION.md) and [verification record](VERIFICATION.md).

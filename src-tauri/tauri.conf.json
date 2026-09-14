@@ -42,6 +42,9 @@
     "macOS": {
       "minimumSystemVersion": "11.0",
       "infoPlist": "Info.plist"
+    },
+    "resources": {
+      "../docs/NATIVE_AUDIO_LICENSE.txt": "licenses/native-audio.txt"
     }
   }
 }

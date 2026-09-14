@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 
+pub mod astronomy;
 pub mod book_method;
 pub mod chart_input;
+mod ephemeris_coefficients;
 pub mod events;
 pub mod review;
 

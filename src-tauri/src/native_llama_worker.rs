@@ -35,6 +35,7 @@ pub struct NativeLlamaHealth {
 
 #[derive(Debug, Clone)]
 pub struct NativeGenerateOptions {
+    pub audio: Option<Vec<u8>>,
     pub max_tokens: u32,
     pub temperature: f32,
     pub top_p: f32,
@@ -47,6 +48,7 @@ pub struct NativeGenerateOptions {
 impl Default for NativeGenerateOptions {
     fn default() -> Self {
         Self {
+            audio: None,
             max_tokens: 256,
             temperature: 0.2,
             top_p: 1.0,
@@ -332,7 +334,20 @@ mod imp {
                 seed: options.seed,
                 ..Default::default()
             },
-            media: Vec::new(),
+            media: options
+                .audio
+                .as_ref()
+                .map(|bytes| {
+                    use sha2::{Digest, Sha256};
+                    vec![llama_native_types::MediaInput {
+                        id: "spoken-question".into(),
+                        kind: llama_native_types::MediaKind::Audio,
+                        mime: "audio/wav".into(),
+                        sha256: format!("{:x}", Sha256::digest(bytes)),
+                        bytes: bytes.clone(),
+                    }]
+                })
+                .unwrap_or_default(),
             cached_prefix: None,
         };
         if options

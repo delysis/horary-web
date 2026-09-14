@@ -219,6 +219,7 @@ pub fn generate_interpretation_from_native_state(
         state,
         prompt_text,
         NativeGenerateOptions {
+            audio: None,
             max_tokens: MAX_INTERPRETATION_TOKENS,
             response_schema: Some(horary_ai_core::interpretation_schema().to_string()),
             temperature: INTERPRETATION_TEMPERATURE,
@@ -300,6 +301,7 @@ pub fn start_interpretation_stream_from_native_state(
                         &native_state,
                         prompt_text,
                         NativeGenerateOptions {
+                            audio: None,
                             max_tokens: MAX_INTERPRETATION_TOKENS,
                             response_schema: Some(
                                 horary_ai_core::interpretation_schema().to_string(),
@@ -829,6 +831,7 @@ mod horary_reading_eval_tests {
                 &state,
                 prompt_text,
                 NativeGenerateOptions {
+                    audio: None,
                     max_tokens: MAX_INTERPRETATION_TOKENS,
                     response_schema: Some(horary_ai_core::interpretation_schema().to_string()),
                     temperature: INTERPRETATION_TEMPERATURE,

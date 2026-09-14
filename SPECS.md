@@ -1,3 +1,5 @@
+> The active interface is now the single-document conversation prototype. See [conversation architecture](docs/CONVERSATION.md). Earlier form-based interaction/validation descriptions below are historical and do not establish acceptance of the new conversation or audio path.
+
 # Horary review build specification
 
 Horary is a native Rust/Tauri app with a React chart interface; the same interface can run as a browser calculator. Eileen's interpretation method remains provisional and is explicitly available for correction in the The method & evidence.

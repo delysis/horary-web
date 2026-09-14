@@ -84,7 +84,7 @@ pub struct ReverseGeocodeRequest {
     pub max_distance_km: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct LocationCandidate {
     pub id: String,
@@ -297,14 +297,43 @@ fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate
 }
 
 fn search_city_records(query: &str, limit: usize) -> GeocodeResult<Vec<LocationCandidate>> {
+    // Natural conversations include countries; the original picker only sent
+    // city names. Keep the country constraint rather than silently discarding it.
+    let countries: HashMap<String, String> =
+        serde_json::from_str(include_str!("../../src/data/country_names.json"))?;
+    let mut aliases: Vec<(String, String)> = countries
+        .iter()
+        .flat_map(|(code, name)| {
+            [
+                (normalize_location_text(name), code.clone()),
+                (code.to_lowercase(), code.clone()),
+            ]
+        })
+        .collect();
+    aliases.extend([
+        ("uk".into(), "GB".into()),
+        ("great britain".into(), "GB".into()),
+        ("usa".into(), "US".into()),
+    ]);
+    aliases.sort_by_key(|entry| std::cmp::Reverse(entry.0.len()));
+    let qualified = aliases.iter().find_map(|(name, code)| {
+        query
+            .strip_suffix(&format!(" {name}"))
+            .filter(|city| !city.is_empty())
+            .map(|city| (city, code.as_str()))
+    });
+    let (city_query, country) = qualified.map_or((query, None), |(city, code)| (city, Some(code)));
     let mut matches: Vec<&CityRecord> = city_records()?
         .iter()
-        .filter(|city| city.name.to_lowercase().contains(query))
+        .filter(|city| {
+            city.name.to_lowercase().contains(city_query)
+                && country.is_none_or(|code| city.country == code)
+        })
         .collect();
 
     matches.sort_by(|a, b| {
-        city_match_rank(&a.name, query)
-            .cmp(&city_match_rank(&b.name, query))
+        city_match_rank(&a.name, city_query)
+            .cmp(&city_match_rank(&b.name, city_query))
             .then_with(|| a.name.cmp(&b.name))
     });
 
@@ -573,6 +602,22 @@ impl GeocodeCache {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn natural_city_country_queries_preserve_the_country() {
+        let state = super::GeocodeState::default();
+        for query in ["London, United Kingdom", "London, UK", "London, GB"] {
+            let places = super::geocode_with_cache(
+                &state,
+                super::GeocodeRequest {
+                    query: query.into(),
+                    limit: Some(5),
+                },
+            )
+            .unwrap();
+            assert!(!places.is_empty());
+            assert!(places.iter().all(|place| place.country == "GB"));
+        }
+    }
     use super::*;
 
     #[test]
