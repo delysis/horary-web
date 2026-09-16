@@ -159,7 +159,7 @@ function layoutPlanets(nameAnglePairs: [string, number][], obstacles: Box[] = []
 }
 
 const DARK_THEME = {
-  ringOuter: '#1a1a2e', ringSign: '#16213e', ringHouse: '#0d1b2a', ringInner: '#242424',
+  ringOuter: '#273537', ringSign: '#222e30', ringHouse: '#1c272a', ringInner: '#192225',
   stroke: 'rgba(255,255,255,0.2)', strokeAngle: 'rgba(255,255,255,0.5)',
   signGlyph: 'rgba(255,255,255,0.6)',
   houseNum: 'rgba(255,255,255,0.45)',
@@ -171,7 +171,7 @@ const DARK_THEME = {
 }
 
 const LIGHT_THEME = {
-  ringOuter: '#c8cce0', ringSign: '#d8dcee', ringHouse: '#e4e8f4', ringInner: '#f0f0f8',
+  ringOuter: '#e4e6da', ringSign: '#edf0e5', ringHouse: '#f6f5ee', ringInner: '#faf8f3',
   stroke: 'rgba(0,0,0,0.15)', strokeAngle: 'rgba(0,0,0,0.35)',
   signGlyph: 'rgba(0,0,0,0.65)',
   houseNum: 'rgba(0,0,0,0.45)',
@@ -197,7 +197,7 @@ export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMod
   )
 
   return (
-    <svg width={SIZE} height={SIZE} style={{ display: 'block', margin: '0 auto' }}>
+    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} role="img" aria-label="Horary chart wheel; ask about any position" style={{ display: 'block', margin: '0 auto', maxWidth: '100%', height: 'auto' }}>
       {/* Ring fills */}
       <circle cx={CX} cy={CY} r={R_OUTER} fill={t.ringOuter} />
       <circle cx={CX} cy={CY} r={R_SIGN_INNER} fill={t.ringSign} />

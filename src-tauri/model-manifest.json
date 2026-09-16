@@ -1,0 +1,57 @@
+{
+  "version": "2026-09-14",
+  "updatedAt": "2026-09-14",
+  "notes": "Pinned Google instruction model and matching image/audio projector. Native-kit owns inference. No Python, CLI, hosted fallback, or app-owned copy of Hub weights.",
+  "models": [
+    {
+      "id": "gemma-4-12b-qat",
+      "displayName": "Gemma 4 12B QAT",
+      "format": "gguf",
+      "family": "gemma4",
+      "source": {
+        "type": "huggingface",
+        "repo": "google/gemma-4-12B-it-qat-q4_0-gguf",
+        "revision": "29d097773436b69ff9feafd636ab4cf873786537",
+        "filename": "gemma-4-12b-it-qat-q4_0.gguf",
+        "url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/gemma-4-12b-it-qat-q4_0.gguf"
+      },
+      "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+      "sizeBytes": 6975879296,
+      "license": "Apache-2.0",
+      "minRamGb": 24,
+      "recommendedRamGb": 32,
+      "defaultContextTokens": 16384,
+      "defaultParams": {
+        "temperature": 0,
+        "top_p": 1,
+        "max_tokens": 3072
+      },
+      "enabled": true
+    },
+    {
+      "id": "gemma-4-12b-qat-projector",
+      "displayName": "Gemma 4 image and audio support",
+      "format": "gguf",
+      "family": "gemma4",
+      "source": {
+        "type": "huggingface",
+        "repo": "google/gemma-4-12B-it-qat-q4_0-gguf",
+        "revision": "29d097773436b69ff9feafd636ab4cf873786537",
+        "filename": "mmproj-gemma-4-12b-it-qat-q4_0.gguf",
+        "url": "https://huggingface.co/google/gemma-4-12B-it-qat-q4_0-gguf/resolve/29d097773436b69ff9feafd636ab4cf873786537/mmproj-gemma-4-12b-it-qat-q4_0.gguf"
+      },
+      "sha256": "cb018338a7538a9814d994bfe54644c71eb7ed54e31eae2f721e45fd3c260da7",
+      "sizeBytes": 175115616,
+      "license": "Apache-2.0",
+      "minRamGb": 24,
+      "recommendedRamGb": 32,
+      "defaultContextTokens": 16384,
+      "defaultParams": {
+        "temperature": 0,
+        "top_p": 1,
+        "max_tokens": 3072
+      },
+      "enabled": true
+    }
+  ]
+}
