@@ -68,7 +68,7 @@ jobs:
           test -n "$NATIVE_PLATFORM_KEY"
           umask 077
           printf '%s\n' "$NATIVE_PLATFORM_KEY" > "$RUNNER_TEMP/native-platform-key"
-          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$RUNNER_TEMP/github-known-hosts"
+          cp .github/github-known-hosts "$RUNNER_TEMP/github-known-hosts"
           test -s "$RUNNER_TEMP/github-known-hosts"
           git config --global url.'ssh://git@github.com/delysis/native-platform'.insteadOf 'https://github.com/delysis/native-platform'
           printf "GIT_SSH_COMMAND=ssh -i '%s/native-platform-key' -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile='%s/github-known-hosts'\n" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
