@@ -382,6 +382,12 @@ fn parse_us_query(query: &str) -> ParsedUsQuery {
         .map(str::to_string);
 
     let mut normalized = normalize_location_text(query);
+    for country in ["united states of america", "united states", "usa", "us"] {
+        if let Some(city) = normalized.strip_suffix(&format!(" {country}")) {
+            normalized = city.to_string();
+            break;
+        }
+    }
     if let Some(zip) = zip.as_deref() {
         normalized = normalized.replace(zip, " ");
     }
@@ -602,6 +608,28 @@ impl GeocodeCache {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn conversational_city_state_country_resolves_without_repeated_search() {
+        let state = super::GeocodeState::default();
+        for query in [
+            "Woodbridge, Virginia, United States.",
+            "Woodbridge VA USA",
+            "Woodbridge, Virginia, United States of America",
+        ] {
+            let result = super::geocode_with_cache(
+                &state,
+                super::GeocodeRequest {
+                    query: query.into(),
+                    limit: Some(5),
+                },
+            )
+            .unwrap();
+            assert!(!result.is_empty(), "{query}");
+            assert_eq!(result[0].country, "US");
+            assert_eq!(result[0].timezone, "America/New_York");
+            assert!(result[0].label.contains("VA"));
+        }
+    }
     #[test]
     fn natural_city_country_queries_preserve_the_country() {
         let state = super::GeocodeState::default();

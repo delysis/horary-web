@@ -27,7 +27,7 @@ tauri-build = { version = "2.6.3", features = [] }
 cpal = "=0.16.0"
 crossbeam-channel = "0.5"
 thiserror = "2"
-serde_json = "1.0"
+serde_json = { version = "1.0", features = ["preserve_order"] }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
 fs2 = "0.4"
@@ -48,4 +48,16 @@ llama-native-types = { git = "https://github.com/delysis/native-platform.git", r
 
 # Reviewer builds still verify multi-gigabyte weights at normal hashing speed.
 [profile.dev.package.sha2]
+opt-level = 3
+
+# Native sampling inspects Gemma's large vocabulary on every token. Reviewer
+# builds need the same optimized arithmetic as release, while app code stays
+# debuggable. No sampling policy or model weights change.
+[profile.dev.package.llama-native-engine]
+opt-level = 3
+[profile.dev.package.llama-native-types]
+opt-level = 3
+[profile.dev.package.llama-native-host]
+opt-level = 3
+[profile.dev.package.llama-cpp-2]
 opt-level = 3

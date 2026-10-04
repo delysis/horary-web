@@ -50,6 +50,8 @@ mod model_manifest;
 mod native_llama;
 mod native_llama_worker;
 mod native_location;
+mod reading_method;
+mod review_progress;
 mod storage;
 mod voice;
 
@@ -522,6 +524,7 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             conversation::conversation_snapshot,
+            conversation::conversation_device_context,
             conversation::conversation_send,
             conversation::conversation_cancel,
             voice::voice_start,

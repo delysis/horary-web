@@ -1,5 +1,7 @@
 //! The model chooses bounded tools; Rust owns places, charts, revisions and disk.
 #![forbid(unsafe_code)]
+use crate::reading_method::{self, BookRule, Fact, Role, RoleChoice, Step};
+use crate::review_progress::{self, Progress};
 use crate::{
     geocode::{geocode_with_cache, GeocodeRequest, GeocodeState, LocationCandidate},
     hf_cache::AcquisitionState,
@@ -24,6 +26,104 @@ const FILE: &str = "conversation.json";
 const PROMPT: &str = include_str!("conversation_prompt.txt");
 const BOOK: &str = include_str!("conversation_method.txt");
 
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeviceContext {
+    pub timezone: String,
+    pub locale: String,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub accuracy_meters: Option<f64>,
+}
+
+fn device_place(context: &DeviceContext) -> Result<Option<LocationCandidate>, String> {
+    horary_ai_core::chart_input::resolve_chart_time("2000-01-01T12:00", &context.timezone, "")?;
+    if context.locale.len() > 80 {
+        return Err("The device language is invalid.".into());
+    }
+    let (Some(latitude), Some(longitude)) = (context.latitude, context.longitude) else {
+        return Ok(None);
+    };
+    if !latitude.is_finite()
+        || latitude.abs() >= 90.
+        || !longitude.is_finite()
+        || longitude.abs() > 180.
+    {
+        return Err("The device location is invalid.".into());
+    }
+    if context
+        .accuracy_meters
+        .is_some_and(|v| !v.is_finite() || !(0.0..=10000.).contains(&v))
+    {
+        return Ok(None);
+    }
+    let near = crate::geocode::reverse_geocode_local_city(crate::geocode::ReverseGeocodeRequest {
+        latitude,
+        longitude,
+        max_distance_km: Some(75.),
+    })
+    .map_err(|e| e.message)?;
+    // The clock's zone alone is never used to guess a geographic position.
+    Ok(near
+        .filter(|near| near.timezone == context.timezone)
+        .map(|near| LocationCandidate {
+            id: "device-location".into(),
+            label: format!("Near {}", near.label),
+            name: near.name,
+            country: near.country,
+            latitude,
+            longitude,
+            timezone: context.timezone.clone(),
+            provider: "device".into(),
+        }))
+}
+
+#[tauri::command]
+pub fn conversation_device_context(
+    app: tauri::AppHandle,
+    context: DeviceContext,
+) -> Result<(), String> {
+    let state = app.state::<ConversationState>();
+    state
+        .busy
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .map_err(|_| "Wait for the current reply to finish.")?;
+    let _lease = Lease(&state.busy);
+    let place = device_place(&context)?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut session = state.load(&dir)?;
+    let available = place.is_some();
+    if session.chart.is_none() && session.place.is_none() {
+        session.candidates.retain(|p| p.provider != "device");
+        session.candidates.extend(place);
+    }
+    session.device_context = Some(context);
+    note(
+        &mut session,
+        &dir,
+        "device",
+        if available {
+            "The device supplied its clock and present location."
+        } else {
+            "The device clock is available; the place may need a short clarification."
+        },
+        0,
+    );
+    state.publish(&mut session, &dir)
+}
+
+fn note(session: &mut Session, dir: &Path, event: &str, detail: &str, elapsed: u64) {
+    match review_progress::record(dir, event, detail, elapsed) {
+        Ok(item) => {
+            session.progress.push(item);
+            if session.progress.len() > 160 {
+                session.progress.remove(0);
+            }
+        }
+        Err(e) => log::warn!("Could not write local progress journal: {e}"),
+    }
+}
+
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
@@ -43,6 +143,12 @@ pub struct Session {
     pub status: String,
     #[serde(skip_deserializing)]
     pub busy: bool,
+    #[serde(default)]
+    pub progress: Vec<Progress>,
+    #[serde(default)]
+    pub facts: Vec<Fact>,
+    #[serde(default)]
+    pub device_context: Option<DeviceContext>,
     #[serde(skip)]
     candidates: Vec<LocationCandidate>,
 }
@@ -59,6 +165,18 @@ pub struct Section {
     pub revision: u64,
     #[serde(default)]
     pub after_message: usize,
+    #[serde(default)]
+    pub step: Option<Step>,
+    #[serde(default)]
+    pub rules: Vec<BookRule>,
+    #[serde(default)]
+    pub because: String,
+    #[serde(default)]
+    pub roles: Vec<Role>,
+    #[serde(default)]
+    pub facts: Vec<Fact>,
+    #[serde(default)]
+    pub draft: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Revision {
@@ -98,11 +216,15 @@ enum Action {
         occurrence: String,
     },
     WriteScroll {
+        step: Step,
         title: String,
         body: String,
         evidence: Vec<String>,
+        rule_ids: Vec<String>,
+        limitation: Option<String>,
+        because: String,
+        roles: Vec<RoleChoice>,
     },
-    ReadEvidence,
     RestoreReading {
         revision: u64,
     },
@@ -130,26 +252,28 @@ fn schema(session: &Session) -> String {
         }
         json!({"type":"object","properties":props,"required":required,"additionalProperties":false})
     };
-    let mut actions = vec![
-        variant("say", vec![("message", text(1200))]),
-        variant("find_place", vec![("query", text(100))]),
-    ];
-    if !turn_calls.contains(&"read_evidence") {
-        actions.push(variant("read_evidence", vec![]));
+    let mut actions = vec![variant("say", vec![("message", text(1200))])];
+    if turn_calls.iter().filter(|a| **a == "find_place").count() < 2
+        && !turn_calls.contains(&"cast_chart")
+    {
+        actions.push(variant("find_place", vec![("query", text(100))]));
     }
+    // Calculated evidence is already supplied with every decision. A tool
+    // that only returns the same data wastes another complete model prefill.
     // A conversational turn should leave room for the person's next thought.
-    // The model cannot wander through more tools after two new passages.
+    // A clear question can complete all three method stages in one turn.
+    // Writing calls remain bounded even when the model tries to revise itself.
     if session
         .sections
         .iter()
         .filter(|s| s.after_message == session.messages.len())
         .count()
-        >= 2
+        >= 3
         || turn_calls
             .iter()
             .filter(|action| **action == "write_scroll")
             .count()
-            >= 2
+            >= 4
     {
         return json!({"oneOf":[variant("say",vec![("message",text(700))])]}).to_string();
     }
@@ -174,20 +298,52 @@ fn schema(session: &Session) -> String {
         ));
     }
     if session.chart.is_some() {
-        let ids: Vec<String> = (0..evidence(session).len())
-            .map(|i| format!("e{i}"))
-            .collect();
-        actions.push(variant(
-            "write_scroll",
-            vec![
-                ("title", text(80)),
-                ("body", text(900)),
-                (
-                    "evidence",
-                    json!({"type":"array","items":{"enum":ids},"minItems":1,"maxItems":8}),
-                ),
-            ],
-        ));
+        let ids: Vec<String> = available_facts(session).into_iter().map(|f| f.id).collect();
+        let mut steps = vec![Step::Significators];
+        if session
+            .sections
+            .iter()
+            .any(|s| s.step == Some(Step::Significators))
+        {
+            steps.push(Step::Testimony);
+        }
+        if session
+            .sections
+            .iter()
+            .any(|s| s.step == Some(Step::Testimony))
+        {
+            steps.push(Step::Judgment);
+        }
+        steps.retain(|step| {
+            !session
+                .audit
+                .iter()
+                .rev()
+                .take_while(|entry| entry["event"] != "user_turn")
+                .any(|r| r["result"]["written"] == true && r["call"]["step"] == json!(step))
+        });
+        let role = |basis: &str, value: Value| {
+            json!({"type":"object","properties":{
+            "label":text(80),basis:value,"reason":{"type":"string","minLength":12,"maxLength":240}
+        },"required":["label",basis,"reason"],"additionalProperties":false})
+        };
+        for step in steps {
+            let roles = if step == Step::Significators {
+                json!({"type":"array","minItems":1,"maxItems":5,"items":{"oneOf":[
+                    role("house",json!({"enum":[1,2,3,4,5,6,7,8,9,10,11,12]})),
+                    role("natural",json!({"enum":["Moon","Sun","Venus"]}))
+                ]}})
+            } else {
+                json!({"type":"array","maxItems":0,"items":{"type":"object"}})
+            };
+            actions.push(variant("write_scroll",vec![
+                ("step",json!({"const":step})),("roles",roles),
+                ("evidence",json!({"type":"array","items":{"enum":ids},"minItems":1,"maxItems":8})),
+                ("rule_ids",json!({"type":"array","items":{"enum":reading_method::rules().iter().filter(|r|reading_method::rule_allowed(step,&r.id)).map(|r|r.id.clone()).collect::<Vec<_>>()},"minItems":1,"maxItems":2})),
+                ("limitation",json!({"const":if step==Step::Judgment {evidence(session).into_iter().find(|f|f.kind=="boundary").map(|f|f.id)}else{None}})),
+                ("because",json!({"type":"string","minLength":20,"maxLength":360})),("body",text(650)),("title",text(80)),
+            ]));
+        }
         if session.chart_after_message != session.messages.len() {
             actions.push(variant("new_question", vec![("question", text(500))]));
         }
@@ -224,10 +380,12 @@ impl ConversationState {
             *slot = Some(session);
         }
         let mut session = slot.as_ref().ok_or("Conversation unavailable")?.clone();
+        session.facts = reading_method::facts(session.chart.as_ref());
         session.busy = self.busy.load(Ordering::Acquire);
         Ok(session)
     }
     fn publish(&self, session: &mut Session, dir: &Path) -> Result<(), String> {
+        session.facts = reading_method::facts(session.chart.as_ref());
         session.snapshot_id = session
             .snapshot_id
             .checked_add(1)
@@ -319,27 +477,38 @@ fn now_ms() -> f64 {
         .as_secs_f64()
         * 1000.
 }
-fn evidence(session: &Session) -> Vec<String> {
-    let mut facts = vec!["John Frawley, The Horary Textbook (2005); editorial method notes supplied in the system prompt.".to_string()];
-    if let Some(chart) = &session.chart {
-        facts.extend(horary_ai_core::book_method::evidence(chart));
-        for house in chart["houses"].as_array().into_iter().flatten() {
-            facts.push(format!("cusp: {house}"));
-        }
-        for body in chart["bodies"].as_array().into_iter().flatten() {
-            facts.push(format!("position: {body}"));
-        }
-        facts.push(format!("events: {}", chart["derived"]["eventSearch"]));
-        facts.push(format!("limits: {}", chart["calculationNote"]));
-    }
-    facts
+fn evidence(session: &Session) -> Vec<Fact> {
+    reading_method::facts(session.chart.as_ref())
+}
+fn available_facts(session: &Session) -> Vec<Fact> {
+    let roles: Vec<&Role> = session
+        .sections
+        .iter()
+        .flat_map(|s| s.roles.iter())
+        .collect();
+    evidence(session)
+        .into_iter()
+        .filter(|fact| {
+            if roles.is_empty() {
+                return matches!(fact.kind.as_str(), "position" | "house" | "boundary");
+            }
+            if fact.kind == "house" {
+                return roles.iter().any(|r| {
+                    r.house
+                        .is_some_and(|number| fact.label == format!("House {number}"))
+                });
+            }
+            fact.kind == "position"
+                || fact.planets.is_empty()
+                || fact
+                    .planets
+                    .iter()
+                    .any(|p| roles.iter().any(|r| r.planet == *p))
+        })
+        .collect()
 }
 fn evidence_index(session: &Session) -> Value {
-    json!(evidence(session)
-        .iter()
-        .enumerate()
-        .map(|(i, text)| json!({"id":format!("e{i}"),"text":text}))
-        .collect::<Vec<_>>())
+    json!(available_facts(session))
 }
 
 fn section_prose(title: &str, body: &str) -> String {
@@ -355,6 +524,18 @@ fn section_prose(title: &str, body: &str) -> String {
         })
         .map_or(body, |(_, rest)| rest.trim());
     prose.replace("**", "")
+}
+
+fn finish_working_reading(session: &mut Session) -> bool {
+    if ![Step::Significators, Step::Testimony, Step::Judgment]
+        .into_iter()
+        .all(|step| session.sections.iter().any(|s| s.step == Some(step)))
+    {
+        return false;
+    }
+    session.messages.push(Message {role:"assistant".into(),text:"Your chart and its testimony are here. The answer remains open while we check how the pieces fit. You can explore the margins, or tell me anything that needs correcting.".into()});
+    session.audit.push(json!({"event":"working_reading_ready","narration":"native","reason":"calculation_limits","revision":session.revision}));
+    true
 }
 
 fn execute(
@@ -428,15 +609,21 @@ fn execute(
             )
         }
         Action::WriteScroll {
+            step,
             title,
             body,
-            evidence: ids,
+            evidence: mut ids,
+            rule_ids,
+            limitation,
+            because,
+            roles,
         } => {
             if session.chart.is_none() {
                 return Err("Calculate the chart before writing a judgment.".into());
             }
             let facts = evidence(session);
             if ids.is_empty()
+                || ids.len() > 8
                 || ids.iter().any(|id| {
                     id.strip_prefix('e')
                         .and_then(|s| s.parse::<usize>().ok())
@@ -448,18 +635,113 @@ fn execute(
             if title.trim().is_empty() || body.trim().is_empty() {
                 return Err("A scroll section needs a title and explanation.".into());
             }
+            if step == Step::Judgment {
+                let boundary = facts
+                    .iter()
+                    .find(|f| f.kind == "boundary")
+                    .ok_or("The calculation boundary is unavailable.")?;
+                if limitation.as_deref() != Some(boundary.id.as_str()) {
+                    return Err(
+                        "Use the supplied calculation-boundary reference for this judgment.".into(),
+                    );
+                }
+                if !ids.contains(&boundary.id) {
+                    ids.push(boundary.id.clone());
+                }
+            } else if limitation.is_some() {
+                return Err("Only the judgment carries the calculation-boundary reference.".into());
+            }
+            if title.chars().count() > 80
+                || body.chars().count() > 900
+                || !(20..=360).contains(&because.trim().chars().count())
+            {
+                return Err(
+                    "Keep the passage short and explain how its facts support the interpretation."
+                        .into(),
+                );
+            }
+            let has_significators = session
+                .sections
+                .iter()
+                .any(|s| s.step == Some(Step::Significators));
+            let has_testimony = session
+                .sections
+                .iter()
+                .any(|s| s.step == Some(Step::Testimony));
+            if (step != Step::Significators && !has_significators)
+                || (step == Step::Judgment && !has_testimony)
+            {
+                return Err("Identify the significators, then weigh testimony, before drawing the judgment.".into());
+            }
+            let catalog = reading_method::rules();
+            let rules: Vec<BookRule> = rule_ids
+                .iter()
+                .map(|id| {
+                    catalog
+                        .iter()
+                        .find(|r| r.id == *id && reading_method::rule_allowed(step, id))
+                        .cloned()
+                        .ok_or("Choose a supplied book rule relevant to this step.")
+                })
+                .collect::<Result<_, _>>()?;
+            if rules.is_empty() || rules.len() > 2 {
+                return Err("Give one or two relevant book rules.".into());
+            }
+            let roles = if step == Step::Significators {
+                reading_method::assign(
+                    session.chart.as_ref().ok_or("A chart is required.")?,
+                    roles,
+                )?
+            } else {
+                if !roles.is_empty() {
+                    return Err(
+                        "Change role assignments in the significators passage first.".into(),
+                    );
+                }
+                Vec::new()
+            };
+            let cited: Vec<Fact> = ids
+                .iter()
+                .filter_map(|id| facts.iter().find(|f| f.id == *id).cloned())
+                .collect();
+            if cited.iter().all(|f| f.kind == "boundary") {
+                return Err("Use a calculated fact as well as any limitations.".into());
+            }
+            if rules.iter().any(|r| r.id == "reception")
+                && !cited.iter().any(|f| f.kind == "reception")
+            {
+                return Err("A reception inference must cite a directed reception fact, not a planet's own dignity.".into());
+            }
+            if step == Step::Judgment && !cited.iter().any(|f| f.kind == "boundary") {
+                return Err("A provisional judgment must cite the calculation boundary and explain what it leaves unresolved.".into());
+            }
+            let prose = section_prose(&title, &body);
+            if prose.trim().is_empty() {
+                return Err("The passage needs prose after its heading.".into());
+            }
+            let (title, body) = reading_method::passage(step);
             let section = Section {
-                body: section_prose(&title, &body),
-                title,
+                body: body.into(),
+                title: title.into(),
+                draft: prose,
                 evidence: ids,
                 revision: session.revision,
                 after_message: session.messages.len(),
+                step: Some(step),
+                rules,
+                because,
+                roles,
+                facts: cited,
             };
-            if let Some(old) = session
-                .sections
-                .iter_mut()
-                .find(|s| s.title == section.title)
-            {
+            // Downstream conclusions belong to their premises. Audit receipts
+            // retain the replaced prose; the visible document must not keep an
+            // answer based on an assignment or testimony that just changed.
+            session.sections.retain(|s| match step {
+                Step::Significators => !matches!(s.step, Some(Step::Testimony | Step::Judgment)),
+                Step::Testimony => s.step != Some(Step::Judgment),
+                Step::Judgment => true,
+            });
+            if let Some(old) = session.sections.iter_mut().find(|s| s.step == section.step) {
                 *old = section;
             } else if session.sections.len() < 12 {
                 session.sections.push(section);
@@ -468,9 +750,6 @@ fn execute(
             }
             Ok(json!({"written":true,"revision":session.revision}))
         }
-        Action::ReadEvidence => Ok(
-            json!({"evidence":"Available in current verified state", "earlier_readings":session.revisions.iter().map(|r|json!({"number":r.number,"question":r.question})).collect::<Vec<_>>()}),
-        ),
         Action::RestoreReading { revision } => {
             let old=session.revisions.iter().find(|r|r.number==revision).cloned().ok_or("That earlier reading does not exist. Read the evidence to see available versions.")?;
             session.revisions.push(Revision {
@@ -526,7 +805,20 @@ fn conversation_prompt(session: &Session, results: &[Value]) -> String {
         history.push(json!({"role":message.role,"content":message.text}));
     }
     history.reverse();
-    let context = json!({"question":session.question,"place":session.place,"places_found":session.candidates,"chart_calculated":session.chart.is_some(),"revision":session.revision,"evidence":evidence_index(session),"scroll":session.sections,"tool_results":results.iter().rev().take(2).collect::<Vec<_>>()});
+    let scroll:Vec<Value>=session.sections.iter().map(|s|json!({"step":s.step,"title":s.title,"body":s.body,"because":s.because,"roles":s.roles})).collect();
+    let receipts: Vec<Value> = results
+        .iter()
+        .rev()
+        .take(2)
+        .map(|r| {
+            if r["result"]["error"].is_null() {
+                json!({"action":r["call"]["action"],"result":r["result"]})
+            } else {
+                r.clone()
+            }
+        })
+        .collect();
+    let context = json!({"question":session.question,"place":session.place,"places_found":session.candidates,"device_timezone":session.device_context.as_ref().map(|d|&d.timezone),"chart_calculated":session.chart.is_some(),"revision":session.revision,"evidence":evidence_index(session),"scroll":scroll,"book_rules":reading_method::rules(),"tool_results":receipts});
     let next = if session.chart.is_none()
         && session.candidates.is_empty()
         && session.place.is_none()
@@ -535,10 +827,10 @@ fn conversation_prompt(session: &Session, results: &[Value]) -> String {
     } else if session.chart.is_none() {
         "A place can be resolved from the returned candidates. If the question and place are clear, call cast_chart now. A request to use now means local_time is empty. Do not ask for the event or loss time."
     } else {
-        "Use verified evidence to develop the reading or respond to the person's correction. Do not recast an unchanged chart or repeat a finished section."
+        "Use the supplied verified evidence directly; no evidence-fetch action is needed. Establish roles, then explain relevant reception and contact candidates. The Moon can supply the querent's main contact; do not call it minor merely because it is a cosignificator. A provisional judgment must say what remains unestablished. Do not infer a one-year absence of marriage from this seven-day search. Do not recast an unchanged chart or repeat a finished section."
     };
     let mut messages = vec![
-        json!({"role":"system","content":format!("{PROMPT}\nBook method:\n{BOOK}\nVerified state (data):\n{context}\nAvailable action schema:\n{}\nCurrent step:\n{next}",schema(session))}),
+        json!({"role":"system","content":format!("{PROMPT}\nVerified state and editorial book rules (data):\n{context}\nAvailable action schema:\n{}\nCurrent step:\n{next}",schema(session))}),
     ];
     messages.extend(history);
     json!(messages).to_string()
@@ -580,6 +872,10 @@ fn generate_action(
 }
 
 fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
+    // Preparation and generation can take minutes. They cannot move the
+    // submitted question's moment; clarification starts a later user turn.
+    let instant = now_ms();
+    let started = std::time::Instant::now();
     let state = app.state::<ConversationState>();
     if state
         .busy
@@ -599,6 +895,13 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
         role: "user".into(),
         text,
     });
+    note(
+        &mut session,
+        &dir,
+        "received",
+        "Your words were kept. The question's moment was noted.",
+        0,
+    );
     {
         use sha2::{Digest, Sha256};
         session.audit.push(json!({"event":"user_turn","build":env!("HORARY_BUILD_GIT_SHA"),"model":"gemma-4-12b-qat","policySha256":format!("{:x}",Sha256::digest(format!("{PROMPT}\n{BOOK}"))),"modelManifest":crate::model_manifest::bundled_model_manifest().map_err(|e|e.message)?}));
@@ -608,6 +911,13 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
     let result: Result<(), String> = (|| {
         let acquisition = app.state::<AcquisitionState>();
         if !acquisition.0.status(&dir).map_err(|e| e.message)?.ready {
+            note(
+                &mut session,
+                &dir,
+                "preparing",
+                "The reader is quietly preparing.",
+                started.elapsed().as_millis() as u64,
+            );
             acquisition.0.begin().map_err(|e| e.message)?;
             acquisition.0.run(&dir).map_err(|e| e.message)?;
         }
@@ -622,15 +932,27 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
             .map_err(|e| e.to_string())?,
         )
         .map_err(|e| e.message)?;
-        let instant = now_ms();
+        note(
+            &mut session,
+            &dir,
+            "ready",
+            "The reader is here, with the book's method at hand.",
+            started.elapsed().as_millis() as u64,
+        );
         let mut results = Vec::<Value>::new();
         for _ in 0..8 {
             state.check()?;
             session.status = "Considering your question…".into();
             state.publish(&mut session, &dir)?;
             let prompt = conversation_prompt(&session, &results);
+            let prompt_hash = {
+                use sha2::{Digest, Sha256};
+                format!("{:x}", Sha256::digest(&prompt))
+            };
             let action_schema = schema(&session);
-            let action = generate_action(&state.cancelled, &mut session.audit, |temperature| {
+            let inference_start = std::time::Instant::now();
+            let mut measurements = Vec::new();
+            let generated = generate_action(&state.cancelled, &mut session.audit, |temperature| {
                 generate_native(
                     &native,
                     prompt.clone(),
@@ -642,9 +964,40 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
                         ..Default::default()
                     },
                 )
-                .map(|answer| answer.content)
+                .map(|answer| {
+                    log::info!("reader inference: prompt_tokens={} output_tokens={} duration_ms={} tokens_per_second={:.2}",answer.prompt_tokens,answer.generated_tokens,answer.elapsed_ms,answer.tokens_per_second);
+                    measurements.push(review_progress::Inference {
+                        prompt_tokens: answer.prompt_tokens,
+                        output_tokens: answer.generated_tokens,
+                        elapsed_ms: u64::try_from(answer.elapsed_ms).unwrap_or(u64::MAX),
+                        tokens_per_second: answer.tokens_per_second,
+                    });
+                    answer.content
+                })
                 .map_err(|e| e.message)
-            })?;
+            });
+            for measurement in measurements {
+                session
+                    .audit
+                    .push(json!({"generation":measurement,"promptSha256":prompt_hash}));
+                if let Ok(item) = review_progress::record_with_inference(
+                    &dir,
+                    "inference",
+                    "The reader considered this step.",
+                    measurement.elapsed_ms,
+                    Some(measurement),
+                ) {
+                    session.progress.push(item);
+                }
+            }
+            let action = generated?;
+            note(
+                &mut session,
+                &dir,
+                "considered",
+                "A piece of the question was considered.",
+                inference_start.elapsed().as_millis() as u64,
+            );
             state.check()?;
             if let Action::Say { message } = action {
                 if message.trim().is_empty() {
@@ -654,6 +1007,13 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
                     role: "assistant".into(),
                     text: message,
                 });
+                note(
+                    &mut session,
+                    &dir,
+                    "reply",
+                    "The conversation returns to you.",
+                    started.elapsed().as_millis() as u64,
+                );
                 return Ok(());
             }
             let call = serde_json::to_value(&action).map_err(|e| e.to_string())?;
@@ -666,16 +1026,58 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
             .into();
             state.publish(&mut session, &dir)?;
             let result = execute(&mut session, action, &app.state::<GeocodeState>(), instant);
+            let detail = match call["action"].as_str() {
+                Some("find_place") => "A place was sought.",
+                Some("cast_chart") => "The chart was calculated for the question's moment.",
+                Some("write_scroll") => "A passage was connected to chart facts and a book rule.",
+                Some("restore_reading") => "An earlier reading was brought back.",
+                Some("new_question") => "A new question opened a new leaf.",
+                _ => "The evidence was consulted.",
+            };
+            note(
+                &mut session,
+                &dir,
+                if result.is_ok() {
+                    "completed"
+                } else {
+                    "needs_attention"
+                },
+                if result.is_ok() {
+                    detail
+                } else {
+                    "This step needs a correction before it can continue."
+                },
+                started.elapsed().as_millis() as u64,
+            );
             let receipt = json!({"call":call,"result":match result {Ok(value)=>value,Err(error)=>json!({"error":error})},"revision":session.revision});
+            let judgment_written =
+                receipt["result"]["written"] == true && receipt["call"]["step"] == "judgment";
             session.audit.push(receipt.clone());
             results.push(receipt);
             state.publish(&mut session, &dir)?;
+            if judgment_written && finish_working_reading(&mut session) {
+                note(
+                    &mut session,
+                    &dir,
+                    "reply",
+                    "The chart and book method are ready to examine; the answer remains open.",
+                    started.elapsed().as_millis() as u64,
+                );
+                return Ok(());
+            }
         }
         Err("I’ve paused here to keep the reading focused. Tell me what you’d like to explore next.".into())
     })();
     session.status.clear();
     session.busy = false;
     if let Err(error) = result {
+        note(
+            &mut session,
+            &dir,
+            "paused",
+            "The reading paused; your words and completed passages were kept.",
+            started.elapsed().as_millis() as u64,
+        );
         session
             .audit
             .push(json!({"interruption":error,"revision":session.revision}));
@@ -713,6 +1115,255 @@ pub fn conversation_cancel(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn device_location_keeps_coordinates_and_requires_credible_zone_and_accuracy() {
+        let mut context = DeviceContext {
+            timezone: "America/New_York".into(),
+            locale: "en-US".into(),
+            latitude: Some(38.657),
+            longitude: Some(-77.249),
+            accuracy_meters: Some(800.),
+        };
+        let place = device_place(&context).unwrap().unwrap();
+        assert_eq!(place.provider, "device");
+        assert_eq!(place.latitude, 38.657);
+        assert_eq!(place.longitude, -77.249);
+        assert_eq!(place.timezone, "America/New_York");
+        context.timezone = "Europe/London".into();
+        assert!(device_place(&context).unwrap().is_none());
+        context.timezone = "America/New_York".into();
+        context.accuracy_meters = Some(50000.);
+        assert!(device_place(&context).unwrap().is_none());
+        context.latitude = None;
+        assert!(device_place(&context).unwrap().is_none());
+    }
+
+    fn passage(step: Step) -> Action {
+        Action::WriteScroll {
+            step,
+            limitation: if step == Step::Judgment {
+                let chart =
+                    horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+                reading_method::facts(Some(&chart))
+                    .into_iter()
+                    .find(|f| f.kind == "boundary")
+                    .map(|f| f.id)
+            } else {
+                None
+            },
+            title: format!("{step:?}"),
+            body: "The passage draws on the chart and explains the method.".into(),
+            evidence: if step == Step::Judgment {
+                let chart =
+                    horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+                vec![
+                    "e7".into(),
+                    reading_method::facts(Some(&chart))
+                        .into_iter()
+                        .find(|f| f.kind == "boundary")
+                        .unwrap()
+                        .id,
+                ]
+            } else {
+                vec!["e7".into()]
+            },
+            rule_ids: vec![if step == Step::Significators {
+                "significators"
+            } else {
+                "perfection"
+            }
+            .into()],
+            because: "The selected house supplies the person's traditional significator.".into(),
+            roles: if step == Step::Significators {
+                vec![RoleChoice {
+                    label: "You".into(),
+                    house: Some(1),
+                    natural: None,
+                    reason: "The querent is the person asking this question.".into(),
+                }]
+            } else {
+                vec![]
+            },
+        }
+    }
+
+    #[test]
+    fn reading_steps_require_source_rules_and_clear_dependent_conclusions() {
+        let mut session = Session {
+            chart: Some(horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap()),
+            ..Default::default()
+        };
+        let geo = GeocodeState::default();
+        assert!(execute(&mut session, passage(Step::Judgment), &geo, 0.).is_err());
+        let mut bad = passage(Step::Significators);
+        if let Action::WriteScroll {
+            ref mut rule_ids, ..
+        } = bad
+        {
+            *rule_ids = vec!["invented_reference".into()];
+        }
+        assert!(execute(&mut session, bad, &geo, 0.).is_err());
+        execute(&mut session, passage(Step::Significators), &geo, 0.).unwrap();
+        assert_eq!(session.sections[0].facts[0].label, "House 1");
+        let planet = reading_method::ruler(
+            session.chart.as_ref().unwrap()["houses"][0]["sign"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(session.sections[0].roles[0].planet, planet);
+        execute(&mut session, passage(Step::Testimony), &geo, 0.).unwrap();
+        execute(&mut session, passage(Step::Judgment), &geo, 0.).unwrap();
+        assert_eq!(session.sections.len(), 3);
+        execute(&mut session, passage(Step::Testimony), &geo, 0.).unwrap();
+        assert_eq!(session.sections.len(), 2);
+        execute(&mut session, passage(Step::Significators), &geo, 0.).unwrap();
+        assert_eq!(session.sections.len(), 1);
+        assert_eq!(session.sections[0].rules[0].pages, "15–38");
+        let mut mistaken = passage(Step::Significators);
+        if let Action::WriteScroll { ref mut body, .. } = mistaken {
+            *body = "Venus in Scorpio is in the detriment of Mars.".into();
+        }
+        execute(&mut session, mistaken, &geo, 0.).unwrap();
+        assert!(!session.sections[0].body.contains("detriment of Mars"));
+        assert!(session.sections[0].draft.contains("detriment of Mars"));
+    }
+
+    #[test]
+    fn place_search_cannot_repeat_indefinitely_and_schema_constrains_role_bases() {
+        let mut session = Session::default();
+        for _ in 0..2 {
+            session.audit.push(json!({"call":{"action":"find_place"}}));
+        }
+        assert!(!schema(&session).contains("find_place"));
+        session.chart =
+            Some(horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap());
+        let parsed: Value = serde_json::from_str(&schema(&session)).unwrap();
+        let write = parsed["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["properties"]["action"]["const"] == "write_scroll")
+            .unwrap();
+        assert_eq!(write["properties"]["step"]["const"], "significators");
+        assert_eq!(write["properties"]["roles"]["minItems"], 1);
+        assert!(
+            write["properties"]["roles"]["items"]["oneOf"][0]["properties"]["house"].is_object()
+        );
+        let fields = write["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fields,
+            vec![
+                "action",
+                "step",
+                "roles",
+                "evidence",
+                "rule_ids",
+                "limitation",
+                "because",
+                "body",
+                "title"
+            ]
+        );
+    }
+
+    #[test]
+    #[ignore = "Real Gemma hardware qualification; run with explicit local weights."]
+    fn native_device_marriage_conversation() {
+        use crate::native_llama_worker::{start_native_llama_from_path, stop_native_llama};
+        use sha2::{Digest, Sha256};
+        let native = NativeLlamaState::default();
+        let model = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("local model path");
+        start_native_llama_from_path(
+            &native,
+            "device-reading-eval".into(),
+            String::new(),
+            model.into(),
+            std::env::temp_dir(),
+            serde_json::from_value(
+                json!({"modelId":"device-reading-eval","ctxSize":16384,"nGpuLayers":"auto"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let context = DeviceContext {
+            timezone: "America/New_York".into(),
+            locale: "en-US".into(),
+            latitude: Some(38.657),
+            longitude: Some(-77.249),
+            accuracy_meters: Some(800.),
+        };
+        let mut session = Session {
+            candidates: vec![device_place(&context).unwrap().unwrap()],
+            device_context: Some(context),
+            ..Default::default()
+        };
+        let geo = GeocodeState::default();
+        for text in ["Will I get married in the next year? I mean a future partner; I am not seeing anyone. Use where this device is now and begin the reading."] {
+            session.messages.push(Message {role:"user".into(),text:text.into()});
+            session.audit.push(json!({"event":"user_turn","build":env!("HORARY_BUILD_GIT_SHA")}));
+            let mut results=Vec::new();
+            for _ in 0..8 {
+                let prompt=conversation_prompt(&session,&results);
+                let hash=format!("{:x}",Sha256::digest(&prompt));
+                let action_schema=schema(&session);
+                let mut measurements=Vec::new();
+                let action=generate_action(&Arc::new(AtomicBool::new(false)),&mut session.audit,|temperature| {
+                    let generated=generate_native(&native,prompt.clone(),NativeGenerateOptions {max_tokens:800,temperature,response_schema:Some(action_schema.clone()),..Default::default()}).map_err(|e|e.message)?;
+                    eprintln!("READING INFERENCE: {} tokens / {}ms ({:.2} tok/s)",generated.generated_tokens,generated.elapsed_ms,generated.tokens_per_second);
+                    measurements.push(json!({"promptSha256":hash,"promptTokens":generated.prompt_tokens,"outputTokens":generated.generated_tokens,"elapsedMs":generated.elapsed_ms,"tokensPerSecond":generated.tokens_per_second}));
+                    Ok(generated.content)
+                }).unwrap();
+                session.audit.extend(measurements.into_iter().map(|m|json!({"generation":m})));
+                eprintln!("DEVICE READING ACTION: {}",serde_json::to_string(&action).unwrap());
+                if let Action::Say {message}=action {session.messages.push(Message {role:"assistant".into(),text:message});break;}
+                let call=serde_json::to_value(&action).unwrap();
+                let result=execute(&mut session,action,&geo,1789387200000.);
+                let receipt=json!({"call":call,"result":match result {Ok(value)=>value,Err(error)=>json!({"error":error})},"promptSha256":hash});
+                session.audit.push(receipt.clone());
+                results.push(receipt);
+                if session.sections.iter().any(|s|s.step==Some(Step::Judgment)) && finish_working_reading(&mut session) {break;}
+            }
+        }
+        stop_native_llama(&native).unwrap();
+        session.facts = evidence(&session);
+        if let Some(path) = std::env::var_os("HORARY_CONVERSATION_REPORT") {
+            std::fs::write(path, serde_json::to_vec_pretty(&session).unwrap()).unwrap();
+        }
+        assert!(
+            session.chart.is_some(),
+            "Device context should enable casting without typing a place"
+        );
+        assert_eq!(session.place.as_ref().unwrap().provider, "device");
+        assert!(
+            !session
+                .audit
+                .iter()
+                .any(|r| r["call"]["action"] == "find_place"),
+            "A supplied device location needs no search loop"
+        );
+        for step in [Step::Significators, Step::Testimony, Step::Judgment] {
+            assert!(
+                session.sections.iter().any(|s| s.step == Some(step)),
+                "Missing method step {step:?}"
+            );
+        }
+        let judgment = session
+            .sections
+            .iter()
+            .find(|s| s.step == Some(Step::Judgment))
+            .unwrap();
+        assert!(judgment
+            .body
+            .contains("do not establish a complete judgment"));
+        assert!(!judgment.draft.is_empty());
+        assert_ne!(judgment.body, judgment.draft);
+    }
     #[test]
     fn token_decode_recovery_is_bounded_and_never_retries_cancellation() {
         let failure = "decode_failed: failed to decode controlled token: Unknown Token Type";
@@ -766,6 +1417,12 @@ mod tests {
         session
             .audit
             .push(json!({"call":{"action":"write_scroll"},"result":{"written":true}}));
+        session
+            .audit
+            .push(json!({"call":{"action":"write_scroll"},"result":{"written":true}}));
+        session
+            .audit
+            .push(json!({"call":{"action":"write_scroll"}}));
         let actions: Value = serde_json::from_str(&schema(&session)).unwrap();
         assert_eq!(actions["oneOf"].as_array().unwrap().len(), 1);
         assert_eq!(actions["oneOf"][0]["properties"]["action"]["const"], "say");
@@ -795,7 +1452,7 @@ mod tests {
         );
     }
     #[test]
-    fn completed_chart_is_not_recast_and_two_passages_return_to_conversation() {
+    fn completed_chart_is_not_recast_and_writing_attempts_are_bounded() {
         let mut s = Session::default();
         let g = GeocodeState::default();
         execute(
@@ -830,6 +1487,16 @@ mod tests {
             execute(
                 &mut s,
                 Action::WriteScroll {
+                    step: Step::Significators,
+                    rule_ids: vec!["significators".into()],
+                    limitation: None,
+                    because: "The chosen house represents the person asking this question.".into(),
+                    roles: vec![RoleChoice {
+                        label: "You".into(),
+                        house: Some(1),
+                        natural: None,
+                        reason: "The querent is represented by the first house.".into(),
+                    }],
                     title: title.into(),
                     body: "A passage.".into(),
                     evidence: vec!["e0".into()],
@@ -839,6 +1506,10 @@ mod tests {
             )
             .unwrap();
         }
+        s.audit.push(json!({"call":{"action":"write_scroll"}}));
+        s.audit.push(json!({"call":{"action":"write_scroll"}}));
+        s.audit.push(json!({"call":{"action":"write_scroll"}}));
+        s.audit.push(json!({"call":{"action":"write_scroll"}}));
         let done: Value = serde_json::from_str(&schema(&s)).unwrap();
         assert_eq!(done["oneOf"].as_array().unwrap().len(), 1);
         assert_eq!(done["oneOf"][0]["properties"]["action"]["const"], "say");
@@ -898,6 +1569,16 @@ mod tests {
         assert!(execute(
             &mut s,
             Action::WriteScroll {
+                step: Step::Significators,
+                rule_ids: vec!["significators".into()],
+                limitation: None,
+                because: "The chosen house represents the person asking this question.".into(),
+                roles: vec![RoleChoice {
+                    label: "You".into(),
+                    house: Some(1),
+                    natural: None,
+                    reason: "The querent is represented by the first house.".into()
+                }],
                 title: "Answer".into(),
                 body: "Yes".into(),
                 evidence: vec!["e0".into()]
@@ -958,7 +1639,9 @@ mod tests {
             }
             let call = serde_json::to_value(&action).unwrap();
             let result = execute(&mut session, action, &geocode, 1789387200000.).unwrap();
-            results.push(json!({"call":call,"result":result}));
+            let receipt = json!({"call":call,"result":result});
+            session.audit.push(receipt.clone());
+            results.push(receipt);
         }
         stop_native_llama(&native).unwrap();
         assert!(
@@ -1004,6 +1687,16 @@ mod tests {
         execute(
             &mut s,
             Action::WriteScroll {
+                step: Step::Significators,
+                rule_ids: vec!["significators".into()],
+                limitation: None,
+                because: "The chosen house represents the person asking this question.".into(),
+                roles: vec![RoleChoice {
+                    label: "You".into(),
+                    house: Some(1),
+                    natural: None,
+                    reason: "The querent is represented by the first house.".into(),
+                }],
                 title: "Question".into(),
                 body: "A lost ring.".into(),
                 evidence: vec!["e0".into()],
@@ -1025,6 +1718,16 @@ mod tests {
         assert!(execute(
             &mut s,
             Action::WriteScroll {
+                step: Step::Significators,
+                rule_ids: vec!["significators".into()],
+                limitation: None,
+                because: "The chosen house represents the person asking this question.".into(),
+                roles: vec![RoleChoice {
+                    label: "You".into(),
+                    house: Some(1),
+                    natural: None,
+                    reason: "The querent is represented by the first house.".into()
+                }],
                 title: "Bad".into(),
                 body: "Bad".into(),
                 evidence: vec!["e99999".into()]

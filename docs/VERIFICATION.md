@@ -1,4 +1,32 @@
-## Single-document prototype — September 14
+## Current review pass — October 4, 2026
+
+This is a reviewable method prototype. It does not establish autonomous astrological judgment. Earlier acceptance records below refer to their recorded builds, not the current application.
+
+### Reproduced failure and repair
+
+The saved native conversation showed repeated empty place searches for Woodbridge with a US country suffix. The parser now resolves those phrases; search attempts are bounded. The ordinary first-question path requests native device coordinates, accuracy and clock context before asking for a place. Accurate device coordinates are retained, and an explicitly supplied place takes priority. A time zone alone is not used as a location. Regressions cover absent/coarse/conflicting device information and denied location permission.
+
+The Space shortcut now starts speech outside editable words without first focusing the invitation. Option–Space starts speech while writing, with normal spaces preserved. Component regressions exercise those focus cases, failed delivery and stale snapshot protection. A real operating-system permission and microphone interaction still requires native acceptance.
+
+### Source and model assessment
+
+The private OCR was reviewed at printed pp. 7–8 and 191–198, alongside the existing method audit. Rust derives role planets from house choices and preserves directed reception separately from own condition. Each ordered method stage retains its cited native facts, editorial rule paraphrases, printed pages and original model proposal. Changing premises clears dependent conclusions. The sampler chooses roles, evidence and rules before prose; JSON order is preserved and tested.
+
+Real Gemma runs still confused minor reception with domicile, invented placements, dismissed the Moon's relevant contact and overreached from seven-day candidate absence to a one-year forecast. Their receipts remain local evidence of those failures. The current design therefore prints native method prose and calculated testimony, keeps the original proposed interpretation in the margin, and leaves the outcome open. A valid citation does not qualify the model's inference.
+
+An isolated real Gemma 4 12B IT QAT text fixture used synthetic Woodbridge device coordinates and a fixed September 14 chart moment. It cast the chart without any place search, established native role planets, completed all three method stages and returned the native open-outcome reply in **81.09 seconds**. It did not overwrite Eileen's saved conversation. This proves the tested tool path, not the draft's astrology or a packaged microphone journey. The separate resident-model gate with the matching projector passed constrained output, streaming, resident reuse, pre-cancellation, live cancellation and joined shutdown in **13.65 seconds**. These local timings are not portable performance claims. The upstream controlled-token decoding defect still has bounded mitigation rather than a claimed fix.
+
+### Local checks and appearance
+
+The current local gates passed: **77 React tests, 199 JavaScript tests, 30 shared Rust core tests, 105 native Rust tests**, ESLint, TypeScript/build, Rust formatting and Clippy for all targets with warnings denied. Two additional native conversation hardware cases remain ignored by default; the synthetic device reading above was invoked explicitly. The resident-model test returns without inference when its explicit model environment is absent, so only the separate hardware run establishes that gate.
+
+Isolated Chrome rendering of the synthetic native fixture checked light and dark system appearance, a 375-pixel viewport without horizontal overflow, immediately selectable planet facts, source margins, zero page buttons and no JavaScript errors. Busy-state animation and its reduced-motion alternative were checked separately. These are browser rendering checks, not native user acceptance.
+
+Before editing, the existing native app was built and launched from clean `b5efef35389351c0bd40c933afda33a38f1c3c01` (bundle ID `app.horary.desktop`, PID 9162, executable SHA-256 `99a6a5445a9983a21c66d05fb989a40d6d2b8a37e73645e3784ffc72504d9a4f`). The updated build's Git identity is embedded in its receipts; its build and launch identity belong to the final PR validation record. Launch alone does not establish microphone, location-permission or expert-reading acceptance.
+
+The app remains native, without Python, a Hugging Face CLI or a separate inference server. The existing shared-cache acquisition path is retained. Progress has a separate bounded local journal without question text, audio or coordinates; the saved conversation retains its complete tool audit. See [October iteration notes](ITERATION_2026-10-04.md) for what Eileen can inspect and [review guide](REVIEW_GUIDE.md) for the remaining native and domain checks.
+
+## Historical single-document prototype — September 14
 
 The clean `082fcb9` macOS bundle (PID 14162, executable SHA-256 `3bc1d818ef442f42e3897c2f74b399c0d47a0111ab602e075ef9e2b13b7d24a0`) visibly accepted a typed question, resolved London and unfolded the chart. Its first passage failed with the pinned runtime's `Unknown Token Type` decode error. A subsequent conversational continuation wrote an inline passage but repeatedly revised it. The follow-up fixes permit one audited greedy retry of that specific inference failure with the same prompt/schema, and count writing calls rather than distinct sections when returning control after two writes. Repeated chart/evidence calls are unavailable within the turn. Recovery is bounded and cancellation is not retried. Updated checks: 97 native tests pass, one hardware test remains explicitly ignored; Clippy includes test targets. The upstream decoding defect itself is not claimed fixed.
 

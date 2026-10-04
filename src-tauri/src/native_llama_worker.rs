@@ -549,6 +549,7 @@ mod integration_tests {
             "ready"
         );
         assert!(result.generated_tokens > 0 && result.prompt_tokens > 0);
+        eprintln!("READINESS INFERENCE: prompt_tokens={} output_tokens={} elapsed_ms={} tokens_per_second={:.2}", result.prompt_tokens,result.generated_tokens,result.elapsed_ms,result.tokens_per_second);
         assert!(
             rx.try_iter().any(|text| !text.is_empty()),
             "Native tokens must reach the UI stream"

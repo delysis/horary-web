@@ -35,8 +35,9 @@ test('generated horary data tables expose captions and scoped headers', () => {
 test('keyboard focus remains visible on buttons and form controls', () => {
     // The shared selector covers every keyboard-focusable control, including
     // disclosure summaries and links, rather than just individual form types.
-    assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*2px solid #[a-f0-9]+/);
-    assert.match(css, /outline-offset:\s*3px/);
+    assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*2px solid (?:#[a-f0-9]+|var\(--gold\))/);
+    assert.match(css, /--gold:\s*#[a-f0-9]+/);
+    assert.match(css, /outline-offset:\s*[3-9]px/);
 });
 
 test('field error helper associates validation errors with fields', () => {

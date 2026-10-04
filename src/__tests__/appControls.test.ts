@@ -5,7 +5,7 @@ import App from '../App'
 import { invoke } from '@tauri-apps/api/core'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 const empty = { messages: [], question: '', chart: null, place: null, sections: [], revisions: [], audit: [], revision: 0, status: '', busy: false }
-afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { vi.clearAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
 async function render() {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   const element = document.createElement('div'); document.body.append(element)
@@ -48,10 +48,85 @@ it('keeps unsent words after delivery failure and prevents duplicate submissions
   try {
     await type(element, 'Where is my ring?'); await submit(element); await submit(element)
     expect(vi.mocked(invoke).mock.calls.filter(([c]) => c === 'conversation_send')).toHaveLength(1)
-    expect(element.textContent).toContain('A moment. Let me sit with this.')
+    expect(element.textContent).toContain('A little quiet, while the thread finds its way.')
     await act(async () => reject('native model internal failure'))
     expect(element.querySelector('textarea')!.value).toBe('Where is my ring?')
     expect(element.textContent).not.toContain('native model internal failure')
+  } finally { await dispose() }
+})
+
+it('starts voice from Space anywhere on the page without clicking the invitation', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', {})
+  vi.mocked(invoke).mockImplementation(command => command === 'conversation_snapshot' || command === 'conversation_send' ? Promise.resolve(empty) : command === 'voice_finish' ? Promise.resolve('Where is my ring?') : Promise.resolve(undefined))
+  const { element, dispose } = await render()
+  try {
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })))
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'voice_start')).toBe(true)
+    expect(element.textContent).toContain('I’m listening…')
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true, cancelable: true })))
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'voice_finish')).toBe(true)
+  } finally { await dispose() }
+})
+
+it('preserves ordinary spaces in writing and supports Option–Space there', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', {})
+  vi.mocked(invoke).mockImplementation(command => command === 'conversation_snapshot' ? Promise.resolve(empty) : Promise.resolve(undefined))
+  const { element, dispose } = await render()
+  try {
+    const input = element.querySelector('textarea')!
+    const space = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })
+    await act(async () => input.dispatchEvent(space))
+    expect(space.defaultPrevented).toBe(false)
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'voice_start')).toBe(false)
+    await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', altKey: true, bubbles: true, cancelable: true })))
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'voice_start')).toBe(true)
+    await act(async () => window.dispatchEvent(new Event('blur')))
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'voice_cancel')).toBe(true)
+  } finally { await dispose() }
+})
+
+it('supplies native device coordinates and clock context before the first question, once', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', {})
+  vi.mocked(invoke).mockImplementation(command => command === 'get_current_location' ? Promise.resolve({ latitude: 38.657, longitude: -77.249, accuracyMeters: 800 }) : command === 'conversation_snapshot' || command === 'conversation_send' ? Promise.resolve(empty) : Promise.resolve(undefined))
+  const { element, dispose } = await render()
+  try {
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'get_current_location')).toBe(false)
+    await type(element, 'Will I get married?'); await submit(element)
+    const context = vi.mocked(invoke).mock.calls.find(([c]) => c === 'conversation_device_context')?.[1] as { context: Record<string, unknown> }
+    expect(context.context).toMatchObject({ latitude: 38.657, longitude: -77.249, accuracyMeters: 800, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    const commands = vi.mocked(invoke).mock.calls.map(([c]) => c)
+    expect(commands.indexOf('conversation_device_context')).toBeLessThan(commands.indexOf('conversation_send'))
+    await type(element, 'A future partner'); await submit(element)
+    expect(vi.mocked(invoke).mock.calls.filter(([c]) => c === 'get_current_location')).toHaveLength(1)
+  } finally { await dispose() }
+})
+
+it('continues the question when device location permission is unavailable', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', {})
+  vi.mocked(invoke).mockImplementation(command => command === 'get_current_location' ? Promise.reject(new Error('denied')) : command === 'conversation_snapshot' || command === 'conversation_send' ? Promise.resolve(empty) : Promise.resolve(undefined))
+  const { element, dispose } = await render()
+  try {
+    await type(element, 'Will I get married?'); await submit(element)
+    expect(vi.mocked(invoke).mock.calls).toContainEqual(['conversation_device_context', { context: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: navigator.language, latitude: null, longitude: null, accuracyMeters: null } }])
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'conversation_send')).toBe(true)
+    expect(element.textContent).not.toContain('denied')
+  } finally { await dispose() }
+})
+
+it('ignores stale snapshots before acknowledging or erasing submitted words', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('__TAURI_INTERNALS__', {})
+  let next = { ...empty, snapshotId: 10 }
+  vi.mocked(invoke).mockImplementation(command => command === 'conversation_snapshot' ? Promise.resolve(next) : command === 'conversation_send' ? new Promise(() => {}) : Promise.resolve(undefined))
+  const { element, dispose } = await render()
+  try {
+    await type(element, 'Question'); await submit(element)
+    next = { ...empty, snapshotId: 3, messages: [{ role: 'user', text: 'Question' }] } as typeof next
+    await act(async () => vi.advanceTimersByTimeAsync(700))
+    expect(element.querySelector('textarea')!.value).toBe('Question')
+    next = { ...next, snapshotId: 11 }
+    await act(async () => vi.advanceTimersByTimeAsync(700))
+    expect(element.querySelector('textarea')!.value).toBe('')
   } finally { await dispose() }
 })
 it('places chart and testimony inline and turns an edited passage into an explicit correction', async () => {
