@@ -109,6 +109,11 @@ jobs:
       - name: Build macOS review app
         if: runner.os == 'macOS'
         run: npm run tauri -- build --debug --features native-llama-metal --bundles app
+      - name: Seal and verify the macOS review bundle
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --deep --sign - src-tauri/target/debug/bundle/macos/Horary.app
+          codesign --verify --deep --strict src-tauri/target/debug/bundle/macos/Horary.app
       - name: Archive macOS review app
         if: runner.os == 'macOS'
         run: ditto -c -k --sequesterRsrc --keepParent src-tauri/target/debug/bundle/macos/Horary.app Horary-macOS-review.zip
