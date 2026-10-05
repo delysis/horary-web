@@ -25,6 +25,12 @@ pub struct Inference {
     pub output_tokens: u32,
     pub elapsed_ms: u64,
     pub tokens_per_second: f64,
+    #[serde(default)]
+    pub cached_prompt_tokens: u32,
+    #[serde(default)]
+    pub prefilled_prompt_tokens: u32,
+    #[serde(default)]
+    pub first_token_ms: Option<u64>,
 }
 
 pub fn record(dir: &Path, event: &str, detail: &str, elapsed_ms: u64) -> std::io::Result<Progress> {

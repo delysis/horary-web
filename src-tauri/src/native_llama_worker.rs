@@ -69,6 +69,9 @@ pub struct NativeGenerationResult {
     pub elapsed_ms: u128,
     pub tokens_per_second: f64,
     pub prompt_cache_hit: bool,
+    pub cached_prompt_tokens: u32,
+    pub prefilled_prompt_tokens: u32,
+    pub first_token_ms: Option<u128>,
     pub cold_cache_bytes: Option<usize>,
 }
 
@@ -100,6 +103,24 @@ mod imp {
         GenerationState, NativeModelConfig, SamplingConfig, SpecialTokenPolicy,
     };
     static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+    fn chat_template(architecture: Option<&str>) -> llama_native_types::ChatTemplateChoice {
+        if architecture == Some("gemma4") {
+            llama_native_types::ChatTemplateChoice::Gemma4NonThinking
+        } else {
+            Default::default()
+        }
+    }
+    #[test]
+    fn gemma_uses_the_explicit_native_turn_protocol_for_text_and_audio() {
+        assert_eq!(
+            chat_template(Some("gemma4")),
+            llama_native_types::ChatTemplateChoice::Gemma4NonThinking
+        );
+        assert_eq!(
+            chat_template(Some("other")),
+            llama_native_types::ChatTemplateChoice::ModelDefault
+        );
+    }
 
     pub fn start_native_llama_in_dir(
         dir: &Path,
@@ -217,6 +238,11 @@ mod imp {
         schema: String,
         options: &NativeGenerateOptions,
     ) -> LlamaResult<Vec<llama_native_types::GenerationOutput>> {
+        if !request.media.is_empty() {
+            return Err(error(
+                "Constrained text generation cannot consume audio. Use the direct audio route.",
+            ));
+        }
         use llama_native_engine::ControlledGenerationSubmission;
         use llama_native_types::{
             ConstraintArtifactReference, ControlProgram, ControlledGenerationBatchRequest,
@@ -314,7 +340,13 @@ mod imp {
         let input = match serde_json::from_str::<Vec<ChatMessage>>(&prompt) {
             Ok(messages) => GenerationInput::Chat {
                 messages,
-                template: Default::default(),
+                template: chat_template(
+                    loaded
+                        .host
+                        .descriptors()
+                        .first()
+                        .map(|d| d.architecture.as_str()),
+                ),
             },
             Err(_) => GenerationInput::Completion {
                 prompts: vec![CompletionPrompt::Text {
@@ -406,7 +438,9 @@ mod imp {
         if !output.real_engine_invoked || output.fake_fixture {
             return Err(error("Reading did not come from the native model"));
         }
-        let cache_hit = output.metrics.shared_prefix_tokens > 0;
+        let reused = output.metrics.cache.resident_prefix_tokens
+            + output.metrics.cache.restored_prefix_tokens;
+        let cache_hit = reused > 0;
         if cache_hit {
             loaded.cache_hits.fetch_add(1, Ordering::Relaxed);
         }
@@ -417,6 +451,9 @@ mod imp {
             elapsed_ms: output.metrics.duration_ms,
             tokens_per_second: output.metrics.tokens_per_second,
             prompt_cache_hit: cache_hit,
+            cached_prompt_tokens: reused as u32,
+            prefilled_prompt_tokens: output.metrics.prompt_tokens.saturating_sub(reused) as u32,
+            first_token_ms: output.metrics.first_token_ms,
             cold_cache_bytes: None,
         })
     }
@@ -549,6 +586,29 @@ mod integration_tests {
             "ready"
         );
         assert!(result.generated_tokens > 0 && result.prompt_tokens > 0);
+        let warm = generate_native(&state, prompt.clone(), NativeGenerateOptions {
+            max_tokens: 64, temperature: 0.,
+            response_schema: Some(r#"{"type":"object","properties":{"answer":{"const":"ready"}},"required":["answer"],"additionalProperties":false}"#.into()),
+            ..Default::default()
+        }).unwrap();
+        assert_eq!(warm.content, result.content);
+        assert!(warm.prompt_cache_hit && warm.cached_prompt_tokens > 0);
+        assert_eq!(
+            warm.prefilled_prompt_tokens + warm.cached_prompt_tokens,
+            warm.prompt_tokens
+        );
+        eprintln!("WARM INFERENCE: prompt_tokens={} cached_tokens={} prefilled_tokens={} first_token_ms={:?} elapsed_ms={}",warm.prompt_tokens,warm.cached_prompt_tokens,warm.prefilled_prompt_tokens,warm.first_token_ms,warm.elapsed_ms);
+        let invalid_audio = generate_native(
+            &state,
+            prompt.clone(),
+            NativeGenerateOptions {
+                audio: Some(vec![1, 2]),
+                response_schema: Some("{}".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(invalid_audio.message.contains("cannot consume audio"));
         eprintln!("READINESS INFERENCE: prompt_tokens={} output_tokens={} elapsed_ms={} tokens_per_second={:.2}", result.prompt_tokens,result.generated_tokens,result.elapsed_ms,result.tokens_per_second);
         assert!(
             rx.try_iter().any(|text| !text.is_empty()),

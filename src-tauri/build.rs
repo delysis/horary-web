@@ -23,6 +23,9 @@ fn main() {
     );
     #[cfg(target_os = "macos")]
     {
+        // Dependency link arguments do not propagate to application/test
+        // executables. Resolve Apple's Swift runtime from the OS, not Xcode.
+        println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
         println!("cargo:rerun-if-changed=native/location_bridge.m");
         cc::Build::new()
             .file("native/location_bridge.m")

@@ -1,4 +1,16 @@
-## Current review pass — October 4, 2026
+## Voice and prompt-cache follow-up — October 4, 2026
+
+The normal voice path no longer asks Gemma to transcribe before asking it to read. macOS uses installed on-device dictation when permitted and available; unavailable dictation falls back to a single direct-audio understanding/tool decision. Gemma transcription is retained only as an explicit comparison route. Raw audio stays in native memory behind a consumed-once receipt, and a direct-audio summary is labeled rather than presented as verbatim words.
+
+Native-kit is pinned to the controlled-prefix branch at `39f2f87858afedef47d7b39057c02a8127b9cc90`. Policy/book rules precede mutable state; native facts and receipts append within a turn. Revisions retire chart data. Native cache authority remains exact-token and resident-worker bound, with cancellation/failure invalidation and unchanged logical admission limits. Real resident-model qualification passed in 13.69 seconds, including warm identical constrained output, physical prompt reuse, streaming, cancellation and shutdown. A warm readiness request reused 31 of 32 prompt tokens; its final token was replayed for fresh logits.
+
+The revised synthetic device-location reading cast without searching, wrote all three native method stages and returned the open-outcome reply in **62.21 seconds**, with model calls totaling **49.46 seconds**. Reused/new prompt tokens were 0/1,740, 1,373/1,614, 2,981/2,786 and 5,761/851. The final first-token delay was 1.833 seconds. The earlier local fixture took 81.09 seconds; prompts and sampled drafts differ, so this is not a controlled causal benchmark. Incorrect draft receptions remain preserved in source margins and are not published as a qualified verdict.
+
+Direct audio successfully understood a synthetic marriage question and called `cast_chart` with the validated device location, without transcription. Its initial cold model call took 29.29 seconds, including a 19.984-second first-token delay; other local work overlapped that run. The final quieter fixture took 5.964 seconds for the model decision, with a 3.950-second first-token delay and 20.45 seconds for the complete test including model preparation/shutdown. An intervening fixture failed a brittle spelling assertion ("marry" versus "married") despite returning the correct question/tool; the semantic question, horizon and device-place checks now pass, and that failed receipt is retained. These runs do not establish direct audio as fastest, or measure live microphone-to-reply time. The platform-dictation probe failed before recognition because Speech permission was `NotDetermined`; it did not prompt from a headless test process. Native dictation latency and the actual bundled first-permission journey are therefore unqualified.
+
+Failed receipts are preserved: initial Swift-runtime linking, the Gemma embedded-template incompatibility, an upstream queued-cancellation cache leak (repaired), and the unavailable platform-dictation prerequisite. Exact final component gates and package identity are recorded with the PR. Earlier records below apply to their recorded builds.
+
+## Earlier review pass — October 4, 2026
 
 This is a reviewable method prototype. It does not establish autonomous astrological judgment. Earlier acceptance records below refer to their recorded builds, not the current application.
 
@@ -84,8 +96,8 @@ Native review export now uses an OS Save dialog and atomic Rust file writing. It
 
 - Eileen has not signed off the method, house suggestions, or reading quality.
 - The ephemeris is approximate. Hourly event bracketing and bounded search do not certify fine timing, stations, or contextual prevention of an event.
-- The pinned native-kit API does not expose speculative decoding for controlled readings. Image/audio attachment UI is not implemented, although the projector is acquired and loaded.
-- Constrained readings keep model weights resident but do not promise prompt-prefix reuse. Prompt caches are memory-only.
+- The pinned native-kit API does not expose speculative decoding for controlled readings. Native microphone input is implemented; image attachments have no interface.
+- Single constrained text decisions reuse verified resident prefixes; media and multi-request/CFG paths have no reuse claim. Prompt caches are memory-only.
 - CPU-only, Windows and Linux user interaction, lower-memory behavior, and distribution signing/notarization are not established by local macOS checks. Remote build results are tracked on the pull request.
 
 See [method audit](METHOD_AUDIT.md), [model provenance](MODEL_PROVENANCE.md), and [review guide](REVIEW_GUIDE.md).

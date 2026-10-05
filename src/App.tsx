@@ -110,10 +110,17 @@ export default function App() {
     const id = ++turn.current
     busyRef.current = true; setPending(true); setNotice('')
     try {
-      const text = await invoke<string>('voice_finish')
+      const voice = await invoke<{ id: number; text: string | null }>('voice_finish')
       if (id !== turn.current) return
-      setDraft(current => current || text)
-      await deliver(text, true, id)
+      if (voice.text) setDraft(current => current || voice.text || '')
+      await prepareContext()
+      if (id !== turn.current) return
+      submitted.current = voice.text || ''
+      const next = await invoke<Session>('conversation_voice', { id: voice.id })
+      if (!mounted.current || id !== turn.current) return
+      accept(next)
+      const reply = next.messages.at(-1)
+      if (reply?.role === 'assistant') await invoke('voice_speak', { text: reply.text }).catch(() => {})
     } catch { if (id === turn.current) setNotice('I didn’t quite catch that. Try once more, or write it here.') }
     finally { busyRef.current = false; if (mounted.current) setPending(false) }
   }

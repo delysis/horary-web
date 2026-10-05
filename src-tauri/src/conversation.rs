@@ -12,6 +12,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeMap,
     io::Write,
     path::Path,
     sync::{
@@ -461,6 +462,16 @@ pub fn transcribe(app: &tauri::AppHandle, audio: Vec<u8>) -> Result<String, Stri
     )
     .map_err(|e| e.message)?;
     state.check()?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    if let Err(error) = review_progress::record_with_inference(
+        &dir,
+        "voice_comparison",
+        "Your spoken words were transcribed for comparison.",
+        u64::try_from(answer.elapsed_ms).unwrap_or(u64::MAX),
+        Some(inference_measurement(&answer)),
+    ) {
+        log::warn!("Could not record voice timing: {error}");
+    }
     let text = answer.content.trim();
     if text.is_empty() || text == "[inaudible]" {
         return Err(
@@ -476,6 +487,19 @@ fn now_ms() -> f64 {
         .unwrap_or_default()
         .as_secs_f64()
         * 1000.
+}
+fn inference_measurement(
+    answer: &crate::native_llama_worker::NativeGenerationResult,
+) -> review_progress::Inference {
+    review_progress::Inference {
+        prompt_tokens: answer.prompt_tokens,
+        output_tokens: answer.generated_tokens,
+        elapsed_ms: u64::try_from(answer.elapsed_ms).unwrap_or(u64::MAX),
+        tokens_per_second: answer.tokens_per_second,
+        cached_prompt_tokens: answer.cached_prompt_tokens,
+        prefilled_prompt_tokens: answer.prefilled_prompt_tokens,
+        first_token_ms: answer.first_token_ms.and_then(|v| u64::try_from(v).ok()),
+    }
 }
 fn evidence(session: &Session) -> Vec<Fact> {
     reading_method::facts(session.chart.as_ref())
@@ -507,10 +531,6 @@ fn available_facts(session: &Session) -> Vec<Fact> {
         })
         .collect()
 }
-fn evidence_index(session: &Session) -> Value {
-    json!(available_facts(session))
-}
-
 fn section_prose(title: &str, body: &str) -> String {
     let body = body.trim();
     let prose = body
@@ -794,46 +814,80 @@ fn execute(
     }
 }
 
-fn conversation_prompt(session: &Session, results: &[Value]) -> String {
-    let mut bytes = 0;
-    let mut history = Vec::new();
-    for message in session.messages.iter().rev().take(24) {
-        if bytes + message.text.len() > 12000 && !history.is_empty() {
-            break;
-        }
-        bytes += message.text.len();
-        history.push(json!({"role":message.role,"content":message.text}));
-    }
-    history.reverse();
-    let scroll:Vec<Value>=session.sections.iter().map(|s|json!({"step":s.step,"title":s.title,"body":s.body,"because":s.because,"roles":s.roles})).collect();
-    let receipts: Vec<Value> = results
-        .iter()
-        .rev()
-        .take(2)
-        .map(|r| {
-            if r["result"]["error"].is_null() {
-                json!({"action":r["call"]["action"],"result":r["result"]})
-            } else {
-                r.clone()
+/// Keep verified evidence append-only during a turn so the native worker can
+/// reuse its exact token prefix. A chart revision retires all prior chart data.
+struct PromptThread {
+    messages: Vec<Value>,
+    history_len: usize,
+    revision: u64,
+    facts: BTreeMap<String, Value>,
+}
+
+impl PromptThread {
+    fn new(session: &Session) -> Self {
+        let mut bytes = 0;
+        let mut history = Vec::new();
+        for message in session.messages.iter().rev().take(24) {
+            if bytes + message.text.len() > 12000 && !history.is_empty() {
+                break;
             }
-        })
-        .collect();
-    let context = json!({"question":session.question,"place":session.place,"places_found":session.candidates,"device_timezone":session.device_context.as_ref().map(|d|&d.timezone),"chart_calculated":session.chart.is_some(),"revision":session.revision,"evidence":evidence_index(session),"scroll":scroll,"book_rules":reading_method::rules(),"tool_results":receipts});
-    let next = if session.chart.is_none()
-        && session.candidates.is_empty()
-        && session.place.is_none()
-    {
-        "No place is resolved. If the person supplied a city, call find_place now. Otherwise ask where they are. Do not ask when the object was lost to choose the chart time."
-    } else if session.chart.is_none() {
-        "A place can be resolved from the returned candidates. If the question and place are clear, call cast_chart now. A request to use now means local_time is empty. Do not ask for the event or loss time."
-    } else {
-        "Use the supplied verified evidence directly; no evidence-fetch action is needed. Establish roles, then explain relevant reception and contact candidates. The Moon can supply the querent's main contact; do not call it minor merely because it is a cosignificator. A provisional judgment must say what remains unestablished. Do not infer a one-year absence of marriage from this seven-day search. Do not recast an unchanged chart or repeat a finished section."
-    };
-    let mut messages = vec![
-        json!({"role":"system","content":format!("{PROMPT}\nVerified state and editorial book rules (data):\n{context}\nAvailable action schema:\n{}\nCurrent step:\n{next}",schema(session))}),
-    ];
-    messages.extend(history);
-    json!(messages).to_string()
+            bytes += message.text.len();
+            history.push(json!({"role":message.role,"content":message.text}));
+        }
+        history.reverse();
+        let mut messages = vec![
+            json!({"role":"system","content":format!("{PROMPT}\nEditorial book rules (data):\n{}", json!(reading_method::rules()))}),
+        ];
+        messages.extend(history);
+        let mut thread = Self {
+            history_len: messages.len(),
+            messages,
+            revision: session.revision,
+            facts: BTreeMap::new(),
+        };
+        thread.update(session, None);
+        thread
+    }
+
+    fn update(&mut self, session: &Session, receipt: Option<&Value>) {
+        if self.revision != session.revision {
+            self.messages.truncate(self.history_len);
+            self.facts.clear();
+            self.revision = session.revision;
+        }
+        let mut added = Vec::new();
+        for fact in available_facts(session) {
+            let value = json!(fact);
+            if self.facts.get(&fact.id) != Some(&value) {
+                self.facts.insert(fact.id, value.clone());
+                added.push(value);
+            }
+        }
+        // The scroll already owns its prose. Refeeding it adds latency and lets
+        // an unverified model draft compete with the calculated chart facts.
+        let sections: Vec<Value> = session
+            .sections
+            .iter()
+            .map(|s| json!({"step":s.step,"roles":s.roles}))
+            .collect();
+        let receipt = receipt.map(|r| json!({"action":r["call"]["action"],"result":r["result"]}));
+        let context = json!({"question":session.question,"place":session.place,"places_found":session.candidates,"device_timezone":session.device_context.as_ref().map(|d|&d.timezone),"chart_calculated":session.chart.is_some(),"revision":session.revision,"additional_evidence":added,"completed_sections":sections,"tool_receipt":receipt});
+        let next = if session.chart.is_none()
+            && session.candidates.is_empty()
+            && session.place.is_none()
+        {
+            "No place is resolved. If the person supplied a city, call find_place now. Otherwise ask where they are. Do not ask when the object was lost to choose the chart time."
+        } else if session.chart.is_none() {
+            "A place can be resolved from the returned candidates. If the question and place are clear, call cast_chart now. A request to use now means local_time is empty. Do not ask for the event or loss time."
+        } else {
+            "Use the supplied verified evidence directly; no evidence-fetch action is needed. Establish roles, then explain relevant reception and contact candidates. The Moon can supply the querent's main contact; do not call it minor merely because it is a cosignificator. A provisional judgment must say what remains unestablished. Do not infer a one-year absence of marriage from this seven-day search. Do not recast an unchanged chart or repeat a finished section."
+        };
+        self.messages.push(json!({"role":"user","content":format!("Native verified update (data):\n{context}\nThis is the latest state. Previously supplied chart facts remain valid only for this revision. Additional evidence augments them. Use only evidence IDs allowed by the current schema.\nAvailable action schema:\n{}\nCurrent step:\n{next}",schema(session))}));
+    }
+
+    fn content(&self) -> String {
+        json!(self.messages).to_string()
+    }
 }
 
 // A failed inference has performed no tools. Recover once from the pinned
@@ -871,10 +925,39 @@ fn generate_action(
     unreachable!("the second attempt always returns")
 }
 
-fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
-    // Preparation and generation can take minutes. They cannot move the
-    // submitted question's moment; clarification starts a later user turn.
-    let instant = now_ms();
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HeardAction {
+    heard: String,
+    call: Action,
+}
+fn heard_action(content: &str) -> Result<HeardAction, String> {
+    let content = content.trim();
+    let content = content
+        .strip_prefix("```json")
+        .or_else(|| content.strip_prefix("```"))
+        .and_then(|s| s.strip_suffix("```"))
+        .unwrap_or(content)
+        .trim();
+    let heard: HeardAction = serde_json::from_str(content)
+        .map_err(|_| "The spoken question needs another hearing.".to_owned())?;
+    if heard.heard.trim().is_empty() || heard.heard.len() > 8000 {
+        return Err("The spoken question needs another hearing.".into());
+    }
+    Ok(heard)
+}
+fn direct_audio_prompt(prompt: &str, action_schema: &str) -> Result<String, String> {
+    let mut messages: Vec<Value> = serde_json::from_str(prompt).map_err(|e| e.to_string())?;
+    messages.push(json!({"role":"user","content":format!("Hear the attached speech as the person's next turn. Understand and respond to it directly. Return one JSON object with two fields: heard (a short faithful summary of what they meant, never claimed as verbatim) and call (one action using this schema: {action_schema}). Ask a brief clarification if their words are unclear. No commentary outside the JSON object.")}));
+    Ok(json!(messages).to_string())
+}
+
+enum TurnInput {
+    Text(String),
+    Voice(u64),
+}
+
+fn run(app: &tauri::AppHandle, input: TurnInput) -> Result<Session, String> {
     let started = std::time::Instant::now();
     let state = app.state::<ConversationState>();
     if state
@@ -885,6 +968,21 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
         return Err("A reply is already in progress.".into());
     }
     let _lease = Lease(&state.busy);
+    // Acquire the conversation before consuming the one-use voice receipt.
+    // A competing turn must leave the pending words intact.
+    let (text, voice) = match input {
+        TurnInput::Text(text) => (text, None),
+        TurnInput::Voice(id) => {
+            let voice = app.state::<crate::voice::VoiceState>().take(id)?;
+            let text = match &voice.payload {
+                crate::voice::VoicePayload::Text(text) => text.clone(),
+                crate::voice::VoicePayload::Audio(_) => "Your spoken question…".into(),
+            };
+            (text, Some(voice))
+        }
+    };
+    // Preparation and generation cannot move the question's submitted moment.
+    let instant = voice.as_ref().map_or_else(now_ms, |v| v.received_at_ms);
     state.cancelled.store(false, Ordering::Release);
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let mut session = state.load(&dir)?;
@@ -895,6 +993,27 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
         role: "user".into(),
         text,
     });
+    let spoken_message = session.messages.len() - 1;
+    let mut audio = None;
+    if let Some(voice) = voice {
+        session.audit.push(json!({"event":"voice_input","route":voice.mode,"preparationMs":voice.preparation_ms,"audioPersisted":false}));
+        note(
+            &mut session,
+            &dir,
+            "voice",
+            match voice.mode {
+                crate::voice::VoiceMode::Native => "Your spoken words became writing here.",
+                crate::voice::VoiceMode::GemmaTranscription => {
+                    "Your spoken words were transcribed for comparison."
+                }
+                _ => "The reader is hearing your question directly.",
+            },
+            voice.preparation_ms,
+        );
+        if let crate::voice::VoicePayload::Audio(bytes) = voice.payload {
+            audio = Some(bytes);
+        }
+    }
     note(
         &mut session,
         &dir,
@@ -939,21 +1058,53 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
             "The reader is here, with the book's method at hand.",
             started.elapsed().as_millis() as u64,
         );
-        let mut results = Vec::<Value>::new();
+        let mut thread = PromptThread::new(&session);
         for _ in 0..8 {
             state.check()?;
             session.status = "Considering your question…".into();
             state.publish(&mut session, &dir)?;
-            let prompt = conversation_prompt(&session, &results);
+            let action_schema = schema(&session);
+            let first_audio = audio.take();
+            let prompt = thread.content();
+            let prompt = if first_audio.is_some() {
+                direct_audio_prompt(&prompt, &action_schema)?
+            } else {
+                prompt
+            };
             let prompt_hash = {
                 use sha2::{Digest, Sha256};
                 format!("{:x}", Sha256::digest(&prompt))
             };
-            let action_schema = schema(&session);
             let inference_start = std::time::Instant::now();
             let mut measurements = Vec::new();
-            let generated = generate_action(&state.cancelled, &mut session.audit, |temperature| {
+            let generated = if let Some(bytes) = first_audio {
                 generate_native(
+                    &native,
+                    prompt.clone(),
+                    NativeGenerateOptions {
+                        audio: Some(bytes),
+                        max_tokens: 400,
+                        temperature: 0.,
+                        cancel: Some(state.cancelled.clone()),
+                        ..Default::default()
+                    },
+                )
+                .map_err(|e| e.message)
+                .and_then(|answer| {
+                    measurements.push(inference_measurement(&answer));
+                    let heard = heard_action(&answer.content)?;
+                    state.check()?;
+                    session.messages[spoken_message].text =
+                        format!("From your spoken words: {}", heard.heard.trim());
+                    session
+                        .audit
+                        .push(json!({"voiceUnderstanding":heard.heard,"verbatim":false}));
+                    thread = PromptThread::new(&session);
+                    Ok(heard.call)
+                })
+            } else {
+                generate_action(&state.cancelled, &mut session.audit, |temperature| {
+                    generate_native(
                     &native,
                     prompt.clone(),
                     NativeGenerateOptions {
@@ -966,16 +1117,12 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
                 )
                 .map(|answer| {
                     log::info!("reader inference: prompt_tokens={} output_tokens={} duration_ms={} tokens_per_second={:.2}",answer.prompt_tokens,answer.generated_tokens,answer.elapsed_ms,answer.tokens_per_second);
-                    measurements.push(review_progress::Inference {
-                        prompt_tokens: answer.prompt_tokens,
-                        output_tokens: answer.generated_tokens,
-                        elapsed_ms: u64::try_from(answer.elapsed_ms).unwrap_or(u64::MAX),
-                        tokens_per_second: answer.tokens_per_second,
-                    });
+                    measurements.push(inference_measurement(&answer));
                     answer.content
                 })
                 .map_err(|e| e.message)
-            });
+                })
+            };
             for measurement in measurements {
                 session
                     .audit
@@ -1053,7 +1200,7 @@ fn run(app: &tauri::AppHandle, text: String) -> Result<Session, String> {
             let judgment_written =
                 receipt["result"]["written"] == true && receipt["call"]["step"] == "judgment";
             session.audit.push(receipt.clone());
-            results.push(receipt);
+            thread.update(&session, Some(&receipt));
             state.publish(&mut session, &dir)?;
             if judgment_written && finish_working_reading(&mut session) {
                 note(
@@ -1099,7 +1246,13 @@ pub fn conversation_snapshot(
 }
 #[tauri::command]
 pub async fn conversation_send(app: tauri::AppHandle, text: String) -> Result<Session, String> {
-    tauri::async_runtime::spawn_blocking(move || run(&app, text))
+    tauri::async_runtime::spawn_blocking(move || run(&app, TurnInput::Text(text)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub async fn conversation_voice(app: tauri::AppHandle, id: u64) -> Result<Session, String> {
+    tauri::async_runtime::spawn_blocking(move || run(&app, TurnInput::Voice(id)))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -1107,14 +1260,80 @@ pub async fn conversation_send(app: tauri::AppHandle, text: String) -> Result<Se
 pub fn conversation_cancel(
     state: tauri::State<'_, ConversationState>,
     acquisition: tauri::State<'_, AcquisitionState>,
+    voice: tauri::State<'_, crate::voice::VoiceState>,
 ) {
     state.cancelled.store(true, Ordering::Release);
     acquisition.0.cancel();
+    voice.discard_pending();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn voice_understanding_is_a_bounded_summary_and_valid_tool() {
+        let result = heard_action(r#"{"heard":"Where is my ring?","call":{"action":"say","message":"When did you notice it was missing?"}}"#).unwrap();
+        assert_eq!(result.heard, "Where is my ring?");
+        assert!(heard_action(r#"{"heard":"","call":{"action":"say","message":"Hello"}}"#).is_err());
+        assert!(
+            heard_action(r#"{"heard":"My ring","call":{"action":"invent_coordinates"}}"#).is_err()
+        );
+        assert!(heard_action("This is some prose instead of a tool.").is_err());
+        assert!(heard_action(
+            &json!({"heard":"x".repeat(8001),"call":{"action":"say","message":"Hello"}})
+                .to_string()
+        )
+        .is_err());
+    }
+    #[test]
+    fn fixed_method_precedes_changing_state_in_the_same_exact_prefix() {
+        let mut session = Session::default();
+        let before = PromptThread::new(&session).messages;
+        session.question = "A new question".into();
+        session.revision = 1;
+        let after = PromptThread::new(&session).messages;
+        assert_eq!(before[0], after[0]);
+        assert!(after[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("Editorial book rules"));
+        assert!(after.last().unwrap()["content"]
+            .as_str()
+            .unwrap()
+            .contains("A new question"));
+    }
+    #[test]
+    fn evidence_updates_keep_the_prefix_and_revision_changes_retire_chart_data() {
+        let mut session = Session {
+            question: "Old question".into(),
+            revision: 1,
+            chart: Some(horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap()),
+            ..Default::default()
+        };
+        let mut thread = PromptThread::new(&session);
+        assert!(!thread.facts.is_empty());
+        let before = thread.messages.clone();
+        let receipt = json!({"call":{"action":"find_place"},"result":{"error":"No such place"}});
+        thread.update(&session, Some(&receipt));
+        assert_eq!(&thread.messages[..before.len()], before.as_slice());
+        let update = thread.messages.last().unwrap()["content"].as_str().unwrap();
+        assert!(update.contains("No such place"));
+        assert!(update.contains("\"additional_evidence\":[]"));
+        thread
+            .facts
+            .insert("old-chart-fact".into(), json!({"old":true}));
+        session.revision = 2;
+        session.question = "New question".into();
+        session.chart =
+            Some(horary_ai_core::astronomy::chart(1789473600000., 38.657, -77.249).unwrap());
+        thread.update(&session, None);
+        assert_eq!(thread.messages.len(), thread.history_len + 1);
+        assert_eq!(thread.messages[0], before[0]);
+        assert!(!thread.content().contains("Old question"));
+        assert!(!thread.facts.contains_key("old-chart-fact"));
+        assert_eq!(thread.facts.len(), available_facts(&session).len());
+        assert!(thread.content().contains("New question"));
+    }
     #[test]
     fn device_location_keeps_coordinates_and_requires_credible_zone_and_accuracy() {
         let mut context = DeviceContext {
@@ -1274,6 +1493,81 @@ mod tests {
 
     #[test]
     #[ignore = "Real Gemma hardware qualification; run with explicit local weights."]
+    fn native_audio_question_reaches_chart_tool_without_transcription() {
+        use crate::native_llama_worker::{start_native_llama_from_path, stop_native_llama};
+        let native = NativeLlamaState::default();
+        let model = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("local model path");
+        let wav =
+            std::fs::read(std::env::var_os("HORARY_VOICE_TEST_WAV").expect("synthetic local WAV"))
+                .unwrap();
+        start_native_llama_from_path(
+            &native,
+            "direct-voice-eval".into(),
+            String::new(),
+            model.into(),
+            std::env::temp_dir(),
+            serde_json::from_value(
+                json!({"modelId":"direct-voice-eval","ctxSize":16384,"nGpuLayers":"auto"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let context = DeviceContext {
+            timezone: "America/New_York".into(),
+            locale: "en-US".into(),
+            latitude: Some(38.657),
+            longitude: Some(-77.249),
+            accuracy_meters: Some(800.),
+        };
+        let mut session = Session {
+            candidates: vec![device_place(&context).unwrap().unwrap()],
+            device_context: Some(context),
+            ..Default::default()
+        };
+        session.messages.push(Message {
+            role: "user".into(),
+            text: "Your spoken question…".into(),
+        });
+        let prompt =
+            direct_audio_prompt(&PromptThread::new(&session).content(), &schema(&session)).unwrap();
+        let answer = generate_native(
+            &native,
+            prompt,
+            NativeGenerateOptions {
+                audio: Some(wav),
+                max_tokens: 400,
+                temperature: 0.,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        eprintln!("DIRECT VOICE: {}", answer.content);
+        eprintln!(
+            "DIRECT VOICE MEASUREMENT: {}",
+            serde_json::to_string(&inference_measurement(&answer)).unwrap()
+        );
+        stop_native_llama(&native).unwrap();
+        let heard = heard_action(&answer.content).unwrap();
+        assert!(
+            heard.heard.to_lowercase().contains("marr"),
+            "Recognize the synthetic marriage question"
+        );
+        assert!(
+            matches!(&heard.call, Action::CastChart {question, local_time, place_id, ..} if local_time.is_empty() && place_id == "device-location" && question.to_lowercase().contains("marr") && question.to_lowercase().contains("year"))
+        );
+        execute(
+            &mut session,
+            heard.call,
+            &GeocodeState::default(),
+            1789387200000.,
+        )
+        .unwrap();
+        assert!(session.chart.is_some());
+        assert_eq!(session.place.as_ref().unwrap().provider, "device");
+    }
+
+    #[test]
+    #[ignore = "Real Gemma hardware qualification; run with explicit local weights."]
     fn native_device_marriage_conversation() {
         use crate::native_llama_worker::{start_native_llama_from_path, stop_native_llama};
         use sha2::{Digest, Sha256};
@@ -1307,16 +1601,16 @@ mod tests {
         for text in ["Will I get married in the next year? I mean a future partner; I am not seeing anyone. Use where this device is now and begin the reading."] {
             session.messages.push(Message {role:"user".into(),text:text.into()});
             session.audit.push(json!({"event":"user_turn","build":env!("HORARY_BUILD_GIT_SHA")}));
-            let mut results=Vec::new();
+            let mut thread=PromptThread::new(&session);
             for _ in 0..8 {
-                let prompt=conversation_prompt(&session,&results);
+                let prompt=thread.content();
                 let hash=format!("{:x}",Sha256::digest(&prompt));
                 let action_schema=schema(&session);
                 let mut measurements=Vec::new();
                 let action=generate_action(&Arc::new(AtomicBool::new(false)),&mut session.audit,|temperature| {
                     let generated=generate_native(&native,prompt.clone(),NativeGenerateOptions {max_tokens:800,temperature,response_schema:Some(action_schema.clone()),..Default::default()}).map_err(|e|e.message)?;
-                    eprintln!("READING INFERENCE: {} tokens / {}ms ({:.2} tok/s)",generated.generated_tokens,generated.elapsed_ms,generated.tokens_per_second);
-                    measurements.push(json!({"promptSha256":hash,"promptTokens":generated.prompt_tokens,"outputTokens":generated.generated_tokens,"elapsedMs":generated.elapsed_ms,"tokensPerSecond":generated.tokens_per_second}));
+                    eprintln!("READING INFERENCE: {} tokens / {}ms ({:.2} tok/s); reused={} prefilled={} first={:?}",generated.generated_tokens,generated.elapsed_ms,generated.tokens_per_second,generated.cached_prompt_tokens,generated.prefilled_prompt_tokens,generated.first_token_ms);
+                    measurements.push(json!({"promptSha256":hash,"promptTokens":generated.prompt_tokens,"outputTokens":generated.generated_tokens,"elapsedMs":generated.elapsed_ms,"tokensPerSecond":generated.tokens_per_second,"cachedPromptTokens":generated.cached_prompt_tokens,"prefilledPromptTokens":generated.prefilled_prompt_tokens,"firstTokenMs":generated.first_token_ms}));
                     Ok(generated.content)
                 }).unwrap();
                 session.audit.extend(measurements.into_iter().map(|m|json!({"generation":m})));
@@ -1326,7 +1620,7 @@ mod tests {
                 let result=execute(&mut session,action,&geo,1789387200000.);
                 let receipt=json!({"call":call,"result":match result {Ok(value)=>value,Err(error)=>json!({"error":error})},"promptSha256":hash});
                 session.audit.push(receipt.clone());
-                results.push(receipt);
+                thread.update(&session, Some(&receipt));
                 if session.sections.iter().any(|s|s.step==Some(Step::Judgment)) && finish_working_reading(&mut session) {break;}
             }
         }
@@ -1353,6 +1647,15 @@ mod tests {
                 "Missing method step {step:?}"
             );
         }
+        assert!(
+            session
+                .audit
+                .iter()
+                .any(|entry| entry["generation"]["cachedPromptTokens"]
+                    .as_u64()
+                    .is_some_and(|n| n > 0)),
+            "Later reading stages must reuse the real resident prompt"
+        );
         let judgment = session
             .sections
             .iter()
@@ -1615,11 +1918,12 @@ mod tests {
         let mut session = Session::default();
         session.messages.push(Message{role:"user".into(),text:"I am the astrologer in London, United Kingdom. Where is my own lost ring? I understand the question now. It is a plain gold ring, last seen at home. Please cast the chart and begin the reading.".into()});
         let mut results = Vec::new();
+        let mut thread = PromptThread::new(&session);
         let geocode = GeocodeState::default();
         for _ in 0..8 {
             let output = generate_native(
                 &native,
-                conversation_prompt(&session, &results),
+                thread.content(),
                 NativeGenerateOptions {
                     max_tokens: 800,
                     temperature: 0.2,
@@ -1641,6 +1945,7 @@ mod tests {
             let result = execute(&mut session, action, &geocode, 1789387200000.).unwrap();
             let receipt = json!({"call":call,"result":result});
             session.audit.push(receipt.clone());
+            thread.update(&session, Some(&receipt));
             results.push(receipt);
         }
         stop_native_llama(&native).unwrap();

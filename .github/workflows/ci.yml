@@ -40,7 +40,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       TAURI_ENV_PLATFORM: ${{ matrix.tauriPlatform }}
-      MACOSX_DEPLOYMENT_TARGET: '11.0'
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
       CARGO_NET_GIT_FETCH_WITH_CLI: 'true'
     strategy:
       fail-fast: false

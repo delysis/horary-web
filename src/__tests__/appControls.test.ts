@@ -57,7 +57,7 @@ it('keeps unsent words after delivery failure and prevents duplicate submissions
 
 it('starts voice from Space anywhere on the page without clicking the invitation', async () => {
   vi.stubGlobal('__TAURI_INTERNALS__', {})
-  vi.mocked(invoke).mockImplementation(command => command === 'conversation_snapshot' || command === 'conversation_send' ? Promise.resolve(empty) : command === 'voice_finish' ? Promise.resolve('Where is my ring?') : Promise.resolve(undefined))
+  vi.mocked(invoke).mockImplementation(command => command === 'conversation_snapshot' || command === 'conversation_voice' ? Promise.resolve(empty) : command === 'voice_finish' ? Promise.resolve({ id: 7, text: 'Where is my ring?' }) : Promise.resolve(undefined))
   const { element, dispose } = await render()
   try {
     await act(async () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })))
@@ -65,6 +65,22 @@ it('starts voice from Space anywhere on the page without clicking the invitation
     expect(element.textContent).toContain('I’m listening…')
     await act(async () => document.body.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true, cancelable: true })))
     expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'voice_finish')).toBe(true)
+    expect(vi.mocked(invoke).mock.calls).toContainEqual(['conversation_voice', { id: 7 }])
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'conversation_send')).toBe(false)
+  } finally { await dispose() }
+})
+
+it('sends direct audio by its native receipt without a required transcription', async () => {
+  vi.stubGlobal('__TAURI_INTERNALS__', {})
+  vi.mocked(invoke).mockImplementation(command => command === 'conversation_snapshot' || command === 'conversation_voice' ? Promise.resolve(empty) : command === 'voice_finish' ? Promise.resolve({ id: 9, text: null }) : Promise.resolve(undefined))
+  const { element, dispose } = await render()
+  try {
+    await type(element, 'A thought for later')
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })))
+    await act(async () => document.body.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true, cancelable: true })))
+    expect(vi.mocked(invoke).mock.calls).toContainEqual(['conversation_voice', { id: 9 }])
+    expect(vi.mocked(invoke).mock.calls.some(([c]) => c === 'conversation_send')).toBe(false)
+    expect(element.querySelector('textarea')!.value).toBe('A thought for later')
   } finally { await dispose() }
 })
 

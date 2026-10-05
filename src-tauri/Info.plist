@@ -5,6 +5,8 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Horary listens when you hold Space or the invitation to speak. Your recording stays on this computer.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Horary can turn your words into writing using speech recognition on this computer.</string>
   <key>NSLocationUsageDescription</key>
   <string>Horary uses your current location to cast a chart for the place where the question is asked.</string>
   <key>NSLocationWhenInUseUsageDescription</key>

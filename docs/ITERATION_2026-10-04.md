@@ -35,11 +35,19 @@ Touch or focus a planet to reveal its calculated testimony immediately. The char
 
 ## Speed and logging
 
-Model prompts now carry evidence appropriate to the current stage and actors, instead of the whole chart, hourly ephemeris and repeated tool prose. Fetching evidence already present in state is no longer another model action. Reviewer builds optimize native sampling while preserving the model, constraints and artifact verification. The pinned controlled runtime clears its prompt cache between requests; no unverified claim of cross-turn prefix reuse is made.
+Model prompts now carry evidence appropriate to the current stage and actors, instead of the whole chart, hourly ephemeris and repeated tool prose. Fetching evidence already present in state is no longer another model action. Reviewer builds optimize native sampling while preserving the model, constraints and artifact verification. At the start of this pass the pinned controlled runtime cleared its prompt cache between requests; the voice and caching follow-up below replaces that behavior with verified resident reuse.
 
 A measured roles passage fell from 61.0 seconds to 24.5 seconds after prompt compaction on this M4 Max. The final synthetic device-location reading reached all three method passages in 81.09 seconds. These are local observations, including prompt work, not a portable benchmark or a packaged voice journey. Residual model errors remain part of review.
 
 The native app writes a bounded `reading-progress.jsonl` journal in its app-data directory, with build identity, stages, durations and inference token metrics. The page's “Notes from this reading” shows plain-language progress. Raw questions, coordinates and audio are absent from this separate journal. The existing `conversation.json` retains the conversation, places, chart revisions, tool calls, errors and inference receipts. Nothing is automatically sent to a developer. Eileen can keep independent notes or speak observations into the conversation.
+
+### Voice and caching follow-up
+
+The earlier mandatory Gemma transcription step is removed from the normal path. macOS first tries installed dictation with on-device recognition required; unavailable dictation falls back to direct audio understanding and the first chart-tool decision in one Gemma call. A labeled summary makes that understanding correctable. The original Gemma transcription route remains a developer comparison option, alongside explicit native and direct modes, without a settings control.
+
+The native-kit update now preserves exact resident prefixes for single controlled text decisions. Fixed book instructions come first; new native facts and receipts append within a turn. Model draft prose is not repeatedly fed back. Chart revisions retire old chart context, and cancellation clears reusable state. The journal now records reused/prefilled tokens and first-token delay.
+
+The synthetic device-location reading completed all three stages in 62.21 seconds with the revised prompt, versus 81.09 seconds in the earlier local fixture. Its four model calls took 49.46 seconds in total; the final decision reused 5,761 tokens and evaluated 851 new tokens. These runs changed prompt organization and output, so this is an observed improvement, not a controlled estimate of cache speedup. Direct audio also reached the chart tool without transcription. The headless native-dictation probe failed its explicit permission prerequisite (`NotDetermined`); no native-dictation speed claim is made. Real microphone, OS permission, and Eileen's method assessment remain separate acceptance work.
 
 ## What this pass does not establish
 

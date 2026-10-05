@@ -45,6 +45,7 @@ mod geocode;
 mod hf_cache;
 mod inference;
 mod llama;
+mod local_dictation;
 mod microphone_capture;
 mod model_manifest;
 mod native_llama;
@@ -526,6 +527,7 @@ pub fn run() {
             conversation::conversation_snapshot,
             conversation::conversation_device_context,
             conversation::conversation_send,
+            conversation::conversation_voice,
             conversation::conversation_cancel,
             voice::voice_start,
             voice::voice_finish,

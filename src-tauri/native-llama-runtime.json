@@ -35,7 +35,7 @@
         {
           "id": "hot",
           "medium": "native-kit memory cache",
-          "purpose": "resident model reuse; controlled reading prefix reuse is not promised"
+          "purpose": "Exact token prefixes reused in the resident single reading; corrections replace the changed suffix and cancellation discards reusable state"
         }
       ]
     },
@@ -60,6 +60,6 @@
   },
   "nativeKit": {
     "repository": "https://github.com/delysis/native-platform.git",
-    "revision": "1d43858953938cb28e935de7c2f107eede69ddf9"
+    "revision": "39f2f87858afedef47d7b39057c02a8127b9cc90"
   }
 }

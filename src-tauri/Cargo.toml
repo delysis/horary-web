@@ -42,9 +42,12 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
-llama-native-engine = { git = "https://github.com/delysis/native-platform.git", rev = "1d43858953938cb28e935de7c2f107eede69ddf9", optional = true }
-llama-native-host = { git = "https://github.com/delysis/native-platform.git", rev = "1d43858953938cb28e935de7c2f107eede69ddf9", optional = true }
-llama-native-types = { git = "https://github.com/delysis/native-platform.git", rev = "1d43858953938cb28e935de7c2f107eede69ddf9", optional = true }
+llama-native-engine = { git = "https://github.com/delysis/native-platform.git", rev = "39f2f87858afedef47d7b39057c02a8127b9cc90", optional = true }
+llama-native-host = { git = "https://github.com/delysis/native-platform.git", rev = "39f2f87858afedef47d7b39057c02a8127b9cc90", optional = true }
+llama-native-types = { git = "https://github.com/delysis/native-platform.git", rev = "39f2f87858afedef47d7b39057c02a8127b9cc90", optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+speech = { version = "=0.8.7", default-features = false, features = ["async"] }
 
 # Reviewer builds still verify multi-gigabyte weights at normal hashing speed.
 [profile.dev.package.sha2]

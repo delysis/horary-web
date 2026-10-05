@@ -40,7 +40,7 @@
       "debugApplicationIdSuffix": ".debug"
     },
     "macOS": {
-      "minimumSystemVersion": "11.0",
+      "minimumSystemVersion": "13.0",
       "infoPlist": "Info.plist"
     },
     "resources": {

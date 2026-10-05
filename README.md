@@ -4,7 +4,7 @@ A private conversation with a horary reader, in one document that unfolds as you
 
 Speak or type. The agent clarifies the question, resolves the place and moment, calls the Rust chart tools, and develops a provisional reading on a scroll. No chart forms or settings button. Ask why, offer a correction, or ask for the supporting calculation.
 
-The native app uses Rust, Tauri and native-kit with Gemma 4 12B IT QAT. First use prepares the model automatically in the shared Hugging Face cache, without Python, a CLI, an account, or duplicate weights. Audio is processed locally through the matching projector; macOS can speak replies using an installed system voice.
+The native app uses Rust, Tauri and native-kit with Gemma 4 12B IT QAT. First use prepares the model automatically in the shared Hugging Face cache, without Python, a CLI, an account, or duplicate weights. Voice uses installed on-device dictation when available, otherwise the reader hears the audio directly. macOS can speak replies using an installed system voice.
 
 For Eileen, start with [the review guide](docs/REVIEW_GUIDE.md). [Conversation architecture](docs/CONVERSATION.md) explains the authority boundaries and current limitations. This is an unsigned development build, awaiting real conversational and domain acceptance. Review artifacts are attached to successful [CI runs](https://github.com/delysis/horary-web/actions/workflows/ci.yml).
 
@@ -29,7 +29,7 @@ npm run check:native-llama       # needs a local compatible GGUF
 npm run check:horary-readings    # needs the same local model
 ```
 
-Set `HORARY_NATIVE_LLAMA_TEST_MODEL` to the full model path if automatic discovery does not find it. Native-kit is pinned to an immutable revision; see [model and runtime provenance](docs/MODEL_PROVENANCE.md). Speculative decoding is not exposed by the pinned runtime. Voice uses native microphone WAV input and the matching projector; image attachments have no interface yet.
+Set `HORARY_NATIVE_LLAMA_TEST_MODEL` to the full model path if automatic discovery does not find it. Native-kit is pinned to an immutable revision; see [model and runtime provenance](docs/MODEL_PROVENANCE.md). Exact resident prompt prefixes are reused for text tool decisions. Speculative decoding is not exposed by the pinned runtime; image attachments have no interface yet. Developer voice comparisons are described in [conversation architecture](docs/CONVERSATION.md).
 
 Build the native macOS review app with:
 
@@ -37,7 +37,7 @@ Build the native macOS review app with:
 npm run tauri -- build --debug --features native-llama-metal --bundles app
 ```
 
-The app appears under `src-tauri/target/debug/bundle/macos/Horary.app`. macOS 11+ is required. Native inference is enabled by default; no separate inference server is needed.
+The app appears under `src-tauri/target/debug/bundle/macos/Horary.app`. macOS 13+ is required by the native Speech bridge. Native inference is enabled by default; no separate inference server is needed.
 
 ## Boundaries to review
 
