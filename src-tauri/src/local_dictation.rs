@@ -2,6 +2,17 @@
 #![forbid(unsafe_code)]
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(target_os = "macos")]
+static AUTHORIZATION_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(any(target_os = "macos", test))]
+fn claim_authorization_request(requested: &AtomicBool) -> Result<(), String> {
+    requested
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .map(|_| ())
+        .map_err(|_| "Local dictation permission is still waiting.".into())
+}
+
 pub fn transcribe(wav: &[u8], cancelled: &AtomicBool) -> Result<String, String> {
     if cancelled.load(Ordering::Acquire) {
         return Err("Listening cancelled.".into());
@@ -40,6 +51,9 @@ fn apple(wav: &[u8], cancelled: &AtomicBool) -> Result<String, String> {
     }
     let mut authorization = SpeechRecognizer::authorization_status();
     if authorization == speech::error::AuthorizationStatus::NotDetermined {
+        // Read authorization on every turn, but ask only once per process. A
+        // pending dialog must not add another six-second wait to each reply.
+        claim_authorization_request(&AUTHORIZATION_REQUESTED)?;
         // A permission dialog must not trap the owned voice worker for the
         // framework's synchronous 30-second wait. Dropping this future is safe.
         authorization = tauri::async_runtime::block_on(async {
@@ -154,6 +168,13 @@ fn pcm_samples(wav: &[u8]) -> Result<Vec<i16>, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn pending_authorization_is_requested_once_instead_of_delaying_every_turn() {
+        let requested = std::sync::atomic::AtomicBool::new(false);
+        assert!(super::claim_authorization_request(&requested).is_ok());
+        assert!(super::claim_authorization_request(&requested).is_err());
+        assert!(super::claim_authorization_request(&requested).is_err());
+    }
     #[cfg(target_os = "macos")]
     #[test]
     #[ignore = "Requires installed on-device dictation, prior Speech permission and a synthetic WAV."]

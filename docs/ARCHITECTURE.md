@@ -18,6 +18,8 @@ The same calculated chart feeds the document and model evidence. Chart/question 
 
 `native_llama_worker.rs` adapts pinned native-kit host/engine/types. The host keeps one model resident, verifies the model and projector, and selects Gemma's explicit non-thinking format from loaded architecture metadata. Text tools are constrained at sampling time. Direct audio uses ordinary multimodal generation and a bounded parsed action, because controlled generation has no media support; a guard prevents silently dropping media. Direct understanding is labeled as a summary, never a verbatim transcript.
 
+Initial integrity verification belongs to the native owner: registered metadata provides pinned expected SHA-256 digests, and the owner verifies its opened files before publishing a resident. Warm preparation uses metadata and that resident, with file-identity guards retained. It does not repeatedly hash model payloads. A pending Speech authorization request is made once per process; later turns read the current permission status without another timeout.
+
 Single controlled text requests reuse the engine's exact resident token prefix. Fixed policy and book rules precede changing state. Within a turn, Rust appends new verified facts and receipts; it does not refeed model draft prose. A chart revision retires the old chart context. Cache authority is bound to the resident worker and token sequence; cancellation, failure and shutdown clear it. Only newly decoded tokens save physical work: logical context and admission limits still charge the entire request. There is no disk prompt cache or speculative decoding. Local receipts record reused/prefilled tokens and first-token delay separately from generation duration.
 
 ## Acquisition and storage

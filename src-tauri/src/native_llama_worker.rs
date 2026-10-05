@@ -103,6 +103,39 @@ mod imp {
         GenerationState, NativeModelConfig, SamplingConfig, SpecialTokenPolicy,
     };
     static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+    fn native_model_metadata(
+        id: &str,
+        registered: &[crate::llama::ModelInfo],
+        inspect_import: impl FnOnce(&str) -> LlamaResult<crate::llama::ModelInfo>,
+    ) -> LlamaResult<crate::llama::ModelInfo> {
+        match registered.iter().find(|model| model.id == id) {
+            Some(model) => Ok(model.clone()),
+            None => inspect_import(id),
+        }
+    }
+
+    #[test]
+    fn registered_metadata_defers_payload_verification_to_the_native_owner() {
+        let model = crate::llama::ModelInfo {
+            id: "reader".into(),
+            filename: "reader.gguf".into(),
+            display_name: "Reader".into(),
+            size_bytes: 123,
+            sha256: "a".repeat(64),
+        };
+        let registered = [model.clone()];
+        let info = native_model_metadata("reader", &registered, |_| {
+            panic!("A resident registered model must not be rehashed before native start")
+        })
+        .unwrap();
+        assert_eq!(info.sha256, model.sha256);
+        let missing = native_model_metadata("imported", &registered, |id| {
+            assert_eq!(id, "imported");
+            Err(error("Import verification required"))
+        })
+        .unwrap_err();
+        assert_eq!(missing.message, "Import verification required");
+    }
     fn chat_template(architecture: Option<&str>) -> llama_native_types::ChatTemplateChoice {
         if architecture == Some("gemma4") {
             llama_native_types::ChatTemplateChoice::Gemma4NonThinking
@@ -127,14 +160,19 @@ mod imp {
         state: &NativeLlamaState,
         req: StartLlamaRequest,
     ) -> LlamaResult<LlamaStatus> {
-        let model = crate::llama::get_model_by_id(dir, &req.model_id)?;
+        // The catalog supplies pinned expected digests, not verification.
+        // Native-kit's owner hashes its opened files before initial load and
+        // guards their identities. A resident start needs no second full read.
+        let registered = crate::hf_cache::registered_models(dir)?;
+        let lookup = |id: &str| {
+            native_model_metadata(id, &registered, |id| crate::llama::get_model_by_id(dir, id))
+        };
+        let model = lookup(&req.model_id)?;
         let path = crate::llama::resolve_model_path(dir, &model.filename)?;
         let mut config = NativeModelConfig::local(path);
         config.model_id = model.id;
         config.expected_model_sha256 = Some(model.sha256);
-        if let Ok(projector) =
-            crate::llama::get_model_by_id(dir, &format!("{}-projector", req.model_id))
-        {
+        if let Ok(projector) = lookup(&format!("{}-projector", req.model_id)) {
             config.mmproj_path = Some(crate::llama::resolve_model_path(dir, &projector.filename)?);
             config.expected_mmproj_sha256 = Some(projector.sha256);
         }
@@ -523,6 +561,50 @@ pub use imp::{
 #[cfg(all(test, feature = "native-llama"))]
 mod integration_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "Requires the pinned model/projector in the shared Hub cache and compatible hardware."]
+    fn registered_reader_preparation_reuses_its_verified_resident() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = crate::hf_cache::cache_root().unwrap();
+        std::fs::write(
+            dir.path().join("huggingface-cache.json"),
+            serde_json::to_vec(&root).unwrap(),
+        )
+        .unwrap();
+        let req: StartLlamaRequest = serde_json::from_value(
+            serde_json::json!({"modelId":"gemma-4-12b-qat","ctxSize":16384,"nGpuLayers":"auto"}),
+        )
+        .unwrap();
+        let state = NativeLlamaState::default();
+        let cold = std::time::Instant::now();
+        start_native_llama_in_dir(dir.path(), &state, req.clone()).unwrap();
+        let cold_ms = cold.elapsed().as_millis();
+        let resident = state.running.lock().unwrap().as_ref().unwrap().clone();
+        let manifest = crate::model_manifest::bundled_model_manifest().unwrap();
+        assert_eq!(
+            resident.config.expected_model_sha256,
+            manifest
+                .models
+                .iter()
+                .find(|m| m.id == req.model_id)
+                .unwrap()
+                .sha256
+        );
+        assert!(resident.config.expected_mmproj_sha256.is_some());
+        let warm = std::time::Instant::now();
+        start_native_llama_in_dir(dir.path(), &state, req).unwrap();
+        let warm_ms = warm.elapsed().as_millis();
+        let reused = Arc::ptr_eq(&resident, state.running.lock().unwrap().as_ref().unwrap());
+        drop(resident);
+        stop_native_llama(&state).unwrap();
+        eprintln!("REGISTERED READER PREPARATION: cold_ms={cold_ms} warm_ms={warm_ms} same_resident={reused}");
+        assert!(reused, "The verified owner must stay resident");
+        assert!(
+            warm_ms < 1000,
+            "A warm metadata lookup must not reread seven GB of payload"
+        );
+    }
 
     #[test]
     fn resident_model_constrains_streams_cancels_and_stops() {

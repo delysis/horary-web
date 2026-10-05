@@ -10,6 +10,8 @@ Direct audio successfully understood a synthetic marriage question and called `c
 
 Failed receipts are preserved: initial Swift-runtime linking, the Gemma embedded-template incompatibility, an upstream queued-cancellation cache leak (repaired), and the unavailable platform-dictation prerequisite. Exact final component gates and package identity are recorded with the PR. Earlier records below apply to their recorded builds.
 
+Live use of the rebuilt bundle exposed an additional 12.589-second preparation delay before a later direct-audio decision. The native start path was rehashing registered model payloads before discovering that the verified owner was already resident. Registered metadata now passes pinned expected digests directly to that owner; initial payload validation and file-identity guards remain in native-kit. Warm starts do not repeat this read. The real registered-reader test measured 13.737 seconds for initial verified preparation and less than one millisecond for a repeated start, with the same resident owner and pinned model/projector digests. Pending Speech authorization is also requested once per process, avoiding another six-second wait on every turn while permission is unanswered. These repairs have metadata-resolution/permission regressions and an opt-in test through the real registered-model start path. The live conversation advanced after launch and is preserved; tests do not reset it.
+
 ## Earlier review pass — October 4, 2026
 
 This is a reviewable method prototype. It does not establish autonomous astrological judgment. Earlier acceptance records below refer to their recorded builds, not the current application.
