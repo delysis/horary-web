@@ -642,6 +642,7 @@ fn run(
     session.status.clear();
     session.busy = false;
     if let Err(error) = result {
+        session.method.flow.pause(error.clone());
         note(
             &mut session,
             &dir,
@@ -654,7 +655,13 @@ fn run(
             .push(json!({"interruption":error,"revision":session.revision}));
         session.messages.push(Message {
             role: "assistant".into(),
-            text: if state.cancelled.load(Ordering::Acquire) { "We can pause here. Tell me what you’d like to change." } else { "I lost my place for a moment. Your words are still here; tell me where you’d like to continue." }.into(),
+            text: if state.cancelled.load(Ordering::Acquire) {
+                "We can pause here. Your chart and completed passages are kept; say ‘continue’ when you’re ready."
+            } else if session.chart.is_some() {
+                "The chart is kept, but the reading hasn't finished. Say ‘continue’ and I'll pick up the unfinished step."
+            } else {
+                "Your question is kept. I couldn't finish this step; say ‘continue’ to try it again."
+            }.into(),
         });
     }
     state.publish(&mut session, &dir)?;

@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": ".gitattributes",
-      "sha256": "f5821ed74c09d993b162adccf704f4e5be81e39ed22b8c9f4fecb747accb41ec"
+      "sha256": "b5d10a7ae685bed31fe9e7549540dcfb7242906a6f4c3a0a76f5d76356ebf436"
     },
     {
       "path": "crates/horary-ai-core/src/astronomy.rs",
@@ -47,7 +47,7 @@
     },
     {
       "path": "src-tauri/src/conversation.rs",
-      "sha256": "13d4929951c20650549eccea233af22354fb04a8717e84da103dd19dfb1770e4"
+      "sha256": "6e717551f072575cb4d15f6244433ffef6a6cf159c594ed6eb5b79aaf9e69a03"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -58,12 +58,20 @@
       "sha256": "bd81fc4c03a774fabde9d8c6fc15f85f837863f38bd834fceade83768fa152a9"
     },
     {
+      "path": "src-tauri/src/horary_contract.rs",
+      "sha256": "4324a9945f84d5dc4d39a3f12304f7ec70c1130be17a1fb19de8c9efa78f384f"
+    },
+    {
+      "path": "src-tauri/src/horary_executor.rs",
+      "sha256": "018757d8802d5d90030f6f0078a0f7942ac3cb19a3e0e9de1ce212bd1a41a9cc"
+    },
+    {
       "path": "src-tauri/src/horary_lessons.rs",
-      "sha256": "22d704a99d98e950973fea48d4520cf3426a1cecaf213a95b5f01eb161cc40ba"
+      "sha256": "c314e840efe87c13a7882b7bc39e1ff54392b438e8548f7c59c05a87cb518256"
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "a2c91d7a1a0e2daf3e1d030a47de3450ab1b60d8001d0668260cbcd1a5caf66d"
+      "sha256": "e525acb69096455ef2b7d1c8ff182d236d584365d2218c966a4e81611a4e78b0"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -75,15 +83,15 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/core.txt",
-      "sha256": "b7a0fe2cd5f8c590c2ccb87d7fb805ff531dc03b3ae67fc5fc9e2856477d8109"
+      "sha256": "642152bc063d2c68a3f5b65cac79bc8805d47bfbe99836ae784b6bbb8ba5850a"
     },
     {
       "path": "src-tauri/src/horary_prompts/explanation.md",
-      "sha256": "010cf1fb336cad64f85e13abeec7491e1ce1465a4216124312f09fc32efc7d66"
+      "sha256": "239f12ed08e0e20e81dcbb22497d449ffe12a6f2ab06ecaa1135d148db44ffa3"
     },
     {
       "path": "src-tauri/src/horary_prompts/intake.md",
-      "sha256": "b71f826d739bbdd9d62f271cbf5e9fe61b20f7a7213d8b13f37d393b44e1fc27"
+      "sha256": "4dc1983592c761406d6185ac79e215cc1f93e121a4be78ccc94ba9274f2bd7b2"
     },
     {
       "path": "src-tauri/src/horary_prompts/judgment.md",
@@ -103,7 +111,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/place.md",
-      "sha256": "08587521513c0ff546304f6e8b5e4e97263d863bd49bea1399283288045a9941"
+      "sha256": "e9aca14f097e27a5061494c68490d36605f0c8084d373a22b441c8def9577116"
     },
     {
       "path": "src-tauri/src/horary_prompts/reception.md",
@@ -111,23 +119,39 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/significators_common.md",
-      "sha256": "41eade03d9f77d2cd4671a105502b4265a98e62a7546270be4f541aff37b9d47"
+      "sha256": "bfbd2d3f013f8411bc9ba17a2a78b30eda4f4c9dd787fd2317493b435b04ddac"
     },
     {
       "path": "src-tauri/src/horary_prompts/significators_lost.md",
-      "sha256": "dbdf916bfc4711265e207e8ee182763153f1d67a2bd8fabb61b7e9060bb336ef"
+      "sha256": "761fa1f30d941b1d2c3eb855dabee54dbb66a9b81c05413597be2f2393bd406e"
     },
     {
       "path": "src-tauri/src/horary_prompts/significators_other.md",
-      "sha256": "0b4980838fd784bc6bd1bc5d6c4ea5ce663d62dac5ea88baac17f9083c4e159a"
+      "sha256": "6ba06167c0c9b5e7fb07a82cdd421d5107fcdfe04fe5204f1be06aab63465168"
     },
     {
       "path": "src-tauri/src/horary_prompts/significators_relationship.md",
-      "sha256": "c9870c7090c6ea8a1b5000635bd9d68bd16774a40b72e837b0e94ffa50ab3fce"
+      "sha256": "c253332d79697506189eeaca2c47f84e2c70cfaa3b74a24f9ef789efc530e0cb"
     },
     {
       "path": "src-tauri/src/horary_prompts/timing.md",
       "sha256": "bcc4afafb70917ab3c41f561458058ea52cfc46a96490a2bb3c915e31daa6ec4"
+    },
+    {
+      "path": "src-tauri/src/horary_recovery_tests.rs",
+      "sha256": "a6d1ce8c46ba3ed10a0f45c763d0c973ee2a2e42975b50eb9566a4424f1da664"
+    },
+    {
+      "path": "src-tauri/src/horary_role_options.rs",
+      "sha256": "255af6162cb32ad857b95a1284f60f63b952b04f4e063ba8467369cebba173b5"
+    },
+    {
+      "path": "src-tauri/src/horary_step.rs",
+      "sha256": "0dcae513fe417e9b0324f7a5c4a3bb5737b2c3e4b049ca3bae36ccfb4328845e"
+    },
+    {
+      "path": "src-tauri/src/horary_step_tests.rs",
+      "sha256": "d19c229854dbc70c349fc69adb04be7df3707f6d8f40def36d9b9403b9da7c6b"
     },
     {
       "path": "src-tauri/src/local_dictation.rs",
@@ -155,19 +179,19 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "39917888b4986afcacffe4b8361fd9fc88fb9dc3d93e79bbcc9f2a0d7967e2a6"
+      "sha256": "fe663f4914103aae8a207d33a650446edf9fbd79ec1d5143de0b074652fabb76"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "4fbdba1eb5a56fb6285ed761e3bef5d8f8392599fe544784ffa71aacddcb2842"
+      "sha256": "424b83ed478ba310fa197b206482235cf289246fa226100206cf82912f4bebe3"
     },
     {
       "path": "src-tauri/src/reading_method.rs",
-      "sha256": "d5c024021222740dc7f0b0a364367364da7a47640bcaa80091e280bfc6b6da69"
+      "sha256": "f6dd86b36c55c807855e77e94695767395948dec1ff5ebca8e4c43555171db65"
     },
     {
       "path": "src-tauri/src/reading_store.rs",
-      "sha256": "2e87c5fdaadc7b027f8ba76ac442e08c0e40ee70c4b57da6b975c8fca74300a5"
+      "sha256": "ba1710789b976a71ea15f199d35e2b446593691708c439f5890c4c7659614ec7"
     },
     {
       "path": "src-tauri/src/review_progress.rs",

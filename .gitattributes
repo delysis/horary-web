@@ -6,3 +6,7 @@
 *.md text eol=lf
 *.json text eol=lf
 *.m text eol=lf
+*.css text eol=lf
+*.mjs text eol=lf
+*.lock text eol=lf
+.gitattributes text eol=lf

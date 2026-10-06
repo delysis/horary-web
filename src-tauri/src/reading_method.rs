@@ -270,9 +270,40 @@ pub struct Role {
     pub reason: String,
 }
 
+#[cfg(test)]
 pub fn assign(chart: &Value, choices: Vec<RoleChoice>) -> Result<Vec<Role>, String> {
-    if choices.is_empty() || choices.len() > 5 {
-        return Err("Identify one to five relevant roles first.".into());
+    assign_with(choices, |number| {
+        let house = chart["houses"]
+            .as_array()
+            .and_then(|hs| {
+                hs.iter()
+                    .find(|h| h["number"].as_u64() == Some(u64::from(number)))
+            })
+            .ok_or("Use a calculated house from 1 to 12.")?;
+        ruler(house["sign"].as_str().unwrap_or(""))
+            .ok_or("The house's traditional ruler is unavailable.")
+    })
+}
+
+/// Resolve from the same native facts supplied to the role task. Validation and
+/// derivation are one operation; no fallible assignment remains after completion.
+pub fn assign_from_facts(facts: &[Fact], choices: Vec<RoleChoice>) -> Result<Vec<Role>, String> {
+    assign_with(choices, |number| {
+        facts
+            .iter()
+            .find(|f| f.kind == "house" && f.label == format!("House {number}"))
+            .and_then(|f| f.planets.first())
+            .map(String::as_str)
+            .ok_or("Use a supplied calculated house from 1 to 12.")
+    })
+}
+
+fn assign_with<'a>(
+    choices: Vec<RoleChoice>,
+    house_ruler: impl Fn(u8) -> Result<&'a str, &'static str>,
+) -> Result<Vec<Role>, String> {
+    if choices.is_empty() || choices.len() > 8 {
+        return Err("Identify one to eight relevant roles first.".into());
     }
     let roles: Vec<Role> = choices
         .into_iter()
@@ -289,15 +320,7 @@ pub fn assign(chart: &Value, choices: Vec<RoleChoice>) -> Result<Vec<Role>, Stri
             let planet = if let (Some(natural), None) = (c.natural, c.house) {
                 natural.planet()
             } else if let (Some(number), None) = (c.house, c.natural) {
-                let house = chart["houses"]
-                    .as_array()
-                    .and_then(|hs| {
-                        hs.iter()
-                            .find(|h| h["number"].as_u64() == Some(u64::from(number)))
-                    })
-                    .ok_or("Use a calculated house from 1 to 12.")?;
-                ruler(house["sign"].as_str().unwrap_or(""))
-                    .ok_or("The house's traditional ruler is unavailable.")?
+                house_ruler(number)?
             } else {
                 return Err("Choose a house or an explicit natural role, not both.".into());
             };

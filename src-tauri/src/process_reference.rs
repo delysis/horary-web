@@ -16,6 +16,12 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/worksheet_xml.rs",
     "src-tauri/src/conversation.rs",
     "src-tauri/src/horary_pipeline.rs",
+    "src-tauri/src/horary_contract.rs",
+    "src-tauri/src/horary_executor.rs",
+    "src-tauri/src/horary_step.rs",
+    "src-tauri/src/horary_role_options.rs",
+    "src-tauri/src/horary_recovery_tests.rs",
+    "src-tauri/src/horary_step_tests.rs",
     "src-tauri/src/horary_lessons.rs",
     "src-tauri/src/tool_formats.rs",
     "src-tauri/src/reading_store.rs",
@@ -53,7 +59,7 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
                 path.strip_prefix(root)
                     .map_err(|e| e.to_string())?
                     .to_string_lossy()
-                    .into(),
+                    .replace('\\', "/"),
             );
         }
     }
@@ -70,6 +76,11 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         .split_once("## What Eileen should examine")
         .ok_or("Missing review section")?;
     let mut document = preamble.to_string();
+    document.push_str("\n## The completion state machine\n\n```mermaid\nflowchart TB\n");
+    for (from, to, reason) in crate::horary_step::Phase::EDGES {
+        document.push_str(&format!("  {from} -->|{reason}| {to}\n"));
+    }
+    document.push_str("```\n\nThese transition labels come from the Rust state catalog. `horary_step.rs` owns the completion permit and durable job journal. `horary_executor.rs` sends both single and batch results through one acceptance path. `horary_contract.rs` validates shapes and domain checks. `horary_role_options.rs` binds named roles, computes turned houses and derives rulers. `horary_pipeline.rs` assembles dependencies and the document. The normal regression suite checks their invariants.\n\nA JSON-shaped response is a proposal. No stage becomes complete until all native checks accept its required data. A request for user information leaves it awaiting input. Rejection returns to the same stage, with the unchanged original input and latest rejected proposal, until accepted data arrives or execution is cancelled/interrupted. There is no two-attempt abandonment. User replies are retained with the waiting stage; a changed input supersedes the old job rather than pretending it completed.\n\nA completion permit is bound to its stage and input fingerprint. Work identity also fingerprints the current native validation code, lesson, contract and chart revision. Saved data is revalidated before reuse. All batch results are recorded before any one case is repaired, so valid siblings survive cancellation. Reloaded unfinished work becomes paused; it is never inferred complete. Original outputs and rejections remain in the private receipts.\n\nFor place/moment explanations, the selected native chart context supplies the actual time, zone and place even before an interpretation exists. The current follow-up words are always included. If an interpretation or passage does not exist, the controller explains that it is unfinished rather than dispatching an actor with empty context or asking the person for chart data. Explicit continue/cast commands preserve the current matter and resume it.\n\n");
     document.push_str("\n## The judgment process\n\n```mermaid\nflowchart TB\n  words[\"Spoken or written question\"]\n  chart[\"N: calculate chart and derive rulers\"]\n  retained_step[\"N: selected prior worksheet and evidence\"]\n");
     for stage in Stage::ALL {
         let kind = match stage.kind() {
@@ -145,10 +156,13 @@ flowchart LR
   verify --> tasks["1 to 4 independent case prompts"]
   changing["Changing question, facts and output contract"] --> tasks
   tasks --> batch["Native generate_batch: distinct KV sequences, one weight copy"]
-  batch --> check["Parse each worksheet, validate its own schema and fact IDs"]
+  batch --> check["Parse each worksheet; check schema, facts and native completion rules"]
   check -->|Valid| receipt["Keep original output, checks, source IDs and metrics"]
-  check -->|Invalid| repair["Retain failure; bounded repair of that task only"]
-  repair --> check
+  check -->|Invalid| repair["Retain failure; retry that same task until checked data or cancellation"]
+  check -->|Needs user information| wait["Keep the task unfinished; deliver replies to it"]
+  wait -->|User reply| retry["Generate only this unfinished task with its saved lesson"]
+  repair --> retry
+  retry --> check
 ```
 
 The bank contains only fixed teaching messages, not private question inputs or audio. It is bounded to one eighth of physical memory, at most 4 GiB. Eviction, owner restart, changed lesson text, changed model or template can require another prefill; an absolute once-ever guarantee would be false. The ordinary batch API accepts an authenticated saved prefix **per case**. The constrained API has one constraint program for the whole batch and no supplied per-case-prefix field in the current pin. Single text tasks use constrained JSON; independent analysis tasks use ordinary cached batching and native validation. This boundary is visible rather than hidden behind an apparent cache-hit claim.
@@ -179,8 +193,18 @@ The bank contains only fixed teaching messages, not private question inputs or a
             let key = lessons::key(stage, *matter);
             let guide = lessons::guide(stage, *matter)?;
             document.push_str(&format!("<a id=\"lesson-{key}\"></a>\n\n### {} · {key}\n\nGuide SHA256: `{}`\n\n<details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>\n\n```text\n{guide}\n```\n\n</details>\n\n",stage.title(),lessons::digest(&guide)));
-            let contract = crate::horary_pipeline::schema_for(stage, *matter, &[]);
-            document.push_str(&format!("<details><summary>Output contract (empty-evidence example)</summary>\n\n```json\n{}\n```\n\n</details>\n\n",serde_json::to_string_pretty(&contract).map_err(|e|e.to_string())?));
+            let contract = if stage == Stage::Significators {
+                examples["examples"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|example| example["stage"] == "significators")
+                    .map(|example| example["responseSchema"].clone())
+                    .ok_or("Missing live role-selector example")?
+            } else {
+                crate::horary_step::response_schema(stage, *matter, &[])
+            };
+            document.push_str(&format!("<details><summary>Output contract (role IDs use the captured marriage fixture; other facts empty)</summary>\n\n```json\n{}\n```\n\n</details>\n\n",serde_json::to_string_pretty(&contract).map_err(|e|e.to_string())?));
             guides.push(json!({"key":key,"stage":stage,"matter":matter,"guide":guide,"guideSha256":lessons::digest(&guide),"contractWithNoFacts":contract}));
         }
     }
@@ -188,6 +212,10 @@ The bank contains only fixed teaching messages, not private question inputs or a
         String::from("# Actual runtime source\n\nGenerated verbatim; not a model transcript.\n\n");
     for path in [
         "src-tauri/src/horary_pipeline.rs",
+        "src-tauri/src/horary_contract.rs",
+        "src-tauri/src/horary_executor.rs",
+        "src-tauri/src/horary_step.rs",
+        "src-tauri/src/horary_role_options.rs",
         "src-tauri/src/horary_lessons.rs",
         "src-tauri/src/conversation.rs",
         "src-tauri/src/native_llama_worker.rs",

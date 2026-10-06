@@ -8,17 +8,20 @@ The method is a working implementation for assessment. Source quotes are checked
 
 **C** means classification or careful extraction. **J** means contextual horary judgment. **W** means explaining the answer. **N** means native calculation, lookup, storage or validation. Independent native checks run in parallel. Independent analysis tasks are submitted in one native batch, with up to four distinct inference sequences sharing one copy of the weights.
 
-The primary flow is derived from the stage dependency catalog alongside the explicit Rust pipeline. The second and third diagrams explain native branches and caching; their source is fingerprinted. An executable fixture captures the requests actually submitted by the pipeline, so prompt examples are not separately invented instructions.
+The completion diagram comes from the transition catalog enforced by the Rust journal. The judgment graph comes from the dependency catalog and explicit pipeline. Further diagrams show native branches and caching. An executable fixture captures requests submitted by the pipeline, so prompt examples are not separately invented instructions.
 
 ## What Eileen should examine
 
 1. Does intake preserve the original question, ownership, horizon, and negation through intermediate replies? Is a place or time in the story being mistaken for the chart's place or moment?
 2. Are house and natural roles justified by the matter? For the querent's lost object, are Lords 2 and 4 compared? For another owner, is the owner's second house turned correctly? Is the Moon's role explicit?
+   Intake extracts people, the subject, ownership and exact source phrases. Named native options bind identities and compute turned houses. An unknown relationship or owner restricts the role actor to requesting information; a numeric guess cannot complete that step. Contextual classification still needs Eileen's review, and the English quote checks do not prove a sentence's full meaning.
 3. Are quality, ability, and motive distinguished? Does each reception run from the planet in the dignity to that dignity's ruler? Are mixed or negative receptions retained?
 4. Is an applying contact relevant to the selected actors? What changes or intervenes before it? Does the calculation actually establish a claimed translation, collection, or prevention?
 5. Does the final passage answer the original question in context? What supports it, what opposes it, and what remains unknown? An uncertain answer should still explain what the testimony means for the person.
 
 The main document carries the proposed interpretation. Chart facts, source extracts and structured checks remain inspectable in its margins. Detailed input, original output, validation and timing receipts are behind **In the margins → Processing details**. These are local records.
+
+Every accepted control request stays attached to its unfinished step. A model proposal becomes data only through the shared native acceptance path. Repeated repairs and user clarification continue until the required data arrives; cancellation/backend interruption pauses that work. Neither an existing chart nor an error message means that an interpretation is finished.
 
 ## Present calculation boundary
 

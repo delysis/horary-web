@@ -56,7 +56,13 @@ pub fn read(path: &Path) -> Result<Session, String> {
     if bytes.len() > LIMIT {
         return Err("This saved reading is too large to open safely.".into());
     }
-    serde_json::from_slice(&bytes).map_err(|e| format!("Could not read the saved reading: {e}"))
+    let mut session: Session = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("Could not read the saved reading: {e}"))?;
+    session
+        .method
+        .flow
+        .pause("The previous process stopped before this work completed.".into());
+    Ok(session)
 }
 
 pub fn write(path: &Path, session: &Session, new_file: bool) -> Result<(), String> {

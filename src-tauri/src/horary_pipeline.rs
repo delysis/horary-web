@@ -3,36 +3,37 @@
 use crate::{
     conversation::{Message, Section, Session},
     geocode::{geocode_with_cache, GeocodeRequest, GeocodeState, LocationCandidate},
+    horary_executor::{ask_pending, execute, execute_batch, task},
     horary_lessons::{self as lessons, Matter, Stage},
+    horary_step::{self as step, CheckedData},
     native_llama_worker::NativeGenerationResult,
-    reading_method::{self, Fact, Role, RoleChoice, Step},
+    reading_method::{self, Fact, Role, Step},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::Path;
 
-#[derive(Clone, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Brief {
-    pub intent: String,
-    pub question: String,
-    pub matter: Matter,
-    pub question_kind: String,
-    pub context: String,
-    pub place_request: String,
-    pub time_request: String,
-    pub horizon: String,
-    pub clarification: String,
-    pub focus: String,
-    pub heard: String,
-    #[serde(default)]
-    pub restore_revision: Option<u64>,
-}
+#[cfg(test)]
+pub use crate::horary_contract::{decode_json, schema, schema_for, validate};
+pub use crate::horary_contract::{prompt, Brief};
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct MethodState {
     pub brief: Brief,
     pub records: Vec<Record>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "step::Journal::is_empty")]
+    pub flow: step::Journal,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub replies: Vec<UserReply>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct UserReply {
+    pub stage: Stage,
+    pub question: String,
+    pub words: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -70,485 +71,189 @@ pub trait Runtime: Sync {
     fn directory(&self) -> &Path;
 }
 
-fn text(max: usize) -> Value {
-    json!({"type":"string", "maxLength":max})
+fn reading_brief(brief: &Brief) -> Value {
+    // A stable matter is different from the command on the latest turn. Analysis
+    // tasks must not inherit "explain", a prior focus, or a prior clarification.
+    json!({"question":brief.question,"matter":brief.matter,"question_kind":brief.question_kind,
+        "context":brief.context,"people":brief.people,"subject":brief.subject,"event_place":brief.event_place,"event_time":brief.event_time,"horizon":brief.horizon})
 }
-fn choice(values: &[&str]) -> Value {
-    json!({"type":"string", "enum":values})
+
+fn follow_up_words(session: &Session) -> String {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+        .map(|message| {
+            message
+                .text
+                .strip_prefix("From your spoken words: ")
+                .unwrap_or(&message.text)
+                .to_string()
+        })
+        .unwrap_or_default()
 }
-fn list(items: Value, max: usize) -> Value {
-    json!({"type":"array", "items":items, "maxItems":max})
+
+fn is_resume_request(words: &str) -> bool {
+    let words = words
+        .trim()
+        .trim_end_matches(['.', '!', '?'])
+        .to_lowercase();
+    matches!(
+        words.as_str(),
+        "continue"
+            | "go on"
+            | "resume"
+            | "try again"
+            | "cast the chart"
+            | "finish the reading"
+            | "continue the reading"
+    )
 }
-fn object(properties: Value) -> Value {
-    let required: Vec<_> = properties
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(k, _)| k.clone())
+
+fn chart_context(session: &Session) -> Value {
+    let Some(chart) = session.chart.as_ref() else {
+        return Value::Null;
+    };
+    let moment = chart["timestampMs"].as_f64();
+    let zone = session.place.as_ref().map(|place| place.timezone.as_str());
+    let local = moment
+        .zip(zone)
+        .and_then(|(moment, zone)| horary_ai_core::chart_input::local_clock(moment, zone).ok());
+    json!({"status":"cast","timestamp_ms":moment,"local_civil_time":local,"timezone":zone,
+        "reader_place":session.place,"candidate_question_moment_ms":session.candidate_moment_ms,
+        "basis":"Horary uses the reader's place and the moment the question was understood, not the place or starting time of the event being asked about.",
+        "event_context":{"place":session.method.brief.event_place,"time":session.method.brief.event_time,"other":session.method.brief.context}})
+}
+
+fn intake_input(session: &Session, spoken: bool) -> Value {
+    let mut retained = reading_brief(&session.method.brief);
+    retained["place_request"] = json!(session.method.brief.place_request);
+    retained["time_request"] = json!(session.method.brief.time_request);
+    let completed: Vec<_> = session
+        .sections
+        .iter()
+        .filter_map(|section| section.method_stage)
         .collect();
-    json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
-}
-
-pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
-    let ids: Vec<_> = facts.iter().map(|f| f.id.as_str()).collect();
-    let evidence = if ids.is_empty() {
-        list(text(1), 0)
+    let unfinished = session
+        .method
+        .flow
+        .jobs
+        .iter()
+        .rev()
+        .find(|job| {
+            job.revision == session.revision
+                && !matches!(job.stage, Stage::Intake | Stage::Explanation)
+                && !matches!(job.phase(), step::Phase::Complete { .. })
+        })
+        .map(|job| json!({"stage":job.stage,"phase":job.phase()}));
+    let legacy_error = if session.chart.is_some() && session.sections.is_empty() {
+        session
+            .audit
+            .iter()
+            .rev()
+            .find_map(|receipt| receipt.get("interruption"))
     } else {
-        list(choice(&ids), 6)
+        None
     };
-    match stage {
-        Stage::Intake => object(
-            json!({"intent":choice(&["read","clarify","correct","new_question","explain","restore"]),"question":text(500),"matter":choice(&["relationship","lost_object","lost_animal","work","money","property","other"]),"question_kind":choice(&["event","situation","location","choice"]),"context":text(700),"place_request":text(240),"time_request":text(180),"horizon":text(100),"clarification":text(180),"focus":choice(&["roles","condition","reception","contacts","location","timing","judgment","place","moment"]),"heard":text(500),"restore_revision":{"type":["integer","null"],"minimum":1}}),
-        ),
-        Stage::Place => object(
-            json!({"mode":choice(&["select","lookup","ask"]),"place_id":text(100),"query":text(240),"clarification":text(180),"basis":text(240)}),
-        ),
-        Stage::Moment => object(
-            json!({"mode":choice(&["now","keep","explicit","ask"]),"local_time":text(32),"occurrence":choice(&["","earlier","later"]),"clarification":text(180),"basis":text(240)}),
-        ),
-        Stage::Significators => object(
-            json!({"roles":list(object(json!({"label":text(80),"house":{"type":["integer","null"],"minimum":1,"maximum":12},"natural":{"type":["string","null"],"enum":[null,"Moon","Sun","Venus"]},"reason":text(240)})),5),"owner_house":{"type":["integer","null"],"minimum":1,"maximum":12},"object_candidates":list(json!({"type":"integer","minimum":1,"maximum":12}),2),"summary":text(350),"unknowns":list(text(150),3)}),
-        ),
-        _ => {
-            let mut checks = serde_json::Map::new();
-            for key in stage.checks() {
-                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":text(220)})));
-            }
-            let mut fields = serde_json::Map::from_iter([
-                ("checks".into(), object(Value::Object(checks))),
-                ("summary".into(), text(450)),
-                ("unknowns".into(), list(text(150), 4)),
-            ]);
-            match stage {
-                Stage::Contacts => {
-                    fields.insert(
-                        "basis".into(),
-                        choice(&[
-                            "direct_candidate",
-                            "complex_unverified",
-                            "location_or_situation",
-                            "no_candidate_covered",
-                        ]),
-                    );
-                    fields.insert("candidate_ids".into(), evidence);
-                    fields.insert("candidate_signs".into(), list(object(json!({"id": if ids.is_empty(){text(1)}else{choice(&ids)}, "within_current_signs":{"type":["boolean","null"]}})),6));
-                }
-                Stage::Timing => {
-                    fields.insert(
-                        "timing_status".into(),
-                        choice(&["tentative", "unestablished"]),
-                    );
-                    fields.insert(
-                        "unit".into(),
-                        choice(&["", "hours", "days", "weeks", "months", "years"]),
-                    );
-                    fields.insert(
-                        "number".into(),
-                        json!({"type":["number","null"],"minimum":0}),
-                    );
-                }
-                Stage::Judgment => {
-                    fields.insert(
-                        "verdict".into(),
-                        choice(&[
-                            "likely_yes",
-                            "likely_no",
-                            "mixed",
-                            "situation",
-                            "location",
-                            "unresolved",
-                        ]),
-                    );
-                    fields.insert("answer".into(), text(1000));
-                    fields.insert("evidence".into(), evidence);
-                }
-                _ => {}
-            }
-            object(Value::Object(fields))
-        }
-    }
-}
-
-pub fn schema_for(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
-    let mut contract = schema(stage, facts);
-    if stage == Stage::Significators && !matches!(matter, Matter::LostObject | Matter::LostAnimal) {
-        if let Some(fields) = contract["properties"].as_object_mut() {
-            fields.remove("owner_house");
-            fields.remove("object_candidates");
-        }
-        if let Some(required) = contract["required"].as_array_mut() {
-            required.retain(|key| key != "owner_house" && key != "object_candidates");
-        }
-    }
-    contract
-}
-
-pub fn prompt(
-    stage: Stage,
-    matter: Matter,
-    input: &Value,
-    schema: &Value,
-) -> Result<String, String> {
-    // Stable teaching and stable contract precede changing data. No whole chart
-    // or conversation history is smuggled into this prefix.
-    let fixed = lessons::guide(stage, matter)?;
-    Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
-}
-
-fn bounded_strings(value: &Value) -> bool {
-    match value {
-        Value::String(s) => {
-            s.len() <= 8000 && !s.contains("<|") && !s.contains("|>") && !s.contains("<image")
-        }
-        Value::Array(a) => a.len() <= 40 && a.iter().all(bounded_strings),
-        Value::Object(m) => m.len() <= 30 && m.values().all(bounded_strings),
-        _ => true,
-    }
-}
-
-pub fn decode_json(raw: &str) -> Result<Value, String> {
-    let trimmed = raw.trim();
-    let data = trimmed
-        .strip_prefix("```json\n")
-        .or_else(|| trimmed.strip_prefix("```\n"))
-        .and_then(|s| s.strip_suffix("```"))
-        .unwrap_or(trimmed)
-        .trim();
-    let mut deserializer = serde_json::Deserializer::from_str(data);
-    let result = StrictValue::deserialize(&mut deserializer)
-        .map_err(|e| e.to_string())?
-        .0;
-    deserializer.end().map_err(|e| e.to_string())?;
-    Ok(result)
-}
-
-struct StrictValue(Value);
-impl<'de> Deserialize<'de> for StrictValue {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Visitor;
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = StrictValue;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("JSON without duplicate fields")
-            }
-            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                serde_json::Number::from_f64(v)
-                    .map(|n| StrictValue(Value::Number(n)))
-                    .ok_or_else(|| E::custom("Invalid JSON number"))
-            }
-            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
-                Ok(StrictValue(Value::String(v)))
-            }
-            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-                Ok(StrictValue(Value::Null))
-            }
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut values = Vec::new();
-                while let Some(v) = seq.next_element::<StrictValue>()? {
-                    values.push(v.0);
-                }
-                Ok(StrictValue(Value::Array(values)))
-            }
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut values = serde_json::Map::new();
-                while let Some((key, value)) = map.next_entry::<String, StrictValue>()? {
-                    if values.insert(key, value.0).is_some() {
-                        return Err(serde::de::Error::custom("Duplicate worksheet field"));
-                    }
-                }
-                Ok(StrictValue(Value::Object(values)))
-            }
-        }
-        deserializer.deserialize_any(Visitor)
-    }
-}
-
-#[cfg(test)]
-pub fn validate(stage: Stage, value: &Value, facts: &[Fact]) -> Result<(), String> {
-    validate_for(stage, Matter::Other, value, facts)
-}
-
-fn validate_for(stage: Stage, matter: Matter, value: &Value, facts: &[Fact]) -> Result<(), String> {
-    if !bounded_strings(value) {
-        return Err("Worksheet exceeds its bounds.".into());
-    }
-    let contract = schema_for(stage, matter, facts);
-    validate_shape(value, &contract)?;
-    if stage == Stage::Intake {
-        let brief: Brief = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        if brief.question.trim().is_empty() && brief.clarification.trim().is_empty() {
-            return Err("Keep the actual question or ask what it is.".into());
-        }
-    }
-    for key in stage.checks() {
-        let c = &value["checks"][key];
-        if c["finding"].as_str().is_none_or(|s| s.trim().is_empty()) {
-            return Err(format!("Explain the {key} check."));
-        }
-        let selected: Vec<_> = c["evidence"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .filter_map(|id| facts.iter().find(|f| f.id == id))
-            .collect();
-        if c["state"] == "supported" && selected.is_empty() && stage != Stage::Explanation {
-            return Err(format!("The {key} check needs supplied evidence."));
-        }
-        if stage == Stage::Reception
-            && c["state"] == "supported"
-            && !selected.iter().any(|f| f.kind == "reception")
-        {
-            return Err("Reception requires a directed reception fact.".into());
-        }
-    }
-    if stage == Stage::Judgment && value["answer"].as_str().is_none_or(|s| s.trim().len() < 30) {
-        return Err("Answer the actual question in ordinary language.".into());
-    }
-    if stage == Stage::Judgment {
-        let scope = &value["checks"]["scope_of_answer"];
-        let boundary = facts.iter().find(|f| f.kind == "boundary");
-        if boundary.is_some_and(|b| {
-            !scope["evidence"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|v| v.as_str() == Some(b.id.as_str()))
-        }) {
-            return Err("The scope check must cite the supplied calculation boundary.".into());
-        }
-        if value["verdict"] == "likely_no"
-            && !value["checks"]["contrary_testimony"]["evidence"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .any(|id| {
-                    facts
-                        .iter()
-                        .any(|f| f.id == id && matches!(f.kind.as_str(), "condition" | "reception"))
-                })
-        {
-            return Err("A negative event proposal needs relevant contrary condition or reception; absence of a short-window contact is insufficient.".into());
-        }
-    }
-    if stage == Stage::Timing && value["number"].is_number() {
-        return Err("No native travel-to-perfection calculation is available; a numeric timing cannot be certified.".into());
-    }
-    if stage == Stage::Contacts {
-        let ids = value["candidate_ids"]
-            .as_array()
-            .ok_or("Missing candidate IDs")?;
-        let signs = value["candidate_signs"]
-            .as_array()
-            .ok_or("Missing candidate sign checks")?;
-        if (value["basis"] == "direct_candidate" && ids.is_empty())
-            || (value["basis"] == "no_candidate_covered" && !ids.is_empty())
-        {
-            return Err("The contact basis must agree with the supplied candidate IDs.".into());
-        }
-        if ids.len() != signs.len() {
-            return Err("Check the native sign-change status of each selected candidate.".into());
-        }
-        let mut seen = std::collections::BTreeSet::new();
-        for id in ids {
-            let id = id.as_str().ok_or("Invalid candidate ID")?;
-            if !seen.insert(id) {
-                return Err("Duplicate contact candidate.".into());
-            }
-            let event = facts
-                .iter()
-                .find(|f| f.id == id && f.kind == "event")
-                .and_then(|f| f.event.as_ref())
-                .ok_or("Select a supplied native event candidate.")?;
-            let matches: Vec<_> = signs.iter().filter(|s| s["id"] == id).collect();
-            if matches.len() != 1
-                || matches[0]["within_current_signs"]
-                    != serde_json::to_value(event.within_current_signs)
-                        .map_err(|e| e.to_string())?
-            {
-                return Err("The selected candidate's sign-change status disagrees with the native calculation.".into());
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_shape(value: &Value, schema: &Value) -> Result<(), String> {
-    if let Some(allowed) = schema["enum"].as_array() {
-        if !allowed.contains(value) {
-            return Err(format!("Unexpected worksheet value {value}."));
-        }
-    }
-    let types: Vec<_> = if let Some(t) = schema["type"].as_str() {
-        vec![t]
-    } else {
-        schema["type"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
+    let legacy_sources: Vec<_> = if session.method.brief.subject.is_empty() {
+        session
+            .messages
+            .iter()
+            .filter(|message| message.role == "user")
+            .rev()
+            .take(8)
+            .map(|message| message.text.as_str())
             .collect()
+    } else {
+        Vec::new()
     };
-    if !types.iter().any(|t| match *t {
-        "null" => value.is_null(),
-        "object" => value.is_object(),
-        "array" => value.is_array(),
-        "string" => value.is_string(),
-        "integer" => value.is_u64(),
-        "number" => value.is_number(),
-        "boolean" => value.is_boolean(),
-        _ => false,
-    }) {
-        return Err("Wrong worksheet value type.".into());
+    json!({"retained_brief":retained,"legacy_user_fact_sources":legacy_sources,"canonical_question":session.question,"chart_exists":session.chart.is_some(),
+        "consultation_state":{"chart":chart_context(session),"completed_steps":completed,
+            "interpretation_exists":completed.contains(&Stage::Judgment),"unfinished_step":unfinished,
+            "pending_user_requests":session.method.flow.pending,"legacy_interruption":legacy_error},
+        "device_place_available":session.candidates.iter().any(|place|place.provider == "device"),"native_clock_available":true,
+        "available_revisions":session.revisions.iter().map(|revision|json!({"number":revision.number,"question":revision.question})).collect::<Vec<_>>(),
+        "latest_words":session.messages.last().map(|message|message.text.as_str()),
+        "last_reader_question":session.messages.iter().rev().find(|message|message.role == "assistant").map(|message|message.text.as_str()),
+        "spoken_input":spoken})
+}
+
+fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result<(), String> {
+    let all = reading_method::facts(session.chart.as_ref());
+    let focus = session.method.brief.focus.clone();
+    let target = match focus.as_str() {
+        "roles" => Stage::Significators,
+        "condition" => Stage::Condition,
+        "reception" => Stage::Reception,
+        "contacts" => Stage::Contacts,
+        "location" => Stage::Location,
+        "timing" => Stage::Timing,
+        "place" => Stage::Place,
+        "moment" => Stage::Moment,
+        _ => Stage::Judgment,
+    };
+    let native_context = if matches!(target, Stage::Place | Stage::Moment) {
+        chart_context(session)
+    } else {
+        Value::Null
+    };
+    let record = session.method.records.iter().rev().find(|record| {
+        record.stage == target
+            && record.revision == session.revision
+            && record.validation_error.is_none()
+            && record.worksheet.get("request_input").is_none()
+    });
+    let passage = session
+        .sections
+        .iter()
+        .find(|section| section.method_stage == Some(target))
+        .or_else(|| {
+            session.sections.iter().find(|section| {
+                target == Stage::Significators && section.step == Some(Step::Significators)
+            })
+        });
+    if native_context.is_null() && passage.is_none() {
+        session.audit.push(json!({"event":"explanation_prerequisite","target":target,"result":"not_yet_available"}));
+        session.messages.push(Message { role:"assistant".into(), text:format!("The chart is cast, but I haven't completed {} yet. Say ‘continue’ to pick up the unfinished reading.",target.title().to_lowercase()) });
+        ask_pending(session);
+        return Ok(());
     }
-    if let Some(s) = value.as_str() {
-        if schema["maxLength"]
-            .as_u64()
-            .is_some_and(|n| s.chars().count() > n as usize)
-        {
-            return Err("Worksheet string is too long.".into());
-        }
+    let supplied: Vec<_> = record
+        .into_iter()
+        .flat_map(|record| {
+            record.worksheet["checks"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .flat_map(|(_, check)| check["evidence"].as_array().into_iter().flatten())
+        })
+        .filter_map(Value::as_str)
+        .collect();
+    let mut facts: Vec<_> = all
+        .iter()
+        .filter(|fact| {
+            supplied.contains(&fact.id.as_str())
+                || passage.is_some_and(|section| section.evidence.contains(&fact.id))
+        })
+        .cloned()
+        .collect();
+    if !native_context.is_null() {
+        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),event:None });
+        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),event:None });
     }
-    if let Some(n) = value.as_f64() {
-        if !n.is_finite()
-            || schema["minimum"].as_f64().is_some_and(|min| n < min)
-            || schema["maximum"].as_f64().is_some_and(|max| n > max)
-        {
-            return Err("Worksheet number is outside its range.".into());
-        }
-    }
-    if let Some(a) = value.as_array() {
-        if a.len() > schema["maxItems"].as_u64().unwrap_or(0) as usize {
-            return Err("Too many worksheet entries.".into());
-        }
-        for v in a {
-            validate_shape(v, &schema["items"])?;
-        }
-    }
-    if let Some(m) = value.as_object() {
-        let fields = schema["properties"]
-            .as_object()
-            .ok_or("Missing worksheet contract")?;
-        if m.len() != fields.len() {
-            return Err("Missing or additional worksheet fields.".into());
-        }
-        for (k, s) in fields {
-            validate_shape(m.get(k).ok_or_else(|| format!("Missing {k}."))?, s)?;
-        }
+    let input = json!({"brief":reading_brief(&session.method.brief),"follow_up_words":words,"focus":focus,
+        "chart_context":native_context,"reading_complete":session.sections.iter().any(|section|section.method_stage == Some(Stage::Judgment)),
+        "prior_worksheet":record.map(|record|&record.worksheet).or_else(||passage.map(|section|&section.worksheet)),
+        "prior_assignment":passage.map(|section|&section.roles),"pending_user_requests":session.method.flow.pending,"facts":facts});
+    if let Some(data) = task(session, runtime, Stage::Explanation, input, &facts)? {
+        session.messages.push(Message {
+            role: "assistant".into(),
+            text: data.worksheet()["summary"].as_str().unwrap_or("").into(),
+        });
+        ask_pending(session);
     }
     Ok(())
-}
-
-fn generate(
-    runtime: &impl Runtime,
-    stage: Stage,
-    matter: Matter,
-    input: Value,
-    facts: &[Fact],
-    audio: Option<&[u8]>,
-) -> Result<(Value, Record), String> {
-    runtime.check()?;
-    let contract = schema_for(stage, matter, facts);
-    let result = runtime.generate(stage, matter, &input, &contract, audio)?;
-    let parsed = decode_json(&result.content);
-    let validation_error = parsed
-        .as_ref()
-        .map_err(|e| e.clone())
-        .and_then(|v| validate_for(stage, matter, v, facts))
-        .err();
-    let value = parsed.unwrap_or(Value::Null);
-    let record = Record {
-        stage,
-        revision: 0,
-        guide_sha256: lessons::digest(&lessons::guide(stage, matter)?),
-        schema_sha256: lessons::digest(&contract.to_string()),
-        input_sha256: lessons::digest(&input.to_string()),
-        input,
-        raw: result.content.clone(),
-        worksheet: value.clone(),
-        generation: result,
-        source_passages: stage.passages(matter).iter().map(|s| (*s).into()).collect(),
-        validation_error,
-    };
-    Ok((value, record))
-}
-
-fn keep(session: &mut Session, runtime: &impl Runtime, mut record: Record) -> Result<(), String> {
-    record.revision = session.revision;
-    let metric = crate::conversation::inference_measurement(&record.generation);
-    if let Ok(progress) = crate::review_progress::record_with_inference(
-        runtime.directory(),
-        record.stage.name(),
-        record.stage.activity(),
-        metric.elapsed_ms,
-        Some(metric),
-    ) {
-        session.progress.push(progress);
-        if session.progress.len() > 160 {
-            session.progress.remove(0);
-        }
-    }
-    log::info!("horary stage={} revision={} guide={} prompt_tokens={} cached_tokens={} output_tokens={} elapsed_ms={} lesson_bank_hit={:?} lesson_prepare_ms={:?} valid={}",record.stage.name(),record.revision,record.guide_sha256,record.generation.prompt_tokens,record.generation.cached_prompt_tokens,record.generation.generated_tokens,record.generation.elapsed_ms,record.generation.lesson_bank_hit,record.generation.lesson_prepare_ms,record.validation_error.is_none());
-    session.audit.push(json!({"event":"method_stage","stage":record.stage,"dependencies":record.stage.dependencies(),"bookOcrSha256":lessons::BOOK_OCR_SHA256,"revision":record.revision,"guideSha256":record.guide_sha256,"schemaSha256":record.schema_sha256,"inputSha256":record.input_sha256,"generation":record.generation}));
-    session.method.records.push(record);
-    runtime.publish(session)
-}
-
-fn task(
-    session: &mut Session,
-    runtime: &impl Runtime,
-    stage: Stage,
-    input: Value,
-    facts: &[Fact],
-) -> Result<Value, String> {
-    session.status = stage.activity().into();
-    runtime.publish(session)?;
-    let mut input = input;
-    let attempts = if input.get("native_validation_error").is_some() {
-        1
-    } else {
-        2
-    };
-    for attempt in 0..attempts {
-        let (value, record) = generate(
-            runtime,
-            stage,
-            session.method.brief.matter,
-            input.clone(),
-            facts,
-            None,
-        )?;
-        let error = record.validation_error.clone();
-        keep(session, runtime, record)?;
-        if let Some(error) = error {
-            if attempt + 1 == attempts {
-                return Err(format!("{} needs review: {error}", stage.name()));
-            }
-            input = json!({"original_input":input,"previous_worksheet":value,"native_validation_error":error,"instruction":"Correct only this worksheet. Do not add assumptions or change the task."});
-        } else {
-            return Ok(value);
-        }
-    }
-    Err("The worksheet remains unresolved.".into())
 }
 
 fn relevant(facts: &[Fact], roles: &[Role], kinds: &[&str]) -> Vec<Fact> {
@@ -643,6 +348,8 @@ fn restore_revision(session: &mut Session, number: u64) -> Result<(), String> {
     session.sections = old.sections;
     session.method.brief = old.brief;
     session.method.brief.question = session.question.clone();
+    session.method.flow.pending.clear();
+    session.method.replies.clear();
     session.chart_after_message = session.messages.len();
     for section in &mut session.sections {
         section.revision = next;
@@ -654,13 +361,22 @@ fn restore_revision(session: &mut Session, number: u64) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
+#[path = "horary_recovery_tests.rs"]
+mod recovery_tests;
+
 fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], roles: Vec<Role>) {
     let ids: Vec<String> = if stage == Stage::Significators {
         facts
             .iter()
-            .filter(|f| f.kind == "house")
+            .filter(|f| {
+                f.kind == "house"
+                    && roles.iter().any(|role| {
+                        role.house
+                            .is_some_and(|house| f.label == format!("House {house}"))
+                    })
+            })
             .map(|f| f.id.clone())
-            .take(5)
             .collect()
     } else {
         let mut ids: Vec<_> = value["checks"]
@@ -715,7 +431,7 @@ fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], r
             quoted: true,
         })
         .collect();
-    session.sections.push(Section {
+    let section = Section {
         title: title.into(),
         body,
         evidence: ids.clone(),
@@ -733,7 +449,16 @@ fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], r
         draft: String::new(),
         worksheet: value.clone(),
         method_stage: Some(stage),
-    });
+    };
+    if let Some(existing) = session
+        .sections
+        .iter_mut()
+        .find(|section| section.method_stage == Some(stage) && section.revision == session.revision)
+    {
+        *existing = section;
+    } else {
+        session.sections.push(section);
+    }
 }
 
 pub fn run(
@@ -744,31 +469,58 @@ pub fn run(
     audio: Option<&[u8]>,
     previous: &Session,
 ) -> Result<(), String> {
-    let input = json!({"retained_brief":session.method.brief,"canonical_question":session.question,"chart_exists":session.chart.is_some(),"device_place_available":session.candidates.iter().any(|p|p.provider=="device"),"native_clock_available":true,"available_revisions":session.revisions.iter().map(|r|json!({"number":r.number,"question":r.question})).collect::<Vec<_>>(),"latest_words":session.messages.last().map(|m|m.text.as_str()),"last_reader_question":session.messages.iter().rev().find(|m|m.role=="assistant").map(|m|m.text.as_str()),"spoken_input":audio.is_some()});
-    session.status = Stage::Intake.activity().into();
-    runtime.publish(session)?;
-    let (value, record) = generate(
-        runtime,
-        Stage::Intake,
-        session.method.brief.matter,
-        input,
-        &[],
-        audio,
-    )?;
-    if let Some(error) = record.validation_error.clone() {
-        keep(session, runtime, record)?;
-        return Err(format!("The understood question needs review: {error}"));
+    let result = run_inner(session, runtime, geocode, instant, audio, previous);
+    if let Err(error) = &result {
+        session.method.flow.pause(error.clone());
+        runtime.publish(session)?;
     }
-    let brief: Brief = serde_json::from_value(value).map_err(|e| e.to_string())?;
-    if brief.intent == "restore"
-        && brief
-            .restore_revision
-            .is_none_or(|number| !session.revisions.iter().any(|r| r.number == number))
-    {
-        keep(session, runtime, record)?;
-        return Err("Choose one listed earlier chart revision.".into());
+    result
+}
+
+fn run_inner(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    geocode: &GeocodeState,
+    instant: f64,
+    audio: Option<&[u8]>,
+    previous: &Session,
+) -> Result<(), String> {
+    let record_start = session.method.records.len();
+    let pending = session.method.flow.pending.clone();
+    let typed_resume = audio.is_none()
+        && is_resume_request(&follow_up_words(session))
+        && !session.question.is_empty()
+        && session.method.brief.question == session.question
+        && !session.method.brief.subject.name.is_empty();
+    let mut brief = if typed_resume {
+        session.audit.push(json!({"event":"native_turn_route","intent":"resume","basis":"An explicit continue command preserves the already-understood matter and chart; no classification generation is needed."}));
+        let mut brief = session.method.brief.clone();
+        brief.intent = "resume".into();
+        brief.clarification.clear();
+        brief.heard.clear();
+        brief.restore_revision = None;
+        brief
+    } else {
+        let input = intake_input(session, audio.is_some());
+        let Some(data) = execute(session, runtime, Stage::Intake, input, &[], audio)? else {
+            return Ok(());
+        };
+        data.brief()
+            .cloned()
+            .ok_or("The intake completion lacks its typed brief")?
+    };
+    let words = if audio.is_some() {
+        brief.heard.clone()
+    } else {
+        follow_up_words(session)
+    };
+    if is_resume_request(&words) && !session.question.is_empty() {
+        session.audit.push(json!({"event":"native_resume_command","proposedIntent":brief.intent,"effectiveIntent":"resume","basis":"Explicit request to continue the current matter; an existing chart is retained."}));
+        brief.intent = "resume".into();
+        brief.clarification.clear();
     }
     if brief.intent == "new_question" {
+        let decision_records = session.method.records[record_start..].to_vec();
         let last = session.messages.last().cloned();
         let sequence = session.snapshot_id;
         *session = crate::reading_store::fresh(runtime.directory(), previous, None)?;
@@ -777,6 +529,9 @@ pub fn run(
             session.messages.push(last);
         }
         session.device_context = previous.device_context.clone();
+        // The new leaf keeps its actual classification receipt, including its
+        // predecessor context, while downstream prompts use only the new brief.
+        session.method.records = decision_records;
         session.candidates = previous
             .candidates
             .iter()
@@ -794,6 +549,19 @@ pub fn run(
     }
     session.question = brief.question.clone();
     session.method.brief = brief;
+    if !matches!(
+        session.method.brief.intent.as_str(),
+        "explain" | "new_question" | "restore"
+    ) && !is_resume_request(&words)
+    {
+        for request in pending {
+            session.method.replies.push(UserReply {
+                stage: request.stage,
+                question: request.request.question,
+                words: words.clone(),
+            });
+        }
+    }
     if session.chart.is_none()
         && session.candidate_moment_ms.is_none()
         && session.method.brief.clarification.is_empty()
@@ -801,7 +569,6 @@ pub fn run(
         session.candidate_moment_ms = Some(instant);
         session.audit.push(json!({"event":"question_moment_candidate","timestampMs":instant,"basis":"Receipt of the understood question; a later place-only clarification keeps this instant."}));
     }
-    keep(session, runtime, record)?;
     if session.method.brief.intent == "restore" {
         restore_revision(
             session,
@@ -813,75 +580,8 @@ pub fn run(
         )?;
         return Ok(());
     }
-    if !session.method.brief.clarification.is_empty() {
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: session.method.brief.clarification.clone(),
-        });
-        return Ok(());
-    }
     if session.method.brief.intent == "explain" && session.chart.is_some() {
-        let facts = reading_method::facts(session.chart.as_ref());
-        let focus = &session.method.brief.focus;
-        let stage = match focus.as_str() {
-            "roles" => Stage::Significators,
-            "condition" => Stage::Condition,
-            "reception" => Stage::Reception,
-            "contacts" => Stage::Contacts,
-            "location" => Stage::Location,
-            "timing" => Stage::Timing,
-            _ => Stage::Judgment,
-        };
-        let record = session
-            .method
-            .records
-            .iter()
-            .rev()
-            .find(|r| r.stage == stage && r.revision == session.revision);
-        let passage = session
-            .sections
-            .iter()
-            .find(|s| s.method_stage == Some(stage))
-            .or_else(|| {
-                if stage == Stage::Significators {
-                    session
-                        .sections
-                        .iter()
-                        .find(|s| s.step == Some(Step::Significators))
-                } else {
-                    None
-                }
-            });
-        let supplied: Vec<_> = record
-            .into_iter()
-            .flat_map(|r| {
-                r.worksheet["checks"]
-                    .as_object()
-                    .into_iter()
-                    .flatten()
-                    .flat_map(|(_, c)| c["evidence"].as_array().into_iter().flatten())
-            })
-            .filter_map(Value::as_str)
-            .collect();
-        let selected: Vec<_> = facts
-            .iter()
-            .filter(|f| {
-                supplied.contains(&f.id.as_str())
-                    || passage.is_some_and(|s| s.evidence.contains(&f.id))
-            })
-            .cloned()
-            .collect();
-        let value = task(
-            session,
-            runtime,
-            Stage::Explanation,
-            json!({"brief":session.method.brief,"focus":focus,"prior_worksheet":record.map(|r|&r.worksheet).or_else(||passage.map(|s|&s.worksheet)),"prior_assignment":passage.map(|s|&s.roles),"facts":selected}),
-            &selected,
-        )?;
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: value["summary"].as_str().unwrap_or("").into(),
-        });
+        explain(session, runtime, &words)?;
         return Ok(());
     }
     // Place lookup and moment sufficiency have no dependency on each other.
@@ -902,13 +602,17 @@ pub fn run(
     let mut moment = moment_result.map_err(str::to_string)?;
     let mut place_inquiry = None;
     if place.is_none() && !candidates.is_empty() {
-        let value = task(
+        let Some(data) = task(
             session,
             runtime,
             Stage::Place,
             json!({"brief":session.method.brief,"candidates":candidates}),
             &[],
-        )?;
+        )?
+        else {
+            return Ok(());
+        };
+        let value = data.worksheet();
         if value["mode"] == "select" {
             place = candidates
                 .iter()
@@ -917,16 +621,6 @@ pub fn run(
             if place.is_none() {
                 return Err("Choose a supplied place candidate ID.".into());
             }
-        } else if value["mode"] == "lookup" {
-            let query = value["query"]
-                .as_str()
-                .filter(|s| !s.trim().is_empty())
-                .ok_or("A place lookup needs the stated location.")?;
-            let narrowed = Brief {
-                place_request: query.into(),
-                ..Default::default()
-            };
-            place = native_place(&narrowed, &[], None, geocode)?.0;
         }
         if place.is_none() {
             place_inquiry = value["clarification"]
@@ -935,18 +629,22 @@ pub fn run(
                 .map(str::to_string);
         }
     }
-    if moment["mode"] == "needs_civil_time" {
+    if moment["mode"] == "needs_civil_time" && place.is_some() {
         let zone = place.as_ref().map(|p| p.timezone.as_str());
         let clock = zone
             .map(|z| horary_ai_core::chart_input::local_clock(instant, z))
             .transpose()?;
-        moment = task(
+        let Some(data) = task(
             session,
             runtime,
             Stage::Moment,
             json!({"requested_question_moment":session.method.brief.time_request,"question_context":session.method.brief.context,"selected_timezone":zone,"current_local_clock":clock,"existing_chart_moment":session.chart.as_ref().map(|c|&c["timestampMs"])}),
             &[],
-        )?;
+        )?
+        else {
+            return Ok(());
+        };
+        moment = data.worksheet().clone();
     }
     let mut inquiries = Vec::new();
     if place.is_none() {
@@ -964,6 +662,15 @@ pub fn run(
         );
     }
     if !inquiries.is_empty() {
+        session
+            .method
+            .flow
+            .pending
+            .retain(|pending| pending.stage != Stage::Place);
+        if place.is_none() {
+            session.method.flow.pending.push(step::PendingInput { stage:Stage::Place, request:step::InputRequest { field:"chart_place".into(),question:inquiries[0].into(),reason:"The device did not supply usable coordinates, and no reader location has been resolved.".into() } });
+            session.audit.push(json!({"event":"native_stage_wait","stage":"place","reason":"reader_location_unresolved"}));
+        }
         session.messages.push(Message {
             role: "assistant".into(),
             text: inquiries.join(" "),
@@ -971,6 +678,11 @@ pub fn run(
         return Ok(());
     }
     let place = place.ok_or("A chart needs its reader's place")?;
+    session
+        .method
+        .flow
+        .pending
+        .retain(|pending| pending.stage != Stage::Place);
     let default_instant = if session.method.brief.time_request.is_empty() {
         session.candidate_moment_ms.unwrap_or(instant)
     } else {
@@ -1021,7 +733,6 @@ pub fn run(
         session.status = "The sky at this question’s moment…".into();
         runtime.publish(session)?;
     }
-    session.sections.clear();
     let chart = session.chart.as_ref().ok_or("A chart is required")?.clone();
     let all = reading_method::facts(Some(&chart));
     let houses: Vec<_> = all
@@ -1029,39 +740,27 @@ pub fn run(
         .filter(|f| f.kind == "house" || f.kind == "position")
         .cloned()
         .collect();
-    let choices = task(
+    let options = crate::horary_role_options::build(
+        session.method.brief.matter,
+        &session.method.brief.people,
+        &session.method.brief.subject,
+    );
+    let Some(assignment) = task(
         session,
         runtime,
         Stage::Significators,
-        json!({"brief":session.method.brief,"house_rulers_and_positions":houses}),
+        json!({"brief":reading_brief(&session.method.brief),"house_rulers_and_positions":houses,"native_role_options":options}),
         &houses,
-    )?;
-    let roles = reading_method::assign(
-        &chart,
-        serde_json::from_value::<Vec<RoleChoice>>(choices["roles"].clone())
-            .map_err(|e| e.to_string())?,
-    )?;
-    if session.method.brief.matter == Matter::LostObject {
-        let owner = choices["owner_house"].as_u64().unwrap_or(1);
-        let expected = if owner == 1 {
-            vec![2, 4]
-        } else {
-            vec![(owner + 12) % 12 + 1]
-        };
-        let actual: Vec<_> = choices["object_candidates"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_u64)
-            .collect();
-        if actual != expected {
-            return Err("Compare Lords 2 and 4 for the querent's object; use another owner's turned second.".into());
-        }
-    }
+    )?
+    else {
+        return Ok(());
+    };
+    let choices = assignment.worksheet();
+    let roles = assignment.roles().to_vec();
     section(
         session,
         Stage::Significators,
-        &choices,
+        choices,
         &houses,
         roles.clone(),
     );
@@ -1071,7 +770,7 @@ pub fn run(
     let events = relevant(&all, &roles, &["event", "moon", "boundary"]);
     let positions = relevant(&all, &roles, &["position", "boundary"]);
     let matter = session.method.brief.matter;
-    let common = json!({"brief":session.method.brief,"roles":roles});
+    let common = json!({"brief":reading_brief(&session.method.brief),"roles":roles});
     session.status = "Following feeling, possibility, and the paths between them…".into();
     runtime.publish(session)?;
     // Independent judgments are submitted together. The resident model owns
@@ -1079,89 +778,45 @@ pub fn run(
     let mut tasks = vec![
         (
             Stage::Condition,
-            matter,
             json!({"question":common,"facts":condition}),
-            schema(Stage::Condition, &condition),
+            condition.clone(),
         ),
         (
             Stage::Reception,
-            matter,
             json!({"question":common,"facts":reception}),
-            schema(Stage::Reception, &reception),
+            reception.clone(),
         ),
         (
             Stage::Contacts,
-            matter,
-            json!({"brief":session.method.brief,"roles":roles,"facts":events}),
-            schema(Stage::Contacts, &events),
+            json!({"brief":reading_brief(&session.method.brief),"roles":roles,"facts":events}),
+            events.clone(),
         ),
     ];
     if matches!(matter, Matter::LostObject | Matter::LostAnimal) {
         tasks.push((
             Stage::Location,
-            matter,
-            json!({"brief":session.method.brief,"roles":roles,"facts":positions}),
-            schema(Stage::Location, &positions),
+            json!({"brief":reading_brief(&session.method.brief),"roles":roles,"facts":positions}),
+            positions.clone(),
         ));
     }
-    let batch = runtime.generate_batch(&tasks)?;
-    if batch.len() != tasks.len() {
-        return Err("An independent task is missing from the batch.".into());
-    }
-    let mut values = Vec::new();
-    for ((stage, matter, input, contract), generation) in tasks.into_iter().zip(batch) {
-        let selected = match stage {
-            Stage::Condition => &condition,
-            Stage::Reception => &reception,
-            Stage::Contacts => &events,
-            _ => &positions,
-        };
-        let parsed = decode_json(&generation.content);
-        let validation_error = parsed
-            .as_ref()
-            .map_err(|e| e.clone())
-            .and_then(|v| validate_for(stage, matter, v, selected))
-            .err();
-        let mut worksheet = parsed.unwrap_or(Value::Null);
-        keep(
-            session,
-            runtime,
-            Record {
-                stage,
-                revision: session.revision,
-                guide_sha256: lessons::digest(&lessons::guide(stage, matter)?),
-                schema_sha256: lessons::digest(&contract.to_string()),
-                input_sha256: lessons::digest(&input.to_string()),
-                input: input.clone(),
-                raw: generation.content.clone(),
-                worksheet: worksheet.clone(),
-                generation,
-                source_passages: stage.passages(matter).iter().map(|s| (*s).into()).collect(),
-                validation_error: validation_error.clone(),
-            },
-        )?;
-        if let Some(error) = validation_error {
-            worksheet = task(
-                session,
-                runtime,
-                stage,
-                json!({"original_input":input,"previous_worksheet":worksheet,"native_validation_error":error}),
-                selected,
-            )?;
+    let values = execute_batch(session, runtime, &tasks)?;
+    for ((stage, _, facts), value) in tasks.iter().zip(&values) {
+        if let Some(data) = value {
+            section(session, *stage, data.worksheet(), facts, Vec::new());
         }
-        values.push(worksheet);
     }
-    let c = values[0].clone();
-    let r = values[1].clone();
-    let contact = values[2].clone();
-    let location = values.get(3).cloned().unwrap_or(Value::Null);
-    section(session, Stage::Condition, &c, &condition, Vec::new());
-    section(session, Stage::Reception, &r, &reception, Vec::new());
     runtime.publish(session)?;
-    section(session, Stage::Contacts, &contact, &events, Vec::new());
-    if !location.is_null() {
-        section(session, Stage::Location, &location, &positions, Vec::new());
+    if values.iter().any(Option::is_none) {
+        ask_pending(session);
+        return Ok(());
     }
+    let c = values[0].as_ref().map(CheckedData::worksheet);
+    let r = values[1].as_ref().map(CheckedData::worksheet);
+    let contact = values[2].as_ref().map(CheckedData::worksheet);
+    let location = values
+        .get(3)
+        .and_then(Option::as_ref)
+        .map(CheckedData::worksheet);
     // Current ephemeris supplies brackets, not the applying planet's travel
     // to exact perfection. Skip speculative timing inference entirely.
     let timing = json!({"timing_status":"unestablished","reason":"The native calculation has not supplied travel to exact perfection. Astronomical hours are not symbolic calendar timing."});
@@ -1180,20 +835,37 @@ pub fn run(
             "boundary",
         ],
     );
-    let judgment = task(
+    let Some(judgment) = task(
         session,
         runtime,
         Stage::Judgment,
-        json!({"brief":session.method.brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts}),
+        json!({"brief":reading_brief(&session.method.brief),"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts}),
         &facts,
-    )?;
-    section(session, Stage::Judgment, &judgment, &facts, Vec::new());
+    )?
+    else {
+        return Ok(());
+    };
+    section(
+        session,
+        Stage::Judgment,
+        judgment.worksheet(),
+        &facts,
+        Vec::new(),
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn role_assignment_failure_is_a_repairable_validation_error() {
+        let chart =
+            json!({"houses":[{"number":1,"sign":"Cancer"},{"number":7,"sign":"Capricorn"}]});
+        let facts = reading_method::facts(Some(&chart));
+        let worksheet = json!({"roles":[{"label":"Querent","house":1,"natural":"Moon","reason":"The first house represents the person asking."}],"summary":"The querent is represented by the first house.","unknowns":[]});
+        assert!(validate(Stage::Significators, &worksheet, &facts).is_err());
+    }
     #[test]
     fn device_defaults_do_not_require_geocoding_or_invent_coordinates() {
         let device = LocationCandidate {
@@ -1420,6 +1092,8 @@ mod real_reading {
         state: NativeLlamaState,
         dir: std::path::PathBuf,
         records: Mutex<Vec<Value>>,
+        stop_before_batch: bool,
+        deadline: Option<std::time::Instant>,
     }
     impl Runtime for Reader {
         fn generate(
@@ -1456,6 +1130,9 @@ mod real_reading {
             &self,
             tasks: &[(Stage, Matter, Value, Value)],
         ) -> Result<Vec<NativeGenerationResult>, String> {
+            if self.stop_before_batch {
+                return Err("Synthetic probe stops before testimony".into());
+            }
             let prompts = tasks
                 .iter()
                 .map(|(stage, matter, input, contract)| {
@@ -1484,7 +1161,14 @@ mod real_reading {
             crate::reading_store::write(&self.dir.join("reading.json"), session, false)
         }
         fn check(&self) -> Result<(), String> {
-            Ok(())
+            if self
+                .deadline
+                .is_some_and(|deadline| std::time::Instant::now() >= deadline)
+            {
+                Err("Synthetic probe deadline reached".into())
+            } else {
+                Ok(())
+            }
         }
         fn directory(&self) -> &Path {
             &self.dir
@@ -1502,6 +1186,8 @@ mod real_reading {
             state: NativeLlamaState::default(),
             dir,
             records: Mutex::new(Vec::new()),
+            stop_before_batch: false,
+            deadline: None,
         };
         start_native_llama_from_path(
             &reader.state,
@@ -1585,6 +1271,144 @@ mod real_reading {
         }
         stop_native_llama(&reader.state).unwrap();
     }
+
+    #[test]
+    #[ignore = "Real multi-turn Gemma recovery probe, no audio; preserves every output in a new HORARY_READING_EVIDENCE directory"]
+    fn real_reader_preserves_fair_context_and_waits_for_required_roles() {
+        let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");
+        let dir = std::path::PathBuf::from(
+            std::env::var_os("HORARY_READING_EVIDENCE").expect("new evidence directory"),
+        );
+        std::fs::create_dir(&dir).expect("Preserve previous attempts");
+        let reader = Reader {
+            state: NativeLlamaState::default(),
+            dir,
+            records: Mutex::new(Vec::new()),
+            stop_before_batch: true,
+            deadline: Some(std::time::Instant::now() + std::time::Duration::from_secs(300)),
+        };
+        start_native_llama_from_path(
+            &reader.state,
+            "fair-recovery-probe".into(),
+            String::new(),
+            path.into(),
+            std::path::PathBuf::new(),
+            serde_json::from_value(
+                json!({"modelId":"fair-recovery-probe","ctxSize":16384,"nGpuLayers":"auto"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut session = Session::default();
+        let geocode = GeocodeState::default();
+        let question = "How many books will Bob sell at the fair?";
+        let turns=[question,"The fair is in Bozeman, Montana.","I'm asking from Woodbridge, Virginia, United States.","How did you know what time to cast the chart? Don't you need to know when the fair is?","OK, the fair is tomorrow at 3 o'clock.","Cast the chart.","Bob is my husband. They are his books."];
+        let mut observations = Vec::new();
+        for (index, words) in turns.into_iter().enumerate() {
+            let previous = session.clone();
+            session.messages.push(Message {
+                role: "user".into(),
+                text: words.into(),
+            });
+            let result = run(
+                &mut session,
+                &reader,
+                &geocode,
+                1789387200000. + index as f64 * 60000.,
+                None,
+                &previous,
+            );
+            observations.push(json!({"turn":index,"words":words,"result":result,"brief":session.method.brief,"chartMoment":session.chart.as_ref().map(|chart|&chart["timestampMs"]),"place":session.place,"sections":session.sections.iter().map(|section|section.method_stage).collect::<Vec<_>>(),"pending":session.method.flow.pending}));
+            std::fs::write(
+                reader.dir.join("observations.json"),
+                serde_json::to_vec_pretty(&observations).unwrap(),
+            )
+            .unwrap();
+            if index < 6 {
+                result.unwrap();
+            } else {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "Synthetic probe stops before testimony"
+                );
+            }
+            assert_eq!(
+                session.question, question,
+                "The original quantity question must survive every turn"
+            );
+            if index == 1 {
+                assert!(
+                    session.chart.is_none(),
+                    "An event venue cannot stand in for an unknown reader place"
+                );
+                assert!(session.method.brief.place_request.is_empty());
+                assert!(session
+                    .method
+                    .brief
+                    .event_place
+                    .to_lowercase()
+                    .contains("bozeman"));
+            }
+            if index >= 2 {
+                assert_eq!(
+                    session.chart.as_ref().unwrap()["timestampMs"],
+                    1789387200000.
+                );
+                assert!(session.place.as_ref().unwrap().name.contains("Woodbridge"));
+            }
+            if matches!(index, 2 | 4 | 5) {
+                assert!(
+                    session.sections.is_empty(),
+                    "Roles cannot complete before the missing relationship is supplied"
+                );
+                assert!(session
+                    .method
+                    .flow
+                    .pending
+                    .iter()
+                    .any(|pending| pending.stage == Stage::Significators));
+            }
+            if index == 3 {
+                let record = session
+                    .method
+                    .records
+                    .iter()
+                    .rev()
+                    .find(|record| record.stage == Stage::Explanation)
+                    .unwrap();
+                assert_eq!(record.input["follow_up_words"], words);
+                let response = record.worksheet["summary"].as_str().unwrap().to_lowercase();
+                assert!(!response.contains("no chart") && !response.contains("provide the chart"));
+            }
+            if index >= 4 {
+                assert!(
+                    session.method.brief.time_request.is_empty(),
+                    "The fair's time is not the question moment"
+                );
+                assert!(session.method.brief.event_time.contains('3'));
+            }
+            if index == 6 {
+                let roles = &session
+                    .sections
+                    .iter()
+                    .find(|section| section.method_stage == Some(Stage::Significators))
+                    .unwrap()
+                    .roles;
+                assert!(
+                    roles.iter().any(|role| role.house == Some(7)),
+                    "The explicitly supplied husband must have a seventh-house role"
+                );
+                assert!(
+                    roles.iter().any(|role| role.house == Some(8)),
+                    "His movable stock is his second, absolute eighth"
+                );
+                assert!(!roles.iter().any(
+                    |role| role.label.to_lowercase().contains("book") && role.house == Some(3)
+                ));
+            }
+        }
+        stop_native_llama(&reader.state).unwrap();
+    }
 }
 
 /// An authored fixture drives the real scheduler and captures its exact inputs.
@@ -1613,10 +1437,10 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
             self.requests.lock().unwrap().push(json!({"stage":stage,"messages":serde_json::from_str::<Value>(&prompt(stage,matter,input,contract)?).map_err(|e|e.to_string())?,"responseSchema":contract}));
             let answer = match stage {
                 Stage::Intake => {
-                    json!({"intent":"read","question":"Will I get married in the next year?","matter":"relationship","question_kind":"event","context":"No particular partner is named.","place_request":if input["latest_words"] == "Woodbridge, Virginia, United States." {"Woodbridge, Virginia, United States."}else{""},"time_request":"","horizon":"within the next year","clarification":"","focus":"judgment","heard":"","restore_revision":null})
+                    json!({"intent":"read","question":"Will I get married in the next year?","matter":"relationship","question_kind":"event","context":"No particular partner is named.","people":[{"id":"partner","label":"Prospective partner","relationship":"partner","source_quote":"Will I get married in the next year?"}],"subject":{"name":"Prospective partner","kind":"person","owner_id":"partner","source_quote":"Will I get married in the next year?"},"event_place":"","event_time":"","place_request":if input["latest_words"] == "Woodbridge, Virginia, United States." {"Woodbridge, Virginia, United States."}else{""},"time_request":"","horizon":"within the next year","clarification":"","focus":"judgment","heard":"","restore_revision":null})
                 }
                 Stage::Significators => {
-                    json!({"roles":[{"label":"Querent","house":1,"natural":null,"reason":"The first house represents the person asking."},{"label":"Prospective partner","house":7,"natural":null,"reason":"The seventh house represents a prospective partner."},{"label":"Feelings","house":null,"natural":"Moon","reason":"The Moon has a contextual role in the question."}],"summary":"Authored fixture: identifies roles to inspect subsequent requests.","unknowns":[]})
+                    json!({"selections":[{"id":"querent.self","reason":"The first house represents the person asking."},{"id":"partner.self","reason":"The seventh house represents a prospective partner."},{"id":"moon.contextual","reason":"The Moon has a contextual role in the question."}],"summary":"Authored fixture: identifies roles to inspect subsequent requests.","unknowns":[]})
                 }
                 Stage::Place => {
                     let place = input["candidates"]

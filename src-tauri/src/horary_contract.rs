@@ -1,0 +1,454 @@
+//! Typed worksheet contracts and native domain validation. No scheduling or UI.
+#![forbid(unsafe_code)]
+use crate::{
+    horary_lessons::{self as lessons, Matter, Stage},
+    reading_method::{self, Fact, RoleChoice},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Brief {
+    pub intent: String,
+    pub question: String,
+    pub matter: Matter,
+    pub question_kind: String,
+    pub context: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub people: Vec<crate::horary_role_options::Person>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "crate::horary_role_options::Subject::is_empty")]
+    pub subject: crate::horary_role_options::Subject,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub event_place: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub event_time: String,
+    pub place_request: String,
+    pub time_request: String,
+    pub horizon: String,
+    pub clarification: String,
+    pub focus: String,
+    pub heard: String,
+    #[serde(default)]
+    pub restore_revision: Option<u64>,
+}
+
+fn text(max: usize) -> Value {
+    json!({"type":"string", "maxLength":max})
+}
+fn choice(values: &[&str]) -> Value {
+    json!({"type":"string", "enum":values})
+}
+fn list(items: Value, max: usize) -> Value {
+    json!({"type":"array", "items":items, "maxItems":max})
+}
+fn object(properties: Value) -> Value {
+    let required: Vec<_> = properties
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(k, _)| k.clone())
+        .collect();
+    json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
+}
+
+pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
+    let ids: Vec<_> = facts.iter().map(|f| f.id.as_str()).collect();
+    let evidence = if ids.is_empty() {
+        list(text(1), 0)
+    } else {
+        list(choice(&ids), 6)
+    };
+    match stage {
+        Stage::Intake => object(
+            json!({"intent":choice(&["read","clarify","correct","new_question","explain","resume","restore"]),"question":text(500),"matter":choice(&["relationship","lost_object","lost_animal","work","money","property","other"]),"question_kind":choice(&["event","situation","quantity","location","choice"]),"context":text(700),"people":list(object(json!({"id":text(40),"label":text(80),"relationship":choice(&["unknown","partner","child","sibling","friend","mother","father","employer","employee","other_party"]),"source_quote":text(240)})),3),"subject":object(json!({"name":text(80),"kind":choice(&["person","movable","money","property","job","small_animal","large_animal","other"]),"owner_id":text(40),"source_quote":text(240)})),"event_place":text(240),"event_time":text(180),"place_request":text(240),"time_request":text(180),"horizon":text(100),"clarification":text(180),"focus":choice(&["roles","condition","reception","contacts","location","timing","judgment","place","moment"]),"heard":text(500),"restore_revision":{"type":["integer","null"],"minimum":1}}),
+        ),
+        Stage::Place => object(
+            json!({"mode":choice(&["select","ask"]),"place_id":text(100),"query":text(240),"clarification":text(180),"basis":text(240)}),
+        ),
+        Stage::Moment => object(
+            json!({"mode":choice(&["now","keep","explicit","ask"]),"local_time":text(32),"occurrence":choice(&["","earlier","later"]),"clarification":text(180),"basis":text(240)}),
+        ),
+        Stage::Significators => object(
+            json!({"roles":list(object(json!({"label":text(80),"house":{"type":["integer","null"],"minimum":1,"maximum":12},"natural":{"type":["string","null"],"enum":[null,"Moon","Sun","Venus"]},"reason":text(240)})),5),"owner_house":{"type":["integer","null"],"minimum":1,"maximum":12},"object_candidates":list(json!({"type":"integer","minimum":1,"maximum":12}),2),"summary":text(350),"unknowns":list(text(150),3)}),
+        ),
+        _ => {
+            let mut checks = serde_json::Map::new();
+            for key in stage.checks() {
+                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":text(220)})));
+            }
+            let mut fields = serde_json::Map::from_iter([
+                ("checks".into(), object(Value::Object(checks))),
+                ("summary".into(), text(450)),
+                ("unknowns".into(), list(text(150), 4)),
+            ]);
+            match stage {
+                Stage::Contacts => {
+                    fields.insert(
+                        "basis".into(),
+                        choice(&[
+                            "direct_candidate",
+                            "complex_unverified",
+                            "location_or_situation",
+                            "no_candidate_covered",
+                        ]),
+                    );
+                    fields.insert("candidate_ids".into(), evidence);
+                    fields.insert("candidate_signs".into(), list(object(json!({"id": if ids.is_empty(){text(1)}else{choice(&ids)}, "within_current_signs":{"type":["boolean","null"]}})),6));
+                }
+                Stage::Timing => {
+                    fields.insert(
+                        "timing_status".into(),
+                        choice(&["tentative", "unestablished"]),
+                    );
+                    fields.insert(
+                        "unit".into(),
+                        choice(&["", "hours", "days", "weeks", "months", "years"]),
+                    );
+                    fields.insert(
+                        "number".into(),
+                        json!({"type":["number","null"],"minimum":0}),
+                    );
+                }
+                Stage::Judgment => {
+                    fields.insert(
+                        "verdict".into(),
+                        choice(&[
+                            "likely_yes",
+                            "likely_no",
+                            "mixed",
+                            "situation",
+                            "location",
+                            "unresolved",
+                        ]),
+                    );
+                    fields.insert("answer".into(), text(1000));
+                    fields.insert("evidence".into(), evidence);
+                }
+                _ => {}
+            }
+            object(Value::Object(fields))
+        }
+    }
+}
+
+pub fn schema_for(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
+    let mut contract = schema(stage, facts);
+    if stage == Stage::Significators && !matches!(matter, Matter::LostObject | Matter::LostAnimal) {
+        if let Some(fields) = contract["properties"].as_object_mut() {
+            fields.remove("owner_house");
+            fields.remove("object_candidates");
+        }
+        if let Some(required) = contract["required"].as_array_mut() {
+            required.retain(|key| key != "owner_house" && key != "object_candidates");
+        }
+    }
+    contract
+}
+
+pub fn prompt(
+    stage: Stage,
+    matter: Matter,
+    input: &Value,
+    schema: &Value,
+) -> Result<String, String> {
+    // Stable teaching and stable contract precede changing data. No whole chart
+    // or conversation history is smuggled into this prefix.
+    let fixed = lessons::guide(stage, matter)?;
+    Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
+}
+
+fn bounded_strings(value: &Value) -> bool {
+    match value {
+        Value::String(s) => {
+            s.len() <= 8000 && !s.contains("<|") && !s.contains("|>") && !s.contains("<image")
+        }
+        Value::Array(a) => a.len() <= 40 && a.iter().all(bounded_strings),
+        Value::Object(m) => m.len() <= 30 && m.values().all(bounded_strings),
+        _ => true,
+    }
+}
+
+pub fn decode_json(raw: &str) -> Result<Value, String> {
+    let trimmed = raw.trim();
+    let data = trimmed
+        .strip_prefix("```json\n")
+        .or_else(|| trimmed.strip_prefix("```\n"))
+        .and_then(|s| s.strip_suffix("```"))
+        .unwrap_or(trimmed)
+        .trim();
+    let mut deserializer = serde_json::Deserializer::from_str(data);
+    let result = StrictValue::deserialize(&mut deserializer)
+        .map_err(|e| e.to_string())?
+        .0;
+    deserializer.end().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+struct StrictValue(Value);
+impl<'de> Deserialize<'de> for StrictValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = StrictValue;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("JSON without duplicate fields")
+            }
+            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                serde_json::Number::from_f64(v)
+                    .map(|n| StrictValue(Value::Number(n)))
+                    .ok_or_else(|| E::custom("Invalid JSON number"))
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
+                Ok(StrictValue(Value::String(v)))
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(StrictValue(Value::Null))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(v) = seq.next_element::<StrictValue>()? {
+                    values.push(v.0);
+                }
+                Ok(StrictValue(Value::Array(values)))
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = serde_json::Map::new();
+                while let Some((key, value)) = map.next_entry::<String, StrictValue>()? {
+                    if values.insert(key, value.0).is_some() {
+                        return Err(serde::de::Error::custom("Duplicate worksheet field"));
+                    }
+                }
+                Ok(StrictValue(Value::Object(values)))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+#[cfg(test)]
+pub fn validate(stage: Stage, value: &Value, facts: &[Fact]) -> Result<(), String> {
+    validate_for(stage, Matter::Other, value, facts)
+}
+
+pub(crate) fn validate_for(
+    stage: Stage,
+    matter: Matter,
+    value: &Value,
+    facts: &[Fact],
+) -> Result<(), String> {
+    if !bounded_strings(value) {
+        return Err("Worksheet exceeds its bounds.".into());
+    }
+    let contract = schema_for(stage, matter, facts);
+    validate_shape(value, &contract)?;
+    if stage == Stage::Intake {
+        let brief: Brief = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        if brief.question.trim().is_empty() && brief.clarification.trim().is_empty() {
+            return Err("Keep the actual question or ask what it is.".into());
+        }
+    }
+    if stage == Stage::Significators {
+        let choices: Vec<RoleChoice> =
+            serde_json::from_value(value["roles"].clone()).map_err(|e| e.to_string())?;
+        reading_method::assign_from_facts(facts, choices)?;
+        if matter == Matter::LostObject {
+            let owner = value["owner_house"]
+                .as_u64()
+                .ok_or("Identify the object's owner house")?;
+            let expected = if owner == 1 {
+                vec![2, 4]
+            } else {
+                vec![(owner + 12) % 12 + 1]
+            };
+            let actual: Vec<_> = value["object_candidates"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_u64)
+                .collect();
+            if actual != expected {
+                return Err("Compare Lords 2 and 4 for the querent's object; use another owner's turned second.".into());
+            }
+        }
+    }
+    for key in stage.checks() {
+        let c = &value["checks"][key];
+        if c["finding"].as_str().is_none_or(|s| s.trim().is_empty()) {
+            return Err(format!("Explain the {key} check."));
+        }
+        let selected: Vec<_> = c["evidence"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|id| facts.iter().find(|f| f.id == id))
+            .collect();
+        if c["state"] == "supported" && selected.is_empty() && stage != Stage::Explanation {
+            return Err(format!("The {key} check needs supplied evidence."));
+        }
+        if stage == Stage::Reception
+            && c["state"] == "supported"
+            && !selected.iter().any(|f| f.kind == "reception")
+        {
+            return Err("Reception requires a directed reception fact.".into());
+        }
+    }
+    if stage == Stage::Judgment && value["answer"].as_str().is_none_or(|s| s.trim().len() < 30) {
+        return Err("Answer the actual question in ordinary language.".into());
+    }
+    if stage == Stage::Judgment {
+        let scope = &value["checks"]["scope_of_answer"];
+        let boundary = facts.iter().find(|f| f.kind == "boundary");
+        if boundary.is_some_and(|b| {
+            !scope["evidence"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|v| v.as_str() == Some(b.id.as_str()))
+        }) {
+            return Err("The scope check must cite the supplied calculation boundary.".into());
+        }
+        if value["verdict"] == "likely_no"
+            && !value["checks"]["contrary_testimony"]["evidence"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .any(|id| {
+                    facts
+                        .iter()
+                        .any(|f| f.id == id && matches!(f.kind.as_str(), "condition" | "reception"))
+                })
+        {
+            return Err("A negative event proposal needs relevant contrary condition or reception; absence of a short-window contact is insufficient.".into());
+        }
+    }
+    if stage == Stage::Timing && value["number"].is_number() {
+        return Err("No native travel-to-perfection calculation is available; a numeric timing cannot be certified.".into());
+    }
+    if stage == Stage::Contacts {
+        let ids = value["candidate_ids"]
+            .as_array()
+            .ok_or("Missing candidate IDs")?;
+        let signs = value["candidate_signs"]
+            .as_array()
+            .ok_or("Missing candidate sign checks")?;
+        if (value["basis"] == "direct_candidate" && ids.is_empty())
+            || (value["basis"] == "no_candidate_covered" && !ids.is_empty())
+        {
+            return Err("The contact basis must agree with the supplied candidate IDs.".into());
+        }
+        if ids.len() != signs.len() {
+            return Err("Check the native sign-change status of each selected candidate.".into());
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for id in ids {
+            let id = id.as_str().ok_or("Invalid candidate ID")?;
+            if !seen.insert(id) {
+                return Err("Duplicate contact candidate.".into());
+            }
+            let event = facts
+                .iter()
+                .find(|f| f.id == id && f.kind == "event")
+                .and_then(|f| f.event.as_ref())
+                .ok_or("Select a supplied native event candidate.")?;
+            let matches: Vec<_> = signs.iter().filter(|s| s["id"] == id).collect();
+            if matches.len() != 1
+                || matches[0]["within_current_signs"]
+                    != serde_json::to_value(event.within_current_signs)
+                        .map_err(|e| e.to_string())?
+            {
+                return Err("The selected candidate's sign-change status disagrees with the native calculation.".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String> {
+    if let Some(allowed) = schema["enum"].as_array() {
+        if !allowed.contains(value) {
+            return Err(format!("Unexpected worksheet value {value}."));
+        }
+    }
+    let types: Vec<_> = if let Some(t) = schema["type"].as_str() {
+        vec![t]
+    } else {
+        schema["type"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect()
+    };
+    if !types.iter().any(|t| match *t {
+        "null" => value.is_null(),
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        "string" => value.is_string(),
+        "integer" => value.is_u64(),
+        "number" => value.is_number(),
+        "boolean" => value.is_boolean(),
+        _ => false,
+    }) {
+        return Err("Wrong worksheet value type.".into());
+    }
+    if let Some(s) = value.as_str() {
+        if schema["maxLength"]
+            .as_u64()
+            .is_some_and(|n| s.chars().count() > n as usize)
+        {
+            return Err("Worksheet string is too long.".into());
+        }
+    }
+    if let Some(n) = value.as_f64() {
+        if !n.is_finite()
+            || schema["minimum"].as_f64().is_some_and(|min| n < min)
+            || schema["maximum"].as_f64().is_some_and(|max| n > max)
+        {
+            return Err("Worksheet number is outside its range.".into());
+        }
+    }
+    if let Some(a) = value.as_array() {
+        if a.len() > schema["maxItems"].as_u64().unwrap_or(0) as usize {
+            return Err("Too many worksheet entries.".into());
+        }
+        for v in a {
+            validate_shape(v, &schema["items"])?;
+        }
+    }
+    if let Some(m) = value.as_object() {
+        let fields = schema["properties"]
+            .as_object()
+            .ok_or("Missing worksheet contract")?;
+        if m.len() != fields.len() {
+            return Err("Missing or additional worksheet fields.".into());
+        }
+        for (k, s) in fields {
+            validate_shape(m.get(k).ok_or_else(|| format!("Missing {k}."))?, s)?;
+        }
+    }
+    Ok(())
+}

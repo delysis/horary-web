@@ -10,6 +10,12 @@ Intake retains question, scope and context. Independent native place/moment suff
 
 The native chart establishes positions and traditional rulers. Role selection precedes the independent condition, reception, contact-mechanics and optional lost-location batch. The final interpretation depends on their worksheets. Native typed event data protects copied sign-change status. Reference and shape checks are explicit boundaries, not certification of model semantics.
 
+`horary_step.rs` owns an enforced transition catalog and the completion permit. Its durable journal distinguishes prepared, running, repairing, awaiting-user, paused, complete and superseded work. `horary_executor.rs` routes every single/batch proposal through the same acceptance path; all sibling receipts are kept before any repair. No attempt cap converts rejection into abandonment. The original input remains unchanged through repairs, and cancellation/backend interruption retains unfinished work. Native validation, lesson, contract, input and revision fingerprints scope reuse; saved data is checked again.
+
+`horary_contract.rs` defines narrow schemas. Intake now extracts source-backed people and the subject separately from per-turn intent. `horary_role_options.rs` binds named choices to those people and objects, computes turned houses, and requires every relevant role slot. Missing relationship/ownership permits an information request instead of a guessed assignment. The actor selects literal option IDs and explains relevance; it does not compute a husband's possessions and accidentally give that house to the husband. Quotation and English relationship-word checks improve extraction provenance but do not prove arbitrary language semantics.
+
+Explanation dispatch requires the actual follow-up words and selected passage or native chart context. Chart time/place can be explained without a completed interpretation. Missing internal artifacts never become requests for user-supplied chart data. Explicit continue commands resume the current matter and can reuse validated completed steps.
+
 `reading_store.rs` archives the complete active leaf before starting or reopening another one. Chart corrections archive the version being left. Native operations are serialized against leaf replacement and check the expected reading ID. Snapshot IDs remain monotonic, preventing late responses from replacing newer work. First native process open starts fresh; renderer reloads resume the active leaf.
 
 ## Calculations

@@ -10,36 +10,37 @@ Generated verbatim; not a model transcript.
 use crate::{
     conversation::{Message, Section, Session},
     geocode::{geocode_with_cache, GeocodeRequest, GeocodeState, LocationCandidate},
+    horary_executor::{ask_pending, execute, execute_batch, task},
     horary_lessons::{self as lessons, Matter, Stage},
+    horary_step::{self as step, CheckedData},
     native_llama_worker::NativeGenerationResult,
-    reading_method::{self, Fact, Role, RoleChoice, Step},
+    reading_method::{self, Fact, Role, Step},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::Path;
 
-#[derive(Clone, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Brief {
-    pub intent: String,
-    pub question: String,
-    pub matter: Matter,
-    pub question_kind: String,
-    pub context: String,
-    pub place_request: String,
-    pub time_request: String,
-    pub horizon: String,
-    pub clarification: String,
-    pub focus: String,
-    pub heard: String,
-    #[serde(default)]
-    pub restore_revision: Option<u64>,
-}
+#[cfg(test)]
+pub use crate::horary_contract::{decode_json, schema, schema_for, validate};
+pub use crate::horary_contract::{prompt, Brief};
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 pub struct MethodState {
     pub brief: Brief,
     pub records: Vec<Record>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "step::Journal::is_empty")]
+    pub flow: step::Journal,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub replies: Vec<UserReply>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct UserReply {
+    pub stage: Stage,
+    pub question: String,
+    pub words: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -77,485 +78,189 @@ pub trait Runtime: Sync {
     fn directory(&self) -> &Path;
 }
 
-fn text(max: usize) -> Value {
-    json!({"type":"string", "maxLength":max})
+fn reading_brief(brief: &Brief) -> Value {
+    // A stable matter is different from the command on the latest turn. Analysis
+    // tasks must not inherit "explain", a prior focus, or a prior clarification.
+    json!({"question":brief.question,"matter":brief.matter,"question_kind":brief.question_kind,
+        "context":brief.context,"people":brief.people,"subject":brief.subject,"event_place":brief.event_place,"event_time":brief.event_time,"horizon":brief.horizon})
 }
-fn choice(values: &[&str]) -> Value {
-    json!({"type":"string", "enum":values})
+
+fn follow_up_words(session: &Session) -> String {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| message.role == "user")
+        .map(|message| {
+            message
+                .text
+                .strip_prefix("From your spoken words: ")
+                .unwrap_or(&message.text)
+                .to_string()
+        })
+        .unwrap_or_default()
 }
-fn list(items: Value, max: usize) -> Value {
-    json!({"type":"array", "items":items, "maxItems":max})
+
+fn is_resume_request(words: &str) -> bool {
+    let words = words
+        .trim()
+        .trim_end_matches(['.', '!', '?'])
+        .to_lowercase();
+    matches!(
+        words.as_str(),
+        "continue"
+            | "go on"
+            | "resume"
+            | "try again"
+            | "cast the chart"
+            | "finish the reading"
+            | "continue the reading"
+    )
 }
-fn object(properties: Value) -> Value {
-    let required: Vec<_> = properties
-        .as_object()
-        .into_iter()
-        .flatten()
-        .map(|(k, _)| k.clone())
+
+fn chart_context(session: &Session) -> Value {
+    let Some(chart) = session.chart.as_ref() else {
+        return Value::Null;
+    };
+    let moment = chart["timestampMs"].as_f64();
+    let zone = session.place.as_ref().map(|place| place.timezone.as_str());
+    let local = moment
+        .zip(zone)
+        .and_then(|(moment, zone)| horary_ai_core::chart_input::local_clock(moment, zone).ok());
+    json!({"status":"cast","timestamp_ms":moment,"local_civil_time":local,"timezone":zone,
+        "reader_place":session.place,"candidate_question_moment_ms":session.candidate_moment_ms,
+        "basis":"Horary uses the reader's place and the moment the question was understood, not the place or starting time of the event being asked about.",
+        "event_context":{"place":session.method.brief.event_place,"time":session.method.brief.event_time,"other":session.method.brief.context}})
+}
+
+fn intake_input(session: &Session, spoken: bool) -> Value {
+    let mut retained = reading_brief(&session.method.brief);
+    retained["place_request"] = json!(session.method.brief.place_request);
+    retained["time_request"] = json!(session.method.brief.time_request);
+    let completed: Vec<_> = session
+        .sections
+        .iter()
+        .filter_map(|section| section.method_stage)
         .collect();
-    json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
-}
-
-pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
-    let ids: Vec<_> = facts.iter().map(|f| f.id.as_str()).collect();
-    let evidence = if ids.is_empty() {
-        list(text(1), 0)
+    let unfinished = session
+        .method
+        .flow
+        .jobs
+        .iter()
+        .rev()
+        .find(|job| {
+            job.revision == session.revision
+                && !matches!(job.stage, Stage::Intake | Stage::Explanation)
+                && !matches!(job.phase(), step::Phase::Complete { .. })
+        })
+        .map(|job| json!({"stage":job.stage,"phase":job.phase()}));
+    let legacy_error = if session.chart.is_some() && session.sections.is_empty() {
+        session
+            .audit
+            .iter()
+            .rev()
+            .find_map(|receipt| receipt.get("interruption"))
     } else {
-        list(choice(&ids), 6)
+        None
     };
-    match stage {
-        Stage::Intake => object(
-            json!({"intent":choice(&["read","clarify","correct","new_question","explain","restore"]),"question":text(500),"matter":choice(&["relationship","lost_object","lost_animal","work","money","property","other"]),"question_kind":choice(&["event","situation","location","choice"]),"context":text(700),"place_request":text(240),"time_request":text(180),"horizon":text(100),"clarification":text(180),"focus":choice(&["roles","condition","reception","contacts","location","timing","judgment","place","moment"]),"heard":text(500),"restore_revision":{"type":["integer","null"],"minimum":1}}),
-        ),
-        Stage::Place => object(
-            json!({"mode":choice(&["select","lookup","ask"]),"place_id":text(100),"query":text(240),"clarification":text(180),"basis":text(240)}),
-        ),
-        Stage::Moment => object(
-            json!({"mode":choice(&["now","keep","explicit","ask"]),"local_time":text(32),"occurrence":choice(&["","earlier","later"]),"clarification":text(180),"basis":text(240)}),
-        ),
-        Stage::Significators => object(
-            json!({"roles":list(object(json!({"label":text(80),"house":{"type":["integer","null"],"minimum":1,"maximum":12},"natural":{"type":["string","null"],"enum":[null,"Moon","Sun","Venus"]},"reason":text(240)})),5),"owner_house":{"type":["integer","null"],"minimum":1,"maximum":12},"object_candidates":list(json!({"type":"integer","minimum":1,"maximum":12}),2),"summary":text(350),"unknowns":list(text(150),3)}),
-        ),
-        _ => {
-            let mut checks = serde_json::Map::new();
-            for key in stage.checks() {
-                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":text(220)})));
-            }
-            let mut fields = serde_json::Map::from_iter([
-                ("checks".into(), object(Value::Object(checks))),
-                ("summary".into(), text(450)),
-                ("unknowns".into(), list(text(150), 4)),
-            ]);
-            match stage {
-                Stage::Contacts => {
-                    fields.insert(
-                        "basis".into(),
-                        choice(&[
-                            "direct_candidate",
-                            "complex_unverified",
-                            "location_or_situation",
-                            "no_candidate_covered",
-                        ]),
-                    );
-                    fields.insert("candidate_ids".into(), evidence);
-                    fields.insert("candidate_signs".into(), list(object(json!({"id": if ids.is_empty(){text(1)}else{choice(&ids)}, "within_current_signs":{"type":["boolean","null"]}})),6));
-                }
-                Stage::Timing => {
-                    fields.insert(
-                        "timing_status".into(),
-                        choice(&["tentative", "unestablished"]),
-                    );
-                    fields.insert(
-                        "unit".into(),
-                        choice(&["", "hours", "days", "weeks", "months", "years"]),
-                    );
-                    fields.insert(
-                        "number".into(),
-                        json!({"type":["number","null"],"minimum":0}),
-                    );
-                }
-                Stage::Judgment => {
-                    fields.insert(
-                        "verdict".into(),
-                        choice(&[
-                            "likely_yes",
-                            "likely_no",
-                            "mixed",
-                            "situation",
-                            "location",
-                            "unresolved",
-                        ]),
-                    );
-                    fields.insert("answer".into(), text(1000));
-                    fields.insert("evidence".into(), evidence);
-                }
-                _ => {}
-            }
-            object(Value::Object(fields))
-        }
-    }
-}
-
-pub fn schema_for(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
-    let mut contract = schema(stage, facts);
-    if stage == Stage::Significators && !matches!(matter, Matter::LostObject | Matter::LostAnimal) {
-        if let Some(fields) = contract["properties"].as_object_mut() {
-            fields.remove("owner_house");
-            fields.remove("object_candidates");
-        }
-        if let Some(required) = contract["required"].as_array_mut() {
-            required.retain(|key| key != "owner_house" && key != "object_candidates");
-        }
-    }
-    contract
-}
-
-pub fn prompt(
-    stage: Stage,
-    matter: Matter,
-    input: &Value,
-    schema: &Value,
-) -> Result<String, String> {
-    // Stable teaching and stable contract precede changing data. No whole chart
-    // or conversation history is smuggled into this prefix.
-    let fixed = lessons::guide(stage, matter)?;
-    Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
-}
-
-fn bounded_strings(value: &Value) -> bool {
-    match value {
-        Value::String(s) => {
-            s.len() <= 8000 && !s.contains("<|") && !s.contains("|>") && !s.contains("<image")
-        }
-        Value::Array(a) => a.len() <= 40 && a.iter().all(bounded_strings),
-        Value::Object(m) => m.len() <= 30 && m.values().all(bounded_strings),
-        _ => true,
-    }
-}
-
-pub fn decode_json(raw: &str) -> Result<Value, String> {
-    let trimmed = raw.trim();
-    let data = trimmed
-        .strip_prefix("```json\n")
-        .or_else(|| trimmed.strip_prefix("```\n"))
-        .and_then(|s| s.strip_suffix("```"))
-        .unwrap_or(trimmed)
-        .trim();
-    let mut deserializer = serde_json::Deserializer::from_str(data);
-    let result = StrictValue::deserialize(&mut deserializer)
-        .map_err(|e| e.to_string())?
-        .0;
-    deserializer.end().map_err(|e| e.to_string())?;
-    Ok(result)
-}
-
-struct StrictValue(Value);
-impl<'de> Deserialize<'de> for StrictValue {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Visitor;
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = StrictValue;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("JSON without duplicate fields")
-            }
-            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
-                serde_json::Number::from_f64(v)
-                    .map(|n| StrictValue(Value::Number(n)))
-                    .ok_or_else(|| E::custom("Invalid JSON number"))
-            }
-            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-                Ok(StrictValue(json!(v)))
-            }
-            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
-                Ok(StrictValue(Value::String(v)))
-            }
-            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
-                Ok(StrictValue(Value::Null))
-            }
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut values = Vec::new();
-                while let Some(v) = seq.next_element::<StrictValue>()? {
-                    values.push(v.0);
-                }
-                Ok(StrictValue(Value::Array(values)))
-            }
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> Result<Self::Value, A::Error> {
-                let mut values = serde_json::Map::new();
-                while let Some((key, value)) = map.next_entry::<String, StrictValue>()? {
-                    if values.insert(key, value.0).is_some() {
-                        return Err(serde::de::Error::custom("Duplicate worksheet field"));
-                    }
-                }
-                Ok(StrictValue(Value::Object(values)))
-            }
-        }
-        deserializer.deserialize_any(Visitor)
-    }
-}
-
-#[cfg(test)]
-pub fn validate(stage: Stage, value: &Value, facts: &[Fact]) -> Result<(), String> {
-    validate_for(stage, Matter::Other, value, facts)
-}
-
-fn validate_for(stage: Stage, matter: Matter, value: &Value, facts: &[Fact]) -> Result<(), String> {
-    if !bounded_strings(value) {
-        return Err("Worksheet exceeds its bounds.".into());
-    }
-    let contract = schema_for(stage, matter, facts);
-    validate_shape(value, &contract)?;
-    if stage == Stage::Intake {
-        let brief: Brief = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        if brief.question.trim().is_empty() && brief.clarification.trim().is_empty() {
-            return Err("Keep the actual question or ask what it is.".into());
-        }
-    }
-    for key in stage.checks() {
-        let c = &value["checks"][key];
-        if c["finding"].as_str().is_none_or(|s| s.trim().is_empty()) {
-            return Err(format!("Explain the {key} check."));
-        }
-        let selected: Vec<_> = c["evidence"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .filter_map(|id| facts.iter().find(|f| f.id == id))
-            .collect();
-        if c["state"] == "supported" && selected.is_empty() && stage != Stage::Explanation {
-            return Err(format!("The {key} check needs supplied evidence."));
-        }
-        if stage == Stage::Reception
-            && c["state"] == "supported"
-            && !selected.iter().any(|f| f.kind == "reception")
-        {
-            return Err("Reception requires a directed reception fact.".into());
-        }
-    }
-    if stage == Stage::Judgment && value["answer"].as_str().is_none_or(|s| s.trim().len() < 30) {
-        return Err("Answer the actual question in ordinary language.".into());
-    }
-    if stage == Stage::Judgment {
-        let scope = &value["checks"]["scope_of_answer"];
-        let boundary = facts.iter().find(|f| f.kind == "boundary");
-        if boundary.is_some_and(|b| {
-            !scope["evidence"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|v| v.as_str() == Some(b.id.as_str()))
-        }) {
-            return Err("The scope check must cite the supplied calculation boundary.".into());
-        }
-        if value["verdict"] == "likely_no"
-            && !value["checks"]["contrary_testimony"]["evidence"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .any(|id| {
-                    facts
-                        .iter()
-                        .any(|f| f.id == id && matches!(f.kind.as_str(), "condition" | "reception"))
-                })
-        {
-            return Err("A negative event proposal needs relevant contrary condition or reception; absence of a short-window contact is insufficient.".into());
-        }
-    }
-    if stage == Stage::Timing && value["number"].is_number() {
-        return Err("No native travel-to-perfection calculation is available; a numeric timing cannot be certified.".into());
-    }
-    if stage == Stage::Contacts {
-        let ids = value["candidate_ids"]
-            .as_array()
-            .ok_or("Missing candidate IDs")?;
-        let signs = value["candidate_signs"]
-            .as_array()
-            .ok_or("Missing candidate sign checks")?;
-        if (value["basis"] == "direct_candidate" && ids.is_empty())
-            || (value["basis"] == "no_candidate_covered" && !ids.is_empty())
-        {
-            return Err("The contact basis must agree with the supplied candidate IDs.".into());
-        }
-        if ids.len() != signs.len() {
-            return Err("Check the native sign-change status of each selected candidate.".into());
-        }
-        let mut seen = std::collections::BTreeSet::new();
-        for id in ids {
-            let id = id.as_str().ok_or("Invalid candidate ID")?;
-            if !seen.insert(id) {
-                return Err("Duplicate contact candidate.".into());
-            }
-            let event = facts
-                .iter()
-                .find(|f| f.id == id && f.kind == "event")
-                .and_then(|f| f.event.as_ref())
-                .ok_or("Select a supplied native event candidate.")?;
-            let matches: Vec<_> = signs.iter().filter(|s| s["id"] == id).collect();
-            if matches.len() != 1
-                || matches[0]["within_current_signs"]
-                    != serde_json::to_value(event.within_current_signs)
-                        .map_err(|e| e.to_string())?
-            {
-                return Err("The selected candidate's sign-change status disagrees with the native calculation.".into());
-            }
-        }
-    }
-    Ok(())
-}
-
-fn validate_shape(value: &Value, schema: &Value) -> Result<(), String> {
-    if let Some(allowed) = schema["enum"].as_array() {
-        if !allowed.contains(value) {
-            return Err(format!("Unexpected worksheet value {value}."));
-        }
-    }
-    let types: Vec<_> = if let Some(t) = schema["type"].as_str() {
-        vec![t]
-    } else {
-        schema["type"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
+    let legacy_sources: Vec<_> = if session.method.brief.subject.is_empty() {
+        session
+            .messages
+            .iter()
+            .filter(|message| message.role == "user")
+            .rev()
+            .take(8)
+            .map(|message| message.text.as_str())
             .collect()
+    } else {
+        Vec::new()
     };
-    if !types.iter().any(|t| match *t {
-        "null" => value.is_null(),
-        "object" => value.is_object(),
-        "array" => value.is_array(),
-        "string" => value.is_string(),
-        "integer" => value.is_u64(),
-        "number" => value.is_number(),
-        "boolean" => value.is_boolean(),
-        _ => false,
-    }) {
-        return Err("Wrong worksheet value type.".into());
+    json!({"retained_brief":retained,"legacy_user_fact_sources":legacy_sources,"canonical_question":session.question,"chart_exists":session.chart.is_some(),
+        "consultation_state":{"chart":chart_context(session),"completed_steps":completed,
+            "interpretation_exists":completed.contains(&Stage::Judgment),"unfinished_step":unfinished,
+            "pending_user_requests":session.method.flow.pending,"legacy_interruption":legacy_error},
+        "device_place_available":session.candidates.iter().any(|place|place.provider == "device"),"native_clock_available":true,
+        "available_revisions":session.revisions.iter().map(|revision|json!({"number":revision.number,"question":revision.question})).collect::<Vec<_>>(),
+        "latest_words":session.messages.last().map(|message|message.text.as_str()),
+        "last_reader_question":session.messages.iter().rev().find(|message|message.role == "assistant").map(|message|message.text.as_str()),
+        "spoken_input":spoken})
+}
+
+fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result<(), String> {
+    let all = reading_method::facts(session.chart.as_ref());
+    let focus = session.method.brief.focus.clone();
+    let target = match focus.as_str() {
+        "roles" => Stage::Significators,
+        "condition" => Stage::Condition,
+        "reception" => Stage::Reception,
+        "contacts" => Stage::Contacts,
+        "location" => Stage::Location,
+        "timing" => Stage::Timing,
+        "place" => Stage::Place,
+        "moment" => Stage::Moment,
+        _ => Stage::Judgment,
+    };
+    let native_context = if matches!(target, Stage::Place | Stage::Moment) {
+        chart_context(session)
+    } else {
+        Value::Null
+    };
+    let record = session.method.records.iter().rev().find(|record| {
+        record.stage == target
+            && record.revision == session.revision
+            && record.validation_error.is_none()
+            && record.worksheet.get("request_input").is_none()
+    });
+    let passage = session
+        .sections
+        .iter()
+        .find(|section| section.method_stage == Some(target))
+        .or_else(|| {
+            session.sections.iter().find(|section| {
+                target == Stage::Significators && section.step == Some(Step::Significators)
+            })
+        });
+    if native_context.is_null() && passage.is_none() {
+        session.audit.push(json!({"event":"explanation_prerequisite","target":target,"result":"not_yet_available"}));
+        session.messages.push(Message { role:"assistant".into(), text:format!("The chart is cast, but I haven't completed {} yet. Say ‘continue’ to pick up the unfinished reading.",target.title().to_lowercase()) });
+        ask_pending(session);
+        return Ok(());
     }
-    if let Some(s) = value.as_str() {
-        if schema["maxLength"]
-            .as_u64()
-            .is_some_and(|n| s.chars().count() > n as usize)
-        {
-            return Err("Worksheet string is too long.".into());
-        }
+    let supplied: Vec<_> = record
+        .into_iter()
+        .flat_map(|record| {
+            record.worksheet["checks"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .flat_map(|(_, check)| check["evidence"].as_array().into_iter().flatten())
+        })
+        .filter_map(Value::as_str)
+        .collect();
+    let mut facts: Vec<_> = all
+        .iter()
+        .filter(|fact| {
+            supplied.contains(&fact.id.as_str())
+                || passage.is_some_and(|section| section.evidence.contains(&fact.id))
+        })
+        .cloned()
+        .collect();
+    if !native_context.is_null() {
+        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),event:None });
+        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),event:None });
     }
-    if let Some(n) = value.as_f64() {
-        if !n.is_finite()
-            || schema["minimum"].as_f64().is_some_and(|min| n < min)
-            || schema["maximum"].as_f64().is_some_and(|max| n > max)
-        {
-            return Err("Worksheet number is outside its range.".into());
-        }
-    }
-    if let Some(a) = value.as_array() {
-        if a.len() > schema["maxItems"].as_u64().unwrap_or(0) as usize {
-            return Err("Too many worksheet entries.".into());
-        }
-        for v in a {
-            validate_shape(v, &schema["items"])?;
-        }
-    }
-    if let Some(m) = value.as_object() {
-        let fields = schema["properties"]
-            .as_object()
-            .ok_or("Missing worksheet contract")?;
-        if m.len() != fields.len() {
-            return Err("Missing or additional worksheet fields.".into());
-        }
-        for (k, s) in fields {
-            validate_shape(m.get(k).ok_or_else(|| format!("Missing {k}."))?, s)?;
-        }
+    let input = json!({"brief":reading_brief(&session.method.brief),"follow_up_words":words,"focus":focus,
+        "chart_context":native_context,"reading_complete":session.sections.iter().any(|section|section.method_stage == Some(Stage::Judgment)),
+        "prior_worksheet":record.map(|record|&record.worksheet).or_else(||passage.map(|section|&section.worksheet)),
+        "prior_assignment":passage.map(|section|&section.roles),"pending_user_requests":session.method.flow.pending,"facts":facts});
+    if let Some(data) = task(session, runtime, Stage::Explanation, input, &facts)? {
+        session.messages.push(Message {
+            role: "assistant".into(),
+            text: data.worksheet()["summary"].as_str().unwrap_or("").into(),
+        });
+        ask_pending(session);
     }
     Ok(())
-}
-
-fn generate(
-    runtime: &impl Runtime,
-    stage: Stage,
-    matter: Matter,
-    input: Value,
-    facts: &[Fact],
-    audio: Option<&[u8]>,
-) -> Result<(Value, Record), String> {
-    runtime.check()?;
-    let contract = schema_for(stage, matter, facts);
-    let result = runtime.generate(stage, matter, &input, &contract, audio)?;
-    let parsed = decode_json(&result.content);
-    let validation_error = parsed
-        .as_ref()
-        .map_err(|e| e.clone())
-        .and_then(|v| validate_for(stage, matter, v, facts))
-        .err();
-    let value = parsed.unwrap_or(Value::Null);
-    let record = Record {
-        stage,
-        revision: 0,
-        guide_sha256: lessons::digest(&lessons::guide(stage, matter)?),
-        schema_sha256: lessons::digest(&contract.to_string()),
-        input_sha256: lessons::digest(&input.to_string()),
-        input,
-        raw: result.content.clone(),
-        worksheet: value.clone(),
-        generation: result,
-        source_passages: stage.passages(matter).iter().map(|s| (*s).into()).collect(),
-        validation_error,
-    };
-    Ok((value, record))
-}
-
-fn keep(session: &mut Session, runtime: &impl Runtime, mut record: Record) -> Result<(), String> {
-    record.revision = session.revision;
-    let metric = crate::conversation::inference_measurement(&record.generation);
-    if let Ok(progress) = crate::review_progress::record_with_inference(
-        runtime.directory(),
-        record.stage.name(),
-        record.stage.activity(),
-        metric.elapsed_ms,
-        Some(metric),
-    ) {
-        session.progress.push(progress);
-        if session.progress.len() > 160 {
-            session.progress.remove(0);
-        }
-    }
-    log::info!("horary stage={} revision={} guide={} prompt_tokens={} cached_tokens={} output_tokens={} elapsed_ms={} lesson_bank_hit={:?} lesson_prepare_ms={:?} valid={}",record.stage.name(),record.revision,record.guide_sha256,record.generation.prompt_tokens,record.generation.cached_prompt_tokens,record.generation.generated_tokens,record.generation.elapsed_ms,record.generation.lesson_bank_hit,record.generation.lesson_prepare_ms,record.validation_error.is_none());
-    session.audit.push(json!({"event":"method_stage","stage":record.stage,"dependencies":record.stage.dependencies(),"bookOcrSha256":lessons::BOOK_OCR_SHA256,"revision":record.revision,"guideSha256":record.guide_sha256,"schemaSha256":record.schema_sha256,"inputSha256":record.input_sha256,"generation":record.generation}));
-    session.method.records.push(record);
-    runtime.publish(session)
-}
-
-fn task(
-    session: &mut Session,
-    runtime: &impl Runtime,
-    stage: Stage,
-    input: Value,
-    facts: &[Fact],
-) -> Result<Value, String> {
-    session.status = stage.activity().into();
-    runtime.publish(session)?;
-    let mut input = input;
-    let attempts = if input.get("native_validation_error").is_some() {
-        1
-    } else {
-        2
-    };
-    for attempt in 0..attempts {
-        let (value, record) = generate(
-            runtime,
-            stage,
-            session.method.brief.matter,
-            input.clone(),
-            facts,
-            None,
-        )?;
-        let error = record.validation_error.clone();
-        keep(session, runtime, record)?;
-        if let Some(error) = error {
-            if attempt + 1 == attempts {
-                return Err(format!("{} needs review: {error}", stage.name()));
-            }
-            input = json!({"original_input":input,"previous_worksheet":value,"native_validation_error":error,"instruction":"Correct only this worksheet. Do not add assumptions or change the task."});
-        } else {
-            return Ok(value);
-        }
-    }
-    Err("The worksheet remains unresolved.".into())
 }
 
 fn relevant(facts: &[Fact], roles: &[Role], kinds: &[&str]) -> Vec<Fact> {
@@ -650,6 +355,8 @@ fn restore_revision(session: &mut Session, number: u64) -> Result<(), String> {
     session.sections = old.sections;
     session.method.brief = old.brief;
     session.method.brief.question = session.question.clone();
+    session.method.flow.pending.clear();
+    session.method.replies.clear();
     session.chart_after_message = session.messages.len();
     for section in &mut session.sections {
         section.revision = next;
@@ -661,13 +368,22 @@ fn restore_revision(session: &mut Session, number: u64) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
+#[path = "horary_recovery_tests.rs"]
+mod recovery_tests;
+
 fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], roles: Vec<Role>) {
     let ids: Vec<String> = if stage == Stage::Significators {
         facts
             .iter()
-            .filter(|f| f.kind == "house")
+            .filter(|f| {
+                f.kind == "house"
+                    && roles.iter().any(|role| {
+                        role.house
+                            .is_some_and(|house| f.label == format!("House {house}"))
+                    })
+            })
             .map(|f| f.id.clone())
-            .take(5)
             .collect()
     } else {
         let mut ids: Vec<_> = value["checks"]
@@ -722,7 +438,7 @@ fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], r
             quoted: true,
         })
         .collect();
-    session.sections.push(Section {
+    let section = Section {
         title: title.into(),
         body,
         evidence: ids.clone(),
@@ -740,7 +456,16 @@ fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], r
         draft: String::new(),
         worksheet: value.clone(),
         method_stage: Some(stage),
-    });
+    };
+    if let Some(existing) = session
+        .sections
+        .iter_mut()
+        .find(|section| section.method_stage == Some(stage) && section.revision == session.revision)
+    {
+        *existing = section;
+    } else {
+        session.sections.push(section);
+    }
 }
 
 pub fn run(
@@ -751,31 +476,58 @@ pub fn run(
     audio: Option<&[u8]>,
     previous: &Session,
 ) -> Result<(), String> {
-    let input = json!({"retained_brief":session.method.brief,"canonical_question":session.question,"chart_exists":session.chart.is_some(),"device_place_available":session.candidates.iter().any(|p|p.provider=="device"),"native_clock_available":true,"available_revisions":session.revisions.iter().map(|r|json!({"number":r.number,"question":r.question})).collect::<Vec<_>>(),"latest_words":session.messages.last().map(|m|m.text.as_str()),"last_reader_question":session.messages.iter().rev().find(|m|m.role=="assistant").map(|m|m.text.as_str()),"spoken_input":audio.is_some()});
-    session.status = Stage::Intake.activity().into();
-    runtime.publish(session)?;
-    let (value, record) = generate(
-        runtime,
-        Stage::Intake,
-        session.method.brief.matter,
-        input,
-        &[],
-        audio,
-    )?;
-    if let Some(error) = record.validation_error.clone() {
-        keep(session, runtime, record)?;
-        return Err(format!("The understood question needs review: {error}"));
+    let result = run_inner(session, runtime, geocode, instant, audio, previous);
+    if let Err(error) = &result {
+        session.method.flow.pause(error.clone());
+        runtime.publish(session)?;
     }
-    let brief: Brief = serde_json::from_value(value).map_err(|e| e.to_string())?;
-    if brief.intent == "restore"
-        && brief
-            .restore_revision
-            .is_none_or(|number| !session.revisions.iter().any(|r| r.number == number))
-    {
-        keep(session, runtime, record)?;
-        return Err("Choose one listed earlier chart revision.".into());
+    result
+}
+
+fn run_inner(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    geocode: &GeocodeState,
+    instant: f64,
+    audio: Option<&[u8]>,
+    previous: &Session,
+) -> Result<(), String> {
+    let record_start = session.method.records.len();
+    let pending = session.method.flow.pending.clone();
+    let typed_resume = audio.is_none()
+        && is_resume_request(&follow_up_words(session))
+        && !session.question.is_empty()
+        && session.method.brief.question == session.question
+        && !session.method.brief.subject.name.is_empty();
+    let mut brief = if typed_resume {
+        session.audit.push(json!({"event":"native_turn_route","intent":"resume","basis":"An explicit continue command preserves the already-understood matter and chart; no classification generation is needed."}));
+        let mut brief = session.method.brief.clone();
+        brief.intent = "resume".into();
+        brief.clarification.clear();
+        brief.heard.clear();
+        brief.restore_revision = None;
+        brief
+    } else {
+        let input = intake_input(session, audio.is_some());
+        let Some(data) = execute(session, runtime, Stage::Intake, input, &[], audio)? else {
+            return Ok(());
+        };
+        data.brief()
+            .cloned()
+            .ok_or("The intake completion lacks its typed brief")?
+    };
+    let words = if audio.is_some() {
+        brief.heard.clone()
+    } else {
+        follow_up_words(session)
+    };
+    if is_resume_request(&words) && !session.question.is_empty() {
+        session.audit.push(json!({"event":"native_resume_command","proposedIntent":brief.intent,"effectiveIntent":"resume","basis":"Explicit request to continue the current matter; an existing chart is retained."}));
+        brief.intent = "resume".into();
+        brief.clarification.clear();
     }
     if brief.intent == "new_question" {
+        let decision_records = session.method.records[record_start..].to_vec();
         let last = session.messages.last().cloned();
         let sequence = session.snapshot_id;
         *session = crate::reading_store::fresh(runtime.directory(), previous, None)?;
@@ -784,6 +536,9 @@ pub fn run(
             session.messages.push(last);
         }
         session.device_context = previous.device_context.clone();
+        // The new leaf keeps its actual classification receipt, including its
+        // predecessor context, while downstream prompts use only the new brief.
+        session.method.records = decision_records;
         session.candidates = previous
             .candidates
             .iter()
@@ -801,6 +556,19 @@ pub fn run(
     }
     session.question = brief.question.clone();
     session.method.brief = brief;
+    if !matches!(
+        session.method.brief.intent.as_str(),
+        "explain" | "new_question" | "restore"
+    ) && !is_resume_request(&words)
+    {
+        for request in pending {
+            session.method.replies.push(UserReply {
+                stage: request.stage,
+                question: request.request.question,
+                words: words.clone(),
+            });
+        }
+    }
     if session.chart.is_none()
         && session.candidate_moment_ms.is_none()
         && session.method.brief.clarification.is_empty()
@@ -808,7 +576,6 @@ pub fn run(
         session.candidate_moment_ms = Some(instant);
         session.audit.push(json!({"event":"question_moment_candidate","timestampMs":instant,"basis":"Receipt of the understood question; a later place-only clarification keeps this instant."}));
     }
-    keep(session, runtime, record)?;
     if session.method.brief.intent == "restore" {
         restore_revision(
             session,
@@ -820,75 +587,8 @@ pub fn run(
         )?;
         return Ok(());
     }
-    if !session.method.brief.clarification.is_empty() {
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: session.method.brief.clarification.clone(),
-        });
-        return Ok(());
-    }
     if session.method.brief.intent == "explain" && session.chart.is_some() {
-        let facts = reading_method::facts(session.chart.as_ref());
-        let focus = &session.method.brief.focus;
-        let stage = match focus.as_str() {
-            "roles" => Stage::Significators,
-            "condition" => Stage::Condition,
-            "reception" => Stage::Reception,
-            "contacts" => Stage::Contacts,
-            "location" => Stage::Location,
-            "timing" => Stage::Timing,
-            _ => Stage::Judgment,
-        };
-        let record = session
-            .method
-            .records
-            .iter()
-            .rev()
-            .find(|r| r.stage == stage && r.revision == session.revision);
-        let passage = session
-            .sections
-            .iter()
-            .find(|s| s.method_stage == Some(stage))
-            .or_else(|| {
-                if stage == Stage::Significators {
-                    session
-                        .sections
-                        .iter()
-                        .find(|s| s.step == Some(Step::Significators))
-                } else {
-                    None
-                }
-            });
-        let supplied: Vec<_> = record
-            .into_iter()
-            .flat_map(|r| {
-                r.worksheet["checks"]
-                    .as_object()
-                    .into_iter()
-                    .flatten()
-                    .flat_map(|(_, c)| c["evidence"].as_array().into_iter().flatten())
-            })
-            .filter_map(Value::as_str)
-            .collect();
-        let selected: Vec<_> = facts
-            .iter()
-            .filter(|f| {
-                supplied.contains(&f.id.as_str())
-                    || passage.is_some_and(|s| s.evidence.contains(&f.id))
-            })
-            .cloned()
-            .collect();
-        let value = task(
-            session,
-            runtime,
-            Stage::Explanation,
-            json!({"brief":session.method.brief,"focus":focus,"prior_worksheet":record.map(|r|&r.worksheet).or_else(||passage.map(|s|&s.worksheet)),"prior_assignment":passage.map(|s|&s.roles),"facts":selected}),
-            &selected,
-        )?;
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: value["summary"].as_str().unwrap_or("").into(),
-        });
+        explain(session, runtime, &words)?;
         return Ok(());
     }
     // Place lookup and moment sufficiency have no dependency on each other.
@@ -909,13 +609,17 @@ pub fn run(
     let mut moment = moment_result.map_err(str::to_string)?;
     let mut place_inquiry = None;
     if place.is_none() && !candidates.is_empty() {
-        let value = task(
+        let Some(data) = task(
             session,
             runtime,
             Stage::Place,
             json!({"brief":session.method.brief,"candidates":candidates}),
             &[],
-        )?;
+        )?
+        else {
+            return Ok(());
+        };
+        let value = data.worksheet();
         if value["mode"] == "select" {
             place = candidates
                 .iter()
@@ -924,16 +628,6 @@ pub fn run(
             if place.is_none() {
                 return Err("Choose a supplied place candidate ID.".into());
             }
-        } else if value["mode"] == "lookup" {
-            let query = value["query"]
-                .as_str()
-                .filter(|s| !s.trim().is_empty())
-                .ok_or("A place lookup needs the stated location.")?;
-            let narrowed = Brief {
-                place_request: query.into(),
-                ..Default::default()
-            };
-            place = native_place(&narrowed, &[], None, geocode)?.0;
         }
         if place.is_none() {
             place_inquiry = value["clarification"]
@@ -942,18 +636,22 @@ pub fn run(
                 .map(str::to_string);
         }
     }
-    if moment["mode"] == "needs_civil_time" {
+    if moment["mode"] == "needs_civil_time" && place.is_some() {
         let zone = place.as_ref().map(|p| p.timezone.as_str());
         let clock = zone
             .map(|z| horary_ai_core::chart_input::local_clock(instant, z))
             .transpose()?;
-        moment = task(
+        let Some(data) = task(
             session,
             runtime,
             Stage::Moment,
             json!({"requested_question_moment":session.method.brief.time_request,"question_context":session.method.brief.context,"selected_timezone":zone,"current_local_clock":clock,"existing_chart_moment":session.chart.as_ref().map(|c|&c["timestampMs"])}),
             &[],
-        )?;
+        )?
+        else {
+            return Ok(());
+        };
+        moment = data.worksheet().clone();
     }
     let mut inquiries = Vec::new();
     if place.is_none() {
@@ -971,6 +669,15 @@ pub fn run(
         );
     }
     if !inquiries.is_empty() {
+        session
+            .method
+            .flow
+            .pending
+            .retain(|pending| pending.stage != Stage::Place);
+        if place.is_none() {
+            session.method.flow.pending.push(step::PendingInput { stage:Stage::Place, request:step::InputRequest { field:"chart_place".into(),question:inquiries[0].into(),reason:"The device did not supply usable coordinates, and no reader location has been resolved.".into() } });
+            session.audit.push(json!({"event":"native_stage_wait","stage":"place","reason":"reader_location_unresolved"}));
+        }
         session.messages.push(Message {
             role: "assistant".into(),
             text: inquiries.join(" "),
@@ -978,6 +685,11 @@ pub fn run(
         return Ok(());
     }
     let place = place.ok_or("A chart needs its reader's place")?;
+    session
+        .method
+        .flow
+        .pending
+        .retain(|pending| pending.stage != Stage::Place);
     let default_instant = if session.method.brief.time_request.is_empty() {
         session.candidate_moment_ms.unwrap_or(instant)
     } else {
@@ -1028,7 +740,6 @@ pub fn run(
         session.status = "The sky at this question’s moment…".into();
         runtime.publish(session)?;
     }
-    session.sections.clear();
     let chart = session.chart.as_ref().ok_or("A chart is required")?.clone();
     let all = reading_method::facts(Some(&chart));
     let houses: Vec<_> = all
@@ -1036,39 +747,27 @@ pub fn run(
         .filter(|f| f.kind == "house" || f.kind == "position")
         .cloned()
         .collect();
-    let choices = task(
+    let options = crate::horary_role_options::build(
+        session.method.brief.matter,
+        &session.method.brief.people,
+        &session.method.brief.subject,
+    );
+    let Some(assignment) = task(
         session,
         runtime,
         Stage::Significators,
-        json!({"brief":session.method.brief,"house_rulers_and_positions":houses}),
+        json!({"brief":reading_brief(&session.method.brief),"house_rulers_and_positions":houses,"native_role_options":options}),
         &houses,
-    )?;
-    let roles = reading_method::assign(
-        &chart,
-        serde_json::from_value::<Vec<RoleChoice>>(choices["roles"].clone())
-            .map_err(|e| e.to_string())?,
-    )?;
-    if session.method.brief.matter == Matter::LostObject {
-        let owner = choices["owner_house"].as_u64().unwrap_or(1);
-        let expected = if owner == 1 {
-            vec![2, 4]
-        } else {
-            vec![(owner + 12) % 12 + 1]
-        };
-        let actual: Vec<_> = choices["object_candidates"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_u64)
-            .collect();
-        if actual != expected {
-            return Err("Compare Lords 2 and 4 for the querent's object; use another owner's turned second.".into());
-        }
-    }
+    )?
+    else {
+        return Ok(());
+    };
+    let choices = assignment.worksheet();
+    let roles = assignment.roles().to_vec();
     section(
         session,
         Stage::Significators,
-        &choices,
+        choices,
         &houses,
         roles.clone(),
     );
@@ -1078,7 +777,7 @@ pub fn run(
     let events = relevant(&all, &roles, &["event", "moon", "boundary"]);
     let positions = relevant(&all, &roles, &["position", "boundary"]);
     let matter = session.method.brief.matter;
-    let common = json!({"brief":session.method.brief,"roles":roles});
+    let common = json!({"brief":reading_brief(&session.method.brief),"roles":roles});
     session.status = "Following feeling, possibility, and the paths between them…".into();
     runtime.publish(session)?;
     // Independent judgments are submitted together. The resident model owns
@@ -1086,89 +785,45 @@ pub fn run(
     let mut tasks = vec![
         (
             Stage::Condition,
-            matter,
             json!({"question":common,"facts":condition}),
-            schema(Stage::Condition, &condition),
+            condition.clone(),
         ),
         (
             Stage::Reception,
-            matter,
             json!({"question":common,"facts":reception}),
-            schema(Stage::Reception, &reception),
+            reception.clone(),
         ),
         (
             Stage::Contacts,
-            matter,
-            json!({"brief":session.method.brief,"roles":roles,"facts":events}),
-            schema(Stage::Contacts, &events),
+            json!({"brief":reading_brief(&session.method.brief),"roles":roles,"facts":events}),
+            events.clone(),
         ),
     ];
     if matches!(matter, Matter::LostObject | Matter::LostAnimal) {
         tasks.push((
             Stage::Location,
-            matter,
-            json!({"brief":session.method.brief,"roles":roles,"facts":positions}),
-            schema(Stage::Location, &positions),
+            json!({"brief":reading_brief(&session.method.brief),"roles":roles,"facts":positions}),
+            positions.clone(),
         ));
     }
-    let batch = runtime.generate_batch(&tasks)?;
-    if batch.len() != tasks.len() {
-        return Err("An independent task is missing from the batch.".into());
-    }
-    let mut values = Vec::new();
-    for ((stage, matter, input, contract), generation) in tasks.into_iter().zip(batch) {
-        let selected = match stage {
-            Stage::Condition => &condition,
-            Stage::Reception => &reception,
-            Stage::Contacts => &events,
-            _ => &positions,
-        };
-        let parsed = decode_json(&generation.content);
-        let validation_error = parsed
-            .as_ref()
-            .map_err(|e| e.clone())
-            .and_then(|v| validate_for(stage, matter, v, selected))
-            .err();
-        let mut worksheet = parsed.unwrap_or(Value::Null);
-        keep(
-            session,
-            runtime,
-            Record {
-                stage,
-                revision: session.revision,
-                guide_sha256: lessons::digest(&lessons::guide(stage, matter)?),
-                schema_sha256: lessons::digest(&contract.to_string()),
-                input_sha256: lessons::digest(&input.to_string()),
-                input: input.clone(),
-                raw: generation.content.clone(),
-                worksheet: worksheet.clone(),
-                generation,
-                source_passages: stage.passages(matter).iter().map(|s| (*s).into()).collect(),
-                validation_error: validation_error.clone(),
-            },
-        )?;
-        if let Some(error) = validation_error {
-            worksheet = task(
-                session,
-                runtime,
-                stage,
-                json!({"original_input":input,"previous_worksheet":worksheet,"native_validation_error":error}),
-                selected,
-            )?;
+    let values = execute_batch(session, runtime, &tasks)?;
+    for ((stage, _, facts), value) in tasks.iter().zip(&values) {
+        if let Some(data) = value {
+            section(session, *stage, data.worksheet(), facts, Vec::new());
         }
-        values.push(worksheet);
     }
-    let c = values[0].clone();
-    let r = values[1].clone();
-    let contact = values[2].clone();
-    let location = values.get(3).cloned().unwrap_or(Value::Null);
-    section(session, Stage::Condition, &c, &condition, Vec::new());
-    section(session, Stage::Reception, &r, &reception, Vec::new());
     runtime.publish(session)?;
-    section(session, Stage::Contacts, &contact, &events, Vec::new());
-    if !location.is_null() {
-        section(session, Stage::Location, &location, &positions, Vec::new());
+    if values.iter().any(Option::is_none) {
+        ask_pending(session);
+        return Ok(());
     }
+    let c = values[0].as_ref().map(CheckedData::worksheet);
+    let r = values[1].as_ref().map(CheckedData::worksheet);
+    let contact = values[2].as_ref().map(CheckedData::worksheet);
+    let location = values
+        .get(3)
+        .and_then(Option::as_ref)
+        .map(CheckedData::worksheet);
     // Current ephemeris supplies brackets, not the applying planet's travel
     // to exact perfection. Skip speculative timing inference entirely.
     let timing = json!({"timing_status":"unestablished","reason":"The native calculation has not supplied travel to exact perfection. Astronomical hours are not symbolic calendar timing."});
@@ -1187,20 +842,37 @@ pub fn run(
             "boundary",
         ],
     );
-    let judgment = task(
+    let Some(judgment) = task(
         session,
         runtime,
         Stage::Judgment,
-        json!({"brief":session.method.brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts}),
+        json!({"brief":reading_brief(&session.method.brief),"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts}),
         &facts,
-    )?;
-    section(session, Stage::Judgment, &judgment, &facts, Vec::new());
+    )?
+    else {
+        return Ok(());
+    };
+    section(
+        session,
+        Stage::Judgment,
+        judgment.worksheet(),
+        &facts,
+        Vec::new(),
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn role_assignment_failure_is_a_repairable_validation_error() {
+        let chart =
+            json!({"houses":[{"number":1,"sign":"Cancer"},{"number":7,"sign":"Capricorn"}]});
+        let facts = reading_method::facts(Some(&chart));
+        let worksheet = json!({"roles":[{"label":"Querent","house":1,"natural":"Moon","reason":"The first house represents the person asking."}],"summary":"The querent is represented by the first house.","unknowns":[]});
+        assert!(validate(Stage::Significators, &worksheet, &facts).is_err());
+    }
     #[test]
     fn device_defaults_do_not_require_geocoding_or_invent_coordinates() {
         let device = LocationCandidate {
@@ -1427,6 +1099,8 @@ mod real_reading {
         state: NativeLlamaState,
         dir: std::path::PathBuf,
         records: Mutex<Vec<Value>>,
+        stop_before_batch: bool,
+        deadline: Option<std::time::Instant>,
     }
     impl Runtime for Reader {
         fn generate(
@@ -1463,6 +1137,9 @@ mod real_reading {
             &self,
             tasks: &[(Stage, Matter, Value, Value)],
         ) -> Result<Vec<NativeGenerationResult>, String> {
+            if self.stop_before_batch {
+                return Err("Synthetic probe stops before testimony".into());
+            }
             let prompts = tasks
                 .iter()
                 .map(|(stage, matter, input, contract)| {
@@ -1491,7 +1168,14 @@ mod real_reading {
             crate::reading_store::write(&self.dir.join("reading.json"), session, false)
         }
         fn check(&self) -> Result<(), String> {
-            Ok(())
+            if self
+                .deadline
+                .is_some_and(|deadline| std::time::Instant::now() >= deadline)
+            {
+                Err("Synthetic probe deadline reached".into())
+            } else {
+                Ok(())
+            }
         }
         fn directory(&self) -> &Path {
             &self.dir
@@ -1509,6 +1193,8 @@ mod real_reading {
             state: NativeLlamaState::default(),
             dir,
             records: Mutex::new(Vec::new()),
+            stop_before_batch: false,
+            deadline: None,
         };
         start_native_llama_from_path(
             &reader.state,
@@ -1592,6 +1278,144 @@ mod real_reading {
         }
         stop_native_llama(&reader.state).unwrap();
     }
+
+    #[test]
+    #[ignore = "Real multi-turn Gemma recovery probe, no audio; preserves every output in a new HORARY_READING_EVIDENCE directory"]
+    fn real_reader_preserves_fair_context_and_waits_for_required_roles() {
+        let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");
+        let dir = std::path::PathBuf::from(
+            std::env::var_os("HORARY_READING_EVIDENCE").expect("new evidence directory"),
+        );
+        std::fs::create_dir(&dir).expect("Preserve previous attempts");
+        let reader = Reader {
+            state: NativeLlamaState::default(),
+            dir,
+            records: Mutex::new(Vec::new()),
+            stop_before_batch: true,
+            deadline: Some(std::time::Instant::now() + std::time::Duration::from_secs(300)),
+        };
+        start_native_llama_from_path(
+            &reader.state,
+            "fair-recovery-probe".into(),
+            String::new(),
+            path.into(),
+            std::path::PathBuf::new(),
+            serde_json::from_value(
+                json!({"modelId":"fair-recovery-probe","ctxSize":16384,"nGpuLayers":"auto"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut session = Session::default();
+        let geocode = GeocodeState::default();
+        let question = "How many books will Bob sell at the fair?";
+        let turns=[question,"The fair is in Bozeman, Montana.","I'm asking from Woodbridge, Virginia, United States.","How did you know what time to cast the chart? Don't you need to know when the fair is?","OK, the fair is tomorrow at 3 o'clock.","Cast the chart.","Bob is my husband. They are his books."];
+        let mut observations = Vec::new();
+        for (index, words) in turns.into_iter().enumerate() {
+            let previous = session.clone();
+            session.messages.push(Message {
+                role: "user".into(),
+                text: words.into(),
+            });
+            let result = run(
+                &mut session,
+                &reader,
+                &geocode,
+                1789387200000. + index as f64 * 60000.,
+                None,
+                &previous,
+            );
+            observations.push(json!({"turn":index,"words":words,"result":result,"brief":session.method.brief,"chartMoment":session.chart.as_ref().map(|chart|&chart["timestampMs"]),"place":session.place,"sections":session.sections.iter().map(|section|section.method_stage).collect::<Vec<_>>(),"pending":session.method.flow.pending}));
+            std::fs::write(
+                reader.dir.join("observations.json"),
+                serde_json::to_vec_pretty(&observations).unwrap(),
+            )
+            .unwrap();
+            if index < 6 {
+                result.unwrap();
+            } else {
+                assert_eq!(
+                    result.unwrap_err(),
+                    "Synthetic probe stops before testimony"
+                );
+            }
+            assert_eq!(
+                session.question, question,
+                "The original quantity question must survive every turn"
+            );
+            if index == 1 {
+                assert!(
+                    session.chart.is_none(),
+                    "An event venue cannot stand in for an unknown reader place"
+                );
+                assert!(session.method.brief.place_request.is_empty());
+                assert!(session
+                    .method
+                    .brief
+                    .event_place
+                    .to_lowercase()
+                    .contains("bozeman"));
+            }
+            if index >= 2 {
+                assert_eq!(
+                    session.chart.as_ref().unwrap()["timestampMs"],
+                    1789387200000.
+                );
+                assert!(session.place.as_ref().unwrap().name.contains("Woodbridge"));
+            }
+            if matches!(index, 2 | 4 | 5) {
+                assert!(
+                    session.sections.is_empty(),
+                    "Roles cannot complete before the missing relationship is supplied"
+                );
+                assert!(session
+                    .method
+                    .flow
+                    .pending
+                    .iter()
+                    .any(|pending| pending.stage == Stage::Significators));
+            }
+            if index == 3 {
+                let record = session
+                    .method
+                    .records
+                    .iter()
+                    .rev()
+                    .find(|record| record.stage == Stage::Explanation)
+                    .unwrap();
+                assert_eq!(record.input["follow_up_words"], words);
+                let response = record.worksheet["summary"].as_str().unwrap().to_lowercase();
+                assert!(!response.contains("no chart") && !response.contains("provide the chart"));
+            }
+            if index >= 4 {
+                assert!(
+                    session.method.brief.time_request.is_empty(),
+                    "The fair's time is not the question moment"
+                );
+                assert!(session.method.brief.event_time.contains('3'));
+            }
+            if index == 6 {
+                let roles = &session
+                    .sections
+                    .iter()
+                    .find(|section| section.method_stage == Some(Stage::Significators))
+                    .unwrap()
+                    .roles;
+                assert!(
+                    roles.iter().any(|role| role.house == Some(7)),
+                    "The explicitly supplied husband must have a seventh-house role"
+                );
+                assert!(
+                    roles.iter().any(|role| role.house == Some(8)),
+                    "His movable stock is his second, absolute eighth"
+                );
+                assert!(!roles.iter().any(
+                    |role| role.label.to_lowercase().contains("book") && role.house == Some(3)
+                ));
+            }
+        }
+        stop_native_llama(&reader.state).unwrap();
+    }
 }
 
 /// An authored fixture drives the real scheduler and captures its exact inputs.
@@ -1620,10 +1444,10 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
             self.requests.lock().unwrap().push(json!({"stage":stage,"messages":serde_json::from_str::<Value>(&prompt(stage,matter,input,contract)?).map_err(|e|e.to_string())?,"responseSchema":contract}));
             let answer = match stage {
                 Stage::Intake => {
-                    json!({"intent":"read","question":"Will I get married in the next year?","matter":"relationship","question_kind":"event","context":"No particular partner is named.","place_request":if input["latest_words"] == "Woodbridge, Virginia, United States." {"Woodbridge, Virginia, United States."}else{""},"time_request":"","horizon":"within the next year","clarification":"","focus":"judgment","heard":"","restore_revision":null})
+                    json!({"intent":"read","question":"Will I get married in the next year?","matter":"relationship","question_kind":"event","context":"No particular partner is named.","people":[{"id":"partner","label":"Prospective partner","relationship":"partner","source_quote":"Will I get married in the next year?"}],"subject":{"name":"Prospective partner","kind":"person","owner_id":"partner","source_quote":"Will I get married in the next year?"},"event_place":"","event_time":"","place_request":if input["latest_words"] == "Woodbridge, Virginia, United States." {"Woodbridge, Virginia, United States."}else{""},"time_request":"","horizon":"within the next year","clarification":"","focus":"judgment","heard":"","restore_revision":null})
                 }
                 Stage::Significators => {
-                    json!({"roles":[{"label":"Querent","house":1,"natural":null,"reason":"The first house represents the person asking."},{"label":"Prospective partner","house":7,"natural":null,"reason":"The seventh house represents a prospective partner."},{"label":"Feelings","house":null,"natural":"Moon","reason":"The Moon has a contextual role in the question."}],"summary":"Authored fixture: identifies roles to inspect subsequent requests.","unknowns":[]})
+                    json!({"selections":[{"id":"querent.self","reason":"The first house represents the person asking."},{"id":"partner.self","reason":"The seventh house represents a prospective partner."},{"id":"moon.contextual","reason":"The Moon has a contextual role in the question."}],"summary":"Authored fixture: identifies roles to inspect subsequent requests.","unknowns":[]})
                 }
                 Stage::Place => {
                     let place = input["candidates"]
@@ -1765,6 +1589,1906 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
     Ok(
         json!({"authorship":"Synthetic inputs and authored worksheet outputs, captured from the actual runtime scheduler; no model invoked.","examples":requests,"visibleProposedAnswer":session.sections.last().map(|s|&s.body),"chartMomentMs":session.chart.as_ref().map(|c|&c["timestampMs"]),"canonicalQuestion":session.question,"horizon":session.method.brief.horizon,"nativeDefaults":{"place":if device_available{"device coordinates"}else{"geocoded stated city"},"moment":"1789387200000, understood question receipt instant","noPlaceOrMomentModelCall":true}}),
     )
+}
+
+```
+
+## src-tauri/src/horary_contract.rs
+
+```rust
+//! Typed worksheet contracts and native domain validation. No scheduling or UI.
+#![forbid(unsafe_code)]
+use crate::{
+    horary_lessons::{self as lessons, Matter, Stage},
+    reading_method::{self, Fact, RoleChoice},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Brief {
+    pub intent: String,
+    pub question: String,
+    pub matter: Matter,
+    pub question_kind: String,
+    pub context: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub people: Vec<crate::horary_role_options::Person>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "crate::horary_role_options::Subject::is_empty")]
+    pub subject: crate::horary_role_options::Subject,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub event_place: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub event_time: String,
+    pub place_request: String,
+    pub time_request: String,
+    pub horizon: String,
+    pub clarification: String,
+    pub focus: String,
+    pub heard: String,
+    #[serde(default)]
+    pub restore_revision: Option<u64>,
+}
+
+fn text(max: usize) -> Value {
+    json!({"type":"string", "maxLength":max})
+}
+fn choice(values: &[&str]) -> Value {
+    json!({"type":"string", "enum":values})
+}
+fn list(items: Value, max: usize) -> Value {
+    json!({"type":"array", "items":items, "maxItems":max})
+}
+fn object(properties: Value) -> Value {
+    let required: Vec<_> = properties
+        .as_object()
+        .into_iter()
+        .flatten()
+        .map(|(k, _)| k.clone())
+        .collect();
+    json!({"type":"object","properties":properties,"required":required,"additionalProperties":false})
+}
+
+pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
+    let ids: Vec<_> = facts.iter().map(|f| f.id.as_str()).collect();
+    let evidence = if ids.is_empty() {
+        list(text(1), 0)
+    } else {
+        list(choice(&ids), 6)
+    };
+    match stage {
+        Stage::Intake => object(
+            json!({"intent":choice(&["read","clarify","correct","new_question","explain","resume","restore"]),"question":text(500),"matter":choice(&["relationship","lost_object","lost_animal","work","money","property","other"]),"question_kind":choice(&["event","situation","quantity","location","choice"]),"context":text(700),"people":list(object(json!({"id":text(40),"label":text(80),"relationship":choice(&["unknown","partner","child","sibling","friend","mother","father","employer","employee","other_party"]),"source_quote":text(240)})),3),"subject":object(json!({"name":text(80),"kind":choice(&["person","movable","money","property","job","small_animal","large_animal","other"]),"owner_id":text(40),"source_quote":text(240)})),"event_place":text(240),"event_time":text(180),"place_request":text(240),"time_request":text(180),"horizon":text(100),"clarification":text(180),"focus":choice(&["roles","condition","reception","contacts","location","timing","judgment","place","moment"]),"heard":text(500),"restore_revision":{"type":["integer","null"],"minimum":1}}),
+        ),
+        Stage::Place => object(
+            json!({"mode":choice(&["select","ask"]),"place_id":text(100),"query":text(240),"clarification":text(180),"basis":text(240)}),
+        ),
+        Stage::Moment => object(
+            json!({"mode":choice(&["now","keep","explicit","ask"]),"local_time":text(32),"occurrence":choice(&["","earlier","later"]),"clarification":text(180),"basis":text(240)}),
+        ),
+        Stage::Significators => object(
+            json!({"roles":list(object(json!({"label":text(80),"house":{"type":["integer","null"],"minimum":1,"maximum":12},"natural":{"type":["string","null"],"enum":[null,"Moon","Sun","Venus"]},"reason":text(240)})),5),"owner_house":{"type":["integer","null"],"minimum":1,"maximum":12},"object_candidates":list(json!({"type":"integer","minimum":1,"maximum":12}),2),"summary":text(350),"unknowns":list(text(150),3)}),
+        ),
+        _ => {
+            let mut checks = serde_json::Map::new();
+            for key in stage.checks() {
+                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":text(220)})));
+            }
+            let mut fields = serde_json::Map::from_iter([
+                ("checks".into(), object(Value::Object(checks))),
+                ("summary".into(), text(450)),
+                ("unknowns".into(), list(text(150), 4)),
+            ]);
+            match stage {
+                Stage::Contacts => {
+                    fields.insert(
+                        "basis".into(),
+                        choice(&[
+                            "direct_candidate",
+                            "complex_unverified",
+                            "location_or_situation",
+                            "no_candidate_covered",
+                        ]),
+                    );
+                    fields.insert("candidate_ids".into(), evidence);
+                    fields.insert("candidate_signs".into(), list(object(json!({"id": if ids.is_empty(){text(1)}else{choice(&ids)}, "within_current_signs":{"type":["boolean","null"]}})),6));
+                }
+                Stage::Timing => {
+                    fields.insert(
+                        "timing_status".into(),
+                        choice(&["tentative", "unestablished"]),
+                    );
+                    fields.insert(
+                        "unit".into(),
+                        choice(&["", "hours", "days", "weeks", "months", "years"]),
+                    );
+                    fields.insert(
+                        "number".into(),
+                        json!({"type":["number","null"],"minimum":0}),
+                    );
+                }
+                Stage::Judgment => {
+                    fields.insert(
+                        "verdict".into(),
+                        choice(&[
+                            "likely_yes",
+                            "likely_no",
+                            "mixed",
+                            "situation",
+                            "location",
+                            "unresolved",
+                        ]),
+                    );
+                    fields.insert("answer".into(), text(1000));
+                    fields.insert("evidence".into(), evidence);
+                }
+                _ => {}
+            }
+            object(Value::Object(fields))
+        }
+    }
+}
+
+pub fn schema_for(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
+    let mut contract = schema(stage, facts);
+    if stage == Stage::Significators && !matches!(matter, Matter::LostObject | Matter::LostAnimal) {
+        if let Some(fields) = contract["properties"].as_object_mut() {
+            fields.remove("owner_house");
+            fields.remove("object_candidates");
+        }
+        if let Some(required) = contract["required"].as_array_mut() {
+            required.retain(|key| key != "owner_house" && key != "object_candidates");
+        }
+    }
+    contract
+}
+
+pub fn prompt(
+    stage: Stage,
+    matter: Matter,
+    input: &Value,
+    schema: &Value,
+) -> Result<String, String> {
+    // Stable teaching and stable contract precede changing data. No whole chart
+    // or conversation history is smuggled into this prefix.
+    let fixed = lessons::guide(stage, matter)?;
+    Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
+}
+
+fn bounded_strings(value: &Value) -> bool {
+    match value {
+        Value::String(s) => {
+            s.len() <= 8000 && !s.contains("<|") && !s.contains("|>") && !s.contains("<image")
+        }
+        Value::Array(a) => a.len() <= 40 && a.iter().all(bounded_strings),
+        Value::Object(m) => m.len() <= 30 && m.values().all(bounded_strings),
+        _ => true,
+    }
+}
+
+pub fn decode_json(raw: &str) -> Result<Value, String> {
+    let trimmed = raw.trim();
+    let data = trimmed
+        .strip_prefix("```json\n")
+        .or_else(|| trimmed.strip_prefix("```\n"))
+        .and_then(|s| s.strip_suffix("```"))
+        .unwrap_or(trimmed)
+        .trim();
+    let mut deserializer = serde_json::Deserializer::from_str(data);
+    let result = StrictValue::deserialize(&mut deserializer)
+        .map_err(|e| e.to_string())?
+        .0;
+    deserializer.end().map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
+struct StrictValue(Value);
+impl<'de> Deserialize<'de> for StrictValue {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = StrictValue;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("JSON without duplicate fields")
+            }
+            fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                serde_json::Number::from_f64(v)
+                    .map(|n| StrictValue(Value::Number(n)))
+                    .ok_or_else(|| E::custom("Invalid JSON number"))
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                Ok(StrictValue(json!(v)))
+            }
+            fn visit_string<E: serde::de::Error>(self, v: String) -> Result<Self::Value, E> {
+                Ok(StrictValue(Value::String(v)))
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(StrictValue(Value::Null))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(v) = seq.next_element::<StrictValue>()? {
+                    values.push(v.0);
+                }
+                Ok(StrictValue(Value::Array(values)))
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<Self::Value, A::Error> {
+                let mut values = serde_json::Map::new();
+                while let Some((key, value)) = map.next_entry::<String, StrictValue>()? {
+                    if values.insert(key, value.0).is_some() {
+                        return Err(serde::de::Error::custom("Duplicate worksheet field"));
+                    }
+                }
+                Ok(StrictValue(Value::Object(values)))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
+    }
+}
+
+#[cfg(test)]
+pub fn validate(stage: Stage, value: &Value, facts: &[Fact]) -> Result<(), String> {
+    validate_for(stage, Matter::Other, value, facts)
+}
+
+pub(crate) fn validate_for(
+    stage: Stage,
+    matter: Matter,
+    value: &Value,
+    facts: &[Fact],
+) -> Result<(), String> {
+    if !bounded_strings(value) {
+        return Err("Worksheet exceeds its bounds.".into());
+    }
+    let contract = schema_for(stage, matter, facts);
+    validate_shape(value, &contract)?;
+    if stage == Stage::Intake {
+        let brief: Brief = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        if brief.question.trim().is_empty() && brief.clarification.trim().is_empty() {
+            return Err("Keep the actual question or ask what it is.".into());
+        }
+    }
+    if stage == Stage::Significators {
+        let choices: Vec<RoleChoice> =
+            serde_json::from_value(value["roles"].clone()).map_err(|e| e.to_string())?;
+        reading_method::assign_from_facts(facts, choices)?;
+        if matter == Matter::LostObject {
+            let owner = value["owner_house"]
+                .as_u64()
+                .ok_or("Identify the object's owner house")?;
+            let expected = if owner == 1 {
+                vec![2, 4]
+            } else {
+                vec![(owner + 12) % 12 + 1]
+            };
+            let actual: Vec<_> = value["object_candidates"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_u64)
+                .collect();
+            if actual != expected {
+                return Err("Compare Lords 2 and 4 for the querent's object; use another owner's turned second.".into());
+            }
+        }
+    }
+    for key in stage.checks() {
+        let c = &value["checks"][key];
+        if c["finding"].as_str().is_none_or(|s| s.trim().is_empty()) {
+            return Err(format!("Explain the {key} check."));
+        }
+        let selected: Vec<_> = c["evidence"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(|id| facts.iter().find(|f| f.id == id))
+            .collect();
+        if c["state"] == "supported" && selected.is_empty() && stage != Stage::Explanation {
+            return Err(format!("The {key} check needs supplied evidence."));
+        }
+        if stage == Stage::Reception
+            && c["state"] == "supported"
+            && !selected.iter().any(|f| f.kind == "reception")
+        {
+            return Err("Reception requires a directed reception fact.".into());
+        }
+    }
+    if stage == Stage::Judgment && value["answer"].as_str().is_none_or(|s| s.trim().len() < 30) {
+        return Err("Answer the actual question in ordinary language.".into());
+    }
+    if stage == Stage::Judgment {
+        let scope = &value["checks"]["scope_of_answer"];
+        let boundary = facts.iter().find(|f| f.kind == "boundary");
+        if boundary.is_some_and(|b| {
+            !scope["evidence"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|v| v.as_str() == Some(b.id.as_str()))
+        }) {
+            return Err("The scope check must cite the supplied calculation boundary.".into());
+        }
+        if value["verdict"] == "likely_no"
+            && !value["checks"]["contrary_testimony"]["evidence"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .any(|id| {
+                    facts
+                        .iter()
+                        .any(|f| f.id == id && matches!(f.kind.as_str(), "condition" | "reception"))
+                })
+        {
+            return Err("A negative event proposal needs relevant contrary condition or reception; absence of a short-window contact is insufficient.".into());
+        }
+    }
+    if stage == Stage::Timing && value["number"].is_number() {
+        return Err("No native travel-to-perfection calculation is available; a numeric timing cannot be certified.".into());
+    }
+    if stage == Stage::Contacts {
+        let ids = value["candidate_ids"]
+            .as_array()
+            .ok_or("Missing candidate IDs")?;
+        let signs = value["candidate_signs"]
+            .as_array()
+            .ok_or("Missing candidate sign checks")?;
+        if (value["basis"] == "direct_candidate" && ids.is_empty())
+            || (value["basis"] == "no_candidate_covered" && !ids.is_empty())
+        {
+            return Err("The contact basis must agree with the supplied candidate IDs.".into());
+        }
+        if ids.len() != signs.len() {
+            return Err("Check the native sign-change status of each selected candidate.".into());
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        for id in ids {
+            let id = id.as_str().ok_or("Invalid candidate ID")?;
+            if !seen.insert(id) {
+                return Err("Duplicate contact candidate.".into());
+            }
+            let event = facts
+                .iter()
+                .find(|f| f.id == id && f.kind == "event")
+                .and_then(|f| f.event.as_ref())
+                .ok_or("Select a supplied native event candidate.")?;
+            let matches: Vec<_> = signs.iter().filter(|s| s["id"] == id).collect();
+            if matches.len() != 1
+                || matches[0]["within_current_signs"]
+                    != serde_json::to_value(event.within_current_signs)
+                        .map_err(|e| e.to_string())?
+            {
+                return Err("The selected candidate's sign-change status disagrees with the native calculation.".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String> {
+    if let Some(allowed) = schema["enum"].as_array() {
+        if !allowed.contains(value) {
+            return Err(format!("Unexpected worksheet value {value}."));
+        }
+    }
+    let types: Vec<_> = if let Some(t) = schema["type"].as_str() {
+        vec![t]
+    } else {
+        schema["type"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect()
+    };
+    if !types.iter().any(|t| match *t {
+        "null" => value.is_null(),
+        "object" => value.is_object(),
+        "array" => value.is_array(),
+        "string" => value.is_string(),
+        "integer" => value.is_u64(),
+        "number" => value.is_number(),
+        "boolean" => value.is_boolean(),
+        _ => false,
+    }) {
+        return Err("Wrong worksheet value type.".into());
+    }
+    if let Some(s) = value.as_str() {
+        if schema["maxLength"]
+            .as_u64()
+            .is_some_and(|n| s.chars().count() > n as usize)
+        {
+            return Err("Worksheet string is too long.".into());
+        }
+    }
+    if let Some(n) = value.as_f64() {
+        if !n.is_finite()
+            || schema["minimum"].as_f64().is_some_and(|min| n < min)
+            || schema["maximum"].as_f64().is_some_and(|max| n > max)
+        {
+            return Err("Worksheet number is outside its range.".into());
+        }
+    }
+    if let Some(a) = value.as_array() {
+        if a.len() > schema["maxItems"].as_u64().unwrap_or(0) as usize {
+            return Err("Too many worksheet entries.".into());
+        }
+        for v in a {
+            validate_shape(v, &schema["items"])?;
+        }
+    }
+    if let Some(m) = value.as_object() {
+        let fields = schema["properties"]
+            .as_object()
+            .ok_or("Missing worksheet contract")?;
+        if m.len() != fields.len() {
+            return Err("Missing or additional worksheet fields.".into());
+        }
+        for (k, s) in fields {
+            validate_shape(m.get(k).ok_or_else(|| format!("Missing {k}."))?, s)?;
+        }
+    }
+    Ok(())
+}
+
+```
+
+## src-tauri/src/horary_executor.rs
+
+```rust
+//! One acceptance, retry, wait and checkpoint path for single and batch steps.
+#![forbid(unsafe_code)]
+use crate::{
+    conversation::{Message, Session},
+    horary_contract::decode_json,
+    horary_lessons::{self as lessons, Matter, Stage},
+    horary_pipeline::{Record, Runtime},
+    horary_step::{self as step, Checked, CheckedData},
+    native_llama_worker::NativeGenerationResult,
+    reading_method::Fact,
+};
+use serde_json::{json, Value};
+
+fn generate(
+    runtime: &impl Runtime,
+    stage: Stage,
+    matter: Matter,
+    input: Value,
+    facts: &[Fact],
+    audio: Option<&[u8]>,
+) -> Result<(Result<Checked, String>, Record), String> {
+    runtime.check()?;
+    let contract = step::response_schema_for(stage, matter, &input, facts);
+    let result = runtime.generate(stage, matter, &input, &contract, audio)?;
+    evaluate(stage, matter, input, contract, result, facts)
+}
+
+fn evaluate(
+    stage: Stage,
+    matter: Matter,
+    input: Value,
+    contract: Value,
+    result: NativeGenerationResult,
+    facts: &[Fact],
+) -> Result<(Result<Checked, String>, Record), String> {
+    let parsed = decode_json(&result.content);
+    let checked = parsed
+        .as_ref()
+        .map_err(|e| e.clone())
+        .and_then(|v| step::check(stage, matter, v, &input, facts));
+    let validation_error = checked.as_ref().err().cloned();
+    let value = parsed.unwrap_or(Value::Null);
+    let record = Record {
+        stage,
+        revision: 0,
+        guide_sha256: lessons::digest(&lessons::guide(stage, matter)?),
+        schema_sha256: lessons::digest(&contract.to_string()),
+        input_sha256: lessons::digest(&input.to_string()),
+        input,
+        raw: result.content.clone(),
+        worksheet: value.clone(),
+        generation: result,
+        source_passages: stage.passages(matter).iter().map(|s| (*s).into()).collect(),
+        validation_error,
+    };
+    Ok((checked, record))
+}
+
+fn keep(session: &mut Session, runtime: &impl Runtime, mut record: Record) -> Result<(), String> {
+    record.revision = session.revision;
+    let metric = crate::conversation::inference_measurement(&record.generation);
+    if let Ok(progress) = crate::review_progress::record_with_inference(
+        runtime.directory(),
+        record.stage.name(),
+        record.stage.activity(),
+        metric.elapsed_ms,
+        Some(metric),
+    ) {
+        session.progress.push(progress);
+        if session.progress.len() > 160 {
+            session.progress.remove(0);
+        }
+    }
+    log::info!("horary stage={} revision={} guide={} prompt_tokens={} cached_tokens={} output_tokens={} elapsed_ms={} lesson_bank_hit={:?} lesson_prepare_ms={:?} valid={}",record.stage.name(),record.revision,record.guide_sha256,record.generation.prompt_tokens,record.generation.cached_prompt_tokens,record.generation.generated_tokens,record.generation.elapsed_ms,record.generation.lesson_bank_hit,record.generation.lesson_prepare_ms,record.validation_error.is_none());
+    session.audit.push(json!({"event":"method_stage","stage":record.stage,"dependencies":record.stage.dependencies(),"bookOcrSha256":lessons::BOOK_OCR_SHA256,"revision":record.revision,"guideSha256":record.guide_sha256,"schemaSha256":record.schema_sha256,"inputSha256":record.input_sha256,"generation":record.generation}));
+    session.method.records.push(record);
+    runtime.publish(session)
+}
+
+pub(crate) fn task(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    stage: Stage,
+    input: Value,
+    facts: &[Fact],
+) -> Result<Option<CheckedData>, String> {
+    execute(session, runtime, stage, input, facts, None)
+}
+
+enum Received {
+    Complete(Box<CheckedData>),
+    AwaitingUser,
+    Rejected { proposal: Value, error: String },
+}
+
+/// All actual model results, including batch cases, enter the same acceptance
+/// path. No caller can mark a decoded JSON value as complete.
+fn receive(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    key: &str,
+    checked: Result<Checked, String>,
+    record: Record,
+) -> Result<Received, String> {
+    let stage = record.stage;
+    let proposal = record.worksheet.clone();
+    let record_index = session.method.records.len();
+    keep(session, runtime, record)?;
+    let (to, received) = match checked {
+        Ok(Checked::Data(data)) => {
+            session.method.flow.finish(key, &data, record_index)?;
+            ("complete", Received::Complete(Box::new(data)))
+        }
+        Ok(Checked::NeedsInput { request, brief }) => {
+            if let Some(brief) = brief {
+                session.question = brief.question.clone();
+                session.method.brief = brief;
+            }
+            session.method.flow.wait(key, request)?;
+            ("awaiting_user", Received::AwaitingUser)
+        }
+        Err(error) => {
+            session.method.flow.reject(key, error.clone())?;
+            ("repairing", Received::Rejected { proposal, error })
+        }
+    };
+    session.audit.push(json!({"event":"stage_transition","stage":stage,"key":key,"to":to,"recordIndex":record_index}));
+    runtime.publish(session)?;
+    Ok(received)
+}
+
+pub(crate) fn execute(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    stage: Stage,
+    input: Value,
+    facts: &[Fact],
+    audio: Option<&[u8]>,
+) -> Result<Option<CheckedData>, String> {
+    let supplied = work_input(session, stage, input);
+    let original = step::original_input(&supplied).clone();
+    if audio.is_none() && !matches!(stage, Stage::Intake | Stage::Explanation) {
+        if let Some((data, index)) = cached_data(session, stage, &original, facts)? {
+            let key = work_key(session, stage, &original, facts)?;
+            session
+                .method
+                .flow
+                .reuse(key, session.revision, &data, index)?;
+            session.audit.push(json!({"event":"stage_data_reused","stage":stage,"revision":session.revision,"inputSha256":lessons::digest(&original.to_string()),"basis":"The exact current input, lesson and contract match; native checks were rerun."}));
+            runtime.publish(session)?;
+            return Ok(Some(data));
+        }
+    }
+    let mut key = work_key(session, stage, &original, facts)?;
+    if matches!(stage, Stage::Intake | Stage::Explanation) {
+        key.push_str(&format!("-{}", session.method.records.len()));
+    }
+    session.status = stage.activity().into();
+    let mut input = supplied;
+    loop {
+        runtime.check()?;
+        session.method.flow.begin(
+            key.clone(),
+            stage,
+            session.revision,
+            lessons::digest(&original.to_string()),
+        )?;
+        session
+            .audit
+            .push(json!({"event":"stage_transition","stage":stage,"key":key,"to":"running"}));
+        if let Err(error) = step::prerequisites(stage, &original) {
+            session.method.flow.pause(error.clone());
+            runtime.publish(session)?;
+            return Err(error);
+        }
+        runtime.publish(session)?;
+        let (checked, record) = generate(
+            runtime,
+            stage,
+            session.method.brief.matter,
+            input.clone(),
+            facts,
+            audio,
+        )?;
+        match receive(session, runtime, &key, checked, record)? {
+            Received::Complete(data) => return Ok(Some(*data)),
+            Received::AwaitingUser => {
+                ask_pending(session);
+                return Ok(None);
+            }
+            Received::Rejected { proposal, error } => {
+                input = repair_input(&original, proposal, error)
+            }
+        }
+    }
+}
+
+fn repair_input(original: &Value, previous: Value, error: String) -> Value {
+    json!({"original_input":original,"previous_worksheet":previous,"native_validation_error":error,
+        "instruction":"This step has not completed. Correct this proposal against the original data and native error. Supply its required data, or use request_input for genuinely missing user context. Do not ask the user to supply chart calculations. Earlier attempts remain in the receipts."})
+}
+
+fn work_input(session: &Session, stage: Stage, mut input: Value) -> Value {
+    let replies: Vec<_> = session
+        .method
+        .replies
+        .iter()
+        .filter(|reply| reply.stage == stage)
+        .collect();
+    if !replies.is_empty() && input.get("original_input").is_none() {
+        input["stage_user_replies"] = json!(replies);
+    }
+    input
+}
+
+fn work_key(
+    session: &Session,
+    stage: Stage,
+    input: &Value,
+    facts: &[Fact],
+) -> Result<String, String> {
+    Ok(lessons::digest(&json!({"stage":stage,"revision":session.revision,"guide":lessons::digest(&lessons::guide(stage, session.method.brief.matter)?),"contract":step::response_schema_for(stage,session.method.brief.matter,input,facts),"input":input,"validationAuthority":step::validation_authority()}).to_string()))
+}
+
+fn cached_data(
+    session: &Session,
+    stage: Stage,
+    input: &Value,
+    facts: &[Fact],
+) -> Result<Option<(CheckedData, usize)>, String> {
+    let input_hash = lessons::digest(&input.to_string());
+    let guide_hash = lessons::digest(&lessons::guide(stage, session.method.brief.matter)?);
+    let schema_hash = lessons::digest(
+        &step::response_schema_for(stage, session.method.brief.matter, input, facts).to_string(),
+    );
+    for (index, record) in session
+        .method
+        .records
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(|(_, record)| {
+            record.stage == stage
+                && record.revision == session.revision
+                && record.validation_error.is_none()
+                && record.guide_sha256 == guide_hash
+                && record.schema_sha256 == schema_hash
+        })
+    {
+        if lessons::digest(&step::original_input(&record.input).to_string()) == input_hash {
+            if let Ok(Checked::Data(data)) = step::check(
+                stage,
+                session.method.brief.matter,
+                &record.worksheet,
+                input,
+                facts,
+            ) {
+                return Ok(Some((data, index)));
+            }
+        }
+    }
+    Ok(None)
+}
+
+pub(crate) fn execute_batch(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    tasks: &[(Stage, Value, Vec<Fact>)],
+) -> Result<Vec<Option<CheckedData>>, String> {
+    if tasks.is_empty() || tasks.len() > 4 {
+        return Err("An independent native batch needs one to four steps.".into());
+    }
+    let matter = session.method.brief.matter;
+    let mut values: Vec<Option<CheckedData>> = (0..tasks.len()).map(|_| None).collect();
+    let mut pending = Vec::new();
+    // Revalidate cached data before beginning any uncached work. All running
+    // cases then have a durable job before the single native batch call.
+    for (index, (stage, input, facts)) in tasks.iter().enumerate() {
+        let input = work_input(session, *stage, input.clone());
+        step::prerequisites(*stage, &input)?;
+        let key = work_key(session, *stage, &input, facts)?;
+        if let Some((data, record_index)) = cached_data(session, *stage, &input, facts)? {
+            session
+                .method
+                .flow
+                .reuse(key, session.revision, &data, record_index)?;
+            session.audit.push(json!({"event":"stage_data_reused","stage":stage,"revision":session.revision,"recordIndex":record_index}));
+            values[index] = Some(data);
+        } else {
+            pending.push((index, key, *stage, input, facts));
+        }
+    }
+    if pending.is_empty() {
+        runtime.publish(session)?;
+        return Ok(values);
+    }
+    for (_, key, stage, input, _) in &pending {
+        session.method.flow.begin(
+            key.clone(),
+            *stage,
+            session.revision,
+            lessons::digest(&input.to_string()),
+        )?;
+        session.audit.push(json!({"event":"stage_transition","stage":stage,"key":key,"to":"running","batchSize":pending.len()}));
+    }
+    runtime.check()?;
+    runtime.publish(session)?;
+    let requests: Vec<_> = pending
+        .iter()
+        .map(|(_, _, stage, input, facts)| {
+            (
+                *stage,
+                matter,
+                input.clone(),
+                step::response_schema_for(*stage, matter, input, facts),
+            )
+        })
+        .collect();
+    let batch = runtime.generate_batch(&requests)?;
+    if batch.len() != pending.len() {
+        return Err("An independent task is missing from the batch.".into());
+    }
+    let mut repairs = Vec::new();
+    // Receive EVERY case before repairing one. Good sibling data and rejected
+    // proposals survive cancellation or failure in a later repair.
+    for ((index, key, stage, input, facts), generation) in pending.into_iter().zip(batch) {
+        let contract = step::response_schema_for(stage, matter, &input, facts);
+        let (checked, record) =
+            evaluate(stage, matter, input.clone(), contract, generation, facts)?;
+        match receive(session, runtime, &key, checked, record)? {
+            Received::Complete(data) => values[index] = Some(*data),
+            Received::AwaitingUser => {}
+            Received::Rejected { proposal, error } => {
+                repairs.push((index, stage, input, facts, proposal, error))
+            }
+        }
+    }
+    for (index, stage, input, facts, proposal, error) in repairs {
+        values[index] = task(
+            session,
+            runtime,
+            stage,
+            repair_input(&input, proposal, error),
+            facts,
+        )?;
+    }
+    ask_pending(session);
+    Ok(values)
+}
+
+pub(crate) fn ask_pending(session: &mut Session) {
+    let question = session
+        .method
+        .flow
+        .pending
+        .iter()
+        .map(|pending| pending.request.question.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !question.is_empty()
+        && !session
+            .messages
+            .last()
+            .is_some_and(|message| message.role == "assistant" && message.text == question)
+    {
+        session.messages.push(Message {
+            role: "assistant".into(),
+            text: question,
+        });
+    }
+}
+
+```
+
+## src-tauri/src/horary_step.rs
+
+```rust
+//! The completion boundary for every model step. An accepted control request is
+//! not data. Only `CheckedData`, constructed here after native checks, completes
+//! a step. Parsing, schema checks, derivation and repair share this boundary.
+#![forbid(unsafe_code)]
+use crate::{
+    horary_contract,
+    horary_lessons::{Matter, Stage},
+    reading_method::{Fact, Role},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputRequest {
+    pub field: String,
+    pub question: String,
+    pub reason: String,
+}
+
+/// A persisted wait belongs to a particular unfinished stage, not to the last
+/// conversational intent. The user's next reply is delivered to that stage.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct PendingInput {
+    pub stage: Stage,
+    pub request: InputRequest,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum Phase {
+    Prepared,
+    Running,
+    Repairing { error: String },
+    AwaitingUser,
+    Paused { error: String },
+    Complete { record_index: usize },
+    Superseded { by: String },
+}
+
+impl Phase {
+    pub const EDGES: &'static [(&'static str, &'static str, &'static str)] = &[
+        ("prepared", "running", "input prerequisites present"),
+        ("running", "repairing", "parse, schema or native rejection"),
+        ("repairing", "running", "retry the same original task"),
+        ("running", "awaiting_user", "explicit information request"),
+        ("awaiting_user", "running", "reply to the waiting task"),
+        ("running", "complete", "bound CheckedData permit"),
+        ("running", "paused", "cancellation or backend interruption"),
+        ("repairing", "paused", "cancellation between attempts"),
+        ("paused", "running", "resume unfinished work"),
+        (
+            "awaiting_user",
+            "superseded",
+            "changed task input; no completion implied",
+        ),
+        ("repairing", "superseded", "changed task input"),
+        ("paused", "superseded", "changed task input"),
+        ("prepared", "complete", "revalidated saved data permit"),
+        ("repairing", "complete", "revalidated saved data permit"),
+        ("awaiting_user", "complete", "revalidated saved data permit"),
+        ("paused", "complete", "revalidated saved data permit"),
+        ("complete", "complete", "revalidated saved data permit"),
+    ];
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Prepared => "prepared",
+            Self::Running => "running",
+            Self::Repairing { .. } => "repairing",
+            Self::AwaitingUser => "awaiting_user",
+            Self::Paused { .. } => "paused",
+            Self::Complete { .. } => "complete",
+            Self::Superseded { .. } => "superseded",
+        }
+    }
+    fn allows(&self, next: &Phase) -> bool {
+        Self::EDGES
+            .iter()
+            .any(|(from, to, _)| *from == self.name() && *to == next.name())
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Job {
+    pub key: String,
+    pub stage: Stage,
+    pub revision: u64,
+    pub input_sha256: String,
+    pub attempts: u64,
+    phase: Phase,
+}
+impl Job {
+    pub fn phase(&self) -> &Phase {
+        &self.phase
+    }
+    fn transition(&mut self, next: Phase) -> Result<(), String> {
+        if !self.phase.allows(&next) {
+            return Err(format!(
+                "Invalid step transition {} to {}",
+                self.phase.name(),
+                next.name()
+            ));
+        }
+        self.phase = next;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Journal {
+    pub jobs: Vec<Job>,
+    pub active: Vec<String>,
+    pub pending: Vec<PendingInput>,
+}
+
+pub struct CheckedData {
+    stage: Stage,
+    input_sha256: String,
+    worksheet: Value,
+    roles: Vec<Role>,
+    brief: Option<horary_contract::Brief>,
+}
+impl CheckedData {
+    pub fn worksheet(&self) -> &Value {
+        &self.worksheet
+    }
+    pub fn roles(&self) -> &[Role] {
+        &self.roles
+    }
+    pub fn brief(&self) -> Option<&horary_contract::Brief> {
+        self.brief.as_ref()
+    }
+}
+
+pub enum Checked {
+    Data(CheckedData),
+    NeedsInput {
+        request: InputRequest,
+        brief: Option<horary_contract::Brief>,
+    },
+}
+
+impl Journal {
+    pub fn is_empty(&self) -> bool {
+        self.jobs.is_empty() && self.active.is_empty() && self.pending.is_empty()
+    }
+    pub fn begin(
+        &mut self,
+        key: String,
+        stage: Stage,
+        revision: u64,
+        input_sha256: String,
+    ) -> Result<(), String> {
+        if self.active.len() >= 4 || self.active.contains(&key) {
+            return Err("The step is already running or the native batch is full.".into());
+        }
+        let index = self.jobs.iter().position(|job| job.key == key);
+        if index.is_none() {
+            for job in self.jobs.iter_mut().filter(|job| {
+                job.stage == stage
+                    && job.revision == revision
+                    && matches!(
+                        job.phase,
+                        Phase::AwaitingUser | Phase::Repairing { .. } | Phase::Paused { .. }
+                    )
+            }) {
+                job.transition(Phase::Superseded { by: key.clone() })?;
+            }
+        }
+        let job = match index {
+            Some(index) => &mut self.jobs[index],
+            None => {
+                self.jobs.push(Job {
+                    key: key.clone(),
+                    stage,
+                    revision,
+                    input_sha256,
+                    attempts: 0,
+                    phase: Phase::Prepared,
+                });
+                self.jobs.last_mut().expect("The inserted job exists")
+            }
+        };
+        if !matches!(
+            job.phase,
+            Phase::Prepared | Phase::Repairing { .. } | Phase::Paused { .. } | Phase::AwaitingUser
+        ) {
+            return Err("Only unfinished work can run.".into());
+        }
+        job.attempts = job
+            .attempts
+            .checked_add(1)
+            .ok_or("Step attempt counter exhausted")?;
+        job.transition(Phase::Running)?;
+        self.active.push(key);
+        Ok(())
+    }
+
+    fn running(&mut self, key: &str) -> Result<&mut Job, String> {
+        if !self.active.iter().any(|active| active == key) {
+            return Err("No step owns this result".into());
+        }
+        self.jobs
+            .iter_mut()
+            .find(|job| job.key == key && job.phase == Phase::Running)
+            .ok_or_else(|| "The result does not belong to a running step.".into())
+    }
+
+    pub fn reject(&mut self, key: &str, error: String) -> Result<(), String> {
+        self.running(key)?.transition(Phase::Repairing { error })?;
+        self.active.retain(|active| active != key);
+        Ok(())
+    }
+
+    pub fn wait(&mut self, key: &str, request: InputRequest) -> Result<(), String> {
+        let job = self.running(key)?;
+        let stage = job.stage;
+        job.transition(Phase::AwaitingUser)?;
+        self.pending.retain(|pending| pending.stage != stage);
+        self.pending.push(PendingInput { stage, request });
+        self.active.retain(|active| active != key);
+        Ok(())
+    }
+
+    pub fn finish(
+        &mut self,
+        key: &str,
+        permit: &CheckedData,
+        record_index: usize,
+    ) -> Result<(), String> {
+        let job = self.running(key)?;
+        if permit.stage != job.stage || permit.input_sha256 != job.input_sha256 {
+            return Err("The completion permit belongs to different work.".into());
+        }
+        let stage = job.stage;
+        job.transition(Phase::Complete { record_index })?;
+        self.pending.retain(|pending| pending.stage != stage);
+        self.active.retain(|active| active != key);
+        Ok(())
+    }
+
+    pub fn reuse(
+        &mut self,
+        key: String,
+        revision: u64,
+        permit: &CheckedData,
+        record_index: usize,
+    ) -> Result<(), String> {
+        if !self.active.is_empty() {
+            return Err("Do not reuse a result while other steps are running.".into());
+        }
+        if let Some(job) = self.jobs.iter_mut().find(|job| job.key == key) {
+            if job.stage != permit.stage
+                || job.input_sha256 != permit.input_sha256
+                || job.revision != revision
+            {
+                return Err("The saved result belongs to different work.".into());
+            }
+            job.transition(Phase::Complete { record_index })?;
+        } else {
+            self.jobs.push(Job {
+                key,
+                stage: permit.stage,
+                revision,
+                input_sha256: permit.input_sha256.clone(),
+                attempts: 0,
+                phase: Phase::Complete { record_index },
+            });
+        }
+        self.pending.retain(|pending| pending.stage != permit.stage);
+        Ok(())
+    }
+
+    pub fn pause(&mut self, error: String) {
+        self.active.clear();
+        for job in self
+            .jobs
+            .iter_mut()
+            .filter(|job| matches!(job.phase, Phase::Running | Phase::Repairing { .. }))
+        {
+            // Includes cancellation between rejection and the next generation.
+            // Completed work and genuine user waits remain intact.
+            let _ = job.transition(Phase::Paused {
+                error: error.clone(),
+            });
+        }
+    }
+}
+
+pub fn information_fields(stage: Stage) -> &'static [&'static str] {
+    match stage {
+        Stage::Significators => &["subject_relationship", "ownership", "context"],
+        Stage::Condition | Stage::Reception => &["context"],
+        Stage::Contacts | Stage::Judgment | Stage::Explanation => &["context", "scope"],
+        Stage::Location => &["ownership", "context"],
+        _ => &[],
+    }
+}
+
+pub fn validation_authority() -> &'static str {
+    static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    HASH.get_or_init(|| {
+        crate::horary_lessons::digest(&format!(
+            "{}\n{}\n{}\n{}",
+            include_str!("horary_step.rs"),
+            include_str!("horary_contract.rs"),
+            include_str!("reading_method.rs"),
+            include_str!("horary_role_options.rs")
+        ))
+    })
+}
+
+pub fn request_schema(stage: Stage) -> Value {
+    json!({"type":"object","properties":{"request_input":{"type":"object","properties":{
+        "field":{"type":"string","enum":information_fields(stage)},
+        "question":{"type":"string","maxLength":180},
+        "reason":{"type":"string","maxLength":240}
+    },"required":["field","question","reason"],"additionalProperties":false}},"required":["request_input"],"additionalProperties":false})
+}
+
+pub fn response_schema(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
+    let data = horary_contract::schema_for(stage, matter, facts);
+    if information_fields(stage).is_empty() {
+        data
+    } else {
+        json!({"oneOf":[data,request_schema(stage)]})
+    }
+}
+
+pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &[Fact]) -> Value {
+    if stage != Stage::Significators {
+        return response_schema(stage, matter, facts);
+    }
+    let options: Result<crate::horary_role_options::Options, _> =
+        serde_json::from_value(original_input(input)["native_role_options"].clone());
+    match options {
+        Ok(options) if options.missing.is_empty() => {
+            json!({"oneOf":[crate::horary_role_options::contract(&options),request_schema(stage)]})
+        }
+        _ => request_schema(stage),
+    }
+}
+
+/// Input gates are separate from model-output repair. An omitted internal
+/// artifact is the controller's job; it must not ask a user for chart data.
+pub fn prerequisites(stage: Stage, input: &Value) -> Result<(), String> {
+    let input = original_input(input);
+    let roles = input
+        .get("roles")
+        .or_else(|| input["question"].get("roles"));
+    match stage {
+        Stage::Significators
+            if !input["house_rulers_and_positions"]
+                .as_array()
+                .is_some_and(|facts| facts.iter().any(|f| f["kind"] == "house")) =>
+        {
+            Err("The controller must supply calculated house rulers before assigning roles.".into())
+        }
+        Stage::Significators if !input["native_role_options"].is_object() => {
+            Err("The controller must supply the native role-option table.".into())
+        }
+        Stage::Condition | Stage::Reception | Stage::Contacts | Stage::Location
+            if roles
+                .and_then(Value::as_array)
+                .is_none_or(|roles| roles.is_empty()) =>
+        {
+            Err("The controller must resolve roles before weighing testimony.".into())
+        }
+        Stage::Judgment
+            if ["condition", "reception", "contacts"].iter().any(|field| {
+                !input[*field]["checks"].is_object() || input[*field].get("request_input").is_some()
+            }) =>
+        {
+            Err("The controller must resolve all required testimony before judgment.".into())
+        }
+        Stage::Explanation
+            if input["follow_up_words"]
+                .as_str()
+                .is_none_or(|s| s.trim().is_empty()) =>
+        {
+            Err("An explanation needs the person's actual follow-up words.".into())
+        }
+        Stage::Explanation
+            if input["prior_worksheet"].is_null() && input["chart_context"].is_null() =>
+        {
+            Err(
+                "The controller must supply the selected reading step or native chart context."
+                    .into(),
+            )
+        }
+        _ => Ok(()),
+    }
+}
+
+pub fn original_input(mut input: &Value) -> &Value {
+    // Repair always carries the same original input and only the latest rejected
+    // proposal. Old saved repairs may be nested; do not propagate that nesting.
+    while let Some(original) = input.get("original_input") {
+        input = original;
+    }
+    input
+}
+
+pub fn check(
+    stage: Stage,
+    matter: Matter,
+    value: &Value,
+    input: &Value,
+    facts: &[Fact],
+) -> Result<Checked, String> {
+    if value.get("request_input").is_some() {
+        horary_contract::validate_shape(value, &request_schema(stage))?;
+        let request: InputRequest =
+            serde_json::from_value(value["request_input"].clone()).map_err(|e| e.to_string())?;
+        if request.question.trim().is_empty() || request.reason.trim().is_empty() {
+            return Err(
+                "A request must name the missing context and ask one specific question.".into(),
+            );
+        }
+        return Ok(Checked::NeedsInput {
+            request,
+            brief: None,
+        });
+    }
+    let input = original_input(input);
+    if stage != Stage::Significators {
+        horary_contract::validate_for(stage, matter, value, facts)?;
+    }
+    let brief: Option<horary_contract::Brief> = if stage == Stage::Intake {
+        let brief: horary_contract::Brief =
+            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        validate_entities(&brief, input)?;
+        if brief.intent == "restore"
+            && !input["available_revisions"]
+                .as_array()
+                .is_some_and(|revisions| {
+                    revisions
+                        .iter()
+                        .any(|r| r["number"].as_u64() == brief.restore_revision)
+                })
+        {
+            return Err("Choose one listed earlier revision, or ask which one to restore.".into());
+        }
+        if !brief.clarification.trim().is_empty() {
+            return Ok(Checked::NeedsInput {
+                request: InputRequest {
+                    field: "question".into(),
+                    question: brief.clarification.clone(),
+                    reason: "The actual matter needs clarification before it can be understood."
+                        .into(),
+                },
+                brief: Some(brief),
+            });
+        }
+        Some(brief)
+    } else {
+        None
+    };
+    let roles = if stage == Stage::Significators {
+        let options: crate::horary_role_options::Options =
+            serde_json::from_value(input["native_role_options"].clone())
+                .map_err(|e| e.to_string())?;
+        horary_contract::validate_shape(value, &crate::horary_role_options::contract(&options))?;
+        crate::horary_role_options::resolve(&options, value, facts)?
+    } else {
+        Vec::new()
+    };
+    if stage == Stage::Explanation && !input["chart_context"].is_null() {
+        let required = if input["focus"] == "place" {
+            "chart.place"
+        } else {
+            "chart.moment"
+        };
+        let evidence = &value["checks"]["evidence_used"];
+        if evidence["state"] != "supported"
+            || !evidence["evidence"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id == required))
+        {
+            return Err(format!("The explanation must use the supplied native {required} fact; a missing interpretation does not mean a missing chart."));
+        }
+    }
+    match stage {
+        Stage::Place
+            if value["mode"] == "select"
+                && !input["candidates"].as_array().is_some_and(|candidates| {
+                    candidates.iter().any(|p| p["id"] == value["place_id"])
+                }) =>
+        {
+            return Err("Choose a supplied place candidate ID.".into());
+        }
+        Stage::Place
+            if value["mode"] == "lookup"
+                && value["query"].as_str().is_none_or(|s| s.trim().is_empty()) =>
+        {
+            return Err("A place lookup needs a stated location.".into())
+        }
+        Stage::Place | Stage::Moment if value["mode"] == "ask" => {
+            let question = value["clarification"]
+                .as_str()
+                .filter(|s| !s.trim().is_empty())
+                .ok_or("Ask the specific missing place or question moment.")?;
+            return Ok(Checked::NeedsInput {
+                request: InputRequest {
+                    field: if stage == Stage::Place {
+                        "chart_place"
+                    } else {
+                        "chart_moment"
+                    }
+                    .into(),
+                    question: question.into(),
+                    reason: value["basis"].as_str().unwrap_or("").into(),
+                },
+                brief: None,
+            });
+        }
+        Stage::Moment if value["mode"] == "explicit" => {
+            let zone = input["selected_timezone"]
+                .as_str()
+                .ok_or("The controller must supply a selected time zone")?;
+            let local = value["local_time"]
+                .as_str()
+                .ok_or("Supply a civil date and time")?;
+            let occurrence = value["occurrence"].as_str().unwrap_or("");
+            if let Err(error) =
+                horary_ai_core::chart_input::resolve_chart_time(local, zone, occurrence)
+            {
+                if error.contains("occurs twice") || error.contains("does not exist") {
+                    return Ok(Checked::NeedsInput { request: InputRequest {
+                        field: "chart_moment".into(),
+                        question: if error.contains("occurs twice") {
+                            "That clock time happened twice. Do you mean the earlier occurrence or the later one?"
+                        } else { "The clocks skipped that time. What time before or after the change should I use?" }.into(),
+                        reason: error,
+                    }, brief: None });
+                }
+                return Err(error);
+            }
+        }
+        _ => {}
+    }
+    Ok(Checked::Data(CheckedData {
+        stage,
+        input_sha256: crate::horary_lessons::digest(&input.to_string()),
+        worksheet: value.clone(),
+        roles,
+        brief,
+    }))
+}
+
+fn validate_entities(brief: &horary_contract::Brief, input: &Value) -> Result<(), String> {
+    if !brief.clarification.is_empty() {
+        return Ok(());
+    }
+    if brief.subject.name.trim().is_empty() {
+        return Err(
+            "Extract what is being asked about into subject; keep a specific subject name.".into(),
+        );
+    }
+    let mut sources = Vec::new();
+    for key in ["latest_words", "canonical_question"] {
+        if let Some(source) = input[key].as_str() {
+            sources.push(source.to_string());
+        }
+    }
+    if !brief.heard.is_empty() {
+        sources.push(brief.heard.clone());
+    }
+    for person in input["retained_brief"]["people"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        if let Some(source) = person["source_quote"].as_str() {
+            sources.push(source.to_string());
+        }
+    }
+    if let Some(source) = input["retained_brief"]["subject"]["source_quote"].as_str() {
+        sources.push(source.to_string());
+    }
+    for source in input["legacy_user_fact_sources"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        sources.push(source.to_string());
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for person in &brief.people {
+        if person.id.is_empty()
+            || person.id == "querent"
+            || !person
+                .id
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || !ids.insert(&person.id)
+            || person.label.trim().is_empty()
+        {
+            return Err(
+                "Each relevant person needs a unique lowercase ID and a name; querent is reserved."
+                    .into(),
+            );
+        }
+        if person.relationship != "unknown" {
+            let quote = person.source_quote.to_lowercase();
+            if quote.is_empty()
+                || !sources
+                    .iter()
+                    .any(|source| source.contains(&person.source_quote))
+                || !crate::horary_role_options::relation_words(&person.relationship)
+                    .iter()
+                    .any(|word| quote.contains(word))
+            {
+                return Err(format!("{}: a known relationship needs an exact supplied quote containing the stated relationship. Use unknown if it was not given; do not turn a name into a relationship.",person.label));
+            }
+        }
+    }
+    if !brief.subject.owner_id.is_empty()
+        && brief.subject.owner_id != "querent"
+        && !ids.contains(&brief.subject.owner_id)
+    {
+        return Err(
+            "Subject owner_id must name a supplied person ID or querent; empty means unknown."
+                .into(),
+        );
+    }
+    if !brief.subject.source_quote.is_empty()
+        && !sources
+            .iter()
+            .any(|source| source.contains(&brief.subject.source_quote))
+    {
+        return Err(
+            "The subject's source_quote must preserve supplied words, not an invented quotation."
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "horary_step_tests.rs"]
+mod invariants;
+
+```
+
+## src-tauri/src/horary_role_options.rs
+
+```rust
+//! Interpret a small, source-backed matter description into named house choices.
+//! The model selects IDs. Rust binds the person/object, turns houses, and derives
+//! rulers. A person cannot be relabeled as their possessions by a numeric slip.
+#![forbid(unsafe_code)]
+use crate::{
+    horary_lessons::Matter,
+    reading_method::{self, Fact, NaturalRole, Role, RoleChoice},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Person {
+    pub id: String,
+    pub label: String,
+    pub relationship: String,
+    pub source_quote: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Subject {
+    pub name: String,
+    pub kind: String,
+    pub owner_id: String,
+    pub source_quote: String,
+}
+impl Subject {
+    pub fn is_empty(&self) -> bool {
+        self.name.is_empty()
+            && self.kind.is_empty()
+            && self.owner_id.is_empty()
+            && self.source_quote.is_empty()
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Choice {
+    pub id: String,
+    pub label: String,
+    pub house: Option<u8>,
+    pub natural: Option<NaturalRole>,
+    pub basis: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Options {
+    pub choices: Vec<Choice>,
+    pub required_groups: Vec<Vec<String>>,
+    pub missing: Vec<String>,
+    pub compare: Vec<String>,
+}
+
+pub fn turn(base: u8, relative: u8) -> u8 {
+    (base + relative - 2) % 12 + 1
+}
+
+pub fn relationship_house(relationship: &str) -> Option<u8> {
+    match relationship {
+        "partner" | "other_party" => Some(7),
+        "child" => Some(5),
+        "sibling" => Some(3),
+        "friend" => Some(11),
+        "mother" | "employer" => Some(10),
+        "father" => Some(4),
+        "employee" => Some(6),
+        "querent" => Some(1),
+        _ => None,
+    }
+}
+
+/// This is a conservative English extraction check, not a proof of the full
+/// meaning of a sentence. Quotes and classification remain reviewable.
+pub fn relation_words(relationship: &str) -> &'static [&'static str] {
+    match relationship {
+        "partner" => &[
+            "husband",
+            "wife",
+            "spouse",
+            "partner",
+            "boyfriend",
+            "girlfriend",
+            "lover",
+            "fiance",
+            "fiancé",
+            "marry",
+            "married",
+            "marriage",
+        ],
+        "child" => &["daughter", "son", "child"],
+        "sibling" => &["brother", "sister", "sibling"],
+        "friend" => &["friend"],
+        "mother" => &["mother", "mom", "mum"],
+        "father" => &["father", "dad"],
+        "employer" => &["employer", "boss"],
+        "employee" => &["employee", "servant"],
+        "other_party" => &[
+            "client",
+            "customer",
+            "buyer",
+            "seller",
+            "opponent",
+            "stranger",
+            "other party",
+        ],
+        _ => &[],
+    }
+}
+
+pub fn build(matter: Matter, people: &[Person], subject: &Subject) -> Options {
+    let mut options = Options {
+        choices: Vec::new(),
+        required_groups: Vec::new(),
+        missing: Vec::new(),
+        compare: Vec::new(),
+    };
+    let mut add = |id: String, label: String, base: u8, relative: u8, basis: String| {
+        options.choices.push(Choice {
+            id,
+            label,
+            house: Some(turn(base, relative)),
+            natural: None,
+            basis,
+        });
+    };
+    add(
+        "querent.self".into(),
+        "You".into(),
+        1,
+        1,
+        "The ordinary first represents the person asking.".into(),
+    );
+    options.required_groups.push(vec!["querent.self".into()]);
+    for person in people {
+        if let Some(base) = relationship_house(&person.relationship) {
+            add(
+                format!("{}.self", person.id),
+                person.label.clone(),
+                base,
+                1,
+                format!(
+                    "{} is classified as {}; their own house is {base}.",
+                    person.label, person.relationship
+                ),
+            );
+            options
+                .required_groups
+                .push(vec![format!("{}.self", person.id)]);
+        } else {
+            options.missing.push(format!(
+                "{}: relationship to the person asking is unknown",
+                person.label
+            ));
+        }
+    }
+    let owner = if subject.owner_id == "querent" {
+        Some(1)
+    } else {
+        people
+            .iter()
+            .find(|person| person.id == subject.owner_id)
+            .and_then(|person| relationship_house(&person.relationship))
+    };
+    match subject.kind.as_str() {
+        "person" => {
+            if subject.owner_id != "querent"
+                && !people.iter().any(|person| person.id == subject.owner_id)
+            {
+                options
+                    .missing
+                    .push("The person asked about has not been identified.".into());
+            }
+        }
+        "movable" | "money" | "property" | "job" | "small_animal" | "large_animal" => {
+            if let Some(base) = owner {
+                let relative = match subject.kind.as_str() {
+                    "property" => 4,
+                    "job" => 10,
+                    "small_animal" => 6,
+                    "large_animal" => 12,
+                    _ => 2,
+                };
+                add("subject.primary".into(),subject.name.clone(),base,relative,format!("{} belongs to {}; count relative house {relative} from owner house {base}. Rust computes {}.",subject.name,subject.owner_id,turn(base,relative)));
+                options.required_groups.push(vec!["subject.primary".into()]);
+                if matter == Matter::LostObject && base == 1 {
+                    add("subject.alternative_fourth".into(),format!("{}: fourth-house candidate",subject.name),1,4,"Frawley's alternative fourth-house candidate for the querent's missing object; compare it with Lord 2.".into());
+                    options
+                        .required_groups
+                        .last_mut()
+                        .expect("The primary subject group exists")
+                        .push("subject.alternative_fourth".into());
+                    options.compare = vec![
+                        "subject.primary".into(),
+                        "subject.alternative_fourth".into(),
+                    ];
+                }
+            } else {
+                options.missing.push(format!(
+                    "{}: whose matter or possession this is remains unknown",
+                    subject.name
+                ));
+            }
+        }
+        _ => {
+            // Unmapped topics still require contextual house judgment, but the
+            // identity and the resulting ruler are bound to the selected ID.
+            let ids: Vec<_> = (1..=12)
+                .map(|house| format!("subject.ordinary_{house}"))
+                .collect();
+            for house in 1..=12 {
+                add(format!("subject.ordinary_{house}"),subject.name.clone(),1,house,format!("Contextual choice of ordinary house {house}; the model must justify relevance from the lesson."));
+            }
+            options.required_groups.push(ids);
+        }
+    }
+    options.choices.push(Choice {
+        id: "moon.contextual".into(),
+        label: "The Moon's contextual role".into(),
+        house: None,
+        natural: Some(NaturalRole::Moon),
+        basis: "Optional contextual testimony; a claimed house ruler has first use of its planet."
+            .into(),
+    });
+    options
+}
+
+pub fn contract(options: &Options) -> Value {
+    let ids: Vec<_> = options
+        .choices
+        .iter()
+        .map(|choice| choice.id.as_str())
+        .collect();
+    let mut contract = json!({"type":"object","properties":{
+        "selections":{"type":"array","maxItems":8,"items":{"type":"object","properties":{"id":{"type":"string","enum":ids},"reason":{"type":"string","maxLength":240}},"required":["id","reason"],"additionalProperties":false}},
+        "summary":{"type":"string","maxLength":350},"unknowns":{"type":"array","maxItems":3,"items":{"type":"string","maxLength":150}}
+    },"required":["selections","summary","unknowns"],"additionalProperties":false});
+    if !options.compare.is_empty() {
+        contract["properties"]["comparison"] = json!({"type":"array","maxItems":2,"items":{"type":"object","properties":{"id":{"type":"string","enum":options.compare},"observation":{"type":"string","maxLength":240}},"required":["id","observation"],"additionalProperties":false}});
+        contract["required"]
+            .as_array_mut()
+            .expect("Required is an array")
+            .push(json!("comparison"));
+    }
+    contract
+}
+
+pub fn resolve(options: &Options, value: &Value, facts: &[Fact]) -> Result<Vec<Role>, String> {
+    if !options.missing.is_empty() {
+        return Err(
+            "Resolve the listed missing person/ownership context before selecting roles.".into(),
+        );
+    }
+    let selections = value["selections"]
+        .as_array()
+        .ok_or("Select native role options")?;
+    let mut selected = std::collections::BTreeSet::new();
+    let mut choices = Vec::new();
+    for selection in selections {
+        let id = selection["id"]
+            .as_str()
+            .ok_or("Use a supplied role option ID")?;
+        if !selected.insert(id) {
+            return Err("Select each role option only once.".into());
+        }
+        let choice = options
+            .choices
+            .iter()
+            .find(|choice| choice.id == id)
+            .ok_or("Use a supplied role option ID")?;
+        choices.push(RoleChoice {
+            label: choice.label.clone(),
+            house: choice.house,
+            natural: choice.natural,
+            reason: selection["reason"].as_str().unwrap_or("").into(),
+        });
+    }
+    if options.required_groups.iter().any(|group| {
+        group
+            .iter()
+            .filter(|id| selected.contains(id.as_str()))
+            .count()
+            != 1
+    }) {
+        return Err("Supply every required person/object role. A person's own house is distinct from the house of their possessions.".into());
+    }
+    if !options.compare.is_empty() {
+        let comparison = value["comparison"]
+            .as_array()
+            .ok_or("Compare both own-object candidates before selecting one")?;
+        if comparison.len() != options.compare.len()
+            || options.compare.iter().any(|id| {
+                comparison
+                    .iter()
+                    .filter(|entry| {
+                        entry["id"] == id.as_str()
+                            && entry["observation"]
+                                .as_str()
+                                .is_some_and(|s| s.trim().len() >= 12)
+                    })
+                    .count()
+                    != 1
+            })
+        {
+            return Err(
+                "Explain the comparison of both Lords 2 and 4; choose one actual object role."
+                    .into(),
+            );
+        }
+    }
+    reading_method::assign_from_facts(facts, choices)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn facts() -> Vec<Fact> {
+        let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+        reading_method::facts(Some(&chart))
+    }
+
+    fn stock(relationship: &str) -> Options {
+        build(
+            Matter::Other,
+            &[Person {
+                id: "bob".into(),
+                label: "Bob".into(),
+                relationship: relationship.into(),
+                source_quote: "Bob is my husband. They are his books.".into(),
+            }],
+            &Subject {
+                name: "Bob's books".into(),
+                kind: "movable".into(),
+                owner_id: "bob".into(),
+                source_quote: "They are his books.".into(),
+            },
+        )
+    }
+
+    #[test]
+    fn selling_books_requires_bob_separately_from_his_stock() {
+        let options = stock("partner");
+        let mut value = json!({"selections":[
+            {"id":"querent.self","reason":"The person asking."},
+            {"id":"subject.primary","reason":"The husband's possessions."}
+        ],"summary":"Authored role regression.","unknowns":[]});
+        assert!(resolve(&options, &value, &facts()).is_err());
+        value["selections"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"id":"bob.self","reason":"The stated husband."}));
+        let roles = resolve(&options, &value, &facts()).unwrap();
+        assert_eq!(
+            roles.iter().find(|r| r.label == "Bob").unwrap().house,
+            Some(7)
+        );
+        assert_eq!(
+            roles
+                .iter()
+                .find(|r| r.label == "Bob's books")
+                .unwrap()
+                .house,
+            Some(8)
+        );
+    }
+
+    #[test]
+    fn unnamed_relationship_cannot_be_completed_as_an_assumed_other_party() {
+        let options = stock("unknown");
+        let value = json!({"selections":[
+            {"id":"querent.self","reason":"The person asking."},
+            {"id":"moon.contextual","reason":"Attempted substitute for missing context."}
+        ],"summary":"Authored incomplete role proposal.","unknowns":[]});
+        assert!(!options.missing.is_empty());
+        assert!(resolve(&options, &value, &facts()).is_err());
+    }
+
+    #[test]
+    fn lost_object_comparison_selects_one_role_only_after_comparing_both() {
+        let options = build(
+            Matter::LostObject,
+            &[],
+            &Subject {
+                name: "Ring".into(),
+                kind: "movable".into(),
+                owner_id: "querent".into(),
+                source_quote: "Where is my ring?".into(),
+            },
+        );
+        let mut value = json!({"selections":[
+            {"id":"querent.self","reason":"The person asking."},
+            {"id":"subject.primary","reason":"The supplied second-house candidate."}
+        ],"summary":"Authored lost-object regression.","unknowns":[]});
+        assert!(resolve(&options, &value, &facts()).is_err());
+        value["comparison"] = json!([
+            {"id":"subject.primary","observation":"Authored comparison of the supplied Lord 2 facts."},
+            {"id":"subject.alternative_fourth","observation":"Authored comparison of the supplied Lord 4 facts."}
+        ]);
+        assert!(resolve(&options, &value, &facts()).is_ok());
+        value["selections"].as_array_mut().unwrap().push(
+            json!({"id":"subject.alternative_fourth","reason":"Attempted second object role."}),
+        );
+        assert!(resolve(&options, &value, &facts()).is_err());
+    }
 }
 
 ```
@@ -2008,7 +3732,12 @@ impl Stage {
                 "timing_examples",
             ],
             Self::Judgment => &["no_forced_certainty", "occasion_motive_ability"],
-            Self::Explanation => &["simplicity", "same_issue"],
+            Self::Explanation => &[
+                "simplicity",
+                "same_issue",
+                "understood_moment",
+                "reader_place",
+            ],
         }
     }
 }
@@ -2796,6 +4525,7 @@ fn run(
     session.status.clear();
     session.busy = false;
     if let Err(error) = result {
+        session.method.flow.pause(error.clone());
         note(
             &mut session,
             &dir,
@@ -2808,7 +4538,13 @@ fn run(
             .push(json!({"interruption":error,"revision":session.revision}));
         session.messages.push(Message {
             role: "assistant".into(),
-            text: if state.cancelled.load(Ordering::Acquire) { "We can pause here. Tell me what you’d like to change." } else { "I lost my place for a moment. Your words are still here; tell me where you’d like to continue." }.into(),
+            text: if state.cancelled.load(Ordering::Acquire) {
+                "We can pause here. Your chart and completed passages are kept; say ‘continue’ when you’re ready."
+            } else if session.chart.is_some() {
+                "The chart is kept, but the reading hasn't finished. Say ‘continue’ and I'll pick up the unfinished step."
+            } else {
+                "Your question is kept. I couldn't finish this step; say ‘continue’ to try it again."
+            }.into(),
         });
     }
     state.publish(&mut session, &dir)?;

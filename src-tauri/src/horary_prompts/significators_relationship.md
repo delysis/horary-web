@@ -13,4 +13,4 @@ D: Moon is ruler of house 7. Partner gets the Moon as house ruler; do not also a
 E: no gender/sexual role context was supplied. Leave optional Sun/Venus out. Do not invent their assignment just to fill a template.
 </worked_examples>
 
-<output_fields>roles, summary, unknowns. Explain each actual house/natural assignment in its reason. Keep summary to two short complete sentences; do not repeat every role reason. Do not add lost-object fields.</output_fields>
+<output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. Select only the supplied native option IDs. The native table computes ownership, turned houses and rulers. For the querents own missing object, include comparison observations for both listed candidates and select one object option. Do not output roles, house numbers, owner_house or object_candidates.</output_fields>

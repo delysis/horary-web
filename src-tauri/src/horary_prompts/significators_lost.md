@@ -16,4 +16,4 @@ E: Great Dane=6, Shetland pony=12. These are species distinctions, not a measuri
 F: unknown ring material and equally plausible rulers. State uncertainty in descriptive selection rather than inventing that it is gold or silver. Provisional Lord 2 remains assessable.
 </worked_examples>
 
-<output_fields>roles include the selected object; owner_house=null for the querent's possession, otherwise the established owner's house; object_candidates=[2,4] for own inanimate object, [turned-second] for another owner's object, [6] or [12] for a generic animal. summary records the comparison without claiming location or recovery.</output_fields>
+<output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. Select only the supplied native option IDs. The native table computes ownership, turned houses and rulers. For the querents own missing object, include comparison observations for both listed candidates and select one object option. Do not output roles, house numbers, owner_house or object_candidates.</output_fields>

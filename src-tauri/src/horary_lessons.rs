@@ -234,7 +234,12 @@ impl Stage {
                 "timing_examples",
             ],
             Self::Judgment => &["no_forced_certainty", "occasion_motive_ability"],
-            Self::Explanation => &["simplicity", "same_issue"],
+            Self::Explanation => &[
+                "simplicity",
+                "same_issue",
+                "understood_moment",
+                "reader_place",
+            ],
         }
     }
 }

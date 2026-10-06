@@ -1,18 +1,26 @@
-<task>Assign only the relevant significators. Rust derives the traditional planet from each selected house. Do not predict or locate anything yet.</task>
+<task>Select NAMED native role-option IDs. Rust has bound each option to its person/object, counted turned houses and derived traditional rulers. Do not output house numbers, planets, custom labels or another role contract.</task>
 
 <definitions>
-A house cusp is its beginning. Lord N is the ruler of the SIGN on house N's cusp, not the planet OCCUPYING N. The selected planet can occupy another house. Do not confuse rulership, occupation and ownership.
+A significator represents a person or thing in this question. Lord N rules the SIGN on house N's cusp, not the planet occupying it. A person's own role is distinct from their possessions. Husband Bob is seventh; his books as movable stock are second from seventh, absolute eighth. Bob does not become eighth because his books are eighth.
 
-Editorial index from printed pp.15–29: 1 querent/body; 2 their money/movable possessions; 3 siblings/neighbours/routine communication; 4 father/home/land/buried treasure; 5 children/pleasures; 6 employees/services/illness/small animals; 7 spouse/partner/prospective partner/other party/opponent/buyer/seller; 8 death or partner's money (2nd from 7); 9 higher learning/religion/long journeys; 10 mother/job/profession/authority/judge; 11 friends/hopes/employer's money (2nd from 10); 12 confinement/hidden troubles/large animals. Select from the ACTUAL matter, not keyword equivalence with zodiac signs.
-
-Turning: count the person's house as ONE. The daughter's second is 2nd from 5th = 6th; sister's second is 2nd from 3rd = 4th. Rust checks ((base + offset - 2) mod 12) + 1. Don't turn without identifying whose matter it is.
+Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movables; 3 siblings/neighbours/routine communication; 4 father/home/land; 5 children/pleasures; 6 employees/services/illness/small animals; 7 partners/prospective partners/other parties; 8 death/partner's money; 9 higher learning/religion/long journeys; 10 mother/job/authority; 11 friends/hopes/employer's money; 12 confinement/large animals. Turning counts the owner's house as ONE. Rust performs the arithmetic.
 </definitions>
 
 <procedure>
-1. Read the retained question and stated ownership/parties. Do not add unmentioned actors.
-2. Assign the querent's ordinary first-house role. Use the matter-specific instructions below for the quesited.
-3. Select a HOUSE NUMBER or an explicitly allowed NATURAL role; never supply an invented ruler. Explain the contextual reason for every choice.
-4. The Moon normally cosignifies the querent, but do not duplicate a planet already claimed by a main house ruler. Its role may differ in a later recovery test; it need not be permanently one actor in every part of a lost-object judgment.
-5. Do not assign extra Sun/Venus roles without the specific relationship justification below. There is no universal need to use every planet.
-6. Return one to five roles, a brief summary and genuine unknowns. Only a lost-object/animal contract includes owner_house and object_candidates. Follow the matter-specific contract; do not add those fields to a relationship, work or other question. These are assignments, not the final answer.
+1. Read the retained question, extracted people/subject, stage_user_replies and native_role_options. Do not assume a named person's relationship or who owns stock/objects.
+2. If native_role_options.missing is nonempty, return request_input for a necessary missing relationship/ownership fact. The controller does not permit a data worksheet yet. Ask a distinguishing follow-up using prior replies instead of repeating an answered question.
+3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots. Supply a choice from EVERY group. A querent-only response cannot finish a question about Bob and his books.
+4. Keep the person's own option separate from their possessions: bob.self is Bob; subject.primary is the books in this case. The table binds those labels and houses. Do not substitute the stock option for Bob himself.
+5. Justify relevance in each selection's reason. For an unmapped topic with ordinary-house alternatives, use the index and specific method. Do not choose a house because a planet occupies it.
+6. Optional Moon testimony must fit the question and cannot compete with a main house ruler claiming Moon. Do not invent gender, thieves, lovers or extra actors.
+7. Native rejection leaves this same step unfinished. Correct the selection or ask for necessary user context. Do not ask for chart data; the table and house facts are supplied by the app.
 </procedure>
+
+<worked_examples>
+A: unknown Bob in a book-sales question -> request_input field=subject_relationship; "Who is Bob to you?" A name does not prove he is a stranger.
+B: stated husband Bob and his books -> select querent.self, bob.self, subject.primary. Native options bind Bob to 7 and Books to 8. Do not select subject.primary twice or omit bob.self while claiming all roles are assigned.
+C: daughter's watch -> daughter.self=5, subject.primary=6. It is her possession, not the querent's ordinary second.
+D: first house Cancer claims Moon -> leave out moon.contextual; do not force competing Moon assignments.
+</worked_examples>
+
+<output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. No roles/house/natural/owner_house/object_candidates fields. Computed facts are printed separately. Summary is two short sentences, not proof the assignments are correct.</output_fields>
