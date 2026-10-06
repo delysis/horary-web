@@ -6,7 +6,7 @@ Speak or type. The agent clarifies the question, resolves the place and moment, 
 
 The native app uses Rust, Tauri and native-kit with Gemma 4 12B IT QAT. First use prepares the model automatically in the shared Hugging Face cache, without Python, a CLI, an account, or duplicate weights. Voice uses installed on-device dictation when available, otherwise the reader hears the audio directly. macOS can speak replies using an installed system voice.
 
-For Eileen, start with [the review guide](docs/REVIEW_GUIDE.md). [Conversation architecture](docs/CONVERSATION.md) explains the authority boundaries and current limitations. This is an unsigned development build, awaiting real conversational and domain acceptance. Review artifacts are attached to successful [CI runs](https://github.com/delysis/horary-web/actions/workflows/ci.yml).
+For Eileen, start with [the review guide](docs/REVIEW_GUIDE.md) and the [living process map, exact prompts and place/time review cases](docs/LLM_PROCESS.md). [Conversation architecture](docs/CONVERSATION.md) explains the authority boundaries and current limitations. This is an unsigned development build, awaiting real conversational and domain acceptance. Review artifacts are attached to successful [CI runs](https://github.com/delysis/horary-web/actions/workflows/ci.yml).
 
 ## Develop
 

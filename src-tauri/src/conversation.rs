@@ -26,6 +26,7 @@ use tauri::Manager;
 const FILE: &str = "conversation.json";
 const PROMPT: &str = include_str!("conversation_prompt.txt");
 const BOOK: &str = include_str!("conversation_method.txt");
+const TRANSCRIPTION_PROMPT: &str = "Transcribe the spoken words in this audio faithfully. Output only the transcript, without commentary, interpretation, or answers. If no intelligible speech is present, output [inaudible].";
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -448,7 +449,7 @@ pub fn transcribe(app: &tauri::AppHandle, audio: Vec<u8>) -> Result<String, Stri
     let _lease = Lease(&state.busy);
     state.cancelled.store(false, Ordering::Release);
     prepare_reader(app)?;
-    let prompt=json!([{"role":"user","content":"Transcribe the spoken words in this audio faithfully. Output only the transcript, without commentary, interpretation, or answers. If no intelligible speech is present, output [inaudible]."}]).to_string();
+    let prompt = json!([{"role":"user","content":TRANSCRIPTION_PROMPT}]).to_string();
     let answer = generate_native(
         &app.state::<NativeLlamaState>(),
         prompt,
@@ -1265,6 +1266,130 @@ pub fn conversation_cancel(
     state.cancelled.store(true, Ordering::Release);
     acquisition.0.cancel();
     voice.discard_pending();
+}
+
+/// Documentation fixtures run the same prompt builder and native tools as the
+/// app. These are authored inputs, never model results or product acceptance.
+#[cfg(test)]
+pub(crate) fn process_examples() -> Result<Value, String> {
+    let geocode = GeocodeState::default();
+    let instant = 1789387200000.;
+    let mut examples = serde_json::Map::new();
+    let capture = |session: &Session| -> Result<Value, String> {
+        Ok(json!({
+            "messages": serde_json::from_str::<Value>(&PromptThread::new(session).content()).map_err(|e|e.to_string())?,
+            "responseSchema": serde_json::from_str::<Value>(&schema(session)).map_err(|e|e.to_string())?
+        }))
+    };
+    let question = "Will I get married in the next year?";
+    let mut session = Session::default();
+    session.messages.push(Message {
+        role: "user".into(),
+        text: question.into(),
+    });
+    examples.insert("place_unresolved".into(), capture(&session)?);
+    session.device_context = Some(DeviceContext {
+        timezone: "America/New_York".into(),
+        locale: "en-US".into(),
+        latitude: Some(38.657),
+        longitude: Some(-77.249),
+        accuracy_meters: Some(800.),
+    });
+    session
+        .candidates
+        .extend(device_place(session.device_context.as_ref().unwrap())?);
+    examples.insert("device_place_available".into(), capture(&session)?);
+    examples.insert("direct_audio_first_decision".into(), json!({"messages":serde_json::from_str::<Value>(&direct_audio_prompt(&PromptThread::new(&session).content(),&schema(&session))?).map_err(|e|e.to_string())?}));
+    let mut explicit = session.clone();
+    explicit.messages.push(Message {
+        role: "assistant".into(),
+        text: "Is this a current partner or a future one?".into(),
+    });
+    explicit.messages.push(Message {
+        role: "user".into(),
+        text: "A future partner. Please use London, United Kingdom.".into(),
+    });
+    let result = execute(
+        &mut explicit,
+        Action::FindPlace {
+            query: "London, United Kingdom".into(),
+        },
+        &geocode,
+        instant,
+    )?;
+    examples.insert(
+        "stated_place_after_clarification".into(),
+        json!({"prompt":capture(&explicit)?,"nativeToolResult":result}),
+    );
+    execute(
+        &mut session,
+        Action::CastChart {
+            question: question.into(),
+            place_id: "device-location".into(),
+            local_time: String::new(),
+            occurrence: String::new(),
+        },
+        &geocode,
+        instant,
+    )?;
+    examples.insert("chart_cast_before_roles".into(), capture(&session)?);
+    let facts = evidence(&session);
+    let id = facts
+        .iter()
+        .find(|f| f.kind == "house")
+        .ok_or("Fixture has no house facts")?
+        .id
+        .clone();
+    execute(
+        &mut session,
+        Action::WriteScroll {
+            step: Step::Significators,
+            title: "Synthetic fixture".into(),
+            body: "Authored fixture for inspecting the actual next-stage prompt, not a model interpretation.".into(),
+            evidence: vec![id],
+            rule_ids: vec!["relationship".into()],
+            limitation: None,
+            because: "This authored fixture identifies the two people for the prompt example.".into(),
+            roles: vec![
+                RoleChoice {
+                    label: "Querent".into(), house: Some(1), natural: None,
+                    reason: "The first house identifies the person asking.".into(),
+                },
+                RoleChoice {
+                    label: "Prospective partner".into(), house: Some(7), natural: None,
+                    reason: "The seventh house identifies a prospective partner.".into(),
+                },
+            ],
+        },
+        &geocode,
+        instant,
+    )?;
+    examples.insert("significators_recorded".into(), capture(&session)?);
+    let id = facts
+        .iter()
+        .find(|f| f.kind == "position")
+        .ok_or("Fixture has no positions")?
+        .id
+        .clone();
+    execute(
+        &mut session,
+        Action::WriteScroll {
+            step: Step::Testimony,
+            title: "Synthetic fixture".into(),
+            body: "Authored fixture to inspect schema ordering; not a qualified account of chart testimony.".into(),
+            evidence: vec![id],
+            rule_ids: vec!["condition".into()],
+            limitation: None,
+            because: "This authored fixture allows inspection of the judgment schema and boundary.".into(),
+            roles: vec![],
+        },
+        &geocode,
+        instant,
+    )?;
+    examples.insert("testimony_recorded".into(), capture(&session)?);
+    Ok(
+        json!({"authorship":"Synthetic inputs authored by the developer. Prompts, schemas, facts and native tool results are generated by the application functions. No model is called and no private reading is loaded.","systemPrompt":PromptThread::new(&Session::default()).messages[0]["content"],"transcriptionPrompt":TRANSCRIPTION_PROMPT,"directAudioInstruction":serde_json::from_str::<Value>(&direct_audio_prompt("[]","<CURRENT ACTION SCHEMA>")?).map_err(|e|e.to_string())?[0]["content"],"examples":examples}),
+    )
 }
 
 #[cfg(test)]

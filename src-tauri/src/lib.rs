@@ -51,6 +51,8 @@ mod model_manifest;
 mod native_llama;
 mod native_llama_worker;
 mod native_location;
+#[cfg(test)]
+mod process_reference;
 mod reading_method;
 mod review_progress;
 mod storage;

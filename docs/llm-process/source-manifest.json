@@ -1,0 +1,105 @@
+{
+  "purpose": "Fingerprint of source reviewed by this generated reference; no private data or model output.",
+  "sources": [
+    {
+      "path": ".gitattributes",
+      "sha256": "f5821ed74c09d993b162adccf704f4e5be81e39ed22b8c9f4fecb747accb41ec"
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "sha256": "0a616f3cfb787dc9d19c8b5015c1d6cc6b7aebfcc96af3ec7b4ee23d0d3f4a37"
+    },
+    {
+      "path": "src-tauri/Cargo.lock",
+      "sha256": "838beaed7a7340c408f8db8e4e1e7d3c077cf3cb01091df942a74771c047f813"
+    },
+    {
+      "path": "src-tauri/model-manifest.json",
+      "sha256": "121745e40b72536c84d2455d2e5845eb12789bc6f469527bd8311c52d7389c89"
+    },
+    {
+      "path": "src-tauri/src/conversation.rs",
+      "sha256": "5ba832808ec05dda78e160c3902d679ad817d8de1b237883c0156e13c943bd7d"
+    },
+    {
+      "path": "src-tauri/src/conversation_prompt.txt",
+      "sha256": "c780196383e873628b9b77953d19dd83afbba3afda6cbeb81aa81eacdb323987"
+    },
+    {
+      "path": "src-tauri/src/conversation_method.txt",
+      "sha256": "78a2136f89b3e4cec2100869eadab23b9d22d0c76798ca40fbcb83fb116d3bbb"
+    },
+    {
+      "path": "src-tauri/src/reading_method.rs",
+      "sha256": "3ccaf634f6d491c83f12e22e9d6cae5a2b8a288ca8dcaa203b75c4e736e0054b"
+    },
+    {
+      "path": "src-tauri/src/voice.rs",
+      "sha256": "8005d63693231cf054dbada0ee15b33a17fb6129f92b6428886744dbfe95979c"
+    },
+    {
+      "path": "src-tauri/src/local_dictation.rs",
+      "sha256": "9b27f286ca5069294a0fcb6a8833e7bd2fa08edc3cd74f8bb06f7f94f89f4b56"
+    },
+    {
+      "path": "src-tauri/src/microphone_capture.rs",
+      "sha256": "229baf208aa2b8d761da8e032e075615beebd062e635bef0314a49fe08cf1a8a"
+    },
+    {
+      "path": "src-tauri/src/native_llama_worker.rs",
+      "sha256": "2fde51b3af8a9b05ab422542ff8d62c0b0413171beeada7d176709675a4667b8"
+    },
+    {
+      "path": "src-tauri/src/native_location.rs",
+      "sha256": "a8762f08e3a37bc44a8ac54a2e3da496f1b36505b8cfcc30e3f9f87c95b06e54"
+    },
+    {
+      "path": "src-tauri/native/location_bridge.m",
+      "sha256": "9fb6a6be56a5e8a8798138255cbdd76dfbb23afd6946a0c9278b673454a1583e"
+    },
+    {
+      "path": "src-tauri/src/geocode.rs",
+      "sha256": "c3c9102d96a39f37611f9d45ac55de2a3d5f450c40ac0c52c526d7dccbffa293"
+    },
+    {
+      "path": "src-tauri/src/hf_cache.rs",
+      "sha256": "bd81fc4c03a774fabde9d8c6fc15f85f837863f38bd834fceade83768fa152a9"
+    },
+    {
+      "path": "src-tauri/src/model_manifest.rs",
+      "sha256": "33b8e66304650fcdcb8d7286d033d4ff3fdf480c99c5acfc5e7c2fc12f1e65c7"
+    },
+    {
+      "path": "src-tauri/src/review_progress.rs",
+      "sha256": "63f0b037f49d23bbe1153174ca68a98fe37492cbb8ea62bf8f446a1782a25c36"
+    },
+    {
+      "path": "crates/horary-ai-core/src/chart_input.rs",
+      "sha256": "87c162d1f1b972e6ff66f64b33237dffb74f1681b979d5dd4d7e03df8ff7a3ee"
+    },
+    {
+      "path": "crates/horary-ai-core/src/astronomy.rs",
+      "sha256": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af"
+    },
+    {
+      "path": "crates/horary-ai-core/src/book_method.rs",
+      "sha256": "9aecebd4551eff0fcdfdf7044667546580ef688b8d5461c36cebf3a15ea2f5de"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "e9921939b79e2d954bd90ec735e70bf1779723842283285f834315a445d954db"
+    },
+    {
+      "path": "src/ReadingDocument.tsx",
+      "sha256": "e3b87f8fff00d266ac2ded52767d45aaac662d77fb9184638117426b7e86de56"
+    },
+    {
+      "path": "src-tauri/src/process_overview.md",
+      "sha256": "e6be881f3ec4d6574e27c0f1da26c2fb6ac782729867d1c84ed0a2ffd4d25dae"
+    },
+    {
+      "path": "src-tauri/src/process_reference.rs",
+      "sha256": "db6edb29effb0da068899dc2334a65a938911ca395b1fc4510da487587f34198"
+    }
+  ]
+}
