@@ -16,7 +16,7 @@ The native chart establishes positions and traditional rulers. Role selection pr
 
 Explanation dispatch requires the actual follow-up words and selected passage or native chart context. Chart time/place can be explained without a completed interpretation. Missing internal artifacts never become requests for user-supplied chart data. Explicit continue commands resume the current matter and can reuse validated completed steps.
 
-`reading_store.rs` archives the complete active leaf before starting or reopening another one. Chart corrections archive the version being left. Native operations are serialized against leaf replacement and check the expected reading ID. Snapshot IDs remain monotonic, preventing late responses from replacing newer work. First native process open starts fresh; renderer reloads resume the active leaf.
+`reading_store.rs` archives the complete active leaf before starting or reopening another one. Chart corrections archive the version being left. Native operations are serialized against leaf replacement and check the expected reading ID. The live operation lease is overlaid only in UI snapshots; it cannot turn the predecessor's archived busy flag on. Active and saved reads share unfinished-work recovery. Snapshot IDs remain monotonic, preventing late responses from replacing newer work. First native process open starts fresh; renderer reloads resume the active leaf.
 
 ## Calculations
 

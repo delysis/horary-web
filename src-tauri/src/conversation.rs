@@ -225,11 +225,7 @@ impl ConversationState {
         if slot.is_none() {
             let path = dir.join(FILE);
             let session = if path.exists() {
-                if std::fs::metadata(&path).map_err(|e| e.to_string())?.len() > 16 * 1024 * 1024 {
-                    return Err("Conversation file is too large to open safely.".into());
-                }
-                serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
-                    .map_err(|e| format!("Could not read the saved conversation: {e}"))?
+                crate::reading_store::read(&path)?
             } else {
                 Session::default()
             };
@@ -237,6 +233,12 @@ impl ConversationState {
         }
         let mut session = slot.as_ref().ok_or("Conversation unavailable")?.clone();
         session.facts = reading_method::facts(session.chart.as_ref());
+        Ok(session)
+    }
+    fn snapshot(&self, dir: &Path) -> Result<Session, String> {
+        let mut session = self.load(dir)?;
+        // The operation lease describes the live process, not its predecessor
+        // reading. Overlay it only for UI snapshots, never for archival data.
         session.busy = self.busy.load(Ordering::Acquire);
         Ok(session)
     }
@@ -500,7 +502,7 @@ pub fn conversation_open(app: tauri::AppHandle) -> Result<Session, String> {
         .lock()
         .map_err(|_| "Reading startup unavailable")?;
     if *opened {
-        return state.load(&app.path().app_data_dir().map_err(|e| e.to_string())?);
+        return state.snapshot(&app.path().app_data_dir().map_err(|e| e.to_string())?);
     }
     let next = replace_leaf(&app, None)?;
     *opened = true;
@@ -561,6 +563,7 @@ fn run(
         return Err("Please send a message of 1–8000 bytes.".into());
     }
     let previous = session.clone();
+    session.busy = true;
     session.messages.push(Message {
         role: "user".into(),
         text,
@@ -673,7 +676,7 @@ pub fn conversation_snapshot(
     app: tauri::AppHandle,
     state: tauri::State<'_, ConversationState>,
 ) -> Result<Session, String> {
-    state.load(&app.path().app_data_dir().map_err(|e| e.to_string())?)
+    state.snapshot(&app.path().app_data_dir().map_err(|e| e.to_string())?)
 }
 #[tauri::command]
 pub async fn conversation_send(
@@ -750,6 +753,31 @@ mod tests {
                 .text,
             "My question"
         );
+    }
+    #[test]
+    fn operation_lease_does_not_modify_the_archived_reading() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = ConversationState::default();
+        let mut original = Session {
+            messages: vec![Message {
+                role: "user".into(),
+                text: "An unfinished question, kept exactly.".into(),
+            }],
+            ..Default::default()
+        };
+        state.publish(&mut original, dir.path()).unwrap();
+        let expected = std::fs::read(dir.path().join(FILE)).unwrap();
+        state.busy.store(true, Ordering::Release);
+        let _lease = Lease(&state.busy);
+        let predecessor = state.load(dir.path()).unwrap();
+        assert!(state.snapshot(dir.path()).unwrap().busy);
+        assert!(!predecessor.busy);
+        let next = crate::reading_store::fresh(dir.path(), &predecessor, None).unwrap();
+        let path = dir
+            .path()
+            .join("readings")
+            .join(format!("{}.json", next.saved_readings[0].id));
+        assert_eq!(std::fs::read(path).unwrap(), expected);
     }
     #[test]
     fn stale_reading_scope_cannot_consume_a_followup() {

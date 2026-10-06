@@ -47,7 +47,7 @@
     },
     {
       "path": "src-tauri/src/conversation.rs",
-      "sha256": "6e717551f072575cb4d15f6244433ffef6a6cf159c594ed6eb5b79aaf9e69a03"
+      "sha256": "47b8ec1b664ddaa7692f6137939118bacee207439c082412c5cc418a8c151471"
     },
     {
       "path": "src-tauri/src/geocode.rs",
