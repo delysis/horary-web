@@ -107,7 +107,7 @@ export default function App() {
     if (!mounted.current || id !== turn.current) return
     accept(next); setDraft(current => current === text ? '' : current)
     const reply = next.messages.at(-1)
-    const spoken = reply?.role === 'assistant' ? reply.text : next.sections.findLast(s => s.step === 'judgment')?.body
+    const spoken = reply?.role === 'assistant' ? reply.text : next.sections.slice().reverse().find(s => s.step === 'judgment')?.body
     if (aloud && spoken) await invoke('voice_speak', { text: spoken }).catch(() => {})
   }
   async function send(text = draft) {
@@ -149,7 +149,7 @@ export default function App() {
       if (!mounted.current || id !== turn.current) return
       accept(next)
       const reply = next.messages.at(-1)
-      const spoken = reply?.role === 'assistant' ? reply.text : next.sections.findLast(s => s.step === 'judgment')?.body
+      const spoken = reply?.role === 'assistant' ? reply.text : next.sections.slice().reverse().find(s => s.step === 'judgment')?.body
       if (spoken) await invoke('voice_speak', { text: spoken }).catch(() => {})
     } catch { if (id === turn.current) setNotice('I didn’t quite catch that. Try once more, or write it here.') }
     finally { if (id === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
