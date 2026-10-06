@@ -11,14 +11,6 @@ pub enum Step {
     Judgment,
 }
 
-pub fn passage(step: Step) -> (&'static str, &'static str) {
-    match step {
-        Step::Significators=>("The parts of your question","These are the roles to follow through the chart. They begin with who is asking, whose matter it is, and what the question concerns; a correction can change the assignment."),
-        Step::Testimony=>("What the chart offers","A planet's condition, its regard for another, and a possible contact answer different parts of the story. These are the facts being weighed. A contact needs the right reception and room to act before it can bring the matter about."),
-        Step::Judgment=>("What remains open","The chart gives us testimony to examine, but these estimates do not establish a complete judgment. A missing contact is not proof that the event cannot happen, and the hours shown do not promise a date."),
-    }
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BookRule {
@@ -26,41 +18,8 @@ pub struct BookRule {
     pub title: String,
     pub explanation: String,
     pub pages: String,
-}
-
-pub fn rules() -> Vec<BookRule> {
-    [
-        ("moment", "When the question becomes clear", "Use the moment and place where the astrologer understands the question. Clarification can establish that moment; later questions on the same matter keep the chart.", "7–8"),
-        ("significators", "Who stands for whom", "Choose houses from the actual matter and ownership. The traditional ruler of the cusp signifies that house. Turning a house depends on the person's relationship to the querent.", "15–38"),
-        ("relationship", "The people in a relationship", "Lord 1 signifies the querent; Lord 7 signifies the partner, including a prospective partner. The Moon describes the querent's feelings unless already Lord 7. Sun and Venus have conditional natural roles; house rulers have first claim. Do not assign these roles from an assumed gender or invent additional people.", "191–195"),
-        ("commitment", "A relationship becoming a commitment", "Relevant contact between the people's significators needs suitable reception. Timing concerns their decision or commitment, not booking the wedding; a chart does not reliably distinguish marriage from commitment without marriage. A seven-day contact search cannot decide a one-year question by absence alone.", "196–198"),
-        ("condition", "Condition and ability", "Essential dignity describes condition; accidental dignity describes ability to act. Neither is a universal score or an automatic answer.", "44–70"),
-        ("reception", "Who regards whom", "A planet in another's dignity regards that ruler. Reception has a direction; detriment and fall can show negative regard. Mutual reception is not automatically helpful.", "71–83"),
-        ("perfection", "What can bring the matter about", "Weigh a relevant applying contact, reception and ability. Check intervening events and changes of sign. A calculated contact candidate alone does not prove perfection.", "84–100"),
-        ("timing", "From distance to time", "Timing requires relevant perfection, degree distance, sign, house and the question's plausible time scale. Astronomical hours until contact are not the calendar prediction.", "127–136"),
-        ("lost_object", "Follow the object", "For an inanimate possession compare Lords 2 and 4 and choose the better description. Another owner's object uses their turned second. Locate the chosen planet by its occupied house; sharing a ruler does not prove the object is at home. Room meanings depend on context.", "146–152"),
-        ("moon", "The Moon's role", "Name the Moon's role in this testimony. It can signify the querent, or a lost object applying to Lord 1 for recovery. A void Moon does not make a lost object's location unknowable.", "65–66, 147–151"),
-    ].into_iter().map(|(id,title,explanation,pages)| BookRule { id:id.into(),title:title.into(),explanation:explanation.into(),pages:pages.into() }).collect()
-}
-
-pub fn rule_allowed(step: Step, id: &str) -> bool {
-    match step {
-        Step::Significators => matches!(
-            id,
-            "significators" | "lost_object" | "moon" | "relationship"
-        ),
-        Step::Testimony | Step::Judgment => matches!(
-            id,
-            "condition"
-                | "reception"
-                | "perfection"
-                | "timing"
-                | "lost_object"
-                | "moon"
-                | "relationship"
-                | "commitment"
-        ),
-    }
+    #[serde(default)]
+    pub quoted: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -70,6 +29,15 @@ pub struct Fact {
     pub label: String,
     pub detail: String,
     pub planets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<EventCandidate>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventCandidate {
+    pub within_current_signs: Option<bool>,
+    pub astronomical_hours: f64,
 }
 
 pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
@@ -82,6 +50,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             label,
             detail,
             planets,
+            event: None,
         });
     };
     for body in chart["bodies"].as_array().into_iter().flatten() {
@@ -175,15 +144,22 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
         add("reception",format!("{guest} → {host}"),format!("{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",meanings.join("; ")),vec![guest,host]);
     }
     // Bounded, compact event summaries avoid dumping the raw ephemeris into every prompt.
+    // Attach typed sign-change data so the worksheet need not guess from prose.
     if let Some(events) = chart["derived"]["eventSearch"]["events"].as_array() {
         for event in events {
             let a = event["planet1"].as_str().unwrap_or("unknown");
             let b = event["planet2"].as_str().unwrap_or("unknown");
             let aspect = event["aspectName"].as_str().unwrap_or("contact");
-            let signs = if event["withinCurrentSigns"] == true {
-                "before either changes sign"
-            } else {
-                "after a change of sign"
+            let signs = match event["withinCurrentSigns"].as_bool() {
+                Some(true) => "before either changes sign",
+                Some(false) => "after a change of sign",
+                None => "sign-change status unestablished",
+            };
+            let Some(hours) = event["estimatedPerfectsWithinHours"]
+                .as_f64()
+                .filter(|n| n.is_finite() && *n >= 0.)
+            else {
+                continue;
             };
             let position = |name: &str| {
                 chart["bodies"]
@@ -211,9 +187,26 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
                     )
                 })
                 .unwrap_or_default();
-            add("event", format!("{a} · {b}"), format!("{aspect} candidate in approximately {:.2} astronomical hours, {signs}.{distance} This is not the predicted timing of the earthly event.",event["estimatedPerfectsWithinHours"].as_f64().unwrap_or(0.)), vec![a.into(),b.into()]);
+            out.push(Fact {
+                id: format!("e{}", out.len()),
+                kind: "event".into(),
+                label: format!("{a} · {b}"),
+                detail: format!("{aspect} candidate in approximately {hours:.2} astronomical hours, {signs}.{distance} This is not the predicted timing of the earthly event."),
+                planets: vec![a.into(),b.into()],
+                event: Some(EventCandidate { within_current_signs: event["withinCurrentSigns"].as_bool(), astronomical_hours: hours }),
+            });
         }
     }
+    let mut add = |kind: &str, label: String, detail: String, planets: Vec<String>| {
+        out.push(Fact {
+            id: format!("e{}", out.len()),
+            kind: kind.into(),
+            label,
+            detail,
+            planets,
+            event: None,
+        });
+    };
     let moon = &chart["derived"]["voidOfCourseMoon"];
     let detail = match moon["isVoid"].as_bool() {
         Some(true)=>"Hourly samples found no major lunar contact before sign exit. This is strict void-of-course testimony within this calculation, not an automatic verdict.",
@@ -377,8 +370,6 @@ mod tests {
             json!({"label":"Ring","house":2,"reason":"Your possession","planet":"Venus"})
         )
         .is_err());
-        let rule = rules().into_iter().find(|r| r.id == "lost_object").unwrap();
-        assert!(rule.explanation.contains("sharing a ruler does not prove"));
     }
     #[test]
     fn displayed_facts_match_the_same_chart_used_for_inference() {

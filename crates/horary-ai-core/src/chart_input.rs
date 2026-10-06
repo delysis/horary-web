@@ -2,6 +2,22 @@
 use chrono::{Datelike, LocalResult, NaiveDateTime, TimeZone};
 use chrono_tz::Tz;
 
+/// Native clock data for a question-moment task; never a model-invented date.
+pub fn local_clock(timestamp_ms: f64, timezone: &str) -> Result<String, String> {
+    if !timestamp_ms.is_finite() || timestamp_ms.abs() > 8.64e15 {
+        return Err("The question's clock is invalid.".into());
+    }
+    let zone: Tz = timezone
+        .parse()
+        .map_err(|_| "The clock's timezone is invalid.")?;
+    let instant = chrono::DateTime::from_timestamp_millis(timestamp_ms as i64)
+        .ok_or("The question's clock is outside the calendar.")?;
+    Ok(instant
+        .with_timezone(&zone)
+        .format("%Y-%m-%dT%H:%M")
+        .to_string())
+}
+
 pub fn nudge_chart_time(local: &str, unit: &str, direction: i32) -> Result<String, String> {
     let civil = NaiveDateTime::parse_from_str(local, "%Y-%m-%dT%H:%M")
         .map_err(|_| "Enter a valid calendar date and time.".to_string())?;
@@ -107,6 +123,21 @@ mod wasm {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_clock_uses_the_selected_place_zone_and_rejects_invalid_input() {
+        let instant = resolve_chart_time("2026-01-14T14:30", "Europe/London", "").unwrap();
+        assert_eq!(
+            local_clock(instant, "Europe/London").unwrap(),
+            "2026-01-14T14:30"
+        );
+        assert_eq!(
+            local_clock(instant, "America/New_York").unwrap(),
+            "2026-01-14T09:30"
+        );
+        assert!(local_clock(f64::NAN, "UTC").is_err());
+        assert!(local_clock(instant, "not-a-zone").is_err());
+    }
 
     #[test]
     fn calendar_nudges_clamp_month_ends_and_preserve_civil_time() {

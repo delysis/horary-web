@@ -92,8 +92,8 @@ pub fn native_llama_runtime_info() -> NativeLlamaRuntimeInfo {
         supports_gpu_offload: native_gpu_offload_support(),
         continuous_batching: NativeLlamaContinuousBatching {
             enabled: false,
-            default_parallel_sequences: 1,
-            max_parallel_sequences: 1,
+            default_parallel_sequences: 4,
+            max_parallel_sequences: 4,
         },
         kv_cache: NativeLlamaKvCache {
             hot_resident_sequence_cache: true,
@@ -106,10 +106,9 @@ pub fn native_llama_runtime_info() -> NativeLlamaRuntimeInfo {
             default_draft_tokens: NATIVE_LLAMA_DEFAULT_DRAFT_TOKENS,
         },
         worker_plan: NativeLlamaWorkerPlan {
-            scheduler: "native-kit owned worker with one reading at a time",
-            request_ordering: "one constrained reading; ordered output events",
-            hot_cache_tier:
-                "native-kit memory cache; controlled readings do not promise prefix reuse",
+            scheduler: "native-kit owned worker with up to four independent task sequences",
+            request_ordering: "one task batch per owned request; results bound to case IDs",
+            hot_cache_tier: "bounded fixed lesson bank; authenticated per-case prefix restore",
             cold_cache_tier: "disabled; private reading caches stay in memory",
             cache_key_fields: &[
                 "modelSha256",
@@ -195,7 +194,7 @@ mod tests {
         assert_eq!(info.backend, "llama-native-kit");
         assert_eq!(info.binding_crate, "llama-cpp-2");
         assert!(!info.continuous_batching.enabled);
-        assert_eq!(info.continuous_batching.default_parallel_sequences, 1);
+        assert_eq!(info.continuous_batching.default_parallel_sequences, 4);
         assert!(info.kv_cache.hot_resident_sequence_cache);
         assert!(!info.kv_cache.cold_disk_sequence_cache);
         assert!(!info.speculative_decoding.mtp_when_draft_model_present);

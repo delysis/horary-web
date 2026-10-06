@@ -3,6 +3,23 @@ import { createRoot } from 'react-dom/client'
 import { expect, it } from 'vitest'
 import { ReadingChart, ReadingPassage } from '../ReadingDocument'
 
+it('puts the proposed answer in the document while keeping raw chart facts in its margin', async () => {
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
+  const element = document.createElement('div'); document.body.append(element)
+  const root = createRoot(element)
+  try {
+    await act(async () => root.render(createElement(ReadingPassage, { section: {
+      title: 'An answer taking shape', body: 'There is interest, but the chart does not yet establish commitment within the next year.', revision: 1, evidence: ['e1'], step: 'judgment', worksheet: { checks: { scope_of_answer: { state: 'unestablished', finding: 'The search covers only seven days.' } } },
+      facts: [{ id: 'e1', kind: 'reception', label: 'Mars → Venus', detail: 'Raw calculated reception', planets: ['Mars', 'Venus'] }],
+    } })))
+    const section = element.querySelector('section')!
+    expect(Array.from(section.children).filter(e => e.tagName !== 'DETAILS').map(e => e.textContent).join(' ')).toContain('commitment within the next year')
+    expect(section.querySelector('.calculated-testimony')).toBeNull()
+    expect(section.querySelector('details')?.textContent).toContain('Raw calculated reception')
+    expect(section.querySelector('details')?.textContent).toContain('The search covers only seven days.')
+  } finally { await act(async () => root.unmount()); element.remove() }
+})
+
 it('lets a planet reveal its calculated facts without a model call', async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   const element = document.createElement('div'); document.body.append(element)

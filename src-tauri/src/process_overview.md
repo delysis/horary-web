@@ -1,200 +1,39 @@
-# How Horary currently makes a reading
+# How the horary reading is made
 
-This is a map of the implemented process, for Eileen's review. It describes the application as it runs, including unfinished behavior; it is not a proposed ideal process or a claim that its interpretations are correct. The exact prompts, schemas, examples and source extracts below are generated from the Rust application. No personal reading, audio or book OCR is included.
+This is the review map for Eileen. The app now uses separate teaching tasks rather than a general prompt asking the model to supply the whole horary method. Each lesson defines its terms, gives numbered checks, contrasts worked examples with mistakes, and includes selected passages from **John Frawley, The Horary Textbook (2005)**. The exact teaching prompts and output contracts appear below.
 
-**The main gap behind the recent feedback:** the model does write a proposed interpretation, but the app keeps it in the closed **“How this follows”** margin. The main document substitutes fixed explanatory prose and a few calculated facts. After all three stages, a native closing sentence always says the answer remains open. More context in the conversation may affect the model's reasoning, but this presentation alone explains why a finished chart can still feel uninterpreted.
+The method is a working implementation for assessment. Source quotes are checked against the locally supplied OCR; editorial procedures and examples are identified separately. Correctly quoting a rule or producing a valid worksheet does not establish a correct judgment. The deployed model is Gemma 4 12B IT QAT; a 2B model has **not** been qualified.
 
-## The whole process
+## Reading the diagrams
 
-Legend: **R** is deterministic Rust work; **C** is a classification or extraction task assigned to the model; **J** is reasoning that needs horary judgment; **W** is model-written explanation. **C/J/W are currently combined in one repeated model decision call**, not separate specialized agents. The branches below describe what that one call may choose.
+**C** means classification or careful extraction. **J** means contextual horary judgment. **W** means explaining the answer. **N** means native calculation, lookup, storage or validation. Independent native checks run in parallel. Independent analysis tasks are submitted in one native batch, with up to four distinct inference sequences sharing one copy of the weights.
 
-```mermaid
-flowchart TD
-  launch["R · Launch / reopen window"] --> load["R · Load the saved conversation<br/>Currently resumes the old reading"]
-  load --> input{"Typed words or held speech?"}
-  input -->|Text| device["R · Obtain device time zone and usable location<br/>Requested once before the first submitted turn"]
-  input -->|Voice| capture["R · Capture bounded WAV in memory<br/>Record receive time; never save audio"]
-  capture --> route{"Voice route"}
-  route -->|Auto: on-device speech available| native["Platform · On-device speech to text"]
-  route -->|Auto fallback or explicit direct| audio["R · Keep WAV for first model decision<br/>No separate transcription"]
-  route -->|Explicit comparison only| transcript["C · Gemma transcription<br/>Separate call, then ordinary text path"]
-  native --> device
-  transcript --> device
-  audio --> device
-  device --> save["R · Save words / voice receipt and turn time<br/>Serialize turns; keep interruption evidence"]
-  save --> model["R · Acquire verified cached weights if needed<br/>Start or reuse the resident local model"]
-  model --> prompt["R · Build the actual prompt<br/>Fixed instructions + editorial rules + recent conversation<br/>Native facts + current state + permitted action schema"]
-  prompt --> decide["C/J/W · Gemma chooses ONE action<br/>Text: constrained JSON<br/>Audio: understand speech + summary + action in ONE call"]
-  decide --> parse{"R · Action parsed and cancellation checked?"}
-  parse -->|No| pause["R · Pause, preserve completed work and error<br/>Return a recovery sentence to the person"]
-  parse -->|Yes| action{"Which permitted action?"}
-  action -->|say| say["W · Clarification, explanation or short reply<br/>Ends this turn; await the next words"]
-  say --> input
-  action -->|find_place| find["C · Extract the stated place<br/>R · Offline geocode returns candidate IDs and zones"]
-  action -->|cast_chart| choose["C/J · Restate the actual question<br/>Choose device / returned place ID and now / explicit civil time"]
-  choose --> time["R · Resolve the time in that place's zone<br/>Reject invalid or ambiguous civil time"]
-  time --> chart["R · Calculate approximate planets and houses<br/>Dignities, directed receptions and seven-day contacts<br/>Save chart; clear superseded passages"]
-  action -->|write_scroll: significators| roles["J · Choose people / object, houses or natural roles<br/>R · Derive each traditional ruler and validate choices"]
-  action -->|write_scroll: testimony| testimony["J/W · Select facts and book rules<br/>Weigh condition, reception, contact and context"]
-  action -->|write_scroll: judgment| judgment["J/W · Proposed interpretation and limits<br/>Must cite a calculation-boundary fact"]
-  roles --> validate["R · Validate stage order, IDs, roles and cited rule types<br/>A valid reference does NOT prove the inference"]
-  testimony --> validate
-  judgment --> validate
-  validate -->|Accepted| document["R · Unfold chart, fixed method prose and facts<br/>Keep model draft + rationale inside How this follows"]
-  validate -->|Rejected: error receipt, no new passage| receipt
-  action -->|restore_reading| restore["R · Restore a numbered chart revision<br/>Preserve the version being left"]
-  action -->|new_question| fresh["R · Clear current chart and sections<br/>Currently keeps the same conversation history"]
-  find --> receipt
-  chart --> receipt
-  document --> receipt
-  restore --> receipt
-  fresh --> receipt
-  receipt["R · Record exact tool call and result / error<br/>Append new facts and receipt to the prompt"] --> done{"R · Successful judgment write<br/>AND all three stages present?"}
-  done -->|Yes| open["R · Fixed closing: outcome remains open<br/>Ends turn without a final interpretive model call"]
-  open --> input
-  done -->|No, fewer than 8 decisions| decide
-  done -->|8 decisions exhausted| pause
-  classDef rust fill:#e8efeb,stroke:#73877d,color:#25372c
-  classDef model fill:#eee7f2,stroke:#90789f,color:#3c2b46
-  classDef writing fill:#f6eddb,stroke:#b69a62,color:#473c28
-  classDef failure fill:#f8e9e6,stroke:#ac776c,color:#4b2e27
-  class launch,load,input,device,capture,route,native,audio,save,model,prompt,parse,action,time,chart,validate,document,restore,fresh,receipt,done,open rust
-  class choose,roles,testimony,judgment,decide model
-  class say,find,transcript writing
-  class pause failure
-```
+The primary flow is derived from the stage dependency catalog alongside the explicit Rust pipeline. The second and third diagrams explain native branches and caching; their source is fingerprinted. An executable fixture captures the requests actually submitted by the pipeline, so prompt examples are not separately invented instructions.
 
-### Where place and time enter
+## What Eileen should examine
 
-```mermaid
-flowchart TD
-  question["The person asks or clarifies a question"] --> model{"C/J · Which place and moment belong to this question?"}
-  device["R · Device coordinates + time zone<br/>Usable fix; nearby offline city agrees with zone"] --> model
-  userplace["Person explicitly supplies another place"] --> geocode["C · Extract city text<br/>R · find_place returns candidates"]
-  geocode --> model
-  model -->|Use present device place| id["R · Require an existing candidate / saved place ID"]
-  model -->|Use a supplied place| id
-  model -->|Place or meaning still unclear| ask["W · say asks one natural clarification"]
-  ask --> question
-  id --> civil{"C · local_time argument"}
-  civil -->|Empty string| same{"R · Already has a chart?"}
-  same -->|Yes| old["R · Keep that chart's timestamp<br/>Even if the device clock has advanced"]
-  same -->|No| now["R · Use the submitted time of THIS turn<br/>For voice, capture-finish receive time"]
-  civil -->|Explicit YYYY-MM-DDTHH:MM| zone["R · Resolve using selected place's IANA time zone"]
-  zone --> dst{"R · Valid unique civil moment?"}
-  dst -->|Unique, or earlier/later disambiguates overlap| instant["R · Calculate chart at resolved timestamp"]
-  dst -->|Gap, unresolved overlap or invalid zone / syntax| error["R · Return tool error to model<br/>Model must clarify or correct"]
-  error --> model
-  old --> instant
-  now --> instant
-  classDef rust fill:#e8efeb,stroke:#73877d,color:#25372c
-  classDef model fill:#eee7f2,stroke:#90789f,color:#3c2b46
-  classDef failure fill:#f8e9e6,stroke:#ac776c,color:#4b2e27
-  class device,geocode,id,same,old,now,zone,dst,instant rust
-  class model,civil,ask model
-  class error failure
-```
+1. Does intake preserve the original question, ownership, horizon, and negation through intermediate replies? Is a place or time in the story being mistaken for the chart's place or moment?
+2. Are house and natural roles justified by the matter? For the querent's lost object, are Lords 2 and 4 compared? For another owner, is the owner's second house turned correctly? Is the Moon's role explicit?
+3. Are quality, ability, and motive distinguished? Does each reception run from the planet in the dignity to that dignity's ruler? Are mixed or negative receptions retained?
+4. Is an applying contact relevant to the selected actors? What changes or intervenes before it? Does the calculation actually establish a claimed translation, collection, or prevention?
+5. Does the final passage answer the original question in context? What supports it, what opposes it, and what remains unknown? An uncertain answer should still explain what the testimony means for the person.
 
-The device is a convenience default, not a determination that it is the appropriate astrologer's place. The current instruction says to use an available device place unless the person supplies another. **There is no independent model classification result or stored explanation of why that default fits the question.** Eileen should assess the rule before we optimize the classification.
+The main document carries the proposed interpretation. Chart facts, source extracts and structured checks remain inspectable in its margins. Detailed input, original output, validation and timing receipts are behind **In the margins → Processing details**. These are local records.
 
-“Now” is a Rust timestamp; the model does not need to invent today's date. On the first cast after clarification, it uses that clarification turn's submitted moment. An empty time on an existing chart preserves its timestamp. An explicit time is resolved in the selected place's zone, not the device's zone. The prompt tells the model not to substitute a wedding, loss or other event time for the moment the astrologer understands the question. That is a prompt instruction, not a semantic validator of the person's intent.
+## Present calculation boundary
 
-The prompt receives the device time-zone name and candidates, but no separate human-readable current clock/date field. Resolving “yesterday at eight” into an explicit date therefore needs further attention. A device location is accepted only after native validation: finite coordinates, latitude strictly between the poles, longitude within ±180°, supplied accuracy no worse than 10 km, a local city within 75 km, and its zone matching the device zone. Absence of that usable fix leads to conversational place resolution; a time-zone name alone never invents coordinates.
+Planetary positions are approximate. The event search uses hourly brackets over seven days; fine event order, intermediate stations, fixed stars and antiscia are not certified. It does not supply the applying planet's travel to exact moving-target perfection. The timing lesson is ready for review but its model call is bypassed with an explicit native unestablished receipt. The model is not asked to invent a numeric duration from the angular gap or astronomical hours. No missing seven-day candidate can by itself answer a one-year question negatively.
 
-## What each model decision is being asked to do
+Location interpretation runs only for a missing object or animal. It uses the chosen object's **occupied house**, not simply the house it rules. Room suggestions are conditional on context; neither a debilitated significator nor a house assignment establishes damage, theft, or recovery.
 
-| Stage | Task type | Actual output / authority | What needs Eileen's review |
-| --- | --- | --- | --- |
-| Hear speech | C plus first C/J/W decision in direct mode | Short meaning summary and one typed action; native dictation instead supplies text | Whether the understood meaning preserves the actual question; numbers, negation, place and time ambiguity |
-| Understand the matter | C/J | `say`, `find_place`, or `cast_chart.question` | Ownership, actual question, who is asking, a new matter versus clarification; no separate canonical question until a chart is cast |
-| Choose place | C/J | Place query or existing candidate ID | Whether device place is suitable; explicit override; ambiguity among candidate cities |
-| Choose moment | C/J | Empty `local_time` for now, or civil time plus `occurrence` | When understanding occurred; historical chart versus event context; preservation on follow-up |
-| Assign significators | J | House / natural-role choices with reasons | Ordinary and turned houses, contextual role of Moon, lost-property exceptions, avoiding assumed gender |
-| Derive rulers | R, no model reasoning | Rust maps the chosen house cusp to a traditional ruler | Accuracy of the calculation; selecting the right house remains the model's responsibility |
-| Weigh testimony | J | Fact IDs, allowed rule IDs, draft prose and `because` | Directed reception, ability to act, relevant applying contacts, event order; references alone do not establish correctness |
-| Interpret the question | J/W | Judgment draft, rationale, required boundary reference | A contextual answer to the original question; what can and cannot be concluded; no seven-day-to-one-year inference |
-| Explain in the document | R plus W retained in margins | Fixed main prose; proposed model interpretation in “How this follows” | Whether the presentation makes an assessment possible; current main document does not deliver the draft as an answer |
-| Correct / go back | C plus R | Recast, restore chart revision, or new question | Whether the action matches the intended correction; current new-question action does not reset conversation history |
+## Output formats under comparison
 
-There is no model-produced hidden reasoning transcript in this design. The reviewable reasoning is the explicit `because`, selected roles, facts, rules, tool receipts and visible draft. We should measure successful semantic decisions and interpreted answers, not merely valid JSON or a chart appearing.
+Single production tasks currently use constrained JSON; independent analysis tasks use ordinary JSON batches with native checks. The selector experiment compared constrained JSON, unconstrained JSON, XML and Natural Language Tools on the same question/place/moment decisions, with two recorded repetitions and rotated order. XML matched 20 of 24 routes, natural language 18, fenced JSON after exact wrapper removal 18, and constrained JSON 14. A separate repaired five-case typed worksheet test passed its defined checks for all three JSON/XML variants. Every failure, raw response, prompt digest, expected selection and latency is retained. Parseability is not correctness. See [the experiment report](FORMAT_EXPERIMENTS.md) for limits and the first failed attempt.
 
-## How the model gets context
+[Johnson et al. (2025)](https://arxiv.org/abs/2510.14453) separate parameterless YES/NO selection from execution and response writing. [Somma et al. (2026)](https://arxiv.org/abs/2607.03953) replicate that setting and exclude parameterized calls and multi-turn interactions. These studies motivate a Horary comparison; they do not establish that natural-language coordinates, civil times, or judgments are reliable. Format choice and argument validation remain separate questions.
 
-1. The system message is `conversation_prompt.txt` followed by the JSON catalog returned by `reading_method::rules()`.
-2. Conversation history is the most recent **24 messages**, stopping at approximately **12,000 bytes**, with at least the newest message kept. The person and reader's messages retain their roles.
-3. A user-role native update supplies the canonical question (empty until first cast), chosen place, place candidates, device zone, chart revision, newly available fact objects, completed method stages and roles, the latest tool result, the current action schema, and one current-stage instruction.
-4. During the tool loop, updates append only new or changed facts and a compact receipt. The already-rendered model draft is not sent back as evidence. A chart revision retires old chart facts from this turn's prompt.
-5. Direct speech adds one user instruction requesting `{heard, call}` and the permitted action schema, with audio sent through the projector. After understanding, the saved user text is a labeled summary and the ordinary text prompt is rebuilt.
+## Review and refresh
 
-This is not retrieval from the OCR. The longer `conversation_method.txt` is review background and contributes to the recorded policy hash, but **is not included in `PromptThread`'s system message**. The actual rule catalog and exact system message appear below. The original question remains in recent history during short clarifications, but very long conversations can drop it before first casting; there is no independent pre-chart question record. After casting, `session.question` is included in every native update. These are specific places to test the concern about intervening exchanges.
+Rust generates this document from the live lesson builder, schemas, dependency catalog and executable authored fixture. The fixture is labeled; it is not a model result. A normal test fails when code or teaching material changes without refreshing this reference.
 
-## What the tool guard actually establishes
-
-Text output is constrained to the current JSON schema during sampling. The schema exposes only permitted stages and enumerated place IDs, evidence IDs and rule IDs. On direct audio's first call the schema is an instruction, not a sampling constraint; Rust parses a deny-unknown-fields `HeardAction` and executes its typed action through the same native validators. Direct audio is bounded to 400 output tokens; text to 800. Invalid audio understanding currently pauses rather than starting another transcription.
-
-Native validation enforces a calculated chart before writing, stage order, current evidence IDs, short nonempty prose, one or two allowed rules, house-derived rulers, a reception fact when citing the reception rule, and the calculation boundary for judgment. Changing significators removes dependent testimony and judgment; changing testimony removes dependent judgment. It does **not** verify every claim in prose, compare the inference against the full book, or decide whether a question's intended place/time was selected correctly.
-
-The schema stops offering more writing after three sections written at this message position or four writing attempts in the current turn. `find_place` is offered at most twice before a cast. A turn has at most eight model decisions. One specific controlled-token decoding error gets one greedy retry with the same prompt/schema; cancellation and other errors do not. Receipts retain retry and interruption evidence. A rejected tool's error is appended to the next prompt so the model can correct it.
-
-Voice Auto may spend up to six seconds on the first Speech permission request and up to six seconds awaiting an on-device recognition result before falling back to direct audio. Subsequent turns check permission without another authorization wait. The UI can then wait up to six seconds for device location before sending the turn. The comparison route additionally runs a complete Gemma transcription call. These waits, model preparation, prompt evaluation and action generation are separate latency sources; an overall slow turn alone does not identify which one dominated.
-
-The native model is Gemma 4 12B IT QAT with its matching audio/image projector and a 16,384-token context. Exact text prefixes may reuse resident KV state; this reduces physical prompt evaluation but does not remove the full logical prompt from context limits. Media has no cache-reuse qualification. The engine verifies loaded model/projector weights; an already-resident model is reused. The pinned runtime does not expose speculative decoding. None of the horary stages uses Python, a hosted model, or a second model evaluator.
-
-## Reading the current result
-
-```mermaid
-flowchart LR
-  write["Model write_scroll output"] --> selected["Roles, fact IDs and rule IDs"]
-  selected --> validate["Native validation and derived rulers"]
-  write --> prose["Model body + because"]
-  validate --> main["Main document<br/>Calculated roles / facts + fixed stage prose"]
-  prose --> margin["Closed How this follows margin<br/>A proposed interpretation"]
-  validate --> all{"Successful judgment write<br/>and all three stages recorded?"}
-  all -->|Yes| closing["Fixed native closing<br/>The answer remains open"]
-  classDef rust fill:#e8efeb,stroke:#73877d,color:#25372c
-  classDef model fill:#eee7f2,stroke:#90789f,color:#3c2b46
-  class validate,main,all,closing rust
-  class write,selected,prose,margin model
-```
-
-The open outcome is deliberate protection after observed model mistakes; it is not evidence that the model derived an inconclusive horary judgment. This needs a product and method decision: how Eileen can assess a substantive proposed answer without mistaking it for a verified conclusion. We should preserve the draft and its trace while distinguishing proven calculations from reviewable interpretation.
-
-## Test matrix to agree before changing the process
-
-The rows below are **proposed semantic acceptance cases**, not claims of passing model behavior. The generated prompt fixtures show what the current application supplies. Existing pure Rust tests establish some time/geocoder/tool mechanics; they do not establish that Gemma selected the right action from the person's words.
-
-| Case | Conversation / device context | Expected decision to assess | Native assertions |
-| --- | --- | --- | --- |
-| Device place, current question | Clear question; valid device fix and zone; “I'm asking from here” | Use device candidate; no city question or lookup; empty civil time | Exact coordinates from device candidate; timestamp equals this turn's submitted instant |
-| Explicit place overrides device | Device in Virginia; person requests London | `find_place` London, then select returned London ID | London coordinates and zone; device candidate not silently chosen |
-| Device unavailable | Permission denied, poor fix or zone mismatch | Ask place once; after user reply geocode and cast | No guessed coordinates; successful returned candidate only |
-| Ambiguous stated place | “Springfield,” multiple candidates | Brief clarification before choosing | No invented ID; choice matches clarified locality |
-| Device time is appropriate | “For the question I'm asking now” | Empty `local_time`; do not ask for a date | Timestamp unaffected by model loading / generation delay |
-| Explicit historical question moment | “I understood this question in London on 2026-01-14 at 14:30” | Select London; pass exact civil time | Resolved timestamp uses Europe/London, not device zone |
-| Event time is context | “I lost it yesterday at eight; where is it now?” | Current understood-question moment, not loss time | Empty civil time on first cast; rationale explicitly distinguishes event from question |
-| Repeated civil clock time | Historical time in autumn DST overlap | Ask earlier/later occurrence if not supplied | Ambiguous input rejected; each specified occurrence resolves to a different instant |
-| Impossible civil clock time | Time in spring DST gap | Explain and seek correction | No chart on nonexistent time; failed receipt retained |
-| Follow-up on same matter | “Why that house?” / ownership correction | Same matter, retain chart moment; invalidate dependent interpretation if roles change | Existing timestamp preserved when recasting with empty time |
-| New matter | Explicit “Start a new reading” / unrelated second question | Fresh question and moment; earlier reading retained separately | New lifecycle and history isolation are still to be implemented |
-| Clarification before first chart | Original marriage question, several replies about partner and place | Cast for the original matter as clarified, not a new invented question | Canonical question retains intended scope; correct chart / tool arguments |
-| Interpretation | Marriage within a year; all three stages recorded | A contextual proposed answer with evidence and limits, no unsupported calendar claim | Draft/rationale inspectable; current main prose intentionally does not publish it as an answer |
-
-Run each semantic case with typed text and direct audio, and with native dictation where available. Report the actual route, prompt fingerprint, arguments, tool results, retries, first-token delay, cached/new prompt tokens, total time and Eileen's assessment separately. A unavailable native speech route is an unavailable case, not a passing direct-audio result mislabeled as dictation.
-
-## Keep this document current
-
-The generator executes the app's actual prompt builder, action schema, device-place validator, offline geocoder and native chart/write tools on synthetic inputs. The companion JSON is therefore an executable view of the real prompt envelope at several stages. Exact source extracts cover the orchestration and render policy. A normal Rust test compares the generated files and source fingerprints with their checked-in copies and fails when they drift. The diagrams and task classifications are authored explanations, guarded by those source fingerprints; they are not an automatic proof of every control-flow edge.
-
-Regenerate after a source or prompt change:
-
-```sh
-cargo test --manifest-path src-tauri/Cargo.toml --locked process_reference::tests::regenerate -- --ignored --nocapture
-```
-
-Check freshness without loading a model or touching app data:
-
-```sh
-cargo test --manifest-path src-tauri/Cargo.toml --locked process_reference::tests::checked_in_reference_is_current
-```
-
-Review questions can be ordinary notes beside a stage: the intended method, the observed decision, and an example of what Eileen would do. No issue-report form is needed.
+Run `cargo test --manifest-path src-tauri/Cargo.toml --locked process_reference::tests::regenerate -- --ignored --nocapture` to refresh. The companion source manifest fingerprints the exact files. Private readings, audio and the complete OCR are not included.

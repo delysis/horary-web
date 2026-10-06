@@ -164,14 +164,14 @@ function validateNativeRuntime(profile, paths, issues) {
     if (profile.capabilities?.inProcessWorker !== true) {
         runtimeIssues.push('native runtime profile must require an in-process worker.');
     }
-    if (profile.capabilities?.continuousBatching?.defaultParallelSequences !== 1 || profile.capabilities?.continuousBatching?.maxParallelSequences !== 1) {
-        runtimeIssues.push('native runtime profile must describe one resident reading sequence.');
+    if (profile.capabilities?.continuousBatching?.defaultParallelSequences !== 4 || profile.capabilities?.continuousBatching?.maxParallelSequences !== 4) {
+        runtimeIssues.push('native runtime profile must describe four available task sequences.');
     }
     if (profile.capabilities?.speculativeDecoding?.nativeWorkerActive !== false) {
         runtimeIssues.push('native runtime profile must not advertise unimplemented speculative decoding.');
     }
-    if (profile.capabilities?.jsonConstrainedOutput?.required !== true) {
-        runtimeIssues.push('native runtime profile must require JSON-constrained output.');
+    if (profile.capabilities?.jsonConstrainedOutput?.nativeValidationRequired !== true) {
+        runtimeIssues.push('native runtime profile must require native worksheet validation.');
     }
 
     const cargoToml = readText(paths.cargoToml, issues);

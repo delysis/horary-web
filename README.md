@@ -44,7 +44,7 @@ The app appears under `src-tauri/target/debug/bundle/macos/Horary.app`. macOS 13
 - The same calculated chart supplies the wheel, tables, and AI facts. UTC resolution uses the selected IANA timezone, with explicit handling of ambiguous or nonexistent civil times.
 - The astronomical engine is an approximation checked against the committed JPL and Swiss Ephemeris fixtures. Those tests cover specific dates and tolerances, not every possible chart or professional ephemeris precision.
 - House suggestions and the traditional interpretation scaffold are provisional. They have not received Eileen’s subject-matter sign-off.
-- The conversation uses a bounded Rust tool loop and an evolving scroll. Tool receipts and evidence pointers make it auditable; they are not an independent verifier of its prose.
+- The conversation uses an explicit Rust task pipeline with separate cached teaching lessons and a native batch of up to four independent analyses. Its working interpretation appears on the scroll. Original worksheets, tool receipts and source extracts make it assessable; they are not an independent verifier of its prose.
 - Structured model output is validated. This does not establish the truth of its prose or the correctness of its astrological judgment.
 
 See [architecture](docs/ARCHITECTURE.md), [privacy](docs/PRIVACY.md), [AI policy](docs/AI_POLICY.md), and [verification](docs/VERIFICATION.md).

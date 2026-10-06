@@ -25,9 +25,9 @@
     "inProcessWorker": true,
     "continuousBatching": {
       "enabled": false,
-      "defaultParallelSequences": 1,
-      "maxParallelSequences": 1,
-      "scheduler": "One native-kit controlled reading at a time"
+      "defaultParallelSequences": 4,
+      "maxParallelSequences": 4,
+      "scheduler": "Independent task batches with up to four sequences; one owned request at a time"
     },
     "kvCache": {
       "enabled": true,
@@ -35,7 +35,7 @@
         {
           "id": "hot",
           "medium": "native-kit memory cache",
-          "purpose": "Exact token prefixes reused in the resident single reading; corrections replace the changed suffix and cancellation discards reusable state"
+          "purpose": "Bounded in-memory bank of fixed lesson prefixes, authenticated by the native owner and restored per batch case"
         }
       ]
     },
@@ -48,8 +48,9 @@
       "supportedFamilies": []
     },
     "jsonConstrainedOutput": {
-      "required": true,
-      "fallbackValidation": "existing HoraryInterpretation schema validation"
+      "required": false,
+      "nativeValidationRequired": true,
+      "fallbackValidation": "Each stage validates its own worksheet, evidence IDs, and native calculation boundary; single tasks also use schema constraints"
     }
   },
   "fallback": {
@@ -60,6 +61,6 @@
   },
   "nativeKit": {
     "repository": "https://github.com/delysis/native-platform.git",
-    "revision": "39f2f87858afedef47d7b39057c02a8127b9cc90"
+    "revision": "a2e7c92fec8f4a7649dd43e6baa88128a8d1b9e2"
   }
 }

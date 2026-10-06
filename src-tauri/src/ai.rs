@@ -227,6 +227,7 @@ pub fn generate_interpretation_from_native_state(
             seed: 0x5752_5952,
             token_sink: None,
             cancel: None,
+            cache_lesson: false,
         },
     )?;
     let interpretation = parse_interpretation_content(&result.content)?;
@@ -311,6 +312,7 @@ pub fn start_interpretation_stream_from_native_state(
                             seed: 0x5752_5952,
                             token_sink: Some(token_tx),
                             cancel: Some(cancel_for_generation),
+                            cache_lesson: false,
                         },
                     )
                     .map(|result| result.content)
@@ -839,6 +841,7 @@ mod horary_reading_eval_tests {
                     seed: 0x5752_5952,
                     token_sink: None,
                     cancel: None,
+                    cache_lesson: false,
                 },
             );
 

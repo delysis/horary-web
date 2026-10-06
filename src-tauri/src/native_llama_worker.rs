@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![cfg_attr(not(feature = "native-llama"), allow(dead_code, unused_imports))]
 use crate::llama::{LlamaError, LlamaResult, LlamaStatus, StartLlamaRequest};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::path::PathBuf;
 use std::{
@@ -43,6 +43,8 @@ pub struct NativeGenerateOptions {
     pub response_schema: Option<String>,
     pub token_sink: Option<mpsc::Sender<String>>,
     pub cancel: Option<Arc<AtomicBool>>,
+    /// Cache only the fixed first system message, never the changing question.
+    pub cache_lesson: bool,
 }
 
 impl Default for NativeGenerateOptions {
@@ -56,17 +58,26 @@ impl Default for NativeGenerateOptions {
             response_schema: None,
             token_sink: None,
             cancel: None,
+            cache_lesson: false,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeGenerationResult {
     pub content: String,
     pub prompt_tokens: u32,
     pub generated_tokens: u32,
     pub elapsed_ms: u128,
+    #[serde(default)]
+    pub total_wall_ms: Option<u128>,
+    #[serde(default)]
+    pub batch_size: Option<usize>,
+    #[serde(default)]
+    pub lesson_bank_hit: Option<bool>,
+    #[serde(default)]
+    pub lesson_prepare_ms: Option<u128>,
     pub tokens_per_second: f64,
     pub prompt_cache_hit: bool,
     pub cached_prompt_tokens: u32,
@@ -84,6 +95,9 @@ struct Loaded {
     host: llama_native_host::NativeHost,
     config: llama_native_types::NativeModelConfig,
     cache_hits: AtomicU64,
+    generation: Mutex<()>,
+    lessons: Mutex<Vec<(String, llama_native_types::SequenceStateBlob)>>,
+    lesson_budget: usize,
 }
 #[cfg(not(feature = "native-llama"))]
 struct Loaded;
@@ -103,6 +117,11 @@ mod imp {
         GenerationState, NativeModelConfig, SamplingConfig, SpecialTokenPolicy,
     };
     static REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+    struct PreparedLesson {
+        prefix: llama_native_types::SequenceStateBlob,
+        bank_hit: bool,
+        prepare_ms: u128,
+    }
     fn native_model_metadata(
         id: &str,
         registered: &[crate::llama::ModelInfo],
@@ -197,7 +216,7 @@ mod imp {
         if layers != "auto" {
             config.gpu_layers = layers.parse().map_err(error)?;
         }
-        config.max_sequences = 1;
+        config.max_sequences = 4;
         config.batch_tokens = 512;
         if let Some(old) = slot.as_ref() {
             if old.config == config {
@@ -227,6 +246,9 @@ mod imp {
             host,
             config,
             cache_hits: AtomicU64::new(0),
+            generation: Mutex::new(()),
+            lessons: Mutex::new(Vec::new()),
+            lesson_budget: (system.total_memory() / 8).min(4 * 1024 * 1024 * 1024) as usize,
         }));
         Ok(status(Some(&id)))
     }
@@ -265,11 +287,265 @@ mod imp {
             health.running = true;
             health.model_id = Some(s.config.model_id.clone());
             health.ctx_size = Some(s.config.context_tokens);
-            health.parallel = Some(1);
+            health.parallel = Some(s.config.max_sequences);
             health.hot_cache_hits = s.cache_hits.load(Ordering::Relaxed);
         }
         Ok(health)
     }
+    fn lesson_state(
+        loaded: &Loaded,
+        input: &GenerationInput,
+    ) -> LlamaResult<Option<PreparedLesson>> {
+        let started = std::time::Instant::now();
+        use llama_native_types::{BranchRequest, ChatRole, SharedPrefixBatchRequest};
+        use sha2::{Digest, Sha256};
+        let GenerationInput::Chat { messages, template } = input else {
+            return Ok(None);
+        };
+        let Some(first) = messages.first().filter(|m| m.role == ChatRole::System) else {
+            return Ok(None);
+        };
+        let key = format!("{:x}", Sha256::digest(first.content.as_bytes()));
+        let handle = loaded
+            .host
+            .load_into_slot(0, loaded.config.clone())
+            .map_err(error)?;
+        let mut bank = loaded.lessons.lock().map_err(error)?;
+        let index = bank.iter().position(|(id, _)| id == &key);
+        let saved = if let Some(index) = index {
+            let entry = bank.remove(index);
+            let state = entry.1.clone();
+            bank.push(entry);
+            state
+        } else {
+            let saved = handle
+                .prefill_shared_prefix(SharedPrefixBatchRequest {
+                    request_id: format!("lesson-{key}"),
+                    model_id: loaded.config.model_id.clone(),
+                    common_messages: vec![first.clone()],
+                    chat_template: template.clone(),
+                    branches: (0..2)
+                        .map(|i| BranchRequest {
+                            branch_id: format!("prepare-{i}"),
+                            label: "Prepare fixed lesson".into(),
+                            instruction: "Complete the next task.".into(),
+                            sampling: SamplingConfig {
+                                max_tokens: 1,
+                                ..Default::default()
+                            },
+                            messages: Vec::new(),
+                            cached_prefix: None,
+                        })
+                        .collect(),
+                    cached_prefix: None,
+                })
+                .map_err(error)?;
+            let bytes = saved.bytes.len();
+            if bytes <= loaded.lesson_budget {
+                while bank.iter().map(|(_, s)| s.bytes.len()).sum::<usize>() + bytes
+                    > loaded.lesson_budget
+                {
+                    bank.remove(0);
+                }
+                bank.push((key, saved.clone()));
+            }
+            saved
+        };
+        // A chat-template boundary is not assumed to be stable: verify actual
+        // tokens against the full request before granting reuse authority.
+        let prepared = handle.prepare_input(input.clone()).map_err(error)?;
+        if prepared
+            .first()
+            .is_none_or(|p| !p.token_ids.starts_with(&saved.token_ids))
+        {
+            return Err(error(
+                "The fixed lesson is not a prefix of the live request.",
+            ));
+        }
+        Ok(Some(PreparedLesson {
+            prefix: saved,
+            bank_hit: index.is_some(),
+            prepare_ms: started.elapsed().as_millis(),
+        }))
+    }
+
+    fn restore_lesson(
+        loaded: &Loaded,
+        request: &GenerationRequest,
+    ) -> LlamaResult<Option<(bool, u128)>> {
+        let Some(saved) = lesson_state(loaded, &request.input)? else {
+            return Ok(None);
+        };
+        let handle = loaded
+            .host
+            .load_into_slot(0, loaded.config.clone())
+            .map_err(error)?;
+        let metadata = (saved.bank_hit, saved.prepare_ms);
+        let restored = handle.restore_sequence(saved.prefix, 0).map_err(error)?;
+        if restored != llama_native_types::SequenceRestoreKind::NativeState {
+            return Err(error("The fixed lesson lost its live cache ownership."));
+        }
+        Ok(Some(metadata))
+    }
+
+    pub fn generate_native_batch(
+        state: &NativeLlamaState,
+        prompts: Vec<(String, u32)>,
+        options: NativeGenerateOptions,
+    ) -> LlamaResult<Vec<NativeGenerationResult>> {
+        let wall = std::time::Instant::now();
+        let count = prompts.len();
+        use llama_native_types::{GenerationBatchRequest, GenerationCase};
+        if prompts.is_empty() || prompts.len() > 4 {
+            return Err(error("A native reading batch needs one to four tasks."));
+        }
+        if options.audio.is_some() || options.response_schema.is_some() {
+            return Err(error(
+                "Independent cached batches use text worksheets with native validation.",
+            ));
+        }
+        let loaded = state
+            .running
+            .lock()
+            .map_err(error)?
+            .clone()
+            .ok_or_else(|| error("Set up the local model first."))?;
+        let _generation = loaded.generation.lock().map_err(error)?;
+        let mut cases = Vec::new();
+        let mut preparations = Vec::new();
+        for (index, (prompt, max_tokens)) in prompts.into_iter().enumerate() {
+            if options
+                .cancel
+                .as_ref()
+                .is_some_and(|c| c.load(Ordering::Acquire))
+            {
+                return Err(error("Judgement cancelled."));
+            }
+            let messages: Vec<ChatMessage> = serde_json::from_str(&prompt).map_err(error)?;
+            let input = GenerationInput::Chat {
+                messages,
+                template: chat_template(
+                    loaded
+                        .host
+                        .descriptors()
+                        .first()
+                        .map(|d| d.architecture.as_str()),
+                ),
+            };
+            let lesson = if options.cache_lesson {
+                lesson_state(&loaded, &input)?
+            } else {
+                None
+            };
+            preparations.push(lesson.as_ref().map(|p| (p.bank_hit, p.prepare_ms)));
+            let cached_prefix = lesson.map(|p| p.prefix);
+            cases.push(GenerationCase {
+                case_id: format!("stage-{index}"),
+                input,
+                cached_prefix,
+                sampling: SamplingConfig {
+                    max_tokens,
+                    temperature: options.temperature,
+                    top_p: options.top_p,
+                    seed: options.seed,
+                    ..Default::default()
+                },
+            });
+        }
+        let mut ticket = loaded
+            .host
+            .generate_batch(
+                loaded.config.clone(),
+                GenerationBatchRequest {
+                    request_id: format!(
+                        "horary-batch-{}",
+                        REQUEST_ID.fetch_add(1, Ordering::Relaxed)
+                    ),
+                    model_id: loaded.config.model_id.clone(),
+                    cases,
+                    media: Vec::new(),
+                    first_word_choices: None,
+                },
+            )
+            .map_err(error)?;
+        let mut outputs = loop {
+            if options
+                .cancel
+                .as_ref()
+                .is_some_and(|c| c.load(Ordering::Acquire))
+            {
+                ticket.cancel_all();
+            }
+            match ticket
+                .wait_timeout(Duration::from_millis(30))
+                .map_err(error)?
+            {
+                WaitOutcome::Ready(outputs) => break outputs,
+                WaitOutcome::TimedOut(pending) => ticket = pending,
+            }
+        };
+        outputs.sort_by(|a, b| a.branch_id.cmp(&b.branch_id));
+        for (index, output) in outputs.iter().enumerate() {
+            if output.branch_id != format!("stage-{index}") {
+                return Err(error(
+                    "Native batch result does not match its requested stage.",
+                ));
+            }
+        }
+        outputs
+            .into_iter()
+            .zip(preparations)
+            .map(|(output, preparation)| {
+                finish_output(&loaded, output).map(|mut result| {
+                    result.total_wall_ms = Some(wall.elapsed().as_millis());
+                    result.batch_size = Some(count);
+                    result.lesson_bank_hit = preparation.map(|p| p.0);
+                    result.lesson_prepare_ms = preparation.map(|p| p.1);
+                    result
+                })
+            })
+            .collect()
+    }
+
+    fn finish_output(
+        loaded: &Loaded,
+        output: llama_native_types::GenerationOutput,
+    ) -> LlamaResult<NativeGenerationResult> {
+        if output.state == GenerationState::Cancelled {
+            return Err(error("Judgement cancelled."));
+        }
+        if output.state != GenerationState::Completed {
+            return Err(error(format!(
+                "Native generation ended: {}",
+                output.finish_reason
+            )));
+        }
+        if !output.real_engine_invoked || output.fake_fixture {
+            return Err(error("Reading did not come from the native model"));
+        }
+        let reused = output.metrics.cache.resident_prefix_tokens
+            + output.metrics.cache.restored_prefix_tokens;
+        if reused > 0 {
+            loaded.cache_hits.fetch_add(1, Ordering::Relaxed);
+        }
+        Ok(NativeGenerationResult {
+            content: output.text,
+            prompt_tokens: output.metrics.prompt_tokens as u32,
+            generated_tokens: output.metrics.completion_tokens as u32,
+            elapsed_ms: output.metrics.duration_ms,
+            total_wall_ms: None,
+            batch_size: None,
+            lesson_bank_hit: None,
+            lesson_prepare_ms: None,
+            tokens_per_second: output.metrics.tokens_per_second,
+            prompt_cache_hit: reused > 0,
+            cached_prompt_tokens: reused as u32,
+            prefilled_prompt_tokens: output.metrics.prompt_tokens.saturating_sub(reused) as u32,
+            first_token_ms: output.metrics.first_token_ms,
+            cold_cache_bytes: None,
+        })
+    }
+
     fn constrained(
         loaded: &Loaded,
         request: GenerationRequest,
@@ -369,12 +645,23 @@ mod imp {
         prompt: String,
         options: NativeGenerateOptions,
     ) -> LlamaResult<NativeGenerationResult> {
+        let wall = std::time::Instant::now();
         let loaded = state
             .running
             .lock()
             .map_err(error)?
             .clone()
             .ok_or_else(|| error("Set up the local model first."))?;
+        // Restore plus generation is one transaction on the owned KV sequence.
+        // Concurrent callers must not restore over a running stage.
+        let _generation = loaded.generation.lock().map_err(error)?;
+        if options
+            .cancel
+            .as_ref()
+            .is_some_and(|c| c.load(Ordering::Acquire))
+        {
+            return Err(error("Judgement cancelled."));
+        }
         let input = match serde_json::from_str::<Vec<ChatMessage>>(&prompt) {
             Ok(messages) => GenerationInput::Chat {
                 messages,
@@ -419,6 +706,11 @@ mod imp {
                 })
                 .unwrap_or_default(),
             cached_prefix: None,
+        };
+        let preparation = if options.cache_lesson && options.audio.is_none() {
+            restore_lesson(&loaded, &request)?
+        } else {
+            None
         };
         if options
             .cancel
@@ -487,6 +779,10 @@ mod imp {
             prompt_tokens: output.metrics.prompt_tokens as u32,
             generated_tokens: output.metrics.completion_tokens as u32,
             elapsed_ms: output.metrics.duration_ms,
+            total_wall_ms: Some(wall.elapsed().as_millis()),
+            batch_size: Some(1),
+            lesson_bank_hit: preparation.map(|p| p.0),
+            lesson_prepare_ms: preparation.map(|p| p.1),
             tokens_per_second: output.metrics.tokens_per_second,
             prompt_cache_hit: cache_hit,
             cached_prompt_tokens: reused as u32,
@@ -534,6 +830,13 @@ mod imp {
     ) -> LlamaResult<LlamaStatus> {
         Err(error("Native model support is not compiled"))
     }
+    pub fn generate_native_batch(
+        _: &NativeLlamaState,
+        _: Vec<(String, u32)>,
+        _: NativeGenerateOptions,
+    ) -> LlamaResult<Vec<NativeGenerationResult>> {
+        Err(error("Native model support is not compiled"))
+    }
     pub fn stop_native_llama(_: &NativeLlamaState) -> LlamaResult<bool> {
         Ok(false)
     }
@@ -554,13 +857,69 @@ mod imp {
 #[cfg(all(test, feature = "native-llama"))]
 pub use imp::start_native_llama_from_path;
 pub use imp::{
-    generate_native, native_llama_health, native_llama_status, start_native_llama_in_dir,
-    stop_native_llama,
+    generate_native, generate_native_batch, native_llama_health, native_llama_status,
+    start_native_llama_in_dir, stop_native_llama,
 };
 
 #[cfg(all(test, feature = "native-llama"))]
 mod integration_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "Real model: four distinct cached prompts must produce four independent batch answers"]
+    fn four_cached_lessons_decode_together_and_survive_stage_switches() {
+        let state = NativeLlamaState::default();
+        let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");
+        start_native_llama_from_path(
+            &state,
+            "four-way".into(),
+            String::new(),
+            path.into(),
+            PathBuf::new(),
+            serde_json::from_value(
+                serde_json::json!({"modelId":"four-way","ctxSize":16384,"nGpuLayers":"auto"}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let prompts = || {
+            (0..4).map(|i|(serde_json::json!([{"role":"system","content":format!("{} Return exactly the one word assigned by the user. No explanation or punctuation.",format!("This is independent lesson {i}. Keep its instructions separate. ").repeat(40))},{"role":"user","content":(["amber","birch","cedar","dawn"][i])}]).to_string(),16)).collect()
+        };
+        let options = || NativeGenerateOptions {
+            temperature: 0.,
+            cache_lesson: true,
+            ..Default::default()
+        };
+        let cold_started = std::time::Instant::now();
+        let cold = generate_native_batch(&state, prompts(), options()).unwrap();
+        let cold_ms = cold_started.elapsed().as_millis();
+        let warm_started = std::time::Instant::now();
+        let warm = generate_native_batch(&state, prompts(), options()).unwrap();
+        let warm_ms = warm_started.elapsed().as_millis();
+        stop_native_llama(&state).unwrap();
+        for ((a, b), expected) in cold
+            .iter()
+            .zip(&warm)
+            .zip(["amber", "birch", "cedar", "dawn"])
+        {
+            assert_eq!(a.content.trim(), expected);
+            assert_eq!(b.content.trim(), expected);
+            assert_eq!(a.lesson_bank_hit, Some(false));
+            assert_eq!(
+                b.lesson_bank_hit,
+                Some(true),
+                "A warm prefix must come from the bank, without a new fixed-lesson prefill"
+            );
+            assert!(
+                b.cached_prompt_tokens > 500,
+                "Per-case lesson prefix was not reused"
+            );
+        }
+        eprintln!(
+            "FOUR WAY CACHE: cold_wall_ms={cold_ms} warm_wall_ms={warm_ms} outputs={}",
+            serde_json::to_string(&warm).unwrap()
+        );
+    }
 
     #[test]
     #[ignore = "Requires the pinned model/projector in the shared Hub cache and compatible hardware."]
@@ -741,4 +1100,64 @@ mod integration_tests {
         assert!(!stop_native_llama(&state).unwrap());
         assert!(generate_native(&state, "Hello".into(), Default::default()).is_err());
     }
+}
+#[test]
+#[ignore = "Real model regression: an owned restored stage prefix must be reused by constrained text."]
+#[cfg(feature = "native-llama")]
+fn constrained_generation_reuses_an_owned_prefix_after_another_stage() {
+    let state = NativeLlamaState::default();
+    let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model path");
+    start_native_llama_from_path(
+        &state,
+        "stage-cache-probe".into(),
+        String::new(),
+        path.into(),
+        std::env::temp_dir(),
+        serde_json::from_value(
+            serde_json::json!({"modelId":"stage-cache-probe","ctxSize":4096,"nGpuLayers":"auto"}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let schema = r#"{"type":"object","properties":{"answer":{"const":"ready"}},"required":["answer"],"additionalProperties":false}"#;
+    let input = |lesson: &str| {
+        serde_json::json!([{"role":"system","content":format!("{} Return only answer=ready.",lesson.repeat(32))},{"role":"user","content":"Report readiness."}]).to_string()
+    };
+    let a =
+        input("This is the first independent lesson. Its exact fixed prefix should be retained. ");
+    let b = input("This is a different lesson, irrelevant to the first task. Keep it separate. ");
+    let options = || NativeGenerateOptions {
+        response_schema: Some(schema.into()),
+        temperature: 0.,
+        max_tokens: 32,
+        ..Default::default()
+    };
+    let cold = generate_native(&state, a.clone(), options()).unwrap();
+    let loaded = state.running.lock().unwrap().as_ref().unwrap().clone();
+    let handle = loaded
+        .host
+        .load_into_slot(0, loaded.config.clone())
+        .unwrap();
+    let saved = handle.snapshot_sequence(0).unwrap();
+    generate_native(&state, b, options()).unwrap();
+    let restored = handle.restore_sequence(saved, 0).unwrap();
+    assert_eq!(
+        restored,
+        llama_native_types::SequenceRestoreKind::NativeState
+    );
+    let warm = generate_native(&state, a, options()).unwrap();
+    stop_native_llama(&state).unwrap();
+    eprintln!(
+        "STAGE PREFIX RESTORE: cold={} warm={} cached={} new={} first_ms={:?}",
+        cold.prompt_tokens,
+        warm.prompt_tokens,
+        warm.cached_prompt_tokens,
+        warm.prefilled_prompt_tokens,
+        warm.first_token_ms
+    );
+    assert_eq!(warm.content, cold.content);
+    assert!(
+        warm.cached_prompt_tokens > cold.prompt_tokens / 2,
+        "The exact live restored prefix was unnecessarily re-prefilled"
+    );
 }

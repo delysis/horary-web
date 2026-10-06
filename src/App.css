@@ -55,6 +55,8 @@ summary:hover { color:var(--ink); }
 .reading-journal ol { list-style:none; padding:0; margin:24px 0; }
 .reading-journal li { display:flex; gap:20px; font-size:13px; color:var(--soft); line-height:1.8; margin:0 0 10px; }
 .reading-journal time { color:var(--faint); white-space:nowrap; font-size:11px; min-width:65px; }
+.reading-journal details { margin:18px 0; padding-left:14px; border-left:1px solid var(--line); }
+.reading-journal pre { max-height:30rem; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.7 ui-monospace,monospace; padding:14px; background:color-mix(in srgb,var(--wash) 5%,transparent); }
 .earlier-leaves article { margin:35px 0; padding-left:20px; border-left:1px solid var(--line); }
 @keyframes ink-arrives { from{opacity:0;filter:blur(2px);transform:translateY(6px)}to{opacity:1;filter:blur(0);transform:translateY(0)} }
 @keyframes paper-opens { from{opacity:0;transform:translateY(14px);clip-path:inset(0 0 70%)}to{opacity:1;transform:translateY(0);clip-path:inset(0)} }

@@ -1,0 +1,36 @@
+<task>Select the role-correct contact candidates, their order, and their sign-change status. This task runs independently of condition and reception. The final judgment combines motive and ability with these mechanical candidates. Do not predict the outcome here or calculate an aspect yourself.</task>
+
+<definitions>
+Applying: the planets are moving towards exact contact. Separating: their relevant contact is already past. An event normally needs a relevant occasion; an aspect's shape alone does not guarantee it. Conjunction, sextile, square, trine and opposition can all bring an event, with context/reception affecting its character. No automatic "trine=yes, square=no" rule.
+
+Direct contact joins relevant significators. Translation uses a faster third planet to link two slower significators by an ordered sequence of exact contacts. Collection has both significators applying to a slower collecting planet. Prohibition/frustration/refrenation involve an intervention or change before the intended contact. They require actual actors and event order, not names guessed from a chart drawing.
+
+The native search supplies approximate HOURLY brackets over SEVEN DAYS. A candidate is not a certified exact perfection or complete event chain. Stations/sign changes between samples may matter. Unknown coverage is not proof of absence. Astronomical hours in a candidate are not the calendar timing of an earthly event.
+</definitions>
+
+<procedure>
+1. Complete relevant_actors: name the querent/quesited planets from the supplied roles. A planet being called a cosignificator does not make its contact unimportant. Include the Moon's applicable role explicitly.
+2. Decide whether this question needs future action. A situation can be answered chiefly by receptions; a lost object's location can be answered by occupied house. Do not demand a future aspect just to allow a location explanation.
+3. Complete applying_or_separating: inspect supplied native contacts only. A past separating contact can fit a reported past event, not an event still to happen. A current drawing aspect with no future candidate does not establish future perfection.
+4. For each selected direct candidate, copy its typed event.withinCurrentSigns field into candidate_signs as within_current_signs: true, false or null. Native Rust checks this copy. true means before either changes sign; false means after a change; null means unestablished. Do not use the old sign's condition/reception to certify a contact after an ingress. Motive and ability are assessed separately; describe the contact as a candidate, never guaranteed completion.
+5. Complete event_order: select only the next relevant contact, or a specifically supported next-two-contact connection. Never push a planet through a long chain until it delivers the desired outcome.
+6. A third planet may help or obstruct. Translation needs the appropriate faster actor and sequence; collection the slower actor and both applications. Their ultimate assistance/interference also depends on contextual reception, which is not supplied to this task. If actor/order/motion tests are unavailable, mark complex mechanism unestablished instead of declaring it.
+7. Complete changing_conditions: check supplied sign changes, stations/intervening events if available. Do not invent an ephemeris result. An aspect after a sign change can alter the interpretation and often the requested time scope.
+8. For lost property, permit either Moon-as-querent applying to the object's lord OR Moon-as-object applying to Lord 1. These are distinct contextual roles. Do not discard recovery testimony simply because the Moon was earlier the querent's cosignificator.
+9. Complete coverage_limits: no relevant candidate in seven days does NOT mean no marriage in a year, no eventual recovery, or an impossible event. Record exactly what is unestablished.
+10. Return basis=direct_candidate|complex_unverified|location_or_situation|no_candidate_covered. Return candidate_ids from current event facts, and a short contextual summary. Do not give a date.
+</procedure>
+
+<worked_examples>
+A — direct occasion, not automatic yes. Querent/partner have a relevant applying trine candidate. The aspect supplies a possible occasion. Reception and ability remain separate checks for the final judgment; do not say "trine means marriage."
+B — Moon counts. Querent has Lord 1 and Moon; Moon applies to the partner's significator before sign change. This can be the querent's main relevant contact. Calling it "only a minor cosignificator aspect" is wrong.
+C — lost cow. Object=Lord 12. Moon-as-querent applying to Lord 12 can fit recovery. Alternatively Moon-as-object applying to Lord 1 can fit return. Name which role the selected testimony uses; do not confuse it with location's main object planet.
+D — apparent translation. Moon separated from Mercury and now applies to Jupiter. This is a translation candidate if the supplied sequence, relative motion and context support it. If the separating event/motion was not computed, complex_unverified; do not certify the missing checks from memory.
+E — apparent prohibition. A applies to B; B meets C first. It can be an intervening candidate, but context and reception must establish whether C obstructs or helps. Two timestamps alone do not prove a traditional named mechanism.
+F — year versus week. Marriage question asks about twelve months; search covers seven days and returns no relevant candidate. Correct: no candidate in the computed window; one-year outcome unestablished. Wrong: "You will not marry this year."
+G — location without future action. Object occupies the child's fifth-house place and plausible context is supplied. A useful location lead need not wait for a future aspect. A void Moon does not erase the object's current whereabouts.
+H — previous theft allegation. A separating suspect/object contact could relate to a past theft if asked. An applying future contact cannot prove a theft already happened. Do not introduce theft when it was not raised.
+I — two different sign intervals. e10 is Moon–Mars with event.withinCurrentSigns=true; e11 is Moon–Venus with event.withinCurrentSigns=false. If both are selected, candidate_signs is [{"id":"e10","within_current_signs":true},{"id":"e11","within_current_signs":false}]. The second contact occurs after a sign change. Wrong: "both occur before sign changes." The same-condition interpretation of e11 remains unchecked.
+</worked_examples>
+
+<output_fields>basis, candidate_ids, candidate_signs, checks relevant_actors/applying_or_separating/event_order/changing_conditions/coverage_limits, summary, unknowns. Every selected event ID has exactly one candidate_signs entry copied from its native event data. A check result cites current IDs or honestly has no established evidence.</output_fields>

@@ -1,8 +1,7 @@
-//! Source-bound review reference. Test-only: never reads private app data or
-//! invokes a model. Regeneration is explicit; freshness is a normal CI test.
+//! Living review map generated from the actual lesson builder and scheduler.
 #![forbid(unsafe_code)]
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
+use crate::horary_lessons::{self as lessons, Matter, Stage};
+use serde_json::json;
 use std::path::Path;
 
 const OVERVIEW: &str = include_str!("process_overview.md");
@@ -11,9 +10,15 @@ const SOURCES: &[&str] = &[
     "src-tauri/Cargo.toml",
     "src-tauri/Cargo.lock",
     "src-tauri/model-manifest.json",
+    "src-tauri/native-llama-runtime.json",
+    "src-tauri/src/native_llama.rs",
+    "scripts/check-release-assets.mjs",
+    "src-tauri/src/worksheet_xml.rs",
     "src-tauri/src/conversation.rs",
-    "src-tauri/src/conversation_prompt.txt",
-    "src-tauri/src/conversation_method.txt",
+    "src-tauri/src/horary_pipeline.rs",
+    "src-tauri/src/horary_lessons.rs",
+    "src-tauri/src/tool_formats.rs",
+    "src-tauri/src/reading_store.rs",
     "src-tauri/src/reading_method.rs",
     "src-tauri/src/voice.rs",
     "src-tauri/src/local_dictation.rs",
@@ -27,160 +32,191 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/review_progress.rs",
     "crates/horary-ai-core/src/chart_input.rs",
     "crates/horary-ai-core/src/astronomy.rs",
+    "crates/horary-ai-core/src/events.rs",
     "crates/horary-ai-core/src/book_method.rs",
     "src/App.tsx",
+    "src/App.css",
     "src/ReadingDocument.tsx",
     "src-tauri/src/process_overview.md",
     "src-tauri/src/process_reference.rs",
 ];
 
-fn excerpt<'a>(source: &'a str, start: &str, end: &str) -> Result<&'a str, String> {
-    let offset = source
-        .find(start)
-        .ok_or_else(|| format!("Source anchor missing: {start}"))?;
-    let rest = &source[offset..];
-    let length = rest
-        .find(end)
-        .ok_or_else(|| format!("Source anchor missing: {end}"))?;
-    Ok(rest[..length].trim_end())
-}
-
 fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
-    let reference = crate::conversation::process_examples()?;
-    let mut manifest = Vec::new();
-    for path in SOURCES {
-        let bytes = std::fs::read(root.join(path)).map_err(|e| format!("{path}: {e}"))?;
-        manifest.push(json!({"path":path,"sha256":format!("{:x}",Sha256::digest(bytes))}));
+    let examples = crate::horary_pipeline::process_examples()?;
+    let mut paths: Vec<String> = SOURCES.iter().map(|p| (*p).into()).collect();
+    for entry in
+        std::fs::read_dir(root.join("src-tauri/src/horary_prompts")).map_err(|e| e.to_string())?
+    {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.is_file() {
+            paths.push(
+                path.strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .to_string_lossy()
+                    .into(),
+            );
+        }
     }
-    let manifest = json!({"purpose":"Fingerprint of source reviewed by this generated reference; no private data or model output.","sources":manifest});
-    let pretty = |value: &Value| serde_json::to_string_pretty(value).map_err(|e| e.to_string());
-    let mut document = OVERVIEW.to_owned();
-    document.push_str("\n## Exact live prompt material\n\nThese strings are taken from the functions that build the model request. The companion [prompt examples](llm-process/prompt-examples.json) contains complete message arrays and response schemas for unresolved place, device place, direct audio, stated place after clarification, first chart, significators and testimony. Its inputs are synthetic; it is not a record of a model run. [Source extracts](llm-process/runtime-excerpts.md) show how each request is assembled and executed. [Source fingerprints](llm-process/source-manifest.json) make this edition auditable.\n\n### Actual system message\n\n```text\n");
-    document.push_str(
-        reference["systemPrompt"]
-            .as_str()
-            .ok_or("Missing system message")?,
-    );
-    document.push_str("\n```\n\n### Actual direct-audio instruction\n\n`<CURRENT ACTION SCHEMA>` below marks the dynamic schema inserted into this exact instruction by `direct_audio_prompt`. A full concrete example is in the companion JSON.\n\n```text\n");
-    document.push_str(
-        reference["directAudioInstruction"]
-            .as_str()
-            .ok_or("Missing audio instruction")?,
-    );
-    document.push_str("\n```\n\n### Actual optional Gemma transcription instruction\n\nThis is used only by the explicit comparison route, not Auto's fallback.\n\n```text\n");
-    document.push_str(
-        reference["transcriptionPrompt"]
-            .as_str()
-            .ok_or("Missing transcript instruction")?,
-    );
-    document.push_str("\n```\n\n### Actual current-stage instructions\n\nThese are extracted from the native update built for each executable fixture. The schemas beside them in the companion JSON show the permitted actions.\n\n");
-    for (key, label) in [
-        ("place_unresolved", "No place yet"),
-        ("device_place_available", "A usable device place"),
-        (
-            "chart_cast_before_roles",
-            "Chart cast; method stages pending",
-        ),
-    ] {
-        let messages = reference["examples"][key]["messages"]
-            .as_array()
-            .ok_or("Missing fixture messages")?;
-        let content = messages
-            .last()
-            .and_then(|m| m["content"].as_str())
-            .ok_or("Missing native update")?;
-        let instruction = content
-            .split_once("Current step:\n")
-            .ok_or("Missing stage instruction")?
-            .1;
-        document.push_str(&format!("#### {label}\n\n```text\n{instruction}\n```\n\n"));
-    }
-    document.push_str("The exact system/rule catalog above is the model's book guidance. The longer review background is [conversation_method.txt](../src-tauri/src/conversation_method.txt); it is not an additional model message.\n");
-
-    let conversation = std::fs::read_to_string(root.join("src-tauri/src/conversation.rs"))
-        .map_err(|e| e.to_string())?;
-    let mut extracts = String::from("# Exact application source used by the process map\n\nGenerated verbatim from the runtime and renderer. This is source, not a transcript or model reasoning. The [main process map](../LLM_PROCESS.md) supplies the task classifications and review questions.\n\n");
-    for (label, start, end) in [
-        (
-            "Device location and context",
-            "fn device_place(",
-            "fn note(",
-        ),
-        (
-            "State-dependent action schema",
-            "fn schema(",
-            "impl ConversationState",
-        ),
-        (
-            "Time, chart, method validation and stored interpretation",
-            "fn execute(",
-            "/// Keep verified evidence",
-        ),
-        (
-            "Actual prompt assembly",
-            "struct PromptThread",
-            "// A failed inference",
-        ),
-        (
-            "Retry, direct-audio prompt and action parsing",
-            "fn generate_action(",
-            "enum TurnInput",
-        ),
-        (
-            "Complete orchestration loop",
-            "fn run(",
-            "#[tauri::command]\npub fn conversation_snapshot",
-        ),
-        (
-            "Fixed native closing",
-            "fn finish_working_reading(",
-            "fn execute(",
-        ),
-    ] {
-        extracts.push_str(&format!(
-            "## {label}\n\nSource: `src-tauri/src/conversation.rs`.\n\n```rust\n{}\n```\n\n",
-            excerpt(&conversation, start, end)?
+    paths.sort();
+    let manifest = paths
+        .iter()
+        .map(|path| {
+            std::fs::read_to_string(root.join(path))
+                .map(|source| json!({"path":path,"sha256":lessons::digest(&source)}))
+                .map_err(|e| format!("{path}: {e}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let (preamble, review) = OVERVIEW
+        .split_once("## What Eileen should examine")
+        .ok_or("Missing review section")?;
+    let mut document = preamble.to_string();
+    document.push_str("\n## The judgment process\n\n```mermaid\nflowchart TB\n  words[\"Spoken or written question\"]\n  chart[\"N: calculate chart and derive rulers\"]\n  retained_step[\"N: selected prior worksheet and evidence\"]\n");
+    for stage in Stage::ALL {
+        let kind = match stage.kind() {
+            "classification" => "C",
+            "explanation" => "W",
+            _ => "J",
+        };
+        let suffix = match stage {
+            Stage::Place => " / native default",
+            Stage::Moment => " / native default",
+            Stage::Location => " / lost matters only",
+            Stage::Timing => " / currently native unestablished",
+            Stage::Judgment => " + W: answer the question",
+            _ => "",
+        };
+        document.push_str(&format!(
+            "  {}[\"{}: {}{}\"]\n",
+            stage.name(),
+            kind,
+            stage.title(),
+            suffix
+        ));
+        for dependency in stage.dependencies() {
+            document.push_str(&format!("  {dependency} --> {}\n", stage.name()));
+        }
+        let key = lessons::key(stage, Matter::Other);
+        document.push_str(&format!(
+            "  click {} href \"#lesson-{}\" \"Inspect its actual lesson\"\n",
+            stage.name(),
+            key
         ));
     }
-    let renderer =
-        std::fs::read_to_string(root.join("src/ReadingDocument.tsx")).map_err(|e| e.to_string())?;
-    extracts.push_str("## Visible passage versus proposed interpretation\n\nSource: `src/ReadingDocument.tsx`.\n\n```tsx\n");
-    extracts.push_str(
-        &renderer[renderer
-            .find("export function ReadingPassage")
-            .ok_or("Missing renderer anchor")?..],
-    );
-    extracts.push_str("\n```\n");
-    let voice =
-        std::fs::read_to_string(root.join("src-tauri/src/voice.rs")).map_err(|e| e.to_string())?;
-    extracts.push_str(
-        "\n## Actual speech route selection\n\nSource: `src-tauri/src/voice.rs`.\n\n```rust\n",
-    );
-    extracts.push_str(excerpt(
-        &voice,
-        "pub async fn voice_finish(",
-        "// The owned recorder",
-    )?);
-    extracts.push_str("\n```\n");
-    let speech = std::fs::read_to_string(root.join("src-tauri/src/local_dictation.rs"))
-        .map_err(|e| e.to_string())?;
-    extracts.push_str("\n## On-device transcription and its waits\n\nSource: `src-tauri/src/local_dictation.rs`.\n\n```rust\n");
-    extracts.push_str(excerpt(
-        &speech,
-        "fn claim_authorization_request(",
-        "#[cfg(any(target_os = \"macos\", test))]",
-    )?);
-    extracts.push_str("\n```\n");
+    document.push_str("  place --> chart\n  moment --> chart\n  judgment --> document[\"N: unfold the proposed answer, checks and sources\"]\n  explanation --> document\n```\n\nAn unclear matter returns one clarification before any chart. A new matter is archived into a separate leaf before downstream work; the previous conversation is not carried into its prompts. Condition, reception and contact mechanics, plus location when applicable, are submitted as **one native generation batch** with separate prompts and saved prefixes. Contact selection does not need the other worksheets: the final judgment combines those independent findings.\n\n");
+    document.push_str(r#"## Place and moment: independence and genuine dependencies
+
+```mermaid
+flowchart TB
+  intake["Retained question and explicit overrides"] --> placecheck["N: assess place and lookup stated city"]
+  intake --> timecheck["N: assess moment sufficiency"]
+  placecheck --> device{"Usable device place, no override?"}
+  device -->|Yes| place["Selected device coordinates and zone"]
+  device -->|No| geocode["Offline candidates or ask for city"]
+  geocode --> unique{"One resolved candidate?"}
+  unique -->|Yes| place
+  unique -->|No| choose["C: distinguish candidates or clarify"]
+  choose --> place
+  timecheck --> supplied{"Explicit earlier or corrected question moment?"}
+  supplied -->|No| recorded["N: receipt instant or existing chart instant"]
+  supplied -->|Yes| civil["C: parse civil date and time"]
+  place -->|Selected time zone and native local clock| civil
+  civil --> resolve["N: validate civil time, DST gap or overlap"]
+  resolve --> ambiguous{"Needs clarification?"}
+  ambiguous -->|Yes| ask["One combined place / time inquiry"]
+  geocode -->|No useful candidate| ask
+  ambiguous -->|No| moment["Verified instant"]
+  recorded --> moment
+  place --> cast["N: cast after both results"]
+  moment --> cast
+```
+
+Mentioning London or yesterday as the location/time of a lost object does not change the chart place or moment. A city-only clarification preserves the original question. A relative historical time needs the native clock in the **chosen place's** zone, not the model's guessed date. Nonexistent civil times fail; repeated civil times require an occurrence choice.
+
+## The cache and native batch boundary
+
+```mermaid
+flowchart LR
+  fixed["Fixed, task-specific lesson"] --> key["SHA256 lesson key in one live model owner"]
+  key --> hit{"Saved native prefix present?"}
+  hit -->|No| prefill["Prefill fixed system message once"]
+  prefill --> bank["Bounded in-memory saved prefix bank"]
+  hit -->|Yes| bank
+  bank --> verify["Verify exact token prefix and live ownership"]
+  verify --> tasks["1 to 4 independent case prompts"]
+  changing["Changing question, facts and output contract"] --> tasks
+  tasks --> batch["Native generate_batch: distinct KV sequences, one weight copy"]
+  batch --> check["Parse each worksheet, validate its own schema and fact IDs"]
+  check -->|Valid| receipt["Keep original output, checks, source IDs and metrics"]
+  check -->|Invalid| repair["Retain failure; bounded repair of that task only"]
+  repair --> check
+```
+
+The bank contains only fixed teaching messages, not private question inputs or audio. It is bounded to one eighth of physical memory, at most 4 GiB. Eviction, owner restart, changed lesson text, changed model or template can require another prefill; an absolute once-ever guarantee would be false. The ordinary batch API accepts an authenticated saved prefix **per case**. The constrained API has one constraint program for the whole batch and no supplied per-case-prefix field in the current pin. Single text tasks use constrained JSON; independent analysis tasks use ordinary cached batching and native validation. This boundary is visible rather than hidden behind an apparent cache-hit claim.
+
+"#);
+    document.push_str("\n## Stage inventory and reviewable outputs\n\n| Task | Kind | Must have first | Public checks |\n|---|---|---|---|\n");
+    for stage in Stage::ALL {
+        document.push_str(&format!(
+            "| [{}](#lesson-{}) | {} | {} | {} |\n",
+            stage.title(),
+            lessons::key(stage, Matter::Other),
+            stage.kind(),
+            stage.dependencies().join(", "),
+            stage.checks().join(", ")
+        ));
+    }
+    document.push_str("\n## What Eileen should examine");
+    document.push_str(review);
+    document.push_str("\n## Exact live lessons and contracts\n\nThe complete request examples are in [prompt-examples.json](llm-process/prompt-examples.json). They are captured by an authored fixture driving the real scheduler. [Runtime source](llm-process/runtime-excerpts.md) and [source fingerprints](llm-process/source-manifest.json) make the implementation inspectable. Evidence-ID enums in each contract are specific to the current stage's supplied facts. No whole chart or full chat history is inserted into every task.\n\n");
+    let mut guides = Vec::new();
+    for stage in Stage::ALL {
+        let matters: &[Matter] = if stage == Stage::Significators {
+            &[Matter::Relationship, Matter::LostObject, Matter::Other]
+        } else {
+            &[Matter::Other]
+        };
+        for matter in matters {
+            let key = lessons::key(stage, *matter);
+            let guide = lessons::guide(stage, *matter)?;
+            document.push_str(&format!("<a id=\"lesson-{key}\"></a>\n\n### {} · {key}\n\nGuide SHA256: `{}`\n\n<details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>\n\n```text\n{guide}\n```\n\n</details>\n\n",stage.title(),lessons::digest(&guide)));
+            let contract = crate::horary_pipeline::schema_for(stage, *matter, &[]);
+            document.push_str(&format!("<details><summary>Output contract (empty-evidence example)</summary>\n\n```json\n{}\n```\n\n</details>\n\n",serde_json::to_string_pretty(&contract).map_err(|e|e.to_string())?));
+            guides.push(json!({"key":key,"stage":stage,"matter":matter,"guide":guide,"guideSha256":lessons::digest(&guide),"contractWithNoFacts":contract}));
+        }
+    }
+    let mut extracts =
+        String::from("# Actual runtime source\n\nGenerated verbatim; not a model transcript.\n\n");
+    for path in [
+        "src-tauri/src/horary_pipeline.rs",
+        "src-tauri/src/horary_lessons.rs",
+        "src-tauri/src/conversation.rs",
+        "src-tauri/src/native_llama_worker.rs",
+        "src-tauri/src/tool_formats.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(path)).map_err(|e| e.to_string())?;
+        extracts.push_str(&format!("## {path}\n\n```rust\n{source}\n```\n\n"));
+    }
+    let reference = json!({"authorship":"Generated exact live prompts plus explicitly authored scheduler fixture; no model invoked","fixture":examples,"lessons":guides,"bookOcrSha256":lessons::BOOK_OCR_SHA256});
+    let manifest = json!({"purpose":"Source fingerprint; no private app data","sources":manifest});
     Ok(vec![
-        ("docs/LLM_PROCESS.md", document),
+        ("docs/LLM_PROCESS.md", format!("{}\n", document.trim_end())),
         (
             "docs/llm-process/prompt-examples.json",
-            format!("{}\n", pretty(&reference)?),
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&reference).map_err(|e| e.to_string())?
+            ),
         ),
-        ("docs/llm-process/runtime-excerpts.md", extracts),
+        (
+            "docs/llm-process/runtime-excerpts.md",
+            format!("{}\n", extracts.trim_end()),
+        ),
         (
             "docs/llm-process/source-manifest.json",
-            format!("{}\n", pretty(&manifest)?),
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?
+            ),
         ),
     ])
 }
@@ -193,15 +229,15 @@ mod tests {
     }
     #[test]
     fn checked_in_reference_is_current() {
-        for (name, expected) in generate(root()).expect("Generate reference from runtime") {
+        for (name, expected) in generate(root()).expect("Generate actual process reference") {
             let current = std::fs::read_to_string(root().join(name)).unwrap_or_default();
             assert!(current==expected,"{name} is stale. Run cargo test --manifest-path src-tauri/Cargo.toml --locked process_reference::tests::regenerate -- --ignored --nocapture");
         }
     }
     #[test]
-    #[ignore = "Explicitly regenerate the source-bound review reference, without a model or app data."]
+    #[ignore = "Explicitly regenerate the living process reference without a model or app data"]
     fn regenerate() {
-        for (name, contents) in generate(root()).expect("Generate reference from runtime") {
+        for (name, contents) in generate(root()).expect("Generate actual process reference") {
             let path = root().join(name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, contents).unwrap();

@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { ChartWheel } from './ChartWheel'
 
 export type Fact = { id: string; kind: string; label: string; detail: string; planets: string[] }
-export type Rule = { id: string; title: string; explanation: string; pages: string }
+export type Rule = { id: string; title: string; explanation: string; pages: string; quoted?: boolean }
 export type Role = { label: string; house: number | null; planet: string; reason: string }
-export type Section = { title: string; body: string; evidence: string[]; revision: number; after_message?: number; step?: string; rules?: Rule[]; facts?: Fact[]; because?: string; draft?: string; roles?: Role[] }
+export type Section = { title: string; body: string; evidence: string[]; revision: number; after_message?: number; step?: string; method_stage?: string; rules?: Rule[]; facts?: Fact[]; because?: string; draft?: string; roles?: Role[]; worksheet?: { checks?: Record<string, { state: string; finding: string }>; unknowns?: string[] } }
 export type Chart = { timestampMs: number; houses: { longitude: number }[]; bodies: { name: string; longitude: number; retrograde: boolean }[]; aspects?: { planet1: string; planet2: string; aspect: string }[] }
 export type Revision = { number: number; question: string; chart: Chart | null; place: { label: string; timezone: string } | null; sections: Section[] }
 export type Progress = { atMs: number; event: string; detail: string; elapsedMs: number }
@@ -43,12 +43,14 @@ export function ReadingPassage({ section }: { section: Section }) {
   return <section className="document-section" data-step={section.step}>
     <h2>{section.title}</h2>
     {!!section.roles?.length && <div className="roles-thread" aria-label="Who the chart represents">{section.roles.map((role, i) => <p key={i}><span>{role.label}</span><span className="thread-line" /><a href="#reading-chart" title={role.reason}>{role.planet}</a><small>{role.house ? `house ${role.house}` : 'natural role'}</small></p>)}</div>}
-    {section.step && section.step !== 'significators' && !!section.facts?.length && <div className="calculated-testimony" aria-label="Calculated testimony">{section.facts.filter(f => f.kind !== 'boundary').slice(0, 2).map(f => <p key={f.id}>{factText(f.detail)}</p>)}</div>}
     {section.body.split('\n\n').map((p, n) => <p key={n}>{p}</p>)}
     <details className="margin-note"><summary>How this follows</summary>
+      {section.worksheet?.checks && <><h3>The checks behind this passage</h3>{Object.entries(section.worksheet.checks).map(([key, check]) => <p key={key}><em>{key.replaceAll('_', ' ')}:</em> {check.finding}</p>)}</>}
+      {!!section.worksheet?.unknowns?.length && <><h3>What remains uncertain</h3>{section.worksheet.unknowns.map((s,i)=><p key={i}>{s}</p>)}</>}
       {section.facts?.length ? <><h3>In the chart</h3>{section.facts.map(f => <p key={f.id}>{factText(f.detail)}</p>)}</> : <p>The evidence behind this earlier passage was not recorded in this form.</p>}
       {!!section.roles?.length && <><h3>Why these roles</h3>{section.roles.map((r, i) => <p key={i}><em>{r.label}:</em> {r.reason}</p>)}</>}
-      {!!section.rules?.length && <><h3>From the book</h3>{section.rules.map(rule => <div key={rule.id}><p><em>{rule.title}.</em> {rule.explanation}</p><p className="source-note">The Horary Textbook · printed pp. {rule.pages} · editorial paraphrase</p></div>)}</>}
+      {!!section.rules?.length && <><h3>From the book</h3>{section.rules.map(rule => <div key={rule.id}>{rule.quoted ? <blockquote>{rule.explanation}</blockquote> : <p><em>{rule.title}.</em> {rule.explanation}</p>}<p className="source-note">The Horary Textbook · printed pp. {rule.pages} · {rule.quoted ? 'source extract' : 'editorial paraphrase'}</p></div>)}</>}
+      {section.step === 'judgment' && section.worksheet && <p className="source-note">This is a working interpretation to assess against these facts and the book.</p>}
       {section.because && <><h3>A proposed interpretation</h3>{section.draft?.split('\n\n').map((p,i)=><p key={i}>{p}</p>)}<p>{section.because}</p><p className="source-note">A working proposal to assess against the facts above. The cited facts and rule let you assess it; they do not prove it correct.</p></>}
     </details>
   </section>

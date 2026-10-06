@@ -43,6 +43,8 @@ mod ai;
 mod conversation;
 mod geocode;
 mod hf_cache;
+mod horary_lessons;
+mod horary_pipeline;
 mod inference;
 mod llama;
 mod local_dictation;
@@ -54,12 +56,19 @@ mod native_location;
 #[cfg(test)]
 mod process_reference;
 mod reading_method;
+mod reading_store;
 mod review_progress;
 mod storage;
+#[cfg(test)]
+mod tool_formats;
 mod voice;
+#[cfg(test)]
+mod worksheet_xml;
 
 #[cfg(target_os = "macos")]
 const QUIT_MENU_ID: &str = "horary.quit";
+#[cfg(target_os = "macos")]
+const NEW_READING_MENU_ID: &str = "horary.new-reading";
 
 #[derive(Serialize)]
 struct AppInfo {
@@ -463,7 +472,16 @@ fn build_macos_app_menu<R: tauri::Runtime>(
                 app,
                 "File",
                 true,
-                &[&PredefinedMenuItem::close_window(app, None)?],
+                &[
+                    &MenuItem::with_id(
+                        app,
+                        NEW_READING_MENU_ID,
+                        "New Reading",
+                        true,
+                        Some("Cmd+N"),
+                    )?,
+                    &PredefinedMenuItem::close_window(app, None)?,
+                ],
             )?,
             &Submenu::with_items(
                 app,
@@ -521,12 +539,19 @@ pub fn run() {
         .on_menu_event(|app, event| {
             if event.id() == QUIT_MENU_ID {
                 app.exit(0);
+            } else if event.id() == NEW_READING_MENU_ID {
+                if let Err(error) = tauri::Emitter::emit(app, "horary-new-reading", ()) {
+                    log::warn!("Could not open a fresh reading: {error}");
+                }
             }
         });
 
     builder
         .invoke_handler(tauri::generate_handler![
             conversation::conversation_snapshot,
+            conversation::conversation_open,
+            conversation::conversation_fresh,
+            conversation::conversation_reopen,
             conversation::conversation_device_context,
             conversation::conversation_send,
             conversation::conversation_voice,
