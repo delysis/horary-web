@@ -63,7 +63,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "d1f3885cbb99fd615e9d4e900aa6a87126181c41e4a78b830d4665eb5218de6a"
+      "sha256": "a2c91d7a1a0e2daf3e1d030a47de3450ab1b60d8001d0668260cbcd1a5caf66d"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",

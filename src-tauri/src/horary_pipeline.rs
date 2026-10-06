@@ -360,6 +360,11 @@ fn validate_for(stage: Stage, matter: Matter, value: &Value, facts: &[Fact]) -> 
         let signs = value["candidate_signs"]
             .as_array()
             .ok_or("Missing candidate sign checks")?;
+        if (value["basis"] == "direct_candidate" && ids.is_empty())
+            || (value["basis"] == "no_candidate_covered" && !ids.is_empty())
+        {
+            return Err("The contact basis must agree with the supplied candidate IDs.".into());
+        }
         if ids.len() != signs.len() {
             return Err("Check the native sign-change status of each selected candidate.".into());
         }
@@ -1238,6 +1243,14 @@ mod tests {
             .contains("sign-change"));
         worksheet["candidate_signs"][0]["within_current_signs"] = json!(false);
         validate(Stage::Contacts, &worksheet, &facts).unwrap();
+        let valid = worksheet.clone();
+        worksheet["candidate_ids"] = json!([]);
+        worksheet["candidate_signs"] = json!([]);
+        assert!(validate(Stage::Contacts, &worksheet, &facts).is_err());
+        worksheet = valid;
+        worksheet["basis"] = json!("no_candidate_covered");
+        assert!(validate(Stage::Contacts, &worksheet, &facts).is_err());
+        worksheet["basis"] = json!("direct_candidate");
         worksheet["candidate_ids"] = json!([event.id, event.id]);
         worksheet["candidate_signs"] = json!([
             worksheet["candidate_signs"][0].clone(),
