@@ -149,6 +149,42 @@ pub fn reopen(dir: &Path, previous: &Session, id: &str) -> Result<Session, Strin
 mod tests {
     use super::*;
     #[test]
+    fn loading_and_archiving_preserves_recorded_float_bits() {
+        let dir = tempfile::tempdir().unwrap();
+        let expected = [
+            0.9857229285553331_f64,
+            13.855763302433843,
+            216.67872924814046,
+            9.247724793621359,
+        ];
+        let original = Session {
+            chart: Some(serde_json::json!({"samples":expected})),
+            audit: vec![serde_json::json!({"samples":expected})],
+            ..Default::default()
+        };
+        let path = dir.path().join("conversation.json");
+        write(&path, &original, false).unwrap();
+        let loaded = read(&path).unwrap();
+        let fresh = fresh(dir.path(), &loaded, None).unwrap();
+        let archived = read(&saved_path(dir.path(), &fresh.saved_readings[0].id).unwrap()).unwrap();
+        for (index, value) in expected.into_iter().enumerate() {
+            assert_eq!(
+                archived.chart.as_ref().unwrap()["samples"][index]
+                    .as_f64()
+                    .unwrap()
+                    .to_bits(),
+                value.to_bits()
+            );
+            assert_eq!(
+                archived.audit[0]["samples"][index]
+                    .as_f64()
+                    .unwrap()
+                    .to_bits(),
+                value.to_bits()
+            );
+        }
+    }
+    #[test]
     fn fresh_leaf_preserves_full_conversation_and_reopens_it_without_old_scope() {
         let dir = tempfile::tempdir().unwrap();
         let original = Session {

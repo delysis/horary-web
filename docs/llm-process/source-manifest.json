@@ -31,7 +31,7 @@
     },
     {
       "path": "src-tauri/Cargo.toml",
-      "sha256": "58f23dc8fc2a09037f596e1440b842eed4591c4d3942dc892e118b174c091a5a"
+      "sha256": "72eff7fad90a711fbf7e864fc8fca2e33d7c864725752755d3a60feda72c19e5"
     },
     {
       "path": "src-tauri/model-manifest.json",
@@ -167,7 +167,7 @@
     },
     {
       "path": "src-tauri/src/reading_store.rs",
-      "sha256": "f1e50732d600d7d4b912adeaa76829caf7d5b7d591c0ed08687867d51e4ae426"
+      "sha256": "2e87c5fdaadc7b027f8ba76ac442e08c0e40ee70c4b57da6b975c8fca74300a5"
     },
     {
       "path": "src-tauri/src/review_progress.rs",
