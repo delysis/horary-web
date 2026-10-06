@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": ".gitattributes",
-      "sha256": "b5d10a7ae685bed31fe9e7549540dcfb7242906a6f4c3a0a76f5d76356ebf436"
+      "sha256": "59d84a795ba1e5b4181daf058cc484a55185aee8e9fba2725710bbe2acefe62f"
     },
     {
       "path": "crates/horary-ai-core/src/astronomy.rs",
