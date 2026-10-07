@@ -1,5 +1,7 @@
 # How the horary reading is made
 
+For the proposed simpler conversation design, see [A small, book-led horary conversation](ELICITATION_DESIGN.md). That design uses authored question cards and narrow recognition; this page continues to describe the current staged application.
+
 This is the review map for Eileen. The app now uses separate teaching tasks rather than a general prompt asking the model to supply the whole horary method. Each lesson defines its terms, gives numbered checks, contrasts worked examples with mistakes, and includes selected passages from **John Frawley, The Horary Textbook (2005)**. The exact teaching prompts and output contracts appear below.
 
 The method is a working implementation for assessment. Source quotes are checked against the locally supplied OCR; editorial procedures and examples are identified separately. Correctly quoting a rule or producing a valid worksheet does not establish a correct judgment. The deployed model is Gemma 4 12B IT QAT; a 2B model has **not** been qualified.
