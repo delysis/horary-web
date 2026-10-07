@@ -34,6 +34,10 @@
       "sha256": "72eff7fad90a711fbf7e864fc8fca2e33d7c864725752755d3a60feda72c19e5"
     },
     {
+      "path": "src-tauri/Info.plist",
+      "sha256": "691595e34600e60f713e107cd8a1276f7783b638af14cb815fa5a718cf616883"
+    },
+    {
       "path": "src-tauri/model-manifest.json",
       "sha256": "33c9f7a9053ee4464094f919be50ce52df522638628b966839aa289992652a0b"
     },
@@ -150,12 +154,16 @@
       "sha256": "d19c229854dbc70c349fc69adb04be7df3707f6d8f40def36d9b9403b9da7c6b"
     },
     {
+      "path": "src-tauri/src/lib.rs",
+      "sha256": "156532fe63a71107ad9041461311ff6bcbd4d72ae15e1698a9f5944f0d6b3eb1"
+    },
+    {
       "path": "src-tauri/src/local_dictation.rs",
-      "sha256": "9b27f286ca5069294a0fcb6a8833e7bd2fa08edc3cd74f8bb06f7f94f89f4b56"
+      "sha256": "0f889bed5dbfeef4acb7bf12272b54ca664252d7cab86e76215c3c08ccf2a633"
     },
     {
       "path": "src-tauri/src/microphone_capture.rs",
-      "sha256": "229baf208aa2b8d761da8e032e075615beebd062e635bef0314a49fe08cf1a8a"
+      "sha256": "2bbaa9468a1f815c20bc1a660ea4e02068c2a14da86be678759e591e34cc7d48"
     },
     {
       "path": "src-tauri/src/model_manifest.rs",
@@ -175,11 +183,11 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "24334a51ea1f3a2a99784b10fb8d99f1395e00956762ec986e54d9de69b29bf7"
+      "sha256": "29c61f1b7d55b0efc3fd5f5813a3800179f2ee2774d71d479cca7ab2df83e7af"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "81a01fd49555822ee2539bf23f9f0d4ec88373c91f156d2f12d98318716f9510"
+      "sha256": "c4564471d211b28d798a7ccef45a6562e34701f4a85d0f004d12c984a25bd0e3"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -211,7 +219,11 @@
     },
     {
       "path": "src-tauri/src/voice.rs",
-      "sha256": "8005d63693231cf054dbada0ee15b33a17fb6129f92b6428886744dbfe95979c"
+      "sha256": "c30fb2ba3ad7e537ad1daef51dc7684855016ffcc2af7cbd06b3d01b80338bb5"
+    },
+    {
+      "path": "src-tauri/src/wake_listening.rs",
+      "sha256": "09afcc4a41c0636548218e85015b2b2012acf5b29bac4f990b4cf976cba93602"
     },
     {
       "path": "src-tauri/src/worksheet_xml.rs",
@@ -219,15 +231,19 @@
     },
     {
       "path": "src/App.css",
-      "sha256": "6fc769a659e9bb771a92ab5c5f533e49e286aaa1dc63f205f7755a99abdd4c54"
+      "sha256": "2fd1b66295f28ae4914ca21acbaf176207dee5db8c23a25f519ae850cdae613c"
     },
     {
       "path": "src/App.tsx",
-      "sha256": "82d60f7a4e623e86604c70bcdfe4bf7ce43da25e83e9d7ba7f3234a6d73da71c"
+      "sha256": "76a53477ac225296eeabe0501f7a7d93e56acbdaac16622b54ec30e6dfeb2710"
     },
     {
       "path": "src/ReadingDocument.tsx",
-      "sha256": "f18ed2fb17868d0c8943e3272159a54cfd0acf4e0914183333cf12279c1f945e"
+      "sha256": "6ad9f03f3b42457b59eccc874ff72c9754839d76785e70888fbdcb4b2b498316"
+    },
+    {
+      "path": "src/ReadingHistory.tsx",
+      "sha256": "8e51a4642b29baca8dbe9805dabe4400ede0534ce220faa951e5800348cd1233"
     }
   ]
 }

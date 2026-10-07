@@ -30,6 +30,9 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/reading_store.rs",
     "src-tauri/src/reading_method.rs",
     "src-tauri/src/voice.rs",
+    "src-tauri/src/wake_listening.rs",
+    "src-tauri/src/lib.rs",
+    "src-tauri/Info.plist",
     "src-tauri/src/local_dictation.rs",
     "src-tauri/src/microphone_capture.rs",
     "src-tauri/src/native_llama_worker.rs",
@@ -46,6 +49,7 @@ const SOURCES: &[&str] = &[
     "src/App.tsx",
     "src/App.css",
     "src/ReadingDocument.tsx",
+    "src/ReadingHistory.tsx",
     "src-tauri/src/process_overview.md",
     "src-tauri/src/process_reference.rs",
 ];
@@ -85,7 +89,8 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         document.push_str(&format!("  {from} -->|{reason}| {to}\n"));
     }
     document.push_str("```\n\nThese transition labels come from the Rust state catalog. `horary_step.rs` owns the completion permit and durable job journal. `horary_executor.rs` sends both single and batch results through one acceptance path. `horary_contract.rs` validates shapes and domain checks. `horary_role_options.rs` binds named roles, computes turned houses and derives rulers. `horary_pipeline.rs` assembles dependencies and the document. The normal regression suite checks their invariants.\n\nA JSON-shaped response is a proposal. No stage becomes complete until all native checks accept its required data. A request for user information leaves it awaiting input. Rejection returns to the same stage, with the unchanged original input and latest rejected proposal, until accepted data arrives or execution is cancelled/interrupted. There is no two-attempt abandonment. User replies are retained with the waiting stage; a changed input supersedes the old job rather than pretending it completed.\n\nA completion permit is bound to its stage and input fingerprint. Work identity also fingerprints the current native validation code, lesson, contract and chart revision. Saved data is revalidated before reuse. All batch results are recorded before any one case is repaired, so valid siblings survive cancellation. Reloaded unfinished work becomes paused; it is never inferred complete. Original outputs and rejections remain in the private receipts.\n\nFor place/moment explanations, the selected native chart context supplies the actual time, zone and place even before an interpretation exists. The current follow-up words are always included. If an interpretation or passage does not exist, the controller explains that it is unfinished rather than dispatching an actor with empty context or asking the person for chart data. Explicit continue/cast commands preserve the current matter and resume it.\n\n");
-    document.push_str("\n## The judgment process\n\n```mermaid\nflowchart TB\n  words[\"Spoken or written question\"]\n  chart[\"N: calculate chart and derive rulers\"]\n  retained_step[\"N: selected prior worksheet and evidence\"]\n");
+    document.push_str(&format!("\n## Voice turns\n\n```mermaid\nflowchart TB\n  focus{{\"Active window; no speech, work or history\"}} --> wake[\"On-device streaming speech recognition\"]\n  wake --> addressed{{\"Oracle or expected reply?\"}}\n  addressed -->|No| discard[\"Discard ambient hypothesis; renew task after {} ms\"]\n  discard --> wake\n  addressed -->|Yes| words[\"Preserve addressed words; light listening mark\"]\n  words --> pause[\"{} ms of quiet and unchanged words\"]\n  pause --> final{{\"Final native recognition result?\"}}\n  final -->|Yes| receipt[\"Release microphone; one-use receipt\"]\n  final -->|No| fallback[\"Stop; retain manual microphone fallback\"]\n  receipt --> reading[\"Catalogue elicitation and reading\"]\n  reading --> reply[\"Installed voice speaks; await completion\"]\n  reply --> expected[\"{} ms expected-reply window, then Oracle\"]\n  expected --> focus\n  orb[\"Manual microphone mark\"] --> wav[\"Bounded in-memory WAV\"]\n  wav --> route[\"On-device dictation, direct Gemma audio, or transcription comparison\"]\n  route --> receipt\n```\n\nTiming values above are emitted from the native listener's constants. Callback and PCM queues are bounded. Ambient and partial recognition never enter a reading, model prompt, file or log. Wake recognition is macOS-only and requires local language assets and permission. No claim of native recognition accuracy follows from controller tests.\n", crate::wake_listening::RENEW_MS, crate::wake_listening::SILENCE_MS, crate::wake_listening::FOLLOW_UP_MS));
+    document.push_str("\n## The judgment process\n\n```mermaid\nflowchart TB\n  words[\"Spoken question\"]\n  chart[\"N: calculate chart and derive rulers\"]\n  retained_step[\"N: selected prior worksheet and evidence\"]\n");
     for stage in Stage::ALL {
         let kind = match stage.kind() {
             "classification" => "C",

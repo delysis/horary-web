@@ -67,6 +67,7 @@ mod storage;
 #[cfg(test)]
 mod tool_formats;
 mod voice;
+mod wake_listening;
 #[cfg(test)]
 mod worksheet_xml;
 
@@ -524,6 +525,17 @@ pub fn run() {
         .manage(AiGenerationState::default())
         .manage(conversation::ConversationState::default())
         .manage(voice::VoiceState::default())
+        .on_window_event(|window, event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Destroyed
+            ) {
+                let app = window.app_handle().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    app.state::<voice::VoiceState>().stop_wake()
+                });
+            }
+        })
         .manage(GeocodeState::default())
         .manage(CurrentLocationDetectionState::default())
         .setup(|app| {
@@ -566,6 +578,8 @@ pub fn run() {
             voice::voice_cancel,
             voice::voice_speak,
             voice::voice_stop_speaking,
+            voice::voice_listen,
+            voice::voice_listen_finish,
             review_export::export_review,
             get_app_info,
             save_chart,

@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Horary listens when you hold Space or the invitation to speak. Your recording stays on this computer.</string>
+  <string>Horary listens for “Oracle” while its window is active, and hears your replies as you speak. Your audio stays on this computer.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>Horary can turn your words into writing using speech recognition on this computer.</string>
   <key>NSLocationUsageDescription</key>

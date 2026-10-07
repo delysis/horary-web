@@ -49,7 +49,7 @@ it('keeps calculation, source rule and inference distinct in a passage margin', 
       because: 'The first house belongs to the person asking.', roles: [{ label: 'You', house: 1, planet: 'Sun', reason: 'You are asking about yourself.' }],
     } })))
     expect(element.querySelector('details')?.open).toBe(false)
-    expect(element.textContent).toContain('In the chart')
+    expect(element.textContent).toContain('Chart')
     expect(element.textContent).toContain('printed pp. 15–38 · editorial paraphrase')
     expect(element.textContent).toContain('they do not prove it correct')
   } finally { await act(async () => root.unmount()); element.remove() }

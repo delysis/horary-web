@@ -59,6 +59,7 @@ pub(crate) enum MicrophoneCaptureError {
 enum Command {
     Start {
         id: String,
+        observer: Option<Sender<Vec<f32>>>,
         reply: Sender<Result<(), MicrophoneCaptureError>>,
     },
     Stop {
@@ -86,6 +87,8 @@ struct Active {
     stream_error: Arc<Mutex<Option<String>>>,
     resampler: Resampler,
     samples: Vec<f32>,
+    observer: Option<Sender<Vec<f32>>>,
+    streaming: bool,
     too_long: bool,
 }
 
@@ -126,10 +129,33 @@ impl NativeMicrophoneCapture {
         self.ensure_initialized()?;
         let (tx, rx) = bounded(1);
         self.command_tx
-            .try_send(Command::Start { id, reply: tx })
+            .try_send(Command::Start {
+                id,
+                observer: None,
+                reply: tx,
+            })
             .map_err(controller)?;
         rx.recv()
             .map_err(|_| MicrophoneCaptureError::OwnerStopped)?
+    }
+
+    /// A bounded, resampled live feed. Streaming samples are never retained in
+    /// the recorder; the caller owns cancellation and recognition lifetime.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn stream(&self, id: String) -> Result<Receiver<Vec<f32>>, MicrophoneCaptureError> {
+        self.ensure_initialized()?;
+        let (observer, audio) = bounded(QUEUE_CAPACITY);
+        let (tx, rx) = bounded(1);
+        self.command_tx
+            .try_send(Command::Start {
+                id,
+                observer: Some(observer),
+                reply: tx,
+            })
+            .map_err(controller)?;
+        rx.recv()
+            .map_err(|_| MicrophoneCaptureError::OwnerStopped)??;
+        Ok(audio)
     }
 
     pub(crate) fn stop(&self, id: String) -> Result<Vec<u8>, MicrophoneCaptureError> {
@@ -187,7 +213,11 @@ fn owner_loop(commands: &Receiver<Command>) {
     loop {
         let Some(capture) = active.as_mut() else {
             match commands.recv() {
-                Ok(Command::Start { id, reply }) => match begin(id) {
+                Ok(Command::Start {
+                    id,
+                    observer,
+                    reply,
+                }) => match begin(id, observer) {
                     Ok(capture) => {
                         active = Some(capture);
                         let _ = reply.send(Ok(()));
@@ -225,7 +255,8 @@ fn owner_loop(commands: &Receiver<Command>) {
                 Ok(Command::Shutdown { reply }) => { drop(active.take()); let _ = reply.send(()); return; }
                 Err(_) => return,
             },
-            recv(capture.audio_rx) -> chunk => if let Ok(chunk) = chunk { capture.push(chunk); }
+            recv(capture.audio_rx) -> chunk => if let Ok(chunk) = chunk { capture.push(chunk); },
+            default(Duration::from_millis(30)) => capture.check_stream()
         }
     }
 }
@@ -234,17 +265,46 @@ impl Active {
     fn push(&mut self, mut chunk: Chunk) {
         if !self.too_long {
             self.resampler.push(&chunk.0, &mut self.samples);
-            if self.samples.len() > MAX_SAMPLES {
+            if self.streaming {
+                forward_samples(&mut self.observer, &mut self.samples, &self.overflowed);
+            } else if self.samples.len() > MAX_SAMPLES {
                 self.samples.truncate(MAX_SAMPLES);
                 self.too_long = true;
             }
         }
         chunk.0.clear();
         let _ = self.free_tx.try_send(chunk.0);
+        self.check_stream();
+    }
+    fn check_stream(&mut self) {
+        if self.overflowed.load(Ordering::Acquire)
+            || self
+                .stream_error
+                .lock()
+                .map_or(true, |error| error.is_some())
+        {
+            self.observer.take();
+        }
     }
 }
 
-fn begin(id: String) -> Result<Active, MicrophoneCaptureError> {
+fn forward_samples(
+    observer: &mut Option<Sender<Vec<f32>>>,
+    samples: &mut Vec<f32>,
+    overflowed: &AtomicBool,
+) {
+    if let Some(sender) = observer {
+        if sender.try_send(std::mem::take(samples)).is_err() {
+            // A slow consumer must fail rather than silently lose words.
+            // Closing the feed wakes the recognition worker.
+            overflowed.store(true, Ordering::Release);
+            observer.take();
+        }
+    }
+    samples.clear();
+}
+
+fn begin(id: String, observer: Option<Sender<Vec<f32>>>) -> Result<Active, MicrophoneCaptureError> {
     let device = cpal::default_host()
         .default_input_device()
         .ok_or(MicrophoneCaptureError::NoInputDevice)?;
@@ -288,7 +348,13 @@ fn begin(id: String) -> Result<Active, MicrophoneCaptureError> {
         overflowed,
         stream_error,
         resampler: Resampler::new(source_rate, OUTPUT_RATE),
-        samples: Vec::with_capacity(OUTPUT_RATE as usize * 30),
+        samples: Vec::with_capacity(if observer.is_some() {
+            OUTPUT_RATE as usize / 4
+        } else {
+            OUTPUT_RATE as usize * 30
+        }),
+        streaming: observer.is_some(),
+        observer,
         too_long: false,
     };
     let first = capture
@@ -545,5 +611,22 @@ mod tests {
         assert_eq!(rx.recv().expect("chunk").0, vec![0.0, 0.5]);
         capture_callback(&[0.25_f32, 0.75], 2, &tx, &free_rx, &overflow);
         assert!(overflow.load(Ordering::Acquire));
+    }
+    #[test]
+    fn streaming_never_retains_samples_and_closes_the_feed_on_overflow() {
+        let (sender, receiver) = bounded(1);
+        let mut observer = Some(sender);
+        let overflow = AtomicBool::new(false);
+        let mut samples = vec![0.25, -0.5];
+        forward_samples(&mut observer, &mut samples, &overflow);
+        assert!(samples.is_empty());
+        assert!(!overflow.load(Ordering::Acquire));
+        samples.extend([0.75]);
+        forward_samples(&mut observer, &mut samples, &overflow);
+        assert!(overflow.load(Ordering::Acquire));
+        assert!(observer.is_none());
+        assert!(samples.is_empty());
+        assert_eq!(receiver.recv().unwrap(), [0.25, -0.5]);
+        assert!(receiver.recv().is_err());
     }
 }

@@ -46,11 +46,35 @@ A completion permit is bound to its stage and input fingerprint. Work identity a
 For place/moment explanations, the selected native chart context supplies the actual time, zone and place even before an interpretation exists. The current follow-up words are always included. If an interpretation or passage does not exist, the controller explains that it is unfinished rather than dispatching an actor with empty context or asking the person for chart data. Explicit continue/cast commands preserve the current matter and resume it.
 
 
+## Voice turns
+
+```mermaid
+flowchart TB
+  focus{"Active window; no speech, work or history"} --> wake["On-device streaming speech recognition"]
+  wake --> addressed{"Oracle or expected reply?"}
+  addressed -->|No| discard["Discard ambient hypothesis; renew task after 45000 ms"]
+  discard --> wake
+  addressed -->|Yes| words["Preserve addressed words; light listening mark"]
+  words --> pause["1400 ms of quiet and unchanged words"]
+  pause --> final{"Final native recognition result?"}
+  final -->|Yes| receipt["Release microphone; one-use receipt"]
+  final -->|No| fallback["Stop; retain manual microphone fallback"]
+  receipt --> reading["Catalogue elicitation and reading"]
+  reading --> reply["Installed voice speaks; await completion"]
+  reply --> expected["20000 ms expected-reply window, then Oracle"]
+  expected --> focus
+  orb["Manual microphone mark"] --> wav["Bounded in-memory WAV"]
+  wav --> route["On-device dictation, direct Gemma audio, or transcription comparison"]
+  route --> receipt
+```
+
+Timing values above are emitted from the native listener's constants. Callback and PCM queues are bounded. Ambient and partial recognition never enter a reading, model prompt, file or log. Wake recognition is macOS-only and requires local language assets and permission. No claim of native recognition accuracy follows from controller tests.
+
 ## The judgment process
 
 ```mermaid
 flowchart TB
-  words["Spoken or written question"]
+  words["Spoken question"]
   chart["N: calculate chart and derive rulers"]
   retained_step["N: selected prior worksheet and evidence"]
   intake["C: The actual question"]
@@ -179,7 +203,7 @@ The bank contains only fixed teaching messages, not private question inputs or a
 4. Is an applying contact relevant to the selected actors? What changes or intervenes before it? Does the calculation actually establish a claimed translation, collection, or prevention?
 5. Does the final passage answer the original question in context? What supports it, what opposes it, and what remains unknown? An uncertain answer should still explain what the testimony means for the person.
 
-The main document carries the proposed interpretation. Chart facts, source extracts and structured checks remain inspectable in its margins. Detailed input, original output, validation and timing receipts are behind **In the margins → Processing details**. These are local records.
+The main document carries the proposed interpretation and keeps spoken words as read-only passages; corrections are conversational. There is no text entry. Chart facts, source extracts and structured checks remain inspectable in “Evidence.” The upper-right history icon opens saved readings and a plus icon for a new leaf. Detailed input, original output, validation and timing receipts are behind **History → Receipts → Processing**. Native macOS wake listening hears “Oracle” or an expected reply, stops after a pause, and waits for final words. It suspends for speech, inference, history and inactive windows. The luminous “?” remains a manual microphone fallback and pauses an in-progress reply. Space/Option–Space are not global speech shortcuts. These are local records.
 
 Every accepted control request stays attached to its unfinished step. A model proposal becomes data only through the shared native acceptance path. Repeated repairs and user clarification continue until the required data arrives; cancellation/backend interruption pauses that work. Neither an existing chart nor an error message means that an interpretation is finished.
 

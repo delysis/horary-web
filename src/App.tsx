@@ -3,34 +3,51 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { ReadingChart, ReadingPassage } from './ReadingDocument'
 import type { Chart, Fact, Progress, Revision, Section } from './ReadingDocument'
+import { ReadingHistory } from './ReadingHistory'
+import type { MethodRecord, SavedReading } from './ReadingHistory'
 import './App.css'
 
 type Message = { role: string; text: string }
-type Session = { readingId?: string; savedReadings?: { id: string; title: string; savedAtMs: number }[]; method?: { records: { stage: string; guideSha256: string; validationError?: string | null; generation: Record<string, unknown>; input: unknown; raw: string; worksheet: unknown }[] }; audit?: unknown[]; messages: Message[]; question: string; chart: Chart | null; chartAfterMessage?: number; snapshotId?: number; place: { label: string; timezone: string } | null; sections: Section[]; revisions?: Revision[]; facts?: Fact[]; progress?: Progress[]; revision: number; status: string; busy: boolean }
+type Session = { readingId?: string; savedReadings?: SavedReading[]; method?: { records: MethodRecord[] }; audit?: unknown[]; messages: Message[]; question: string; chart: Chart | null; chartAfterMessage?: number; snapshotId?: number; place: { label: string; timezone: string } | null; sections: Section[]; revisions?: Revision[]; facts?: Fact[]; progress?: Progress[]; revision: number; status: string; busy: boolean }
+type Heard = { generation: number; state: 'waiting' | 'listening' | 'heard' | 'unavailable'; id?: number }
 const EMPTY: Session = { messages: [], question: '', chart: null, place: null, sections: [], revision: 0, status: '', busy: false }
+const OPENING = 'What would you like to know?'
 const native = () => '__TAURI_INTERNALS__' in window
 
 export default function App() {
   const [session, setSession] = useState<Session>(EMPTY)
-  const [draft, setDraft] = useState('')
+  const [ready, setReady] = useState(false)
   const [pending, setPending] = useState(false)
   const [recording, setRecording] = useState(false)
+  const [openingMic, setOpeningMic] = useState(false)
+  const [manual, setManual] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
+  const [foreground, setForeground] = useState(true)
+  const [wakeState, setWakeState] = useState<'off' | 'opening' | 'waiting' | 'listening'>('off')
+  const [wakeUnavailable, setWakeUnavailable] = useState(false)
+  const [voicePaused, setVoicePaused] = useState(false)
+  const [wakeRegistered, setWakeRegistered] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [dark, setDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false)
-  const input = useRef<HTMLTextAreaElement>(null)
   const page = useRef<HTMLElement>(null)
   const tail = useRef<HTMLDivElement>(null)
+  const historyTrigger = useRef<HTMLButtonElement>(null)
   const turn = useRef(0)
-  const hold = useRef(false)
+  const wakeGeneration = useRef(0)
+  const followUp = useRef(false)
+  const canHear = useRef(true)
+  const heard = useRef<(update: Heard) => void>(() => {})
   const capture = useRef(false)
   const starting = useRef(false)
   const abandonCapture = useRef(false)
   const busyRef = useRef(false)
   const mounted = useRef(true)
-  const submitted = useRef('')
   const acceptedSnapshot = useRef(0)
   const contextReady = useRef<Promise<void> | null>(null)
   const newLeaf = useRef<() => void>(() => {})
+  const opening = useRef<Promise<Session> | null>(null)
+  const speechTurn = useRef(0)
   const busy = pending || session.busy
   const accept = useCallback((s: Session) => {
     if (!mounted.current) return
@@ -38,41 +55,83 @@ export default function App() {
     if (sequence < acceptedSnapshot.current) return
     acceptedSnapshot.current = sequence
     setSession(s)
-    if (submitted.current && s.messages.some(m => m.role === 'user' && m.text === submitted.current)) {
-      const kept = submitted.current; submitted.current = ''
-      setDraft(current => current === kept ? '' : current)
-    }
   }, [])
+  async function quiet() { if (native()) await invoke('voice_stop_speaking').catch(() => {}) }
+  async function say(text: string) {
+    if (!native() || !mounted.current) return
+    const spokenTurn = ++speechTurn.current
+    setSpeaking(true)
+    try { await invoke('voice_speak', { text }) }
+    catch { /* The written reading remains available if an installed voice is absent. */ }
+    finally { if (mounted.current && spokenTurn === speechTurn.current) setSpeaking(false) }
+  }
   useEffect(() => {
     mounted.current = true
+    let live = true
     page.current?.focus()
     const theme = window.matchMedia?.('(prefers-color-scheme: dark)')
     const change = (e: MediaQueryListEvent) => setDark(e.matches)
     theme?.addEventListener?.('change', change)
-    if (native()) void invoke<Session>('conversation_open').then(accept).catch(() => setNotice('I couldn’t open a fresh leaf. Our earlier conversation has been left untouched.'))
-    return () => { mounted.current = false; theme?.removeEventListener?.('change', change) }
+    if (native()) void (async () => {
+      try {
+        opening.current ??= invoke<Session>('conversation_open')
+        const next = await opening.current
+        if (!live) return
+        accept(next)
+        if (!next.messages.length && !next.sections.length) { await say(OPENING); followUp.current = true }
+        if (live) setReady(true)
+      } catch { if (live) setNotice('I couldn’t open a fresh leaf. Our earlier conversation has been left untouched.') }
+    })()
+    return () => { live = false; mounted.current = false; theme?.removeEventListener?.('change', change) }
   }, [accept])
   useEffect(() => {
     if (!busy || !native()) return
-    const timer = window.setInterval(() => { void invoke<Session>('conversation_snapshot').then(accept).catch(() => {}) }, 700)
+    const attempt = turn.current
+    const timer = window.setInterval(() => { void invoke<Session>('conversation_snapshot').then(s => { if (attempt === turn.current) accept(s) }).catch(() => {}) }, 700)
     return () => window.clearInterval(timer)
   }, [busy, accept])
   useEffect(() => {
     const nearEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240
     if (nearEnd) tail.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' })
   }, [session.messages.length, session.sections.length])
-  async function quiet() { if (native()) await invoke('voice_stop_speaking').catch(() => {}) }
+  async function stopWake() {
+    const generation = ++wakeGeneration.current
+    if (native()) await invoke('voice_listen', { generation, enabled: false, followUp: false }).catch(() => {})
+  }
+  useEffect(() => {
+    if (!native()) return
+    let disposed = false
+    let stop: (() => void) | undefined
+    void listen<Heard>('horary-voice', event => heard.current(event.payload)).then(unlisten => {
+      if (disposed) unlisten()
+      else { stop = unlisten; setWakeRegistered(true) }
+    }).catch(() => setWakeUnavailable(true))
+    return () => { disposed = true; stop?.() }
+  }, [])
+  useEffect(() => {
+    if (!native() || !wakeRegistered) return
+    if (!ready || busy || speaking || manual || historyOpen || !foreground || voicePaused || wakeUnavailable) { setWakeState('off'); return }
+    const generation = ++wakeGeneration.current
+    setWakeState('opening')
+    void invoke('voice_listen', { generation, enabled: true, followUp: followUp.current }).catch(() => {
+      if (mounted.current && generation === wakeGeneration.current) { setWakeUnavailable(true); setWakeState('off') }
+    })
+    followUp.current = false
+    return () => { void stopWake() }
+  }, [ready, busy, speaking, manual, historyOpen, foreground, voicePaused, wakeUnavailable, wakeRegistered])
   const scope = () => session.readingId ? { readingId: session.readingId } : {}
   async function openLeaf(id?: string) {
-    if (!native() || busyRef.current || session.busy || recording || capture.current || starting.current) return
+    if (!native() || busyRef.current || session.busy || capture.current || starting.current || wakeState === 'listening') return
     const attempt = ++turn.current
     busyRef.current = true; setPending(true); setNotice('')
     try {
-      await quiet()
+      await stopWake(); await quiet()
       const next = await invoke<Session>(id ? 'conversation_reopen' : 'conversation_fresh', id ? { id } : {})
       if (!mounted.current || attempt !== turn.current) return
-      contextReady.current = null; submitted.current = ''; accept(next)
+      contextReady.current = null; accept(next)
+      setHistoryOpen(false); setVoicePaused(false)
       page.current?.focus(); window.scrollTo?.({ top: 0, behavior: 'smooth' })
+      if (!id) { await say(OPENING); followUp.current = true }
     } catch { if (attempt === turn.current) setNotice('I couldn’t open that leaf. This reading is still here.') }
     finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
   }
@@ -92,93 +151,95 @@ export default function App() {
     if (!contextReady.current) contextReady.current = (async () => {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
       let location: { latitude: number; longitude: number; accuracyMeters?: number } | undefined
-      if (!session.place && !session.chart) {
-        location = await invoke<typeof location>('get_current_location', { req: { timeoutMs: 6000 } }).catch(() => undefined)
-      }
+      if (!session.place && !session.chart) location = await invoke<typeof location>('get_current_location', { req: { timeoutMs: 6000 } }).catch(() => undefined)
       await invoke('conversation_device_context', { ...scope(), context: { timezone, locale: navigator.language, latitude: location?.latitude ?? null, longitude: location?.longitude ?? null, accuracyMeters: location?.accuracyMeters ?? null } }).catch(() => {})
     })()
     await contextReady.current
   }
-  async function deliver(text: string, aloud: boolean, id: number) {
-    await prepareContext()
-    if (id !== turn.current) return
-    submitted.current = text
-    const next = await invoke<Session>('conversation_send', { text, ...scope() })
-    if (!mounted.current || id !== turn.current) return
-    accept(next); setDraft(current => current === text ? '' : current)
-    const reply = next.messages.at(-1)
-    const spoken = reply?.role === 'assistant' ? reply.text : next.sections.slice().reverse().find(s => s.step === 'judgment')?.body
-    if (aloud && spoken) await invoke('voice_speak', { text: spoken }).catch(() => {})
-  }
-  async function send(text = draft) {
-    if (!text.trim() || busyRef.current || session.busy) return
-    if (!native()) { setNotice('This page is a sketch. Our conversation comes alive in the desktop app.'); return }
-    const id = ++turn.current
-    busyRef.current = true; setPending(true); setNotice('')
-    try { await quiet(); await deliver(text, false, id) }
-    catch { setNotice('Something interrupted us. Your words are still here.'); setDraft(current => current || text) }
-    finally { if (id === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
-  }
   const pause = useCallback(async () => {
     abandonCapture.current = true
-    ++turn.current; hold.current = false
-    await quiet()
-    if (capture.current) { capture.current = false; setRecording(false); await invoke('voice_cancel').catch(() => {}) }
-    if (busyRef.current || session.busy) { await invoke('conversation_cancel').catch(() => {}); busyRef.current = false; setPending(false); setNotice('We can pause here.') }
+    ++turn.current
+    setVoicePaused(true); setWakeState('off')
+    await stopWake(); await quiet()
+    if (capture.current) { capture.current = false; setRecording(false); setManual(false); await invoke('voice_cancel').catch(() => {}) }
+    if (busyRef.current || session.busy) { await invoke('conversation_cancel').catch(() => {}); busyRef.current = false; setPending(false) }
+    setNotice('')
   }, [session.busy])
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); void pause() } }
-    const blur = () => { if (capture.current || starting.current) void pause() }
-    window.addEventListener('keydown', key); window.addEventListener('blur', blur)
-    return () => { window.removeEventListener('keydown', key); window.removeEventListener('blur', blur) }
-  }, [pause])
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && !historyOpen) { e.preventDefault(); void pause() } }
+    const leave = () => {
+      canHear.current = false; setForeground(false)
+      abandonCapture.current = true
+      if (capture.current) { capture.current = false; setRecording(false); setManual(false); void invoke('voice_cancel').catch(() => {}) }
+    }
+    const focus = () => { if (!document.hidden) { canHear.current = true; setForeground(true) } }
+    const visibility = () => { if (document.hidden) leave(); else focus() }
+    window.addEventListener('keydown', key); window.addEventListener('blur', leave); window.addEventListener('focus', focus); document.addEventListener('visibilitychange', visibility)
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('blur', leave); window.removeEventListener('focus', focus); document.removeEventListener('visibilitychange', visibility) }
+  }, [pause, historyOpen])
+  async function deliverVoice(id: number, attempt: number) {
+    await prepareContext()
+    if (attempt !== turn.current) return
+    const next = await invoke<Session>('conversation_voice', { id, ...scope() })
+    if (!mounted.current || attempt !== turn.current) return
+    accept(next); setWakeUnavailable(false)
+    const reply = next.messages.at(-1)
+    const spoken = reply?.role === 'assistant' ? reply.text : next.sections.slice().reverse().find(s => s.step === 'judgment')?.body
+    if (spoken) { await say(spoken); if (attempt === turn.current) followUp.current = true }
+  }
+  async function consumeHeard(id: number) {
+    if (busyRef.current || session.busy || !canHear.current || historyOpen || capture.current || starting.current) return
+    const attempt = ++turn.current
+    busyRef.current = true; setPending(true); setNotice(''); setWakeState('off')
+    try { await deliverVoice(id, attempt) }
+    catch { if (attempt === turn.current) { setVoicePaused(true); setNotice('Something interrupted the reading. Your earlier words are still here.'); await say('Something interrupted the reading. Shall we try again?') } }
+    finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
+  }
+  useEffect(() => {
+    heard.current = update => {
+      if (!mounted.current || update.generation !== wakeGeneration.current || !canHear.current || busyRef.current || historyOpen) return
+      if (update.state === 'unavailable') { setWakeUnavailable(true); setWakeState('off') }
+      else if (update.state === 'heard' && update.id !== undefined) void consumeHeard(update.id)
+      else if (update.state === 'waiting' || update.state === 'listening') setWakeState(update.state)
+    }
+  })
   async function finishSpeaking() {
-    hold.current = false
     if (!capture.current) return
     capture.current = false; setRecording(false)
-    const id = ++turn.current
+    const attempt = ++turn.current
     busyRef.current = true; setPending(true); setNotice('')
     try {
       const voice = await invoke<{ id: number; text: string | null }>('voice_finish')
-      if (id !== turn.current) return
-      if (voice.text) setDraft(current => current || voice.text || '')
-      await prepareContext()
-      if (id !== turn.current) return
-      submitted.current = voice.text || ''
-      const next = await invoke<Session>('conversation_voice', { id: voice.id, ...scope() })
-      if (!mounted.current || id !== turn.current) return
-      accept(next)
-      const reply = next.messages.at(-1)
-      const spoken = reply?.role === 'assistant' ? reply.text : next.sections.slice().reverse().find(s => s.step === 'judgment')?.body
-      if (spoken) await invoke('voice_speak', { text: spoken }).catch(() => {})
-    } catch { if (id === turn.current) setNotice('I didn’t quite catch that. Try once more, or write it here.') }
-    finally { if (id === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
+      if (attempt !== turn.current) return
+      await deliverVoice(voice.id, attempt)
+    } catch { if (attempt === turn.current) { setVoicePaused(true); setNotice('I didn’t quite catch that.'); await say('I didn’t quite catch that.') } }
+    finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) { setPending(false); setManual(false) } } }
   }
   async function beginSpeaking() {
     if (busyRef.current || session.busy || starting.current || capture.current) return
-    if (!native()) { setNotice('This page is a sketch. Our conversation comes alive in the desktop app.'); return }
-    hold.current = true; starting.current = true; abandonCapture.current = false; setNotice('')
+    if (!native()) { setNotice('Voice is available in the desktop app.'); return }
+    starting.current = true; abandonCapture.current = false; setManual(true); setOpeningMic(true); setNotice('')
     try {
-      await quiet(); await invoke('voice_start')
+      await stopWake(); await quiet()
+      if (abandonCapture.current || !mounted.current) return
+      await invoke('voice_start')
       if (abandonCapture.current || !mounted.current) { await invoke('voice_cancel').catch(() => {}); return }
-      capture.current = true; setRecording(true)
-      if (!hold.current) await finishSpeaking()
-    } catch { setNotice('I can’t hear you yet. You can write here, too.') }
-    finally { starting.current = false }
+      capture.current = true; setRecording(true); setVoicePaused(false)
+    } catch { if (mounted.current && !abandonCapture.current) { setNotice('I can’t hear you yet.'); await say('I can’t hear you yet.') } }
+    finally { starting.current = false; if (mounted.current) { setOpeningMic(false); if (!capture.current) setManual(false) } }
   }
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat || e.code !== 'Space' || e.metaKey || e.ctrlKey) return
-      const editing = e.target instanceof Element && !!e.target.closest('textarea,input,select,[contenteditable="true"]')
-      if (editing && !e.altKey) return
-      e.preventDefault(); void beginSpeaking()
-    }
-    const up = (e: KeyboardEvent) => {
-      if (!e.defaultPrevented && e.code === 'Space' && hold.current) { e.preventDefault(); void finishSpeaking() }
-    }
-    window.addEventListener('keydown', down); window.addEventListener('keyup', up)
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
-  })
+  function toggleSpeaking() {
+    if (starting.current || busyRef.current || session.busy || speaking) void pause()
+    else if (capture.current) void finishSpeaking()
+    else if (wakeState === 'listening') void invoke('voice_listen_finish', { generation: wakeGeneration.current }).catch(() => {})
+    else void beginSpeaking()
+  }
+  const closeHistory = useCallback(() => { setHistoryOpen(false); historyTrigger.current?.focus() }, [])
+  async function showHistory() {
+    if (capture.current || starting.current || wakeState === 'listening') await pause()
+    else await stopWake()
+    setHistoryOpen(true)
+  }
   useEffect(() => {
     if (!recording) return
     const timer = window.setTimeout(() => { void finishSpeaking() }, 120000)
@@ -186,34 +247,28 @@ export default function App() {
     // Native capture bounds its storage independently of the page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recording])
-  useEffect(() => () => { if (capture.current && native()) void invoke('voice_cancel').catch(() => {}) }, [])
+  useEffect(() => () => { abandonCapture.current = true; ++turn.current; void stopWake(); void quiet(); if (capture.current && native()) void invoke('voice_cancel').catch(() => {}) }, [])
   function material(after: number) {
     return <>{session.chart && (session.chartAfterMessage || 1) === after && <ReadingChart key={`chart-${session.revision}`} chart={session.chart} place={session.place} dark={dark} facts={session.facts} />}{session.sections.filter(s => (s.after_message || 1) === after).map(section => <ReadingPassage key={`${section.revision}-${section.method_stage || section.title}`} section={section} />)}</>
   }
-  return <main ref={page} className="unfolding-page" data-listening={recording} data-thinking={busy} tabIndex={0} aria-label="Your unfolding reading">
-    <article className="living-document">
-      <p className="opening-question">What would you like to know?</p>
-      <div className="document-conversation" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions text">
-        {session.messages.map((message, i) => <Fragment key={i}><div className={`passage ${message.role}`}>
-          {message.role === 'user' ? <p contentEditable={!busy} suppressContentEditableWarning role="textbox" aria-label="Your earlier words, editable" onBlur={e => {
-            const correction = e.currentTarget.textContent?.trim()
-            e.currentTarget.textContent = message.text
-            if (correction && correction !== message.text) { setDraft(`A correction to “${message.text}”: ${correction}`); input.current?.focus() }
-          }}>{message.text}</p> : message.text.split('\n\n').map((p, n) => <p key={n}>{p}</p>)}
-        </div>{material(i + 1)}</Fragment>)}
-      </div>
-      <div className="document-present">
-        {busy && <p className="passing-thought" role="status"><span className="ink-wisp" aria-hidden="true" />{session.status || 'A little quiet, while the thread finds its way.'}</p>}
-        {notice && <p className="gentle-notice" role="status">{notice}</p>}
-        {!busy && <p className={`voice-invitation ${recording ? 'listening' : ''}`} tabIndex={0} aria-label="Hold to speak; release to finish" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); void beginSpeaking() }} onPointerUp={() => void finishSpeaking()} onPointerCancel={() => void pause()} onKeyDown={e => { if ((e.code === 'Space' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); void beginSpeaking() } }} onKeyUp={e => { if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); void finishSpeaking() } }}>{recording ? 'I’m listening…' : session.messages.length ? 'There’s more room here. Hold Space to speak.' : 'Hold Space to speak. Or write below.'}</p>}
-        <textarea ref={input} className="document-answer" aria-label="Your next words" placeholder={busy ? 'A thought to return to…' : '…'} value={draft} rows={2} maxLength={8000} disabled={recording} onChange={e => { setDraft(e.target.value); e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px` }} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send() } }} />
-        <p className="page-instruction">{busy ? 'Esc to pause.' : draft.trim() ? 'Return to continue. Option–Space to speak while writing.' : session.messages.length ? 'Your earlier words can be changed. Nothing is lost.' : 'Return to continue. Or hold the words above to speak.'}</p>
-      </div>
-      {!!session.revisions?.length && <details className="earlier-leaves"><summary>Earlier leaves</summary>{session.revisions.map((r, i) => <article key={i}><p className="source-note">Reading {r.number}</p><h2>{r.question}</h2>{r.sections.map((s, n) => <ReadingPassage key={n} section={s} />)}<p className="source-note">To return, ask “Bring back reading {r.number}.”</p></article>)}</details>}
-      {(!!session.messages.length || !!session.savedReadings?.length) && <p className="source-note"><a href="#fresh-leaf" aria-disabled={busy} onClick={e => { e.preventDefault(); void openLeaf() }}>Begin a fresh reading</a></p>}
-      {!!session.savedReadings?.length && <details className="earlier-leaves"><summary>Our earlier readings</summary>{session.savedReadings.map(r => <p key={r.id}><a href={`#reading-${r.id}`} onClick={e => { e.preventDefault(); void openLeaf(r.id) }}>{r.title}</a> <small>{new Date(r.savedAtMs).toLocaleDateString()}</small></p>)}</details>}
-      {!!session.audit?.length && <details className="reading-journal"><summary>In the margins</summary><p className="source-note">The steps behind this reading are kept here for closer study.</p><details><summary>Processing details</summary>{session.method?.records.map((r, i) => <details key={i}><summary>{r.stage} · {String(r.generation.elapsedMs)} ms</summary><p>Guide SHA256: {r.guideSha256}</p><p>Native validation: {r.validationError || 'accepted'}</p><pre>{JSON.stringify(r.generation, null, 2)}</pre><details><summary>Input</summary><pre>{JSON.stringify(r.input, null, 2)}</pre></details><details><summary>Original output</summary><pre>{r.raw}</pre></details><details><summary>Worksheet proposal</summary><pre>{JSON.stringify(r.worksheet, null, 2)}</pre></details></details>)}<details><summary>All local receipts</summary><pre>{JSON.stringify(session.audit, null, 2)}</pre></details></details></details>}
-      <div ref={tail} />
-    </article>
-  </main>
+  const listening = recording || wakeState === 'listening'
+  const voiceState = listening ? 'listening' : openingMic || wakeState === 'opening' ? 'opening' : speaking ? 'speaking' : busy ? 'thinking' : wakeState === 'waiting' ? 'waiting' : 'idle'
+  const voiceLabel = listening ? 'Finish speaking' : openingMic ? 'Cancel listening' : busy ? 'Pause reading' : speaking ? 'Pause speech' : 'Speak your question'
+  const voiceTip = notice || (voiceState === 'waiting' ? 'Say “Oracle”, or touch to speak.' : voiceLabel)
+  return <>
+    <button ref={historyTrigger} type="button" className="quiet-icon history-trigger" aria-label="Earlier readings" aria-haspopup="dialog" aria-expanded={historyOpen} aria-controls="reading-history" title="Earlier readings" onClick={() => void showHistory()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v11M5 7h10a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" /><path d="M7 12h6M7 15h4" /></svg></button>
+    <main ref={page} className="unfolding-page" data-listening={listening} data-thinking={busy} tabIndex={-1} aria-label="Your unfolding reading">
+      <article className="living-document">
+        <p className="opening-question">{OPENING}</p>
+        <div className="document-conversation" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions text">
+          {session.messages.map((message, i) => <Fragment key={i}><div className={`passage ${message.role}`}>{message.text.split('\n\n').map((p, n) => <p key={n}>{p}</p>)}</div>{material(i + 1)}</Fragment>)}
+        </div>
+        {busy && <p className="visually-hidden" role="status">{session.status || 'Considering your question.'}</p>}
+        {notice && <p id="reading-notice" className="visually-hidden" role="alert">{notice}</p>}
+        <div ref={tail} />
+      </article>
+    </main>
+    <div className="listening-dock"><button type="button" className="listening-orb" data-state={voiceState} data-notice={!!notice} aria-label={voiceLabel} aria-describedby={notice ? 'reading-notice' : undefined} aria-pressed={listening} title={voiceTip} onClick={toggleSpeaking}><span aria-hidden="true">{notice ? '!' : '?'}</span></button><span className="visually-hidden" role="status">{listening ? 'Listening.' : openingMic ? 'Opening the microphone.' : ''}</span></div>
+    <ReadingHistory open={historyOpen} close={closeHistory} saved={session.savedReadings} revisions={session.revisions} records={session.method?.records} audit={session.audit} unavailable={busy || listening || openingMic} openReading={id => void openLeaf(id)} />
+  </>
 }

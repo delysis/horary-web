@@ -31,53 +31,14 @@ pub fn transcribe(wav: &[u8], cancelled: &AtomicBool) -> Result<String, String> 
 #[cfg(target_os = "macos")]
 fn apple(wav: &[u8], cancelled: &AtomicBool) -> Result<String, String> {
     use speech::{
-        recognizer::SpeechRecognizer,
-        request::{
-            AudioBufferRecognitionRequest, CallbackQueue, RecognitionRequestOptions, TaskHint,
-        },
+        request::{AudioBufferRecognitionRequest, RecognitionRequestOptions, TaskHint},
         task::RecognitionTaskEvent,
     };
     use std::{
         sync::mpsc,
         time::{Duration, Instant},
     };
-    let recognizer = SpeechRecognizer::new().with_callback_queue(CallbackQueue::background());
-    if !recognizer.is_available()
-        || !recognizer
-            .supports_on_device_recognition()
-            .map_err(|e| e.to_string())?
-    {
-        return Err("Local dictation is not available for this language.".into());
-    }
-    let mut authorization = SpeechRecognizer::authorization_status();
-    if authorization == speech::error::AuthorizationStatus::NotDetermined {
-        // Read authorization on every turn, but ask only once per process. A
-        // pending dialog must not add another six-second wait to each reply.
-        claim_authorization_request(&AUTHORIZATION_REQUESTED)?;
-        // A permission dialog must not trap the owned voice worker for the
-        // framework's synchronous 30-second wait. Dropping this future is safe.
-        authorization = tauri::async_runtime::block_on(async {
-            let authorization = speech::async_api::AsyncSpeechRecognizer::request_authorization();
-            tokio::pin!(authorization);
-            let deadline = Instant::now() + Duration::from_secs(6);
-            loop {
-                tokio::select! {
-                    result = &mut authorization => return result.map_err(|e| e.to_string()),
-                    _ = tokio::time::sleep(Duration::from_millis(30)) => {
-                        if cancelled.load(Ordering::Acquire) || Instant::now() >= deadline {
-                            return Err("Local dictation permission is not ready.".into());
-                        }
-                    }
-                }
-            }
-        })?;
-    }
-    if !authorization.is_authorized() {
-        return Err("Local dictation was not permitted.".into());
-    }
-    if cancelled.load(Ordering::Acquire) {
-        return Err("Listening cancelled.".into());
-    }
+    let recognizer = authorized_recognizer(cancelled)?;
     let samples = pcm_samples(wav)?;
     let request = AudioBufferRecognitionRequest::new().with_options(
         RecognitionRequestOptions::new()
@@ -129,6 +90,52 @@ fn apple(wav: &[u8], cancelled: &AtomicBool) -> Result<String, String> {
     })();
     task.cancel();
     result
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn authorized_recognizer(
+    cancelled: &AtomicBool,
+) -> Result<speech::recognizer::SpeechRecognizer, String> {
+    use speech::{recognizer::SpeechRecognizer, request::CallbackQueue};
+    use std::time::{Duration, Instant};
+    let recognizer = SpeechRecognizer::new().with_callback_queue(CallbackQueue::background());
+    if !recognizer.is_available()
+        || !recognizer
+            .supports_on_device_recognition()
+            .map_err(|e| e.to_string())?
+    {
+        return Err("Local dictation is not available for this language.".into());
+    }
+    let mut authorization = SpeechRecognizer::authorization_status();
+    if authorization == speech::error::AuthorizationStatus::NotDetermined {
+        // Read authorization on every turn, but ask only once per process. A
+        // pending dialog must not add another six-second wait to each reply.
+        claim_authorization_request(&AUTHORIZATION_REQUESTED)?;
+        // A permission dialog must not trap the owned voice worker for the
+        // framework's synchronous 30-second wait. Dropping this future is safe.
+        authorization = tauri::async_runtime::block_on(async {
+            let authorization = speech::async_api::AsyncSpeechRecognizer::request_authorization();
+            tokio::pin!(authorization);
+            let deadline = Instant::now() + Duration::from_secs(6);
+            loop {
+                tokio::select! {
+                    result = &mut authorization => return result.map_err(|e| e.to_string()),
+                    _ = tokio::time::sleep(Duration::from_millis(30)) => {
+                        if cancelled.load(Ordering::Acquire) || Instant::now() >= deadline {
+                            return Err("Local dictation permission is not ready.".into());
+                        }
+                    }
+                }
+            }
+        })?;
+    }
+    if !authorization.is_authorized() {
+        return Err("Local dictation was not permitted.".into());
+    }
+    if cancelled.load(Ordering::Acquire) {
+        return Err("Listening cancelled.".into());
+    }
+    Ok(recognizer)
 }
 
 #[cfg(any(target_os = "macos", test))]
