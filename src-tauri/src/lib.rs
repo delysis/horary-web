@@ -59,6 +59,7 @@ mod native_llama_worker;
 mod native_location;
 #[cfg(test)]
 mod process_reference;
+mod reading_contracts;
 mod reading_method;
 mod reading_store;
 mod review_progress;

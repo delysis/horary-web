@@ -43,7 +43,7 @@ fn evaluate(
     let record = Record {
         stage,
         revision: 0,
-        guide_sha256: lessons::digest(&lessons::guide(stage, matter)?),
+        guide_sha256: lessons::digest(&crate::horary_contract::guide_for(stage, matter, &input)?),
         schema_sha256: lessons::digest(&contract.to_string()),
         input_sha256: lessons::digest(&input.to_string()),
         input,
@@ -100,21 +100,61 @@ fn receive(
     runtime: &impl Runtime,
     key: &str,
     checked: Result<Checked, String>,
-    record: Record,
+    mut record: Record,
 ) -> Result<Received, String> {
     let stage = record.stage;
     let proposal = record.worksheet.clone();
     let record_index = session.method.records.len();
+    // A result may be well formed but belong to superseded consultation
+    // inputs. Reject it through the same journal/receipt/repair boundary.
+    let checked = checked.and_then(|value| {
+        if let Some(case) = &session.method.consultation {
+            let request = &step::original_input(&record.input)["reading_request"];
+            if request.is_object()
+                && (request["binding"]["catalogue_version"] != case.catalogue_version
+                    || request["binding"]["case_revision"].as_u64() != Some(case.revision)
+                    || request["binding"]["question"].as_str()
+                        != case.question.resolved().map(String::as_str)
+                    || request["binding"]["frame"]
+                        != serde_json::to_value(case.frame.resolved()).map_err(|e| e.to_string())?)
+            {
+                return Err("This result belongs to older consultation inputs; this task has not completed.".into());
+            }
+        }
+        Ok(value)
+    });
+    record.validation_error = checked.as_ref().err().cloned();
     keep(session, runtime, record)?;
     let (to, received) = match checked {
         Ok(Checked::Data(data)) => {
             session.method.flow.finish(key, &data, record_index)?;
             ("complete", Received::Complete(Box::new(data)))
         }
-        Ok(Checked::NeedsInput { request, brief }) => {
-            if let Some(brief) = brief {
-                session.question = brief.question.clone();
-                session.method.brief = brief;
+        Ok(Checked::NeedsInput { request }) => {
+            if let Some(case) = session.method.consultation.as_mut() {
+                let key = crate::reading_contracts::need_key(&request.field, case)?;
+                case.require_information(key.clone(), request.reason.clone());
+                if matches!(
+                    key,
+                    crate::reading_contracts::RequirementKey::Field(
+                        crate::reading_contracts::Field::Context
+                            | crate::reading_contracts::Field::SearchContext
+                    )
+                ) {
+                    if let Some(need) = case.additional.iter_mut().find(|need| need.key == key) {
+                        need.question = Some(request.question.clone());
+                        need.reason = request.reason.clone();
+                    }
+                }
+                let question = case.question_for(&key);
+                session.method.result =
+                    Some(crate::reading_contracts::ReadingResult::NeedsInformation {
+                        need: crate::reading_contracts::InformationNeed {
+                            key,
+                            reason: request.reason.clone(),
+                            question: Some(question),
+                        },
+                    });
             }
             session.method.flow.wait(key, request)?;
             ("awaiting_user", Received::AwaitingUser)
@@ -197,7 +237,7 @@ pub(crate) fn execute(
 
 fn repair_input(original: &Value, previous: Value, error: String) -> Value {
     json!({"original_input":original,"previous_worksheet":previous,"native_validation_error":error,
-        "instruction":"This step has not completed. Correct this proposal against the original data and native error. Supply its required data, or use request_input for genuinely missing user context. Do not ask the user to supply chart calculations. Earlier attempts remain in the receipts."})
+        "instruction":"This step has not completed. Only original_input has accepted authority; previous_worksheet was rejected and none of its proposed facts were saved. Correct against the original data and the specific native error. Supply required data, or use request_input for genuinely missing user context. Do not ask the user to repeat provided words or supply chart calculations. Earlier attempts remain in the receipts."})
 }
 
 fn work_input(session: &Session, stage: Stage, mut input: Value) -> Value {
@@ -219,7 +259,7 @@ fn work_key(
     input: &Value,
     facts: &[Fact],
 ) -> Result<String, String> {
-    Ok(lessons::digest(&json!({"stage":stage,"revision":session.revision,"guide":lessons::digest(&lessons::guide(stage, session.method.brief.matter)?),"contract":step::response_schema_for(stage,session.method.brief.matter,input,facts),"input":input,"validationAuthority":step::validation_authority()}).to_string()))
+    Ok(lessons::digest(&json!({"stage":stage,"revision":session.revision,"guide":lessons::digest(&crate::horary_contract::guide_for(stage, session.method.brief.matter,input)?),"contract":step::response_schema_for(stage,session.method.brief.matter,input,facts),"input":input,"validationAuthority":step::validation_authority()}).to_string()))
 }
 
 fn cached_data(
@@ -229,7 +269,11 @@ fn cached_data(
     facts: &[Fact],
 ) -> Result<Option<(CheckedData, usize)>, String> {
     let input_hash = lessons::digest(&input.to_string());
-    let guide_hash = lessons::digest(&lessons::guide(stage, session.method.brief.matter)?);
+    let guide_hash = lessons::digest(&crate::horary_contract::guide_for(
+        stage,
+        session.method.brief.matter,
+        input,
+    )?);
     let schema_hash = lessons::digest(
         &step::response_schema_for(stage, session.method.brief.matter, input, facts).to_string(),
     );
@@ -349,6 +393,31 @@ pub(crate) fn execute_batch(
 }
 
 pub(crate) fn ask_pending(session: &mut Session) {
+    if let Some(case) = session.method.consultation.as_ref() {
+        if let Some(key) = &case.requested {
+            let native_anchor_question = session.method.flow.pending.iter().find(|pending| {
+                matches!(key, crate::reading_contracts::RequirementKey::ChartPlace)
+                    && pending.request.field == "chart_place"
+                    || matches!(key, crate::reading_contracts::RequirementKey::ChartMoment)
+                        && pending.request.field == "chart_moment"
+            });
+            let question = native_anchor_question.map_or_else(
+                || case.question_for(key),
+                |pending| pending.request.question.clone(),
+            );
+            if !session
+                .messages
+                .last()
+                .is_some_and(|m| m.role == "assistant" && m.text == question)
+            {
+                session.messages.push(Message {
+                    role: "assistant".into(),
+                    text: question,
+                });
+            }
+            return;
+        }
+    }
     let question = session
         .method
         .flow

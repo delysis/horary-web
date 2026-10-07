@@ -20,6 +20,9 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/horary_executor.rs",
     "src-tauri/src/horary_step.rs",
     "src-tauri/src/horary_role_options.rs",
+    "src-tauri/src/reading_contracts.rs",
+    "src-tauri/src/reading_contract_overview.md",
+    "src-tauri/src/reading_contract_tests.rs",
     "src-tauri/src/horary_recovery_tests.rs",
     "src-tauri/src/horary_step_tests.rs",
     "src-tauri/src/horary_lessons.rs",
@@ -76,6 +79,7 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         .split_once("## What Eileen should examine")
         .ok_or("Missing review section")?;
     let mut document = preamble.to_string();
+    document.push_str("\nThe application is now governed by the [executable reading catalogue](READING_CONTRACTS.md). It generates the recognition contract, conditional elicitation, readiness gate and frozen reading request. The earlier [elicitation design](ELICITATION_DESIGN.md) is its research record.\n\n");
     document.push_str("\n## The completion state machine\n\n```mermaid\nflowchart TB\n");
     for (from, to, reason) in crate::horary_step::Phase::EDGES {
         document.push_str(&format!("  {from} -->|{reason}| {to}\n"));
@@ -191,7 +195,8 @@ The bank contains only fixed teaching messages, not private question inputs or a
         };
         for matter in matters {
             let key = lessons::key(stage, *matter);
-            let guide = lessons::guide(stage, *matter)?;
+            let guide =
+                crate::horary_contract::guide_for(stage, *matter, &serde_json::Value::Null)?;
             document.push_str(&format!("<a id=\"lesson-{key}\"></a>\n\n### {} · {key}\n\nGuide SHA256: `{}`\n\n<details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>\n\n```text\n{guide}\n```\n\n</details>\n\n",stage.title(),lessons::digest(&guide)));
             let contract = if stage == Stage::Significators {
                 examples["examples"]
@@ -227,6 +232,22 @@ The bank contains only fixed teaching messages, not private question inputs or a
     let reference = json!({"authorship":"Generated exact live prompts plus explicitly authored scheduler fixture; no model invoked","fixture":examples,"lessons":guides,"bookOcrSha256":lessons::BOOK_OCR_SHA256});
     let manifest = json!({"purpose":"Source fingerprint; no private app data","sources":manifest});
     Ok(vec![
+        (
+            "docs/READING_CONTRACTS.md",
+            crate::reading_contracts::documentation(),
+        ),
+        (
+            "docs/llm-process/reading-catalogue.json",
+            format!("{}\n", serde_json::to_string_pretty(&json!({
+                "authorship":"Generated from the production Rust catalogue; not model output or expert qualification",
+                "version":crate::reading_contracts::VERSION,
+                "contracts":crate::reading_contracts::CATALOGUE,
+                "fields":crate::reading_contracts::Field::ALL.iter().map(|field| json!({
+                    "id":field.name(), "question":crate::reading_contracts::field_prompt(*field),
+                    "labels":crate::reading_contracts::allowed_values(*field)
+                })).collect::<Vec<_>>()
+            })).map_err(|e|e.to_string())?),
+        ),
         ("docs/LLM_PROCESS.md", format!("{}\n", document.trim_end())),
         (
             "docs/llm-process/prompt-examples.json",
@@ -259,7 +280,7 @@ mod tests {
     fn checked_in_reference_is_current() {
         for (name, expected) in generate(root()).expect("Generate actual process reference") {
             let current = std::fs::read_to_string(root().join(name)).unwrap_or_default();
-            assert!(current==expected,"{name} is stale. Run cargo test --manifest-path src-tauri/Cargo.toml --locked process_reference::tests::regenerate -- --ignored --nocapture");
+            assert!(current==expected,"{name} is stale. Run cargo test --manifest-path src-tauri/Cargo.toml --locked --lib process_reference::tests::regenerate -- --ignored --nocapture");
         }
     }
     #[test]

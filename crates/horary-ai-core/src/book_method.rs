@@ -394,8 +394,8 @@ mod tests {
                 assert_eq!(rulers(sign, 1.0, day)[2].1, "Mars");
             }
         }
-        for sign in 0..12 {
-            for (end, host) in TERMS[sign] {
+        for (sign, terms) in TERMS.iter().enumerate() {
+            for &(end, host) in terms {
                 assert_eq!(rulers(sign, f64::from(end) - 0.001, true)[3].1, host);
             }
         }

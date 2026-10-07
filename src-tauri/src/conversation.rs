@@ -35,7 +35,7 @@ pub struct DeviceContext {
     pub accuracy_meters: Option<f64>,
 }
 
-fn device_place(context: &DeviceContext) -> Result<Option<LocationCandidate>, String> {
+pub(crate) fn device_place(context: &DeviceContext) -> Result<Option<LocationCandidate>, String> {
     horary_ai_core::chart_input::resolve_chart_time("2000-01-01T12:00", &context.timezone, "")?;
     if context.locale.len() > 80 {
         return Err("The device language is invalid.".into());
@@ -63,18 +63,22 @@ fn device_place(context: &DeviceContext) -> Result<Option<LocationCandidate>, St
     })
     .map_err(|e| e.message)?;
     // The clock's zone alone is never used to guess a geographic position.
-    Ok(near
-        .filter(|near| near.timezone == context.timezone)
-        .map(|near| LocationCandidate {
-            id: "device-location".into(),
-            label: format!("Near {}", near.label),
-            name: near.name,
-            country: near.country,
-            latitude,
-            longitude,
-            timezone: context.timezone.clone(),
-            provider: "device".into(),
-        }))
+    Ok(Some(LocationCandidate {
+        id: "device-location".into(),
+        label: near
+            .as_ref()
+            .map_or_else(|| "Here".into(), |near| format!("Near {}", near.label)),
+        name: near
+            .as_ref()
+            .map_or_else(|| "Here".into(), |near| near.name.clone()),
+        country: near
+            .as_ref()
+            .map_or_else(String::new, |near| near.country.clone()),
+        latitude,
+        longitude,
+        timezone: near.map_or_else(|| context.timezone.clone(), |near| near.timezone),
+        provider: "device".into(),
+    }))
 }
 
 #[tauri::command]
@@ -200,6 +204,8 @@ pub struct Revision {
     pub place: Option<LocationCandidate>,
     #[serde(default)]
     pub brief: crate::horary_pipeline::Brief,
+    #[serde(default)]
+    pub consultation: Option<crate::reading_contracts::Consultation>,
 }
 
 #[derive(Default)]
@@ -285,7 +291,7 @@ pub fn prepare_reader(app: &tauri::AppHandle) -> Result<(), String> {
         &dir,
         &app.state::<NativeLlamaState>(),
         serde_json::from_value(
-            json!({"modelId":"gemma-4-12b-qat","ctxSize":16384,"nGpuLayers":"auto"}),
+            json!({"modelId":"gemma-4-12b-qat","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}),
         )
         .map_err(|e| e.to_string())?,
     )
@@ -368,6 +374,22 @@ struct PipelineRuntime<'a> {
     dir: &'a Path,
 }
 impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
+    fn device_location(&self) -> Result<Option<LocationCandidate>, String> {
+        let location =
+            tauri::async_runtime::block_on(crate::native_location::get_current_location_native(
+                crate::native_location::CurrentLocationRequest {
+                    timeout_ms: Some(6000),
+                },
+            ))
+            .map_err(|e| e.message)?;
+        device_place(&DeviceContext {
+            timezone: "UTC".into(),
+            locale: String::new(),
+            latitude: Some(location.latitude),
+            longitude: Some(location.longitude),
+            accuracy_meters: location.accuracy_meters,
+        })
+    }
     fn generate_batch(
         &self,
         tasks: &[(
@@ -443,7 +465,7 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
         .map_err(|e| e.message);
         // Write the original output before parsing. Failed worksheets remain
         // inspectable; neither private words nor coordinates enter the log.
-        let receipt = json!({"stage":stage,"guideSha256":crate::horary_lessons::digest(&crate::horary_lessons::guide(stage,matter)?),"input":input,"schema":schema,"result":result.as_ref().map_err(|e|e.as_str())});
+        let receipt = json!({"stage":stage,"guideSha256":crate::horary_lessons::digest(&crate::horary_contract::guide_for(stage,matter,input)?),"input":input,"schema":schema,"result":result.as_ref().map_err(|e|e.as_str())});
         let receipts = self.dir.join("method-receipts");
         std::fs::create_dir_all(&receipts).map_err(|e| e.to_string())?;
         let name = format!(
@@ -620,7 +642,7 @@ fn run(
             &dir,
             &native,
             serde_json::from_value(
-                json!({"modelId":"gemma-4-12b-qat","ctxSize":16384,"nGpuLayers":"auto"}),
+                json!({"modelId":"gemma-4-12b-qat","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}),
             )
             .map_err(|e| e.to_string())?,
         )
@@ -727,7 +749,9 @@ mod tests {
         assert_eq!(place.longitude, -77.249);
         assert_eq!(place.timezone, "America/New_York");
         context.timezone = "Europe/London".into();
-        assert!(device_place(&context).unwrap().is_none());
+        let travel = device_place(&context).unwrap().unwrap();
+        assert_eq!(travel.latitude, 38.657);
+        assert_eq!(travel.timezone, "America/New_York");
         context.timezone = "America/New_York".into();
         context.accuracy_meters = Some(50000.);
         assert!(device_place(&context).unwrap().is_none());

@@ -1,6 +1,6 @@
 # How the horary reading is made
 
-This is the review map for Eileen. The app now uses separate teaching tasks rather than a general prompt asking the model to supply the whole horary method. Each lesson defines its terms, gives numbered checks, contrasts worked examples with mistakes, and includes selected passages from **John Frawley, The Horary Textbook (2005)**. The exact teaching prompts and output contracts appear below.
+This is the review map for Eileen. A Rust reading catalogue governs two operations: eliciting the necessary information, then generating a reading. Recognition proposes small updates to a retained consultation. The selected contract computes the next missing fact and refuses a reading handoff until its requirements are resolved. Separate teaching tasks then work on a frozen request. Their exact prompts, output contracts and source references appear below.
 
 The method is a working implementation for assessment. Source quotes are checked against the locally supplied OCR; editorial procedures and examples are identified separately. Correctly quoting a rule or producing a valid worksheet does not establish a correct judgment. The deployed model is Gemma 4 12B IT QAT; a 2B model has **not** been qualified.
 
@@ -14,7 +14,7 @@ The completion diagram comes from the transition catalog enforced by the Rust jo
 
 1. Does intake preserve the original question, ownership, horizon, and negation through intermediate replies? Is a place or time in the story being mistaken for the chart's place or moment?
 2. Are house and natural roles justified by the matter? For the querent's lost object, are Lords 2 and 4 compared? For another owner, is the owner's second house turned correctly? Is the Moon's role explicit?
-   Intake extracts people, the subject, ownership and exact source phrases. Named native options bind identities and compute turned houses. An unknown relationship or owner restricts the role actor to requesting information; a numeric guess cannot complete that step. Contextual classification still needs Eileen's review, and the English quote checks do not prove a sentence's full meaning.
+   Recognition proposes people, the subject, ownership and exact source phrases. The catalogue resolves applicable ownership and capacity before dispatching the role program; a workplace capacity or generic future partner does not require an invented personal relationship. Named native options bind identities and compute turned houses. A numeric guess cannot complete that step. Contextual classification still needs Eileen's review, and the English quote checks do not prove a sentence's full meaning.
 3. Are quality, ability, and motive distinguished? Does each reception run from the planet in the dignity to that dignity's ruler? Are mixed or negative receptions retained?
 4. Is an applying contact relevant to the selected actors? What changes or intervenes before it? Does the calculation actually establish a claimed translation, collection, or prevention?
 5. Does the final passage answer the original question in context? What supports it, what opposes it, and what remains unknown? An uncertain answer should still explain what the testimony means for the person.
@@ -39,4 +39,4 @@ Single production tasks currently use constrained JSON; independent analysis tas
 
 Rust generates this document from the live lesson builder, schemas, dependency catalog and executable authored fixture. The fixture is labeled; it is not a model result. A normal test fails when code or teaching material changes without refreshing this reference.
 
-Run `cargo test --manifest-path src-tauri/Cargo.toml --locked process_reference::tests::regenerate -- --ignored --nocapture` to refresh. The companion source manifest fingerprints the exact files. Private readings, audio and the complete OCR are not included.
+Run `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib process_reference::tests::regenerate -- --ignored --nocapture` to refresh. The companion source manifest fingerprints the exact files. Private readings, audio and the complete OCR are not included.

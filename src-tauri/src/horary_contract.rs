@@ -63,9 +63,7 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
         list(choice(&ids), 6)
     };
     match stage {
-        Stage::Intake => object(
-            json!({"intent":choice(&["read","clarify","correct","new_question","explain","resume","restore"]),"question":text(500),"matter":choice(&["relationship","lost_object","lost_animal","work","money","property","other"]),"question_kind":choice(&["event","situation","quantity","location","choice"]),"context":text(700),"people":list(object(json!({"id":text(40),"label":text(80),"relationship":choice(&["unknown","partner","child","sibling","friend","mother","father","employer","employee","other_party"]),"source_quote":text(240)})),3),"subject":object(json!({"name":text(80),"kind":choice(&["person","movable","money","property","job","small_animal","large_animal","other"]),"owner_id":text(40),"source_quote":text(240)})),"event_place":text(240),"event_time":text(180),"place_request":text(240),"time_request":text(180),"horizon":text(100),"clarification":text(180),"focus":choice(&["roles","condition","reception","contacts","location","timing","judgment","place","moment"]),"heard":text(500),"restore_revision":{"type":["integer","null"],"minimum":1}}),
-        ),
+        Stage::Intake => crate::reading_contracts::turn_schema(None),
         Stage::Place => object(
             json!({"mode":choice(&["select","ask"]),"place_id":text(100),"query":text(240),"clarification":text(180),"basis":text(240)}),
         ),
@@ -157,8 +155,26 @@ pub fn prompt(
 ) -> Result<String, String> {
     // Stable teaching and stable contract precede changing data. No whole chart
     // or conversation history is smuggled into this prefix.
-    let fixed = lessons::guide(stage, matter)?;
+    let fixed = guide_for(stage, matter, input)?;
     Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
+}
+
+pub fn guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
+    let original = crate::horary_step::original_input(input);
+    if stage == Stage::Intake {
+        let case = serde_json::from_value::<crate::reading_contracts::Consultation>(
+            original["consultation"].clone(),
+        )
+        .ok();
+        return Ok(crate::reading_contracts::recognition_guide(case.as_ref()));
+    }
+    let mut guide = lessons::guide(stage, matter)?;
+    if let Ok(method) = serde_json::from_value::<crate::reading_contracts::Method>(
+        original["reading_request"]["binding"]["frame"]["method"].clone(),
+    ) {
+        guide.push_str(&crate::reading_contracts::method_guide(method));
+    }
+    Ok(guide)
 }
 
 fn bounded_strings(value: &Value) -> bool {
@@ -264,10 +280,9 @@ pub(crate) fn validate_for(
     let contract = schema_for(stage, matter, facts);
     validate_shape(value, &contract)?;
     if stage == Stage::Intake {
-        let brief: Brief = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        if brief.question.trim().is_empty() && brief.clarification.trim().is_empty() {
-            return Err("Keep the actual question or ask what it is.".into());
-        }
+        serde_json::from_value::<crate::reading_contracts::Turn>(value.clone())
+            .map_err(|e| e.to_string())?;
+        return Ok(());
     }
     if stage == Stage::Significators {
         let choices: Vec<RoleChoice> =
@@ -388,6 +403,23 @@ pub(crate) fn validate_for(
 }
 
 pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String> {
+    if let Some(alternatives) = schema["oneOf"].as_array() {
+        let attempts = alternatives
+            .iter()
+            .map(|branch| validate_shape(value, branch))
+            .collect::<Vec<_>>();
+        if attempts.iter().filter(|result| result.is_ok()).count() == 1 {
+            return Ok(());
+        }
+        return Err(format!(
+            "The value must match exactly one response alternative: {}",
+            attempts
+                .into_iter()
+                .filter_map(Result::err)
+                .collect::<Vec<_>>()
+                .join("; ")
+        ));
+    }
     if let Some(allowed) = schema["enum"].as_array() {
         if !allowed.contains(value) {
             return Err(format!("Unexpected worksheet value {value}."));

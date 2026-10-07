@@ -1,6 +1,6 @@
 {
-  "version": "2026-09-14",
-  "updatedAt": "2026-09-14",
+  "version": "2026-10-07",
+  "updatedAt": "2026-10-07",
   "notes": "Pinned Google instruction model and matching image/audio projector. Native-kit owns inference. No Python, CLI, hosted fallback, or app-owned copy of Hub weights.",
   "models": [
     {
@@ -20,7 +20,7 @@
       "license": "Apache-2.0",
       "minRamGb": 24,
       "recommendedRamGb": 32,
-      "defaultContextTokens": 16384,
+      "defaultContextTokens": 32768,
       "defaultParams": {
         "temperature": 0,
         "top_p": 1,
@@ -45,7 +45,7 @@
       "license": "Apache-2.0",
       "minRamGb": 24,
       "recommendedRamGb": 32,
-      "defaultContextTokens": 16384,
+      "defaultContextTokens": 32768,
       "defaultParams": {
         "temperature": 0,
         "top_p": 1,

@@ -1,0 +1,1628 @@
+{
+  "authorship": "Generated from the production Rust catalogue; not model output or expert qualification",
+  "version": "frawley-reading-contracts-2026-10-07.1",
+  "contracts": [
+    {
+      "method": "relationship",
+      "title": "Relationship, marriage and feelings",
+      "printed_pages": "140, 191–200",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "baseline",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "Implemented",
+      "roles": "Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.",
+      "judgment": "Distinguish hoped-for formation, current feelings and an arranged wedding. An unnamed prospective partner is a role: do not claim an existing person currently loves the querent or has already met them. Directed reception describes chart testimony; event perfection is a separate question. No contact is not an automatic cancellation of an arranged wedding.",
+      "subject_kinds": [
+        "person"
+      ]
+    },
+    {
+      "method": "lost_object",
+      "title": "Lost inanimate possession",
+      "printed_pages": "146–153, 244",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "description",
+          "guard": {
+            "condition": "principal_owns_subject"
+          }
+        }
+      ],
+      "facets": [
+        "location",
+        "event",
+        "timing",
+        "description"
+      ],
+      "coverage": "Implemented",
+      "roles": "Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.",
+      "judgment": "Consider recovery before proposing a search. Angularity and clear whereabouts can support recovery without an applying aspect. Keep search reports fallible; no thief unless raised. A failed search revisits this chart.",
+      "subject_kinds": [
+        "movable"
+      ]
+    },
+    {
+      "method": "lost_animal",
+      "title": "Lost animal",
+      "printed_pages": "1–3, 146–153",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "animal_kind",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "location",
+        "event",
+        "timing",
+        "description"
+      ],
+      "coverage": "Implemented",
+      "roles": "Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.",
+      "judgment": "Assess recovery and plausible whereabouts from supplied context, without exact GPS promises or automatic void-Moon rejection.",
+      "subject_kinds": [
+        "small_animal",
+        "large_animal"
+      ]
+    },
+    {
+      "method": "missing_person",
+      "title": "Missing person",
+      "printed_pages": "146–153",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "location",
+        "event",
+        "timing",
+        "description"
+      ],
+      "coverage": "Implemented",
+      "roles": "Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.",
+      "judgment": "Consider recovery/contact and location separately. Retain reported circumstances as reports.",
+      "subject_kinds": [
+        "person"
+      ]
+    },
+    {
+      "method": "movable_deal",
+      "title": "Sale or purchase of movable goods",
+      "printed_pages": "156–161, 167–172",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "deal_capacity",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "seller",
+          "guard": {
+            "condition": "equals",
+            "field": "deal_capacity",
+            "value": "sell"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "choice",
+        "profit"
+      ],
+      "coverage": "Implemented",
+      "roles": "Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.",
+      "judgment": "Preserve deal, quality or profit as asked. Non-property opposition may complete with regret. This recipe provides no exact count of books/tulips sold. A venue/date is event context, never the chart anchor.",
+      "subject_kinds": [
+        "movable"
+      ]
+    },
+    {
+      "method": "money",
+      "title": "Payment, debt, gift or grant",
+      "printed_pages": "156–161",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "money_source",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "discretionary",
+          "guard": {
+            "condition": "equals",
+            "field": "money_source",
+            "value": "government"
+          }
+        },
+        {
+          "field": "sender",
+          "guard": {
+            "condition": "equals",
+            "field": "money_source",
+            "value": "relative"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing",
+        "profit"
+      ],
+      "coverage": "Implemented",
+      "roles": "Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.",
+      "judgment": "Arrival requires its own testimony. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.",
+      "subject_kinds": [
+        "money",
+        "movable"
+      ]
+    },
+    {
+      "method": "investment",
+      "title": "Shares and investments",
+      "printed_pages": "156–161",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "situation",
+        "profit",
+        "choice"
+      ],
+      "coverage": "Implemented",
+      "roles": "Owned shares are the principal's second-house possessions, not automatically eighth-house money.",
+      "judgment": "Judge condition/value and scope. Do not promise an exact return or treat this as a payment-arrival question.",
+      "subject_kinds": [
+        "money",
+        "movable"
+      ]
+    },
+    {
+      "method": "new_job",
+      "title": "Getting a new external job",
+      "printed_pages": "222–224",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "Implemented",
+      "roles": "Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.",
+      "judgment": "Establish getting the job, not merely contacting wages. An explicitly mentioned intermediary may matter; do not invent one.",
+      "subject_kinds": [
+        "job"
+      ]
+    },
+    {
+      "method": "existing_job",
+      "title": "Keeping a job or existing career",
+      "printed_pages": "224–226",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "Implemented",
+      "roles": "Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.",
+      "judgment": "Default is an existing job: assess stability/disruption, not a compulsory acquisition aspect.",
+      "subject_kinds": [
+        "job"
+      ]
+    },
+    {
+      "method": "return_to_job",
+      "title": "Returning to an old job",
+      "printed_pages": "225–226",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "Implemented",
+      "roles": "Principal and relevant job; keep the old-job re-entry context.",
+      "judgment": "Use re-entry testimony, not the generic get/keep assumption. State limitations of contact coverage.",
+      "subject_kinds": [
+        "job"
+      ]
+    },
+    {
+      "method": "job_offer",
+      "title": "Assessing an available job",
+      "printed_pages": "224–226",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "situation",
+        "choice",
+        "profit"
+      ],
+      "coverage": "Implemented",
+      "roles": "Job and its pay have distinct roles. An offer already available is not a new acquisition.",
+      "judgment": "Judge quality and stated priorities. Ask priorities only if the answer truly depends on what 'good' means.",
+      "subject_kinds": [
+        "job"
+      ]
+    },
+    {
+      "method": "work_person",
+      "title": "Boss, colleague or subordinate",
+      "printed_pages": "224–225",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "work_capacity",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "Implemented",
+      "roles": "Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.",
+      "judgment": "Address the actual work relationship; do not reclassify a friendly colleague as eleventh by habit.",
+      "subject_kinds": [
+        "person"
+      ]
+    },
+    {
+      "method": "property",
+      "title": "Buying or selling property",
+      "printed_pages": "167–171",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "deal_capacity",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "choice",
+        "profit"
+      ],
+      "coverage": "Implemented",
+      "roles": "Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.",
+      "judgment": "Assess condition, price and completion separately. Opposition may complete a sale; don't apply this exception to an ongoing rental.",
+      "subject_kinds": [
+        "property"
+      ]
+    },
+    {
+      "method": "rental",
+      "title": "Rental agreement",
+      "printed_pages": "170",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "deal_capacity",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "choice",
+        "profit"
+      ],
+      "coverage": "Implemented",
+      "roles": "Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.",
+      "judgment": "An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one.",
+      "subject_kinds": [
+        "property"
+      ]
+    },
+    {
+      "method": "business_property",
+      "title": "Property used for business",
+      "printed_pages": "170–171",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "deal_capacity",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "choice",
+        "profit"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.",
+      "judgment": "Dedicated profit testimony and reviewed role allocation are required before this program can deliver a judgment.",
+      "subject_kinds": [
+        "property"
+      ]
+    },
+    {
+      "method": "choice",
+      "title": "Stay, change or compare alternatives",
+      "printed_pages": "201–203",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "current_option",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "alternatives",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "choice",
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.",
+      "judgment": "Do not mechanically place Lord 1 in seventh. A finite shortlist and meaningful comparison must remain visible.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "hiring",
+      "title": "Hiring staff",
+      "printed_pages": "189–190",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "candidates",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "choice",
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.",
+      "judgment": "Availability is assumed in this recipe; no obligatory acquisition aspect. Dedicated candidate-matching program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "contact",
+      "title": "Contact with someone",
+      "printed_pages": "165–166",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "Implemented",
+      "roles": "The person takes their operative relationship house.",
+      "judgment": "Contact with the person differs from the arrival of their parcel. An expected contact and long-lost return have different defaults.",
+      "subject_kinds": [
+        "person"
+      ]
+    },
+    {
+      "method": "parcel",
+      "title": "Arrival of a letter or parcel",
+      "printed_pages": "165–166",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "sender",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.",
+      "judgment": "An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "visit",
+      "title": "Expected visit",
+      "printed_pages": "166",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "visitor",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "expected",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.",
+      "judgment": "Use the naturally limited contextual scale. Do not request birth data or full street address by habit.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "contest",
+      "title": "Sporting match or championship",
+      "printed_pages": "203–208",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "competition",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "affiliation",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.",
+      "judgment": "Match versus season/championship differs. An indifferent spectator has no invented allegiance. Dedicated contest program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "bet",
+      "title": "Profit from a bet",
+      "printed_pages": "156–161, 203–204",
+      "owner": "Principal",
+      "requirements": [],
+      "facets": [
+        "profit",
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Money/profit question, not the team's us/them match recipe.",
+      "judgment": "Assess the principal's money and relevant gains without promising an exact payout.",
+      "subject_kinds": [
+        "money",
+        "movable"
+      ]
+    },
+    {
+      "method": "court_case",
+      "title": "Civil trial or legal dispute",
+      "printed_pages": "208–209",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "claim",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.",
+      "judgment": "Dedicated trial/perfection program awaits review; identify the actual party and issue without inferring a legal outcome from a generic deal.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "vehicle",
+      "title": "Vehicle or journey safety",
+      "printed_pages": "142–143",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "safety",
+        "situation",
+        "event"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.",
+      "judgment": "Dedicated safety judgment requires review; identify the undertaking without replacing the question time with departure time.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "person_description",
+      "title": "Description of a person",
+      "printed_pages": "143–145",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "description",
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Person's operative relationship fixes their ruler.",
+      "judgment": "Broad comparative description, not exact height, ethnicity or invented marks. Dedicated descriptive program needs review.",
+      "subject_kinds": [
+        "person"
+      ]
+    },
+    {
+      "method": "information",
+      "title": "Whether information is true",
+      "printed_pages": "164–165",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "claim",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "truth"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.",
+      "judgment": "Preserve the specific reported claim. Dedicated veracity program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "trust",
+      "title": "Trustworthiness in a capacity",
+      "printed_pages": "165",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "situation",
+        "truth"
+      ],
+      "coverage": "Implemented",
+      "roles": "Judge the relevant person's condition, not a generic message-veracity house.",
+      "judgment": "State the capacity and the actual concern; avoid accusations unsupported by the reading.",
+      "subject_kinds": [
+        "person"
+      ]
+    },
+    {
+      "method": "pregnancy",
+      "title": "Current pregnancy",
+      "printed_pages": "173–174",
+      "owner": "Required",
+      "requirements": [],
+      "facets": [
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.",
+      "judgment": "Dedicated pregnancy/medical qualification is required; the chart is not a clinical test.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "fertility",
+      "title": "Conception and fertility",
+      "printed_pages": "174–177",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "fertility_scope",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing",
+        "quantity"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.",
+      "judgment": "The source's coarse childbirth count is specific to this recipe, not transferable to sales. Dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "adoption",
+      "title": "Adoption",
+      "printed_pages": "177–178",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "adoption_state",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "birth_parent",
+          "guard": {
+            "condition": "equals",
+            "field": "adoption_state",
+            "value": "prospective_known_parent"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.",
+      "judgment": "Do not erase adoption state. Dedicated role/testimony program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "medical",
+      "title": "Illness or treatment",
+      "printed_pages": "179–189",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "medical_task",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "treatment",
+          "guard": {
+            "condition": "equals",
+            "field": "medical_task",
+            "value": "treatment"
+          }
+        }
+      ],
+      "facets": [
+        "situation",
+        "choice",
+        "event",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Patient/capacity, diagnosis/prognosis/treatment differ. Lord 6 is not automatically the illness.",
+      "judgment": "The textbook's medical overview is not complete diagnosis training. Dedicated clinical-scope and judgment qualification is required.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "politics",
+      "title": "Political election",
+      "printed_pages": "212–214",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "office",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "election_state",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "political_capacity",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Incumbent/open contest and supporter/impartial citizen/foreign observer change assignment. Citizenship is not inferred from device location.",
+      "judgment": "Dedicated election program awaits review; preserve candidates and actual observer capacity.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "knowledge",
+      "title": "Knowledge and its earnings",
+      "printed_pages": "216–218",
+      "owner": "Principal",
+      "requirements": [
+        {
+          "field": "knowledge_task",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "situation",
+        "profit"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Knowledge ninth, profit tenth; employed job tenth/wages eleventh is different.",
+      "judgment": "Profit already arising from knowledge does not universally need an arrival aspect. Dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "exam",
+      "title": "Examination",
+      "printed_pages": "218",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "exam_task",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Exam result/profit from knowledge is not just a ninth-house object.",
+      "judgment": "Admission and passing can differ; preserve which was asked. Dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "undertaking",
+      "title": "Voyage, course or fair benefit",
+      "printed_pages": "219",
+      "owner": "Principal",
+      "requirements": [],
+      "facets": [
+        "situation",
+        "profit"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Undertaking quality differs from its profit; don't blindly reuse movable-goods sale roles.",
+      "judgment": "Identify the actual benefit asked about. Dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "dream",
+      "title": "Dream meaning or prophetic truth",
+      "printed_pages": "219",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "dream_task",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "dream_account",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "situation",
+        "truth"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.",
+      "judgment": "Chart the question's time, not the dream's time. Dedicated interpretation program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "education",
+      "title": "School or university",
+      "printed_pages": "219–220",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "school_level",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "school_task",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Institution radical third/ninth, not blindly turned from a child.",
+      "judgment": "Admission, enjoyment and quality are distinct. Dedicated education program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "wish",
+      "title": "An unspecified wish",
+      "printed_pages": "164–165, 231",
+      "owner": "None",
+      "requirements": [],
+      "facets": [
+        "event",
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Specific matters use their own method; not every wish is eleventh.",
+      "judgment": "Ask what the concern is without demanding disclosure. No invented judgment for an unspecified wish.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "tax",
+      "title": "Tax and assessment",
+      "printed_pages": "231–232",
+      "owner": "Principal",
+      "requirements": [],
+      "facets": [
+        "situation",
+        "profit"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Government tenth, its coffers eleventh, principal's money second.",
+      "judgment": "Amount/assessment and ability to bear it differ. No fabricated exact tax amount; dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "allegation",
+      "title": "Reported harmful practice",
+      "printed_pages": "233–234",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "claim",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "truth",
+        "situation"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Keep allegations as reported concerns. Special relationships matter only when supplied.",
+      "judgment": "A future applying aspect cannot prove a past act. No unprompted accusation; dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "custody",
+      "title": "Imprisonment or release",
+      "printed_pages": "234–237",
+      "owner": "Required",
+      "requirements": [
+        {
+          "field": "custody_state",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Whether already in custody is indispensable. Relevant radical and turned twelfth need explicit consideration.",
+      "judgment": "Entry and release have different defaults; dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "weather",
+      "title": "Weather in a place or at an event",
+      "printed_pages": "238–240",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "weather_scope",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "target_place",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "target_period",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "event",
+        "situation",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Target locality/season and event's house are context, not chart coordinates or question time.",
+      "judgment": "Dedicated weather program awaits review; do not treat this as a forecast from meteorological observations.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "election",
+      "title": "Choosing when to act by horary",
+      "printed_pages": "241–242",
+      "owner": "None",
+      "requirements": [
+        {
+          "field": "action",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "action_window",
+          "guard": {
+            "condition": "always"
+          }
+        }
+      ],
+      "facets": [
+        "choice",
+        "timing"
+      ],
+      "coverage": "ExpertReview",
+      "roles": "Horary election works from the original question chart, not a new future chart or a full natal election.",
+      "judgment": "Feasible action window and real constraints matter. Native exact-perfection timing is currently insufficient; dedicated program awaits review.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    },
+    {
+      "method": "unclassified",
+      "title": "Matter not yet identified",
+      "printed_pages": "14, 26, 137–140",
+      "owner": "None",
+      "requirements": [],
+      "facets": [],
+      "coverage": "ExpertReview",
+      "roles": "Do not guess the subject or force it into a familiar house.",
+      "judgment": "Elicit the actual concern; retain ambiguity until a method can be selected.",
+      "subject_kinds": [
+        "person",
+        "movable",
+        "money",
+        "property",
+        "job",
+        "small_animal",
+        "large_animal",
+        "other"
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "principal_mode",
+      "question": "Are you asking for yourself, about someone else, or passing on their own question?",
+      "labels": [
+        "self",
+        "relay",
+        "concerning_other"
+      ]
+    },
+    {
+      "id": "principal_id",
+      "question": "Whose own question are you passing on?",
+      "labels": []
+    },
+    {
+      "id": "context",
+      "question": "What circumstance do I need to understand about this question?",
+      "labels": []
+    },
+    {
+      "id": "reader_place",
+      "question": "Where are you asking from? A city and country will do; the event's venue is separate.",
+      "labels": []
+    },
+    {
+      "id": "question_time",
+      "question": "What date and local time did you understand this earlier question?",
+      "labels": []
+    },
+    {
+      "id": "time_occurrence",
+      "question": "That clock time happened twice. Do you mean the earlier occurrence or the later one?",
+      "labels": [
+        "earlier",
+        "later"
+      ]
+    },
+    {
+      "id": "event_place",
+      "question": "Where is the event taking place?",
+      "labels": []
+    },
+    {
+      "id": "event_time",
+      "question": "When is that event taking place?",
+      "labels": []
+    },
+    {
+      "id": "horizon",
+      "question": "What time span does your question concern?",
+      "labels": []
+    },
+    {
+      "id": "baseline",
+      "question": "Is this about a hoped-for relationship, one already under way, or an arranged wedding?",
+      "labels": [
+        "hoped_for",
+        "ongoing",
+        "arranged_wedding"
+      ]
+    },
+    {
+      "id": "description",
+      "question": "What does the missing object look like—its colour, material or shape?",
+      "labels": []
+    },
+    {
+      "id": "animal_kind",
+      "question": "What kind of animal is missing?",
+      "labels": [
+        "small_kind",
+        "large_kind"
+      ]
+    },
+    {
+      "id": "theft_raised",
+      "question": "What concern about theft have you already raised?",
+      "labels": [
+        "yes",
+        "no"
+      ]
+    },
+    {
+      "id": "search_context",
+      "question": "What happened when you searched the suggested place?",
+      "labels": []
+    },
+    {
+      "id": "deal_capacity",
+      "question": "Are you buying, selling, renting, or asking about money from the deal?",
+      "labels": [
+        "buy",
+        "sell",
+        "rent",
+        "profit",
+        "quality"
+      ]
+    },
+    {
+      "id": "deal_party",
+      "question": "Who is the other party in this particular deal?",
+      "labels": []
+    },
+    {
+      "id": "seller",
+      "question": "Who is selling the goods? That may be different from who owns them.",
+      "labels": []
+    },
+    {
+      "id": "money_source",
+      "question": "Where is the money coming from—a customer, job, government, or someone you know?",
+      "labels": [
+        "customer",
+        "partner",
+        "job",
+        "government",
+        "relative",
+        "other"
+      ]
+    },
+    {
+      "id": "discretionary",
+      "question": "Is this money already owed to you, or a gift or grant they can choose to give?",
+      "labels": [
+        "owed",
+        "discretionary"
+      ]
+    },
+    {
+      "id": "job_context",
+      "question": "Is this a new job, your current job, a return, or an offer you can already take?",
+      "labels": []
+    },
+    {
+      "id": "work_capacity",
+      "question": "Is this person your boss, a colleague, or someone who works for you?",
+      "labels": [
+        "boss",
+        "colleague",
+        "subordinate"
+      ]
+    },
+    {
+      "id": "priorities",
+      "question": "What would make this option good for you in this question?",
+      "labels": []
+    },
+    {
+      "id": "current_option",
+      "question": "What would staying with things as they are mean?",
+      "labels": []
+    },
+    {
+      "id": "alternatives",
+      "question": "What are the alternatives you are comparing?",
+      "labels": []
+    },
+    {
+      "id": "home_meaning",
+      "question": "By home, do you mean your current home or your homeland?",
+      "labels": [
+        "current_home",
+        "homeland"
+      ]
+    },
+    {
+      "id": "candidates",
+      "question": "Who are the candidates you could hire? A brief description of each will do.",
+      "labels": []
+    },
+    {
+      "id": "sender",
+      "question": "Who is sending the parcel, and in what capacity?",
+      "labels": []
+    },
+    {
+      "id": "visitor",
+      "question": "Who is coming to visit, and who are they to you?",
+      "labels": []
+    },
+    {
+      "id": "expected",
+      "question": "Is this visit already expected, or are you hoping they will come?",
+      "labels": [
+        "yes",
+        "no"
+      ]
+    },
+    {
+      "id": "affiliation",
+      "question": "Which side do you support, or are you asking about a bet's profit?",
+      "labels": []
+    },
+    {
+      "id": "competition",
+      "question": "Is this about one match, a season, or a championship?",
+      "labels": [
+        "match",
+        "season",
+        "championship"
+      ]
+    },
+    {
+      "id": "claim",
+      "question": "What specific claim or concern would you like me to consider?",
+      "labels": []
+    },
+    {
+      "id": "parenthood",
+      "question": "Whose parenthood is involved in this question?",
+      "labels": []
+    },
+    {
+      "id": "fertility_scope",
+      "question": "Are you asking about conceiving soon, carrying a pregnancy, or ever having children?",
+      "labels": [
+        "conception",
+        "carrying_to_term",
+        "lifetime"
+      ]
+    },
+    {
+      "id": "adoption_state",
+      "question": "Is this adoption still prospective, or is the child already yours?",
+      "labels": [
+        "prospective",
+        "prospective_known_parent",
+        "completed"
+      ]
+    },
+    {
+      "id": "birth_parent",
+      "question": "Who is the child's birth parent to you?",
+      "labels": []
+    },
+    {
+      "id": "medical_task",
+      "question": "Is your question about the illness, its course, or a particular treatment?",
+      "labels": [
+        "diagnosis",
+        "prognosis",
+        "treatment"
+      ]
+    },
+    {
+      "id": "treatment",
+      "question": "Which treatment or treatments are you asking about?",
+      "labels": []
+    },
+    {
+      "id": "political_capacity",
+      "question": "Are you supporting a candidate, an impartial citizen, or an observer from elsewhere?",
+      "labels": [
+        "supporter",
+        "impartial_citizen",
+        "foreign_observer"
+      ]
+    },
+    {
+      "id": "election_state",
+      "question": "Is there an incumbent standing again, or is this an open contest?",
+      "labels": [
+        "incumbent",
+        "open"
+      ]
+    },
+    {
+      "id": "office",
+      "question": "Which office and election are you asking about?",
+      "labels": []
+    },
+    {
+      "id": "knowledge_task",
+      "question": "Are you asking about the knowledge itself, or earnings from using it?",
+      "labels": [
+        "quality",
+        "profit"
+      ]
+    },
+    {
+      "id": "exam_task",
+      "question": "Are you asking about passing this exam, or being admitted?",
+      "labels": [
+        "passing",
+        "admission"
+      ]
+    },
+    {
+      "id": "dream_task",
+      "question": "Would you like to explore the dream's meaning, or whether it foretells something?",
+      "labels": [
+        "meaning",
+        "prophetic_truth"
+      ]
+    },
+    {
+      "id": "dream_account",
+      "question": "What happened in the dream?",
+      "labels": []
+    },
+    {
+      "id": "school_level",
+      "question": "Is this a school or a university?",
+      "labels": [
+        "school",
+        "university"
+      ]
+    },
+    {
+      "id": "school_task",
+      "question": "Are you asking about admission, enjoyment, or the quality of the education?",
+      "labels": [
+        "admission",
+        "enjoyment",
+        "quality"
+      ]
+    },
+    {
+      "id": "custody_state",
+      "question": "Is this person already in custody, or are you asking whether they will be?",
+      "labels": [
+        "already_held",
+        "not_held"
+      ]
+    },
+    {
+      "id": "weather_scope",
+      "question": "Is this about the weather generally, or at a particular event?",
+      "labels": [
+        "general",
+        "event"
+      ]
+    },
+    {
+      "id": "target_place",
+      "question": "Where is the weather you are asking about? This is separate from where we cast the question.",
+      "labels": []
+    },
+    {
+      "id": "target_period",
+      "question": "What day or season is this weather question about?",
+      "labels": []
+    },
+    {
+      "id": "action",
+      "question": "What action would you like to find a time for?",
+      "labels": []
+    },
+    {
+      "id": "action_window",
+      "question": "What dates or time window are actually available for that action?",
+      "labels": []
+    },
+    {
+      "id": "constraints",
+      "question": "What real constraints affect when you can act?",
+      "labels": []
+    },
+    {
+      "id": "unit",
+      "question": "What quantity are you asking me to estimate?",
+      "labels": []
+    }
+  ]
+}

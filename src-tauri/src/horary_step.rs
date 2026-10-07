@@ -120,26 +120,23 @@ pub struct CheckedData {
     input_sha256: String,
     worksheet: Value,
     roles: Vec<Role>,
-    brief: Option<horary_contract::Brief>,
+    turn: Option<Box<crate::reading_contracts::Turn>>,
 }
 impl CheckedData {
+    pub fn turn(&self) -> Option<&crate::reading_contracts::Turn> {
+        self.turn.as_deref()
+    }
     pub fn worksheet(&self) -> &Value {
         &self.worksheet
     }
     pub fn roles(&self) -> &[Role] {
         &self.roles
     }
-    pub fn brief(&self) -> Option<&horary_contract::Brief> {
-        self.brief.as_ref()
-    }
 }
 
 pub enum Checked {
     Data(CheckedData),
-    NeedsInput {
-        request: InputRequest,
-        brief: Option<horary_contract::Brief>,
-    },
+    NeedsInput { request: InputRequest },
 }
 
 impl Journal {
@@ -303,11 +300,12 @@ pub fn validation_authority() -> &'static str {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     HASH.get_or_init(|| {
         crate::horary_lessons::digest(&format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             include_str!("horary_step.rs"),
             include_str!("horary_contract.rs"),
             include_str!("reading_method.rs"),
-            include_str!("horary_role_options.rs")
+            include_str!("horary_role_options.rs"),
+            include_str!("reading_contracts.rs")
         ))
     })
 }
@@ -320,6 +318,26 @@ pub fn request_schema(stage: Stage) -> Value {
     },"required":["field","question","reason"],"additionalProperties":false}},"required":["request_input"],"additionalProperties":false})
 }
 
+fn request_schema_for(stage: Stage, input: &Value) -> Value {
+    let mut schema = request_schema(stage);
+    if original_input(input)["reading_request"].is_object() {
+        let mut fields = information_fields(stage)
+            .iter()
+            .map(|f| Value::String((*f).into()))
+            .collect::<Vec<_>>();
+        fields.extend(
+            crate::reading_contracts::Field::ALL
+                .iter()
+                .map(|f| Value::String(f.name().into())),
+        );
+        fields.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+        fields.dedup();
+        schema["properties"]["request_input"]["properties"]["field"]["enum"] = Value::Array(fields);
+    }
+    schema
+}
+
+#[cfg(test)]
 pub fn response_schema(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
     let data = horary_contract::schema_for(stage, matter, facts);
     if information_fields(stage).is_empty() {
@@ -330,16 +348,28 @@ pub fn response_schema(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
 }
 
 pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &[Fact]) -> Value {
+    if stage == Stage::Intake {
+        let case = serde_json::from_value::<crate::reading_contracts::Consultation>(
+            original_input(input)["consultation"].clone(),
+        )
+        .ok();
+        return crate::reading_contracts::turn_schema(case.as_ref());
+    }
     if stage != Stage::Significators {
-        return response_schema(stage, matter, facts);
+        let data = horary_contract::schema_for(stage, matter, facts);
+        return if information_fields(stage).is_empty() {
+            data
+        } else {
+            json!({"oneOf":[data,request_schema_for(stage,input)]})
+        };
     }
     let options: Result<crate::horary_role_options::Options, _> =
         serde_json::from_value(original_input(input)["native_role_options"].clone());
     match options {
         Ok(options) if options.missing.is_empty() => {
-            json!({"oneOf":[crate::horary_role_options::contract(&options),request_schema(stage)]})
+            json!({"oneOf":[crate::horary_role_options::contract(&options),request_schema_for(stage,input)]})
         }
-        _ => request_schema(stage),
+        _ => request_schema_for(stage, input),
     }
 }
 
@@ -410,8 +440,77 @@ pub fn check(
     input: &Value,
     facts: &[Fact],
 ) -> Result<Checked, String> {
+    if stage == Stage::Intake {
+        let input = original_input(input);
+        horary_contract::validate_shape(value, &response_schema_for(stage, matter, input, facts))?;
+        let turn: crate::reading_contracts::Turn =
+            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        let mut case: crate::reading_contracts::Consultation =
+            serde_json::from_value(input["consultation"].clone()).unwrap_or_default();
+        case.apply(
+            &turn,
+            0,
+            input["latest_words"].as_str().unwrap_or(""),
+            input["spoken_input"] == true,
+        )?;
+        let words = if input["spoken_input"] == true {
+            turn.heard.as_str()
+        } else {
+            input["latest_words"].as_str().unwrap_or("")
+        };
+        if words.trim().to_ascii_lowercase().starts_with("how many ")
+            && matches!(
+                turn.intent,
+                crate::reading_contracts::Intent::Read
+                    | crate::reading_contracts::Intent::NewQuestion
+                    | crate::reading_contracts::Intent::Correct
+            )
+            && case
+                .frame
+                .resolved()
+                .is_some_and(|frame| frame.facet != crate::reading_contracts::Facet::Quantity)
+        {
+            return Err("The supplied question explicitly asks HOW MANY. Keep facet=quantity and its count goal; do not substitute an event prediction.".into());
+        }
+        if case.question.resolved().is_none()
+            && case.subject.resolved().is_some()
+            && case.method().is_some()
+        {
+            return Err("The original consultation has no question yet. Preserve the actual question from latest_words (or heard for audio); null cannot stand for an unsaved question. A rejected previous_worksheet is not retained context.".into());
+        }
+        if case.question.resolved().is_some()
+            && case.subject.resolved().is_some()
+            && case.method().is_none()
+            && !matches!(
+                turn.intent,
+                crate::reading_contracts::Intent::Explain
+                    | crate::reading_contracts::Intent::Pause
+                    | crate::reading_contracts::Intent::Restore
+            )
+        {
+            return Err("Select the reading method from the retained concern, or explicitly mark it unclassified. A blank frame cannot complete classification.".into());
+        }
+        if turn.intent == crate::reading_contracts::Intent::Restore
+            && !input["available_revisions"]
+                .as_array()
+                .is_some_and(|revisions| {
+                    revisions
+                        .iter()
+                        .any(|r| r["number"].as_u64() == turn.restore_revision)
+                })
+        {
+            return Err("Restore must select an existing revision.".into());
+        }
+        return Ok(Checked::Data(CheckedData {
+            stage,
+            input_sha256: crate::horary_lessons::digest(&input.to_string()),
+            worksheet: value.clone(),
+            roles: Vec::new(),
+            turn: Some(Box::new(turn)),
+        }));
+    }
     if value.get("request_input").is_some() {
-        horary_contract::validate_shape(value, &request_schema(stage))?;
+        horary_contract::validate_shape(value, &request_schema_for(stage, input))?;
         let request: InputRequest =
             serde_json::from_value(value["request_input"].clone()).map_err(|e| e.to_string())?;
         if request.question.trim().is_empty() || request.reason.trim().is_empty() {
@@ -419,45 +518,30 @@ pub fn check(
                 "A request must name the missing context and ask one specific question.".into(),
             );
         }
-        return Ok(Checked::NeedsInput {
-            request,
-            brief: None,
-        });
+        let ready = &original_input(input)["reading_request"];
+        if ready.is_object() {
+            let subject = &ready["subject"];
+            if request.field == "ownership"
+                && subject["owner_id"]
+                    .as_str()
+                    .is_some_and(|id| !id.is_empty())
+                || request.field == "subject_relationship"
+                    && subject["owner_id"].as_str().is_some_and(|id| {
+                        id == "querent"
+                            || ready["people"][id]["relationship"]
+                                .as_str()
+                                .is_some_and(|r| r != "unknown")
+                    })
+            {
+                return Err("This fact is already resolved in reading_request. Use it; do not ask the person to repeat known ownership or capacity.".into());
+            }
+        }
+        return Ok(Checked::NeedsInput { request });
     }
     let input = original_input(input);
     if stage != Stage::Significators {
         horary_contract::validate_for(stage, matter, value, facts)?;
     }
-    let brief: Option<horary_contract::Brief> = if stage == Stage::Intake {
-        let brief: horary_contract::Brief =
-            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        validate_entities(&brief, input)?;
-        if brief.intent == "restore"
-            && !input["available_revisions"]
-                .as_array()
-                .is_some_and(|revisions| {
-                    revisions
-                        .iter()
-                        .any(|r| r["number"].as_u64() == brief.restore_revision)
-                })
-        {
-            return Err("Choose one listed earlier revision, or ask which one to restore.".into());
-        }
-        if !brief.clarification.trim().is_empty() {
-            return Ok(Checked::NeedsInput {
-                request: InputRequest {
-                    field: "question".into(),
-                    question: brief.clarification.clone(),
-                    reason: "The actual matter needs clarification before it can be understood."
-                        .into(),
-                },
-                brief: Some(brief),
-            });
-        }
-        Some(brief)
-    } else {
-        None
-    };
     let roles = if stage == Stage::Significators {
         let options: crate::horary_role_options::Options =
             serde_json::from_value(input["native_role_options"].clone())
@@ -513,10 +597,15 @@ pub fn check(
                     question: question.into(),
                     reason: value["basis"].as_str().unwrap_or("").into(),
                 },
-                brief: None,
             });
         }
         Stage::Moment if value["mode"] == "explicit" => {
+            if input["explicit_occurrence"]
+                .as_str()
+                .is_some_and(|choice| value["occurrence"].as_str() != Some(choice))
+            {
+                return Err("Use the person's explicitly selected earlier/later occurrence; do not replace it.".into());
+            }
             let zone = input["selected_timezone"]
                 .as_str()
                 .ok_or("The controller must supply a selected time zone")?;
@@ -529,12 +618,12 @@ pub fn check(
             {
                 if error.contains("occurs twice") || error.contains("does not exist") {
                     return Ok(Checked::NeedsInput { request: InputRequest {
-                        field: "chart_moment".into(),
+                        field: if error.contains("occurs twice"){"time_occurrence"}else{"chart_moment"}.into(),
                         question: if error.contains("occurs twice") {
                             "That clock time happened twice. Do you mean the earlier occurrence or the later one?"
                         } else { "The clocks skipped that time. What time before or after the change should I use?" }.into(),
                         reason: error,
-                    }, brief: None });
+                    } });
                 }
                 return Err(error);
             }
@@ -546,98 +635,8 @@ pub fn check(
         input_sha256: crate::horary_lessons::digest(&input.to_string()),
         worksheet: value.clone(),
         roles,
-        brief,
+        turn: None,
     }))
-}
-
-fn validate_entities(brief: &horary_contract::Brief, input: &Value) -> Result<(), String> {
-    if !brief.clarification.is_empty() {
-        return Ok(());
-    }
-    if brief.subject.name.trim().is_empty() {
-        return Err(
-            "Extract what is being asked about into subject; keep a specific subject name.".into(),
-        );
-    }
-    let mut sources = Vec::new();
-    for key in ["latest_words", "canonical_question"] {
-        if let Some(source) = input[key].as_str() {
-            sources.push(source.to_string());
-        }
-    }
-    if !brief.heard.is_empty() {
-        sources.push(brief.heard.clone());
-    }
-    for person in input["retained_brief"]["people"]
-        .as_array()
-        .into_iter()
-        .flatten()
-    {
-        if let Some(source) = person["source_quote"].as_str() {
-            sources.push(source.to_string());
-        }
-    }
-    if let Some(source) = input["retained_brief"]["subject"]["source_quote"].as_str() {
-        sources.push(source.to_string());
-    }
-    for source in input["legacy_user_fact_sources"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-    {
-        sources.push(source.to_string());
-    }
-    let mut ids = std::collections::BTreeSet::new();
-    for person in &brief.people {
-        if person.id.is_empty()
-            || person.id == "querent"
-            || !person
-                .id
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-            || !ids.insert(&person.id)
-            || person.label.trim().is_empty()
-        {
-            return Err(
-                "Each relevant person needs a unique lowercase ID and a name; querent is reserved."
-                    .into(),
-            );
-        }
-        if person.relationship != "unknown" {
-            let quote = person.source_quote.to_lowercase();
-            if quote.is_empty()
-                || !sources
-                    .iter()
-                    .any(|source| source.contains(&person.source_quote))
-                || !crate::horary_role_options::relation_words(&person.relationship)
-                    .iter()
-                    .any(|word| quote.contains(word))
-            {
-                return Err(format!("{}: a known relationship needs an exact supplied quote containing the stated relationship. Use unknown if it was not given; do not turn a name into a relationship.",person.label));
-            }
-        }
-    }
-    if !brief.subject.owner_id.is_empty()
-        && brief.subject.owner_id != "querent"
-        && !ids.contains(&brief.subject.owner_id)
-    {
-        return Err(
-            "Subject owner_id must name a supplied person ID or querent; empty means unknown."
-                .into(),
-        );
-    }
-    if !brief.subject.source_quote.is_empty()
-        && !sources
-            .iter()
-            .any(|source| source.contains(&brief.subject.source_quote))
-    {
-        return Err(
-            "The subject's source_quote must preserve supplied words, not an invented quotation."
-                .into(),
-        );
-    }
-    Ok(())
 }
 
 #[cfg(test)]

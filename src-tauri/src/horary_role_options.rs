@@ -9,7 +9,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Person {
     pub id: String,
@@ -18,7 +18,7 @@ pub struct Person {
     pub source_quote: String,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Subject {
     pub name: String,
@@ -66,6 +66,7 @@ pub fn relationship_house(relationship: &str) -> Option<u8> {
         "father" => Some(4),
         "employee" => Some(6),
         "querent" => Some(1),
+        "neighbor" => Some(3),
         _ => None,
     }
 }
@@ -95,6 +96,13 @@ pub fn relation_words(relationship: &str) -> &'static [&'static str] {
         "father" => &["father", "dad"],
         "employer" => &["employer", "boss"],
         "employee" => &["employee", "servant"],
+        "neighbor" => &["neighbor", "neighbour"],
+        "querent" => &[
+            "my own question",
+            "their own question",
+            "her own question",
+            "his own question",
+        ],
         "other_party" => &[
             "client",
             "customer",
@@ -222,6 +230,190 @@ pub fn build(matter: Matter, people: &[Person], subject: &Subject) -> Options {
         basis: "Optional contextual testimony; a claimed house ruler has first use of its planet."
             .into(),
     });
+    options
+}
+
+/// Contract-specific capacities override the generic turning helper. Only
+/// operative participants enter this program; names in background context do
+/// not become mandatory astrological roles.
+pub fn build_for(
+    case: &crate::reading_contracts::Consultation,
+    matter: Matter,
+    people: &[Person],
+    subject: &Subject,
+) -> Options {
+    use crate::reading_contracts::{Field, Method};
+    let method = case.method();
+    let relay = case.text(Field::PrincipalMode) == Some("relay");
+    let principal = if relay {
+        case.text(Field::PrincipalId).unwrap_or("querent")
+    } else {
+        "querent"
+    };
+    let mut relevant: Vec<_> = people
+        .iter()
+        .filter(|p| {
+            p.id == subject.owner_id
+                || (matches!(
+                    method,
+                    Some(
+                        Method::MovableDeal
+                            | Method::Property
+                            | Method::Rental
+                            | Method::BusinessProperty
+                    )
+                ) && (Some(p.id.as_str()) == case.text(Field::Seller)
+                    || Some(p.id.as_str()) == case.text(Field::DealParty)))
+                || (method == Some(Method::Money)
+                    && Some(p.id.as_str()) == case.text(Field::Sender))
+        })
+        .cloned()
+        .collect();
+    for person in &mut relevant {
+        if person.id == principal {
+            person.relationship = "querent".into();
+        }
+    }
+    let mut chosen = subject.clone();
+    if method == Some(Method::WorkPerson) {
+        // The work capacity is already a resolved input. Do not require a
+        // second personal relationship or bind the same person twice.
+        relevant.retain(|p| p.id != subject.owner_id);
+        chosen.kind = "other".into();
+    }
+    if matches!(method, Some(Method::LostAnimal)) {
+        chosen.owner_id = "querent".into();
+        chosen.kind = if case.text(Field::AnimalKind) == Some("large_kind") {
+            "large_animal"
+        } else {
+            "small_animal"
+        }
+        .into();
+        relevant.clear();
+    }
+    if method.is_some_and(|m| {
+        matches!(
+            crate::reading_contracts::contract(m).owner,
+            crate::reading_contracts::OwnerRule::Principal
+        )
+    }) {
+        chosen.owner_id = principal.into();
+    }
+    let mut options = build(matter, &relevant, &chosen);
+    let base = if chosen.owner_id == "querent" || chosen.owner_id == principal {
+        1
+    } else {
+        relevant
+            .iter()
+            .find(|p| p.id == chosen.owner_id)
+            .and_then(|p| relationship_house(&p.relationship))
+            .unwrap_or(1)
+    };
+    let replacement = match method {
+        Some(Method::NewJob | Method::JobOffer) => {
+            Some(if base == 10 { turn(base, 10) } else { 10 })
+        }
+        Some(Method::WorkPerson) => Some(match case.text(Field::WorkCapacity) {
+            Some("boss") => 10,
+            Some("subordinate") => 6,
+            _ => 7,
+        }),
+        Some(Method::Money) => match case.text(Field::MoneySource) {
+            Some("customer" | "partner") => Some(turn(base, 8)),
+            Some("job" | "government") => Some(turn(base, 11)),
+            Some("relative") => case
+                .text(Field::Sender)
+                .and_then(|id| case.people.get(id))
+                .and_then(|p| relationship_house(&p.relationship))
+                .map(|house| turn(house, 2)),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(house) = replacement {
+        options.choices.retain(|c| !c.id.starts_with("subject."));
+        options
+            .required_groups
+            .retain(|group| !group.iter().any(|id| id.starts_with("subject.")));
+        options.compare.clear();
+        options.choices.push(Choice{id:"subject.primary".into(),label:subject.name.clone(),house:Some(house),natural:None,basis:format!("The selected {} contract supplies house {house}; ordinary indiscriminate turning is not applied. Frawley printed pp. {}.",method.expect("Matched method").name(),crate::reading_contracts::contract(method.expect("Matched method")).printed_pages)});
+        options.required_groups.push(vec!["subject.primary".into()]);
+        options.missing.retain(|s| !s.starts_with(&subject.name));
+    }
+    if method == Some(Method::Relationship)
+        && (subject.owner_id.is_empty() || case.text(Field::Baseline) == Some("hoped_for"))
+    {
+        // A future partner is a role, not an invented biographical person.
+        options = build(
+            Matter::Other,
+            &[],
+            &Subject {
+                name: subject.name.clone(),
+                kind: "other".into(),
+                ..Default::default()
+            },
+        );
+        options.choices.retain(|c| !c.id.starts_with("subject."));
+        options.choices.push(Choice{id:"subject.primary".into(),label:subject.name.clone(),house:Some(7),natural:None,basis:"Seventh for the prospective partner; no identified person or gender is required (Frawley p. 191).".into()});
+        options
+            .required_groups
+            .retain(|g| !g.iter().any(|id| id.starts_with("subject.")));
+        options.required_groups.push(vec!["subject.primary".into()]);
+    }
+    if matches!(method, Some(Method::Property | Method::Rental)) {
+        options.choices.push(Choice{id:"deal.price".into(),label:"The price".into(),house:Some(turn(base,10)),natural:None,basis:"Property and its price are distinct: fourth/tenth in the relevant frame, Frawley pp. 167–170.".into()});
+        options.required_groups.push(vec!["deal.price".into()]);
+    }
+    if matches!(
+        method,
+        Some(Method::MovableDeal | Method::Property | Method::Rental)
+    ) && case.text(Field::DealParty).is_none()
+    {
+        let actor = if case.text(Field::DealCapacity) == Some("sell") {
+            case.text(Field::Seller).unwrap_or(&chosen.owner_id)
+        } else {
+            principal
+        };
+        let actor_house = if actor == "querent" || actor == principal {
+            Some(1)
+        } else {
+            relevant
+                .iter()
+                .find(|p| p.id == actor)
+                .and_then(|p| relationship_house(&p.relationship))
+        };
+        if let Some(actor_house) = actor_house {
+            let house = turn(actor_house, 7);
+            options.choices.push(Choice {
+                id: "deal.counterparty".into(),
+                label: "The other party in the deal".into(),
+                house: Some(house),
+                natural: None,
+                basis: format!("The unnamed other party is seventh from the deal actor's house {actor_house}; completion concerns the parties, not goods touching a buyer (Frawley pp. 168–172)."),
+            });
+            options
+                .required_groups
+                .push(vec!["deal.counterparty".into()]);
+        } else {
+            options
+                .missing
+                .push("The deal actor's operative capacity has not been resolved.".into());
+        }
+    }
+    // Some method overrides rebuild the choices. Apply the relay identity last.
+    if relay {
+        if let Some(querent) = options.choices.iter_mut().find(|c| c.id == "querent.self") {
+            querent.label = case
+                .people
+                .get(principal)
+                .map(|p| p.label.clone())
+                .unwrap_or_else(|| "The person whose question is relayed".into());
+            querent.basis = "The genuine principal receives first; the speaker is a mouthpiece (Frawley pp. 137–138).".into();
+        }
+        let redundant = format!("{principal}.self");
+        options.choices.retain(|c| c.id != redundant);
+        options.required_groups.retain(|g| !g.contains(&redundant));
+    }
     options
 }
 

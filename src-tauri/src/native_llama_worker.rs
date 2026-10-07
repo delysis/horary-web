@@ -13,6 +13,9 @@ use std::{
     time::Duration,
 };
 pub const NATIVE_LLAMA_RUNTIME_BACKEND: &str = "llama-native-kit";
+/// The shared arena holds all independent lesson prefixes, changing inputs and
+/// output reservations for a four-sequence reading batch, not one prompt alone.
+pub(crate) const READING_CONTEXT_TOKENS: u32 = 32768;
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeLlamaHealth {
@@ -203,7 +206,7 @@ mod imp {
         req: StartLlamaRequest,
     ) -> LlamaResult<LlamaStatus> {
         let mut slot = state.running.lock().map_err(error)?;
-        config.context_tokens = req.ctx_size.unwrap_or(16384);
+        config.context_tokens = req.ctx_size.unwrap_or(READING_CONTEXT_TOKENS);
         if !(2048..=32768).contains(&config.context_tokens) {
             return Err(error("Context size must be between 2048 and 32768 tokens."));
         }
