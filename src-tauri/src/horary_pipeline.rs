@@ -1690,6 +1690,75 @@ mod tests {
         }
     }
     #[test]
+    fn job_event_role_coverage_keeps_native_moon_to_job_contact_candidates() {
+        use crate::reading_contracts::{
+            Consultation, Evidence, Facet, Frame, Method, Observation, Slot,
+        };
+        for method in [Method::NewJob, Method::ReturnToJob] {
+            for facet in [Facet::Event, Facet::Timing] {
+                let case = Consultation {
+                    frame: Slot::Resolved {
+                        observation: Observation {
+                            value: Frame { method, facet },
+                            evidence: Evidence::Migration {
+                                detail: "Authored job contact coverage, not a predicted event."
+                                    .into(),
+                            },
+                        },
+                    },
+                    ..Default::default()
+                };
+                let subject = crate::horary_role_options::Subject {
+                    name: "The applicant's job".into(),
+                    kind: "job".into(),
+                    owner_id: "querent".into(),
+                    source_quote: "my application or return to my former job".into(),
+                };
+                let options =
+                    crate::horary_role_options::build_for(&case, Matter::Work, &[], &subject);
+                let events: Vec<_> = ["Jupiter", "Moon", "Mars"]
+                    .iter()
+                    .map(|worker| {
+                        json!({"planet1":worker,"planet2":"Venus","aspectName":"Sextile",
+                            "withinCurrentSigns":true,"estimatedPerfectsWithinHours":0.5})
+                    })
+                    .collect();
+                let chart = json!({"houses":[
+                    {"number":1,"sign":"Sagittarius","degree":0.0},
+                    {"number":10,"sign":"Libra","degree":0.0}
+                ],"derived":{"eventSearch":{"events":events}}});
+                let facts = reading_method::facts(Some(&chart));
+                let mut worksheet = json!({"selections":[
+                    {"id":"querent.self","reason":"The actual principal is the worker."},
+                    {"id":"subject.primary","reason":"The worker's relevant job."}
+                ],"summary":"These are contact candidates, not a guaranteed outcome or date.","unknowns":[]});
+                assert!(
+                    crate::horary_role_options::resolve(&options, &worksheet, &facts)
+                        .unwrap_err()
+                        .contains("Missing conditional role moon.contextual")
+                );
+                worksheet["selections"].as_array_mut().unwrap().push(json!({
+                    "id":"moon.contextual","reason":"The unclaimed genuine-worker co-significator."
+                }));
+                let roles =
+                    crate::horary_role_options::resolve(&options, &worksheet, &facts).unwrap();
+                let retained = relevant(&facts, &roles, &["event"]);
+                assert_eq!(retained.len(), 2, "Incidental Mars remains excluded");
+                for worker in ["Jupiter", "Moon"] {
+                    assert!(retained
+                        .iter()
+                        .any(|fact| fact.planets == [worker, "Venus"]));
+                }
+                let main_roles: Vec<_> = roles.into_iter().filter(|r| r.house.is_some()).collect();
+                assert_eq!(
+                    relevant(&facts, &main_roles, &["event"]).len(),
+                    1,
+                    "Omitting the contextual Moon is the original contact-filter loss"
+                );
+            }
+        }
+    }
+    #[test]
     fn relationship_role_contract_has_no_lost_object_fields() {
         let contract = schema_for(Stage::Significators, Matter::Relationship, &[]);
         assert!(contract["properties"].get("object_candidates").is_none());

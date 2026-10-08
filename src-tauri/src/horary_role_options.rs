@@ -956,6 +956,38 @@ pub fn build_for(
             }
         }
     }
+    if matches!(method, Some(Method::NewJob | Method::ReturnToJob))
+        && case.frame.resolved().is_some_and(|frame| {
+            matches!(
+                frame.facet,
+                crate::reading_contracts::Facet::Event | crate::reading_contracts::Facet::Timing
+            )
+        })
+        && match case.text(Field::PrincipalMode) {
+            Some("relay") => case.text(Field::PrincipalId) == Some(chosen.owner_id.as_str()),
+            Some("self" | "concerning_other") => chosen.owner_id == "querent",
+            _ => false,
+        }
+    {
+        options.conditional_roles.push(ConditionalRole {
+            choice_id: "moon.contextual".into(),
+            unless_house_claims: NaturalRole::Moon,
+            basis: "For acquiring or returning to a job, the genuine principal has Lord 1 and Moon. Select Moon unless a selected house ruler already claims it; do not transfer the speaker's Moon to another worker (Frawley printed pp. 32, 222, 225–226).".into(),
+        });
+        if let Some(moon) = options
+            .choices
+            .iter_mut()
+            .find(|choice| choice.id == "moon.contextual")
+        {
+            moon.label = if relay {
+                "The principal's Moon as worker"
+            } else {
+                "Your Moon as worker"
+            }
+            .into();
+            moon.basis = "Required genuine-worker co-significator for acquiring or returning to a job, unless a selected house ruler has first claim on Moon. This preserves relevant testimony; it does not establish an event or its date (Frawley printed pp. 32, 222, 225–226).".into();
+        }
+    }
     if method == Some(Method::JobOffer) {
         if let Some(job_house) = options
             .choices
@@ -1498,6 +1530,216 @@ mod tests {
             )
             .unwrap();
             assert_eq!(roles.len(), 2);
+        }
+    }
+
+    fn job_case(
+        method: Method,
+        facet: Facet,
+        worker: &str,
+        people: &[Person],
+    ) -> (Consultation, Subject) {
+        let subject = Subject {
+            name: "The stated job".into(),
+            kind: "job".into(),
+            owner_id: worker.into(),
+            source_quote: "The stated worker's job.".into(),
+        };
+        let frame = Slot::Resolved {
+            observation: Observation {
+                value: Frame { method, facet },
+                evidence: Evidence::Migration {
+                    detail: "Authored job role coverage, not a model judgment.".into(),
+                },
+            },
+        };
+        (
+            Consultation {
+                frame,
+                subject: resolved(subject.clone()),
+                people: people.iter().cloned().map(|p| (p.id.clone(), p)).collect(),
+                ..Default::default()
+            },
+            subject,
+        )
+    }
+
+    fn job_options(case: &Consultation, subject: &Subject) -> Options {
+        let people: Vec<_> = case.people.values().cloned().collect();
+        build_for(case, Matter::Work, &people, subject)
+    }
+
+    fn job_worksheet(options: &Options, moon: bool) -> Value {
+        let mut selections: Vec<_> = options
+            .required_groups
+            .iter()
+            .map(|group| {
+                assert_eq!(
+                    group.len(),
+                    1,
+                    "These job roles are identified, not alternatives"
+                );
+                json!({"id":group[0],"reason":"The stated worker and job keep their native roles."})
+            })
+            .collect();
+        if moon {
+            selections.push(json!({"id":"moon.contextual","reason":"The genuine principal's unclaimed co-significator."}));
+        }
+        json!({"selections":selections,"summary":"Role coverage establishes no event or date.","unknowns":[]})
+    }
+
+    #[test]
+    fn job_event_roles_require_the_genuine_workers_unclaimed_moon() {
+        for method in [Method::NewJob, Method::ReturnToJob] {
+            for facet in [Facet::Event, Facet::Timing] {
+                let (case, subject) = job_case(method, facet, "querent", &[]);
+                let options = job_options(&case, &subject);
+                let native = money_house_facts();
+                let omitted =
+                    resolve(&options, &job_worksheet(&options, false), &native).unwrap_err();
+                assert!(omitted.contains("Missing conditional role moon.contextual"));
+                let roles = resolve(&options, &job_worksheet(&options, true), &native).unwrap();
+                assert_eq!(roles.len(), 3);
+                assert!(roles
+                    .iter()
+                    .any(|r| r.house == Some(1) && r.planet == "Jupiter"));
+                assert!(roles
+                    .iter()
+                    .any(|r| r.house == Some(10) && r.planet == "Mercury"));
+                assert!(roles
+                    .iter()
+                    .any(|r| r.house.is_none() && r.planet == "Moon"));
+            }
+        }
+    }
+
+    #[test]
+    fn job_event_moon_keeps_selected_house_rulers_first_claim() {
+        for method in [Method::NewJob, Method::ReturnToJob] {
+            let (case, subject) = job_case(method, Facet::Timing, "querent", &[]);
+            let options = job_options(&case, &subject);
+            for house in [1, 10] {
+                let mut native = money_house_facts();
+                native
+                    .iter_mut()
+                    .find(|fact| fact.label == format!("House {house}"))
+                    .unwrap()
+                    .planets = vec!["Moon".into()];
+                let roles = resolve(&options, &job_worksheet(&options, false), &native).unwrap();
+                assert!(roles
+                    .iter()
+                    .any(|r| r.house == Some(house) && r.planet == "Moon"));
+                assert!(!roles.iter().any(|r| r.house.is_none()));
+                let duplicate =
+                    resolve(&options, &job_worksheet(&options, true), &native).unwrap_err();
+                assert!(duplicate.contains("first claim"));
+            }
+        }
+    }
+
+    #[test]
+    fn job_event_moon_does_not_transfer_to_a_third_person_worker() {
+        for method in [Method::NewJob, Method::ReturnToJob] {
+            for (relationship, worker_house) in [("child", 5), ("partner", 7)] {
+                let worker = money_person("worker", relationship);
+                let (mut case, subject) = job_case(method, Facet::Event, "worker", &[worker]);
+                case.facts
+                    .insert(Field::PrincipalMode, resolved("concerning_other".into()));
+                let options = job_options(&case, &subject);
+                assert!(options.conditional_roles.is_empty());
+                assert_eq!(choice_house(&options, "worker.self"), Some(worker_house));
+                assert_eq!(
+                    choice_house(&options, "subject.primary"),
+                    Some(if method == Method::NewJob {
+                        10
+                    } else {
+                        turn(worker_house, 10)
+                    })
+                );
+                let roles = resolve(
+                    &options,
+                    &job_worksheet(&options, false),
+                    &money_house_facts(),
+                )
+                .unwrap();
+                assert!(!roles
+                    .iter()
+                    .any(|r| r.house.is_none() && r.planet == "Moon"));
+            }
+        }
+    }
+
+    #[test]
+    fn job_event_relay_requires_exact_principal_binding_without_role_aliases() {
+        for method in [Method::NewJob, Method::ReturnToJob] {
+            let worker = money_person("worker", "unknown");
+            let (mut case, subject) = job_case(method, Facet::Timing, "worker", &[worker]);
+            case.facts
+                .insert(Field::PrincipalMode, resolved("relay".into()));
+            case.facts
+                .insert(Field::PrincipalId, resolved("worker".into()));
+            let options = job_options(&case, &subject);
+            assert_eq!(options.conditional_roles.len(), 1);
+            assert_eq!(choice_house(&options, "querent.self"), Some(1));
+            assert_eq!(choice_house(&options, "subject.primary"), Some(10));
+            assert!(!options
+                .choices
+                .iter()
+                .any(|choice| choice.id == "worker.self"));
+            assert!(!options
+                .required_groups
+                .iter()
+                .flatten()
+                .any(|id| id == "worker.self"));
+            let roles = resolve(
+                &options,
+                &job_worksheet(&options, true),
+                &money_house_facts(),
+            )
+            .unwrap();
+            assert!(roles
+                .iter()
+                .any(|r| r.house == Some(1) && r.label == "worker"));
+            assert!(roles
+                .iter()
+                .any(|r| r.house.is_none() && r.planet == "Moon"));
+            let mut alias = job_worksheet(&options, true);
+            alias["selections"][0]["id"] = json!("worker.self");
+            assert!(resolve(&options, &alias, &money_house_facts())
+                .unwrap_err()
+                .contains("supplied role option ID"));
+
+            // Literal querent cannot stand in for an identified relayed worker.
+            // Nor does a missing PrincipalId make build_for's first-house
+            // fallback a genuine principal. These incomplete input frames are
+            // not qualified here; only the new Moon obligation is withheld.
+            let mut unbound = subject.clone();
+            unbound.owner_id = "querent".into();
+            assert!(job_options(&case, &unbound).conditional_roles.is_empty());
+            case.facts.remove(&Field::PrincipalId);
+            assert!(job_options(&case, &unbound).conditional_roles.is_empty());
+            assert!(job_options(&case, &subject).conditional_roles.is_empty());
+        }
+    }
+
+    #[test]
+    fn job_event_moon_does_not_broaden_methods_or_non_event_facets() {
+        for method in [Method::NewJob, Method::ReturnToJob] {
+            for facet in [
+                Facet::Situation,
+                Facet::Profit,
+                Facet::Choice,
+                Facet::Quantity,
+            ] {
+                let (case, subject) = job_case(method, facet, "querent", &[]);
+                assert!(job_options(&case, &subject).conditional_roles.is_empty());
+            }
+        }
+        for method in [Method::ExistingJob, Method::JobOffer] {
+            for facet in [Facet::Event, Facet::Timing, Facet::Situation] {
+                let (case, subject) = job_case(method, facet, "querent", &[]);
+                assert!(job_options(&case, &subject).conditional_roles.is_empty());
+            }
         }
     }
 
