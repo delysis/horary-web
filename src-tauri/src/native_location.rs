@@ -347,6 +347,23 @@ fn validate_coordinate(
 mod tests {
     use super::*;
 
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    #[test]
+    fn permission_refresh_waits_for_initial_callback_without_requesting_access_or_location() {
+        extern "C" {
+            fn horary_test_location_permission_refresh(initialized_status: i32) -> i32;
+        }
+        // The native test provider's property begins NotDetermined. Only its
+        // later initialization callback reports the actual status. High bits
+        // record consent/location requests, which refresh must never make.
+        for status in [0, 1, 2, 3, 4] {
+            // SAFETY: the debug-only bridge takes/returns integers, uses an
+            // isolated callback queue and fake provider, and touches no OS data.
+            let actual = unsafe { horary_test_location_permission_refresh(status) };
+            assert_eq!(actual, status, "refresh of native status {status}");
+        }
+    }
+
     #[test]
     fn timeout_is_bounded_for_ui_responsiveness() {
         assert_eq!(normalize_timeout_ms(None), DEFAULT_TIMEOUT_MS);

@@ -39,6 +39,7 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/native_llama_worker.rs",
     "src-tauri/src/native_location.rs",
     "src-tauri/native/location_bridge.m",
+    "src-tauri/native/location_bridge_test.inc",
     "src-tauri/native/permissions_bridge.m",
     "src-tauri/src/permissions.rs",
     "src-tauri/build.rs",

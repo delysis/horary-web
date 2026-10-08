@@ -20,6 +20,8 @@ typedef struct HoraryLocationState {
     BOOL completed;
     BOOL requested_location;
     BOOL authorization_only;
+    BOOL may_request_authorization;
+    BOOL requested_authorization;
 } HoraryLocationState;
 
 static void horary_location_set_error(HoraryLocationState *state, NSString *format, ...) {
@@ -60,8 +62,9 @@ static CLAuthorizationStatus horary_location_authorization_status(CLLocationMana
 static void horary_location_request_authorization(CLLocationManager *manager) {
     if (@available(macOS 10.15, *)) {
         [manager requestWhenInUseAuthorization];
+    } else {
+        [manager startUpdatingLocation];
     }
-    [manager startUpdatingLocation];
 }
 
 static void horary_location_request_once(CLLocationManager *manager) {
@@ -108,7 +111,12 @@ static void horary_location_request_once(CLLocationManager *manager) {
 
     switch (status) {
         case kCLAuthorizationStatusNotDetermined:
-            horary_location_request_authorization(manager);
+            if (!_state->may_request_authorization) {
+                horary_location_complete(_state);
+            } else if (!_state->requested_authorization) {
+                _state->requested_authorization = YES;
+                horary_location_request_authorization(manager);
+            }
             break;
         case kCLAuthorizationStatusRestricted:
             horary_location_set_error(_state, @"Location Services are restricted on this Mac.");
@@ -177,12 +185,17 @@ static void horary_location_request_once(CLLocationManager *manager) {
 
 @end
 
-static int horary_request_location(
+typedef CLLocationManager *(^HoraryLocationManagerFactory)(void);
+
+static int horary_request_location_on_queue(
     double timeout_seconds,
     BOOL authorization_only,
+    BOOL may_request_authorization,
     HoraryNativeLocationResult *out_result,
     char *error_buffer,
-    size_t error_buffer_len
+    size_t error_buffer_len,
+    dispatch_queue_t callback_queue,
+    HoraryLocationManagerFactory make_manager
 ) {
     if (!out_result || !error_buffer || error_buffer_len == 0) {
         return 1;
@@ -199,28 +212,31 @@ static int horary_request_location(
         }
         state->semaphore = dispatch_semaphore_create(0);
         state->authorization_only = authorization_only;
+        state->may_request_authorization = may_request_authorization;
 
         __block CLLocationManager *manager = nil;
         __block HoraryLocationDelegate *delegate = nil;
 
-        dispatch_async(dispatch_get_main_queue(), ^{
+        dispatch_async(callback_queue, ^{
             if (state->completed) {
                 return;
             }
-            if (![CLLocationManager locationServicesEnabled]) {
+            manager = make_manager();
+            if (!manager) {
                 state->result.authorization_status = (int)kCLAuthorizationStatusDenied;
                 horary_location_set_error(state, @"Location Services are disabled on this Mac.");
                 horary_location_complete(state);
                 return;
             }
 
-            manager = [[CLLocationManager alloc] init];
             manager.desiredAccuracy = kCLLocationAccuracyKilometer;
             manager.distanceFilter = kCLDistanceFilterNone;
 
             delegate = [[HoraryLocationDelegate alloc] initWithState:state];
             manager.delegate = delegate;
-            [delegate handleAuthorizationStatus:horary_location_authorization_status(manager) manager:manager];
+            // Core Location initializes authorization asynchronously. A new
+            // manager's immediate property can still say NotDetermined even
+            // when consent is granted. Only the delegate callback is ready.
         });
 
         uint64_t timeout_nanos = (uint64_t)(timeout_seconds * (double)NSEC_PER_SEC);
@@ -249,14 +265,14 @@ static int horary_request_location(
 
         if (wait_result != 0) {
             strlcpy(error_buffer, "Timed out waiting for macOS Location Services.", error_buffer_len);
-            dispatch_async(dispatch_get_main_queue(), cleanup);
+            dispatch_async(callback_queue, cleanup);
             return 2;
         }
 
         HoraryNativeLocationResult result = state->result;
         char native_error[512];
         strlcpy(native_error, state->error, sizeof(native_error));
-        dispatch_async(dispatch_get_main_queue(), cleanup);
+        dispatch_async(callback_queue, cleanup);
 
         *out_result = result;
 
@@ -270,24 +286,44 @@ static int horary_request_location(
     }
 }
 
+static CLLocationManager *horary_make_location_manager(void) {
+    return [CLLocationManager locationServicesEnabled] ? [[CLLocationManager alloc] init] : nil;
+}
+
+static int horary_request_location(double timeout_seconds, BOOL authorization_only,
+    BOOL may_request_authorization, HoraryNativeLocationResult *out_result,
+    char *error_buffer, size_t error_buffer_len) {
+    return horary_request_location_on_queue(timeout_seconds, authorization_only,
+        may_request_authorization, out_result, error_buffer, error_buffer_len,
+        dispatch_get_main_queue(), ^{ return horary_make_location_manager(); });
+}
+
 int horary_request_current_location(double timeout_seconds, HoraryNativeLocationResult *out_result,
     char *error_buffer, size_t error_buffer_len) {
-    return horary_request_location(timeout_seconds, NO, out_result, error_buffer, error_buffer_len);
+    return horary_request_location(timeout_seconds, NO, YES, out_result, error_buffer, error_buffer_len);
 }
 
 int horary_request_location_permission(void) {
     HoraryNativeLocationResult result;
     char error[512];
-    int code = horary_request_location(120.0, YES, &result, error, sizeof(error));
+    int code = horary_request_location(120.0, YES, YES, &result, error, sizeof(error));
+    return code == 2 ? 0 : result.authorization_status;
+}
+
+static int horary_location_permission_status_on_queue(dispatch_queue_t callback_queue,
+    HoraryLocationManagerFactory make_manager) {
+    HoraryNativeLocationResult result;
+    char error[512];
+    int code = horary_request_location_on_queue(6.0, YES, NO, &result, error,
+        sizeof(error), callback_queue, make_manager);
     return code == 2 ? 0 : result.authorization_status;
 }
 
 int horary_location_permission_status(void) {
-    __block int result = 0;
-    dispatch_sync(dispatch_get_main_queue(), ^{
-        if (![CLLocationManager locationServicesEnabled]) { result = 2; return; }
-        CLLocationManager *manager = [[CLLocationManager alloc] init];
-        result = (int)horary_location_authorization_status(manager);
-    });
-    return result;
+    return horary_location_permission_status_on_queue(dispatch_get_main_queue(),
+        ^{ return horary_make_location_manager(); });
 }
+
+#ifdef HORARY_LOCATION_TESTS
+#include "location_bridge_test.inc"
+#endif

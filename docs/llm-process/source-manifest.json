@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": ".gitattributes",
-      "sha256": "8fc2ceb5c2cebf15dbf515be08be7ab39d8c3212b33535b8a50bfa4e253ae9e0"
+      "sha256": "5f5367f7c325e3ab92d68d82f60172c829870f466357991516083409bb1fa0da"
     },
     {
       "path": "crates/horary-ai-core/src/astronomy.rs",
@@ -39,7 +39,7 @@
     },
     {
       "path": "src-tauri/build.rs",
-      "sha256": "ec4b2db6ae6c01c76783d4989e63cdd49d3826faab6a0d72fa359b502042349a"
+      "sha256": "ccde2e47d40a71f2d4ba254612edf3cf38c90fd7e301ec5133fd3ca23aaf0c4a"
     },
     {
       "path": "src-tauri/model-manifest.json",
@@ -51,7 +51,11 @@
     },
     {
       "path": "src-tauri/native/location_bridge.m",
-      "sha256": "ed460516d9bf87efe4591e0790ceec060cf604ca591f47bf0734d0064a34d04f"
+      "sha256": "ae1b75037d0c2ce0004052cbe07eb782e757110941e179e4bae153309a7e2e10"
+    },
+    {
+      "path": "src-tauri/native/location_bridge_test.inc",
+      "sha256": "222f486d9d76c6dd50e954a50bf5e05e69f942f42633913d3adceb35b037c049"
     },
     {
       "path": "src-tauri/native/permissions_bridge.m",
@@ -195,7 +199,7 @@
     },
     {
       "path": "src-tauri/src/native_location.rs",
-      "sha256": "57de3d5819daeafd5cf6e9898a8aaab0b8ed1bcc7a96aa48b6ac53100bcc92d5"
+      "sha256": "c212796958d3c5716c71073aeb7891fd3d9a007c121665a5e1adacef9113520a"
     },
     {
       "path": "src-tauri/src/permissions.rs",
@@ -203,11 +207,11 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "f69f1fdf879504372ffdfe2ffc15b9a9a27c9ceebe33a04c32b469acd84a8687"
+      "sha256": "4cd49f4b48abfbff23551633e60b0bce1e29531e5530f7973c3d99ff428d6ac2"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "3ee7d8987f9934135bb2355ffa439f711fe7a80de8f838cf77ff647a1082d0e4"
+      "sha256": "a5f6ed91dd5614e0f7f4b6cbeb55b5790222a5d15b7af9aaa4c04172f95cea21"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
