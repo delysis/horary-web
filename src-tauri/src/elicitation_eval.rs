@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const EVALUATOR_VERSION: &str = "horary-elicitation-evaluator-2026-10-08.7";
+const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-08.1";
 const CORE: &str = include_str!("../test-fixtures/elicitation/core.json");
 const SPECIALIST: &str = include_str!("../test-fixtures/elicitation/specialist.json");
 
@@ -170,6 +170,36 @@ fn case_selected(case: &Case, filters: &[&str]) -> bool {
             .any(|filter| case.id == *filter || case.method.name() == *filter)
 }
 
+fn validate_rubric_coverage(
+    cases: &[Case],
+    rubrics: &BTreeMap<String, crate::reading_eval::Rubric>,
+) -> Result<(), String> {
+    if cases.len() != rubrics.len() {
+        return Err(format!(
+            "Reading rubric coverage differs: {} cases, {} rubrics",
+            cases.len(),
+            rubrics.len()
+        ));
+    }
+    for case in cases {
+        let rubric = rubrics
+            .get(&case.id)
+            .ok_or_else(|| format!("Case {} has no reading rubric", case.id))?;
+        let mode = match case.mode {
+            Mode::Explicit => "explicit",
+            Mode::Implicit => "implicit",
+            Mode::Missing => "missing",
+        };
+        if rubric.declared_method != case.method || rubric.mode != mode {
+            return Err(format!(
+                "Reading rubric method/mode disagrees with immutable fixture {}",
+                case.id
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn catalogue_size(root: &Path) -> Result<usize, String> {
     catalogue_in(&root.join("src-tauri/test-fixtures/elicitation")).map(|cases| cases.len())
 }
@@ -218,6 +248,7 @@ struct Grade {
     actual: Value,
     fluidity_review_flags: Vec<String>,
     human_fluidity_review: &'static str,
+    hurdles: crate::reading_eval::Hurdles,
 }
 
 fn same_actor(
@@ -288,10 +319,12 @@ fn grade_at_moment(
     error: Option<&str>,
     default_moment: f64,
 ) -> Grade {
+    use crate::reading_eval::Gate;
     let mut mismatches = Vec::new();
     if let Some(error) = error {
         mismatches.push(format!("Execution did not complete: {error}"));
     }
+    let evidence_start = mismatches.len();
     let consultation = session.method.consultation.as_ref();
     for mention in &case.expected.canonical_mentions {
         let retained = consultation.is_some_and(|c| {
@@ -310,6 +343,7 @@ fn grade_at_moment(
             mismatches.push(format!("Canonical facts must retain {mention:?}; the question/transcript alone is not a factual binding"));
         }
     }
+    let classification_start = mismatches.len();
     let frame = consultation.and_then(|c| c.frame.resolved());
     let allowed = case
         .expected
@@ -337,6 +371,7 @@ fn grade_at_moment(
             frame.map(|frame| frame.facet)
         ));
     }
+    let facts_start = mismatches.len();
     for fact in &case.expected.facts {
         let actual = consultation.and_then(|c| c.text(fact.field));
         let actor_field = matches!(
@@ -445,6 +480,7 @@ fn grade_at_moment(
             ));
         }
     }
+    let elicitation_start = mismatches.len();
     let anchor = current_anchor(session);
     let plan = consultation.map(|c| c.plan(anchor.as_ref()));
     let clipboard = crate::horary_conversation::clipboard(session);
@@ -491,6 +527,7 @@ fn grade_at_moment(
             "The reader must elicit one expected missing fact; selected {requested:?}"
         ));
     }
+    let handoff_start = mismatches.len();
     let ready = session.chart.is_some()
         && plan
             .as_ref()
@@ -547,6 +584,7 @@ fn grade_at_moment(
             ));
         }
     }
+    let reply_start = mismatches.len();
     if expected_needs.is_empty() && requested.is_some() {
         mismatches.push(format!(
             "The reader requested unnecessary information {requested:?}"
@@ -563,6 +601,17 @@ fn grade_at_moment(
         mismatches.push("No conversational reply was delivered".into());
     }
     let flags = fluidity_flags(session, reply, &needs);
+    let classification = Gate::checked(
+        mismatches[classification_start..facts_start].to_vec(),
+        "Authored allowed methods and answer facets; dialogue meaning is independently reviewed",
+    );
+    let mut extraction_failures = mismatches[evidence_start..classification_start].to_vec();
+    extraction_failures.extend_from_slice(&mismatches[facts_start..elicitation_start]);
+    extraction_failures.extend_from_slice(&mismatches[handoff_start..reply_start]);
+    let extraction = Gate::checked(extraction_failures, "Authored canonical facts, actor/owner bindings, normalization, chart anchor and native handoff; original quotes are retained by production acceptance");
+    let mut elicitation_failures = mismatches[elicitation_start..handoff_start].to_vec();
+    elicitation_failures.extend_from_slice(&mismatches[reply_start..]);
+    let elicitation = Gate::checked(elicitation_failures, "Authored genuine gaps or no gaps, selected reminder and a fresh response; the meaning and fluency of the actual inquiry need independent review");
     Grade {
         semantic_pass: mismatches.is_empty(),
         mismatches,
@@ -573,7 +622,31 @@ fn grade_at_moment(
         fluidity_review_flags: flags,
         human_fluidity_review:
             "Not reviewed; flags are heuristics, not certification of conversational quality",
+        hurdles: crate::reading_eval::Hurdles {
+            classification,
+            elicitation,
+            extraction,
+            reading: crate::reading_eval::reading_gate(session, false, true, None),
+        },
     }
+}
+
+fn with_reading_grade(
+    mut grade: Grade,
+    session: &Session,
+    full: bool,
+    error: Option<&str>,
+) -> Grade {
+    use crate::reading_eval::Status;
+    let inputs_pass = [
+        &grade.hurdles.classification,
+        &grade.hurdles.elicitation,
+        &grade.hurdles.extraction,
+    ]
+    .iter()
+    .all(|gate| gate.status == Status::Pass);
+    grade.hurdles.reading = crate::reading_eval::reading_gate(session, full, inputs_pass, error);
+    grade
 }
 
 fn fluidity_flags(session: &Session, reply: &str, needs: &[RequirementKey]) -> Vec<String> {
@@ -1060,6 +1133,7 @@ fn write_index_text(path: &Path, value: &str) -> Result<(), String> {
 
 struct Reader<'a> {
     state: &'a NativeLlamaState,
+    hosted: Option<Arc<crate::hosted_gemma_eval::Client>>,
     dir: PathBuf,
     cancelled: Arc<AtomicBool>,
     calls: Mutex<Vec<Value>>,
@@ -1289,8 +1363,16 @@ struct CaseRun {
     shared_cancelled: Option<Arc<AtomicBool>>,
     group: Option<usize>,
     program: Option<Arc<horary_prompt_program::Program>>,
+    rubrics: Option<Arc<BTreeMap<String, crate::reading_eval::Rubric>>>,
+    hosted: Option<Arc<crate::hosted_gemma_eval::Client>>,
 }
 impl Reader<'_> {
+    fn case_id(&self) -> &str {
+        self.dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("unknown")
+    }
     fn keep_call(&self, sequence: u64, call: Value) -> Result<(), String> {
         // A recoverable final trace can retain the raw result even if this
         // particular persistence attempt fails. An I/O error is never success.
@@ -1305,6 +1387,10 @@ impl Reader<'_> {
                 .join(format!("{sequence:04}-result.json")),
             &call,
         )?;
+        println!(
+            "{}",
+            json!({"event":"model_result","case_id":self.case_id(),"sequence":sequence,"stage":call["request"]["stage"],"batch_tasks":call["request"]["tasks"].as_array().map(|tasks|tasks.iter().map(|task|task[0].clone()).collect::<Vec<_>>()),"wall_ms":call["wall_ms"],"error":call["result"]["Err"]})
+        );
         Ok(())
     }
 }
@@ -1334,6 +1420,7 @@ impl Runtime for Reader<'_> {
             trial_prompt(stage, matter, input, schema, self.program.as_deref())?;
         let messages: Value = serde_json::from_str(&prompt).map_err(|e| e.to_string())?;
         let request = json!({"sequence":sequence,"stage":stage,"matter":matter,
+            "provider":self.hosted.as_ref().map(|client|client.metadata()),
             "prompt":messages,
             "schema":schema,"input":input,
             "guide_sha256":horary_lessons::digest(messages[0]["content"].as_str().ok_or("Missing actual system teaching")?),
@@ -1341,7 +1428,7 @@ impl Runtime for Reader<'_> {
             "prompt_program":applied,
             "prompt_sha256":horary_lessons::digest(&prompt),
             "schema_sha256":horary_lessons::digest(&schema.to_string()),
-            "decoder":if self.dispatcher.is_some(){"EXPLORATION unconstrained independent batch; not production-decoder qualification"}else{"production constrained single text generation"},
+            "decoder":if self.hosted.is_some(){"hosted unconstrained text; prompt-specified contract, native acceptance and repair; not on-device qualification"}else if self.dispatcher.is_some(){"EXPLORATION unconstrained independent batch; not production-decoder qualification"}else{"production constrained single text generation"},
             "exploration_group":self.group,
             "cancellation_scope":if self.group.is_some(){"shared group; a deadline can interrupt every peer"}else{"individual case"}});
         write_new(
@@ -1352,7 +1439,24 @@ impl Runtime for Reader<'_> {
             &request,
         )?;
         let start = Instant::now();
-        let result = if let Some(dispatcher) = &self.dispatcher {
+        println!(
+            "{}",
+            json!({"event":"model_started","case_id":self.case_id(),"sequence":sequence,"stage":stage,"hosted":self.hosted.is_some()})
+        );
+        let mut provider_receipt = Value::Null;
+        let result = if let Some(hosted) = &self.hosted {
+            if audio.is_some() {
+                return Err("Hosted evaluation accepts synthetic text cases only".into());
+            }
+            let attempt = hosted.generate(
+                &prompt,
+                schema,
+                if stage == Stage::Judgment { 1400 } else { 1000 },
+                self.cancelled.clone(),
+            );
+            provider_receipt = attempt.receipt;
+            attempt.result
+        } else if let Some(dispatcher) = &self.dispatcher {
             if audio.is_some() {
                 return Err("Exploratory batch supports text elicitation only".into());
             }
@@ -1387,6 +1491,7 @@ impl Runtime for Reader<'_> {
         self.keep_call(
             sequence,
             json!({"request":request,"wall_ms":start.elapsed().as_millis(),
+            "provider_receipt":provider_receipt,
             "result":result.as_ref().map_err(String::as_str)}),
         )?;
         result
@@ -1413,7 +1518,8 @@ impl Runtime for Reader<'_> {
         let request = json!({"sequence":sequence,"tasks":tasks,"prompts":prompts.iter()
             .map(|(p,_)|serde_json::from_str::<Value>(p)).collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?,
             "prompt_program":prepared.iter().map(|(_,applied)|applied).collect::<Vec<_>>(),
-            "decoder":"production unconstrained independent analysis batch"});
+            "provider":self.hosted.as_ref().map(|client|client.metadata()),
+            "decoder":if self.hosted.is_some(){"hosted parallel unconstrained text branches; prompt contracts and native acceptance unchanged"}else{"production unconstrained independent analysis batch"}});
         write_new(
             &self
                 .dir
@@ -1422,22 +1528,59 @@ impl Runtime for Reader<'_> {
             &request,
         )?;
         let start = Instant::now();
-        let result = generate_native_batch(
-            self.state,
-            prompts,
-            NativeGenerateOptions {
-                max_tokens: 1000,
-                temperature: 0.,
-                seed: 0,
-                cache_lesson: true,
-                cancel: Some(self.cancelled.clone()),
-                ..Default::default()
-            },
-        )
-        .map_err(|e| e.message);
+        println!(
+            "{}",
+            json!({"event":"model_started","case_id":self.case_id(),"sequence":sequence,"stages":tasks.iter().map(|task|task.0).collect::<Vec<_>>(),"hosted":self.hosted.is_some()})
+        );
+        let mut provider_receipts = Value::Null;
+        let result = if let Some(hosted) = &self.hosted {
+            let attempts = std::thread::scope(|scope| {
+                let workers = prompts
+                    .iter()
+                    .zip(tasks)
+                    .map(|((prompt, max_tokens), (_, _, _, schema))| {
+                        let cancel = self.cancelled.clone();
+                        scope.spawn(move || hosted.generate(prompt, schema, *max_tokens, cancel))
+                    })
+                    .collect::<Vec<_>>();
+                workers
+                    .into_iter()
+                    .map(|worker| {
+                        worker
+                            .join()
+                            .map_err(|_| "Hosted analysis worker panicked".to_owned())
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            });
+            match attempts {
+                Ok(attempts) => {
+                    provider_receipts = json!(attempts
+                        .iter()
+                        .map(|attempt| &attempt.receipt)
+                        .collect::<Vec<_>>());
+                    attempts.into_iter().map(|attempt| attempt.result).collect()
+                }
+                Err(error) => Err(error),
+            }
+        } else {
+            generate_native_batch(
+                self.state,
+                prompts,
+                NativeGenerateOptions {
+                    max_tokens: 1000,
+                    temperature: 0.,
+                    seed: 0,
+                    cache_lesson: true,
+                    cancel: Some(self.cancelled.clone()),
+                    ..Default::default()
+                },
+            )
+            .map_err(|e| e.message)
+        };
         self.keep_call(
             sequence,
             json!({"request":request,"wall_ms":start.elapsed().as_millis(),
+            "provider_receipts":provider_receipts,
             "result":result.as_ref().map_err(String::as_str)}),
         )?;
         result
@@ -1453,7 +1596,11 @@ impl Runtime for Reader<'_> {
         )?;
         let path = self.dir.join("reading.json");
         crate::reading_store::write(&path, session, false)
-            .map_err(|error| format!("Evidence I/O failure at {}: {error}", path.display()))
+            .map_err(|error| format!("Evidence I/O failure at {}: {error}", path.display()))?;
+        write_index_json(
+            &self.dir.join("live.json"),
+            &json!({"case_id":self.case_id(),"checkpoint":sequence,"current_stage":session.status,"accepted_records":session.method.records.len(),"completed_stages":session.sections.iter().filter_map(|section|section.method_stage).collect::<Vec<_>>(),"pending":session.method.flow.pending,"native_result":session.method.result.as_ref().map(|result| match result {reading_contracts::ReadingResult::Judgment {..}=>"judgment",reading_contracts::ReadingResult::NeedsInformation {..}=>"needs_information",reading_contracts::ReadingResult::Limited {..}=>"limited"})}),
+        )
     }
     fn check(&self) -> Result<(), String> {
         if self.cancelled.load(Ordering::Acquire) {
@@ -1493,7 +1640,7 @@ fn trace_html(
     calls: &[Value],
     follow_up: &Value,
 ) -> String {
-    let mut html = format!("<!doctype html><meta charset=utf-8><title>{}</title><style>{STYLE}</style><h1>{}</h1><p class=note>Synthetic authored words and device context. Actual native model outputs. Elicitation grades do not qualify astrological judgment or microphone recognition.</p><h2>Conversation</h2>",escape(&case.id),escape(&case.id));
+    let mut html = format!("<!doctype html><meta charset=utf-8><title>{}</title><style>{STYLE}</style><h1>{}</h1><p class=note>Synthetic authored words and device context. Actual inference outputs and native decisions; each call identifies its provider and decoding mode. Input grades do not qualify astrological judgment or microphone recognition.</p><h2>Conversation</h2>",escape(&case.id),escape(&case.id));
     for message in &session.messages {
         html.push_str(&format!(
             "<blockquote><small>{}</small><br>{}</blockquote>",
@@ -1504,6 +1651,10 @@ fn trace_html(
     for (title, value) in [
         ("Expected inputs and author rationale", json!(case)),
         ("First-turn semantic grade", json!(first)),
+        (
+            "Four separate hurdles (native checks; interpretation review is separate)",
+            json!(first.hurdles),
+        ),
         ("Follow-up observation", follow_up.clone()),
         (
             "Final native record",
@@ -1515,6 +1666,16 @@ fn trace_html(
             escape(title),
             escape(&serde_json::to_string_pretty(&value).unwrap_or_default())
         ));
+    }
+    if !session.sections.is_empty() {
+        html.push_str("<h2>The actual reading</h2>");
+        for section in &session.sections {
+            html.push_str(&format!(
+                "<h3>{}</h3><p>{}</p>",
+                escape(&section.title),
+                escape(&section.body)
+            ));
+        }
     }
     html.push_str("<h2>Full model calls, including rejected attempts</h2>");
     for (i, call) in calls.iter().enumerate() {
@@ -1544,6 +1705,8 @@ fn outcome_qualified(result: &Value) -> bool {
         } else {
             result["follow_up_pass"] != false
         }
+        && (result["full_reading"] != true
+            || result["hurdles"]["reading"]["status"] == "structure_pass_review_pending")
 }
 
 fn save_report_state(
@@ -1596,6 +1759,19 @@ fn save_report_state(
         .iter()
         .filter_map(|r| r["prompt_program_applied_calls"].as_u64())
         .sum();
+    let hurdle_counts = ["classification", "elicitation", "extraction", "reading"]
+        .iter()
+        .map(|stage| {
+            let mut counts = BTreeMap::<String, usize>::new();
+            for result in results {
+                let status = result["hurdles"][*stage]["status"]
+                    .as_str()
+                    .unwrap_or("not_recorded");
+                *counts.entry(status.into()).or_default() += 1;
+            }
+            ((*stage).to_string(), counts)
+        })
+        .collect::<BTreeMap<_, _>>();
     let report = json!({"manifest":manifest,"campaign_state":campaign_state,"completed":results.len(),"semantic_passes":passes,
         "prompt_program_applied_calls":applied_calls,
         "semantic_failures":failures,"human_fluidity_review":"pending",
@@ -1603,11 +1779,16 @@ fn save_report_state(
         "follow_up_passes":journey_passes,"follow_up_failures":journey_failures,
         "scripted_followups_withheld":withheld,
         "follow_up_not_executed":results.len()-journey_passes-journey_failures-follow_up_interruptions,"campaign_failures":campaign_failures,
-        "coverage_boundary":"Actual text elicitation and native readiness. Full readings only when explicitly selected; no speech/hardware or SME acceptance implied.","cases":results});
+        "hurdle_counts":hurdle_counts,
+        "reading_semantic_review":"separate immutable Codex source-rubric reviews; pending is not passing",
+        "coverage_boundary":"Actual text pipeline. Each input hurdle is separate; native structure completion still needs source-rubric interpretation review. No speech or SME acceptance implied.","cases":results});
     write_index_json(&dir.join("report.json"), &report)?;
     let status = campaign_state["status"].as_str().unwrap_or("unqualified");
     let reason = campaign_state["reason"].as_str().unwrap_or("");
     let mut html = format!("<!doctype html><meta charset=utf-8><title>Horary scenario review</title><style>{STYLE}</style><h1>Horary scenario review</h1><p class=note>{} {}</p><p>{} completed · {passes} first-turn semantic passes · {failures} first-turn semantic failures · {interruptions} execution interruptions.</p><p>{journey_passes} follow-ups passed · {journey_failures} follow-ups failed · {follow_up_interruptions} follow-ups interrupted.</p><p class=note>Authored synthetic questions; actual model outputs. Conversational quality still needs human review. Every failed attempt is retained. These tests assess elicitation; no astrological answer is certified by a passing grade. First-turn passes are separate from follow-up passes; an unexecuted follow-up is not a successful journey. Batch4 uses unconstrained native generation and shared group cancellation; it is exploration, not production-decoder qualification. Interrupted cases remain unqualified and are counted separately from completed semantic failures.</p><table><thead><tr><th>Case</th><th>Method</th><th>Inputs</th><th>Result</th><th>Review flags</th></tr></thead><tbody>",escape(status),escape(reason),results.len());
+    if manifest["full_reading"] == true {
+        html.push_str("<tr><td colspan=5>The complete application reading procedure is selected. Open each trace for four separate hurdles, its provider and source rubric. A completed native procedure remains pending interpretation review.</td></tr>");
+    }
     for result in results {
         let id = result["id"].as_str().unwrap_or("");
         let passed = outcome_qualified(result);
@@ -1623,6 +1804,31 @@ fn save_report_state(
             "fail"
         };
         html.push_str(&format!("<tr><td><a href=\"cases/{}/trace.html\">{}</a></td><td>{}</td><td>{}</td><td class={}>{}</td><td>{}</td></tr>",escape(id),escape(id),escape(result["method"].as_str().unwrap_or("")),escape(result["mode"].as_str().unwrap_or("")),if passed {"pass"}else{"fail"},label,result["grade"]["fluidity_review_flags"].as_array().map_or(0,Vec::len)));
+        if result["full_reading"] == true {
+            html.push_str(&format!(
+                "<tr><td colspan=5>Classify: {} · Elicit: {} · Extract: {} · Read: {}</td></tr>",
+                escape(
+                    result["hurdles"]["classification"]["status"]
+                        .as_str()
+                        .unwrap_or("not recorded")
+                ),
+                escape(
+                    result["hurdles"]["elicitation"]["status"]
+                        .as_str()
+                        .unwrap_or("not recorded")
+                ),
+                escape(
+                    result["hurdles"]["extraction"]["status"]
+                        .as_str()
+                        .unwrap_or("not recorded")
+                ),
+                escape(
+                    result["hurdles"]["reading"]["status"]
+                        .as_str()
+                        .unwrap_or("not recorded")
+                )
+            ));
+        }
     }
     html.push_str(&format!("</tbody></table><details><summary>Frozen campaign provenance</summary><pre>{}</pre></details>",escape(&serde_json::to_string_pretty(manifest).unwrap_or_default())));
     write_index_text(&dir.join("review.html"), &html)
@@ -1649,6 +1855,7 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
             "src-tauri/Cargo.toml",
             "src-tauri/Cargo.lock",
             "src-tauri/test-fixtures/elicitation",
+            "src-tauri/test-fixtures/readings",
             "crates/horary-ai-core/src",
             "crates/horary-prompt-program/src",
             "crates/horary-prompt-program/Cargo.toml",
@@ -1672,6 +1879,7 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
                 "--exclude-standard",
                 "src-tauri/src",
                 "src-tauri/test-fixtures/elicitation",
+                "src-tauri/test-fixtures/readings",
                 "crates/horary-ai-core/src",
                 "crates/horary-prompt-program/src",
                 "crates/horary-prompt-program/Cargo.toml",
@@ -1690,6 +1898,18 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
             .to_str()
             .ok_or("A fixture bank needs a UTF-8 repository path")?;
         names.insert(name.to_owned());
+    }
+    let rubric_directory = root.join("src-tauri/test-fixtures/readings");
+    if rubric_directory.exists() {
+        for bank in crate::reading_eval::banks(&rubric_directory)? {
+            let name = bank
+                .strip_prefix(root)
+                .map_err(|e| e.to_string())?
+                .to_str()
+                .ok_or("A reading rubric needs a UTF-8 path")?
+                .to_owned();
+            names.insert(name);
+        }
     }
     names
         .into_iter()
@@ -1809,6 +2029,30 @@ fn fixtures_cover_every_method_with_explicit_implicit_and_missing_inputs() {
 }
 
 #[test]
+fn every_scenario_has_its_own_source_based_reading_rubric() {
+    let rubrics = crate::reading_eval::catalogue(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("test-fixtures/readings"),
+    )
+    .expect("Strict reading rubrics");
+    validate_rubric_coverage(&catalogue().unwrap(), &rubrics).unwrap();
+}
+
+#[test]
+fn full_reading_qualification_cannot_stop_at_a_successful_input_handoff() {
+    let mut outcome = json!({"first_turn_execution_completed":true,"grade":{"semantic_pass":true},"follow_up_scripted":false,"follow_up_pass":null,"full_reading":true,"hurdles":{"reading":{"status":"blocked"}}});
+    assert!(!outcome_qualified(&outcome));
+    for status in ["not_run", "awaiting_information", "fail"] {
+        outcome["hurdles"]["reading"]["status"] = json!(status);
+        assert!(!outcome_qualified(&outcome));
+    }
+    outcome["hurdles"]["reading"]["status"] = json!("structure_pass_review_pending");
+    assert!(
+        outcome_qualified(&outcome),
+        "Only native completion is established; the source-rubric judge is still mandatory"
+    );
+}
+
+#[test]
 fn semantic_grade_rejects_wrong_method_even_with_nonempty_reply() {
     let case: Case = serde_json::from_value(json!({"id":"semantic-regression","method":"lost_object","mode":"missing","words":"Where is my ring?",
         "expected":{"facet":"location","ready":false,"needs":[{"kind":"owner"}]},"source_pages":"146–153","rationale":"A readable reply cannot substitute for classifying the actual concern."})).unwrap();
@@ -1902,6 +2146,28 @@ fn follow_up_fixture() -> (Case, Session, Session) {
         text: "The concern is the quality of your knowledge.".into(),
     });
     (case, previous, after)
+}
+
+#[test]
+fn a_later_reading_failure_does_not_erase_successful_input_hurdles() {
+    use crate::reading_eval::Status;
+    let (mut case, _, session) = follow_up_fixture();
+    case.expected = case.follow_up_expected.take().unwrap();
+    let error = "The specialist did not complete";
+    let graded = with_reading_grade(
+        grade(&case, &session, Some(error)),
+        &session,
+        true,
+        Some(error),
+    );
+    assert!(
+        !graded.semantic_pass,
+        "The legacy aggregate retains its error"
+    );
+    assert_eq!(graded.hurdles.classification.status, Status::Pass);
+    assert_eq!(graded.hurdles.extraction.status, Status::Pass);
+    assert_eq!(graded.hurdles.elicitation.status, Status::Pass);
+    assert_eq!(graded.hurdles.reading.status, Status::Fail);
 }
 
 #[test]
@@ -2510,7 +2776,7 @@ fn actor_fact_grade_resolves_the_participant_instead_of_matching_id_spelling() {
 }
 
 #[test]
-#[ignore = "Actual resident Gemma across synthetic catalogue; fresh HORARY_EVAL_EVIDENCE and HORARY_NATIVE_LLAMA_TEST_MODEL required"]
+#[ignore = "Real Gemma catalogue campaign: fresh HORARY_EVAL_EVIDENCE plus an explicitly configured native or hosted provider"]
 fn real_model_catalogue_campaign() -> Result<(), String> {
     run_campaign()
 }
@@ -2530,6 +2796,12 @@ fn evaluate_case(
     fs::create_dir(case_dir.join("calls")).map_err(|e| e.to_string())?;
     fs::create_dir(case_dir.join("checkpoints")).map_err(|e| e.to_string())?;
     write_new(&case_dir.join("fixture.json"), &case)?;
+    if let Some(rubrics) = &config.rubrics {
+        let rubric = rubrics
+            .get(&case.id)
+            .ok_or_else(|| format!("Missing reading rubric {}", case.id))?;
+        write_new(&case_dir.join("reading-rubric.json"), rubric)?;
+    }
     let cancelled = config
         .shared_cancelled
         .clone()
@@ -2540,6 +2812,7 @@ fn evaluate_case(
         .then(|| Deadline::start(seconds, cancelled.clone()));
     let reader = Reader {
         state,
+        hosted: config.hosted.clone(),
         dir: case_dir.clone(),
         cancelled,
         calls: Mutex::new(Vec::new()),
@@ -2589,11 +2862,17 @@ fn evaluate_case(
         .err()
         .filter(|error| error.contains("Evidence I/O failure"))
         .cloned();
-    let first = grade(&case, &session, result.as_ref().err().map(String::as_str));
+    let first = with_reading_grade(
+        grade(&case, &session, result.as_ref().err().map(String::as_str)),
+        &session,
+        full_reading,
+        result.as_ref().err().map(String::as_str),
+    );
+    let mut final_hurdles = first.hurdles.clone();
     let first_turn_execution_completed = result.is_ok();
     write_new(
         &case_dir.join("first-turn.json"),
-        &json!({"result":result,"grade":first,"session":session,"candidates":session.candidates}),
+        &json!({"result":result,"grade":first,"hurdles":first.hurdles,"session":session,"candidates":session.candidates}),
     )?;
     let mut follow_up = json!({"status":"not scripted"});
     let mut follow_up_pass: Option<bool> = None;
@@ -2617,10 +2896,28 @@ fn evaluate_case(
             }
             follow_up_execution_completed = Some(next.is_ok());
             let next_grade = follow_up_grade(&case, words, &previous, &session, &next);
+            if let Some(expected) = &case.follow_up_expected {
+                let mut after_case = case.clone();
+                after_case.expected = expected.clone();
+                let after = with_reading_grade(
+                    grade_at_moment(
+                        &after_case,
+                        &session,
+                        next.as_ref().err().map(String::as_str),
+                        previous
+                            .candidate_moment_ms
+                            .unwrap_or_else(|| frozen_moment() + 60_000.),
+                    ),
+                    &session,
+                    full_reading,
+                    next.as_ref().err().map(String::as_str),
+                );
+                final_hurdles = after.hurdles;
+            }
             follow_up_pass = next_grade["pass"].as_bool();
             follow_up = json!({"status":if proposal {"executed after one eligible authored proposal"} else {"executed after matching elicitation"},"words":words,"result":next,
                 "consultation":session.method.consultation,"native_result":session.method.result,
-                "chart":session.chart,"first_turn_grade_retained":true,"grade":next_grade});
+                "chart":session.chart,"first_turn_grade_retained":true,"grade":next_grade,"hurdles":final_hurdles});
         } else {
             follow_up = json!({"status":"withheld because the intended fact or single eligible proposal was not correctly elicited","words":words,
                 "bound_need_matched":bound_need,"proposal_eligible":proposal});
@@ -2630,7 +2927,7 @@ fn evaluate_case(
     let calls = reader.calls.into_inner().map_err(|e| e.to_string())?;
     write_new(
         &case_dir.join("final.json"),
-        &json!({"session":session,"candidates":session.candidates,"follow_up":follow_up}),
+        &json!({"session":session,"candidates":session.candidates,"follow_up":follow_up,"hurdles":final_hurdles}),
     )?;
     write_index_text(
         &case_dir.join("trace.html"),
@@ -2652,15 +2949,38 @@ fn evaluate_case(
                     .is_some_and(|items| items.iter().any(Value::is_object))
         })
         .count();
+    let provider_attempts = calls
+        .iter()
+        .flat_map(|call| {
+            if call["provider_receipt"].is_object() {
+                vec![&call["provider_receipt"]]
+            } else {
+                call["provider_receipts"]
+                    .as_array()
+                    .map(|items| items.iter().collect())
+                    .unwrap_or_default()
+            }
+        })
+        .collect::<Vec<_>>();
+    let provider_stop = provider_attempts.iter().find_map(|attempt| {
+        let status=attempt["response"]["http_status"].as_u64()?;
+        [401,403,404,429].contains(&status).then(||format!("Hosted provider HTTP {status}; stop the campaign before repeating authentication, availability or quota failures"))
+    });
     let outcome = json!({"id":case.id,"method":case.method,"mode":case.mode,"grade":first,
+        "full_reading":full_reading,"hurdles":final_hurdles,"reading_semantic_review":"pending; native structure does not certify the textbook interpretation",
         "prompt_program_applied_calls":applied_calls,
         "elapsed_ms":started.elapsed().as_millis(),"model_calls":calls.len(),"rejected_attempts":repairs,
+        "hosted_http_requests":provider_attempts.iter().map(|attempt| {
+            attempt["generation_attempts"].as_array().map(|items|items.iter().filter(|item|item["submitted"]==true).count())
+                .unwrap_or_else(||usize::from(attempt["submitted"]==true))
+        }).sum::<usize>(),
+        "provider_stop":provider_stop,
         "deadline_cancelled":reader.cancelled.load(Ordering::Acquire),"follow_up":follow_up,
         "follow_up_pass":follow_up_pass,"follow_up_scripted":case.follow_up.is_some(),
         "first_turn_execution_completed":first_turn_execution_completed,
         "follow_up_execution_completed":follow_up_execution_completed,
         "exploration_group":config.group,
-        "decoder_mode":if config.dispatcher.is_some(){"exploration_unconstrained_batch"}else{"production_constrained_single"},
+        "decoder_mode":if config.hosted.is_some(){"hosted_unconstrained_text"}else if config.dispatcher.is_some(){"exploration_unconstrained_batch"}else{"production_constrained_single"},
         "group_cancelled":config.group.is_some() && reader.cancelled.load(Ordering::Acquire),
         "infrastructure_error":evidence_error,
         "execution_status":if evidence_error.is_some(){"evidence_io_interrupted"}
@@ -2668,21 +2988,11 @@ fn evaluate_case(
             else if reader.cancelled.load(Ordering::Acquire){"deadline_cancelled"}
             else if reader.sequence.load(Ordering::Acquire)>=max_calls && result.is_err(){"call_budget_exhausted"}
             else if result.is_err(){"execution_error"}else{"completed"},
-        "health":native_llama_health(state).map_err(|e|e.message),"trace":format!("cases/{}/trace.html",case.id)});
+        "health":if let Some(hosted)=&config.hosted {hosted.metadata()}else{json!(native_llama_health(state).map_err(|e|e.message))},"trace":format!("cases/{}/trace.html",case.id)});
     write_new(&case_dir.join("outcome.json"), &outcome)?;
     println!(
-        "{}: {} ({} calls, {} rejected attempts, {} ms)",
-        case.id,
-        if !first_turn_execution_completed {
-            "EXECUTION INTERRUPTED"
-        } else if first.semantic_pass {
-            "semantic pass"
-        } else {
-            "SEMANTIC FAIL"
-        },
-        calls.len(),
-        repairs,
-        started.elapsed().as_millis()
+        "{}",
+        json!({"event":"case_completed","case_id":case.id,"first_turn_execution_completed":first_turn_execution_completed,"hurdles":final_hurdles,"model_calls":calls.len(),"rejected_attempts":repairs,"elapsed_ms":started.elapsed().as_millis()})
     );
     Ok(outcome)
 }
@@ -2770,6 +3080,33 @@ fn a_model_campaign_without_native_capability_reports_the_boundary_without_touch
 #[cfg(feature = "native-llama")]
 fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize, String> {
     use crate::native_llama_worker::{start_native_llama_from_path, stop_native_llama};
+    let provider = std::env::var("HORARY_EVAL_PROVIDER").unwrap_or_else(|_| "native".into());
+    if !["native", "google"].contains(&provider.as_str()) {
+        return Err("HORARY_EVAL_PROVIDER must be native or google".into());
+    }
+    let hosted = if provider == "google" {
+        let keyfile = PathBuf::from(
+            std::env::var_os("HORARY_GOOGLE_KEY_FILE")
+                .ok_or("Set a private HORARY_GOOGLE_KEY_FILE outside the repository")?,
+        );
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("Repository root unavailable")?
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        if keyfile
+            .canonicalize()
+            .map_err(|_| "Hosted credential unavailable")?
+            .starts_with(root)
+        {
+            return Err("Keep the hosted credential outside the repository".into());
+        }
+        Some(Arc::new(crate::hosted_gemma_eval::Client::from_file(
+            &keyfile, 4,
+        )?))
+    } else {
+        None
+    };
     let batch_size = std::env::var("HORARY_EVAL_BATCH")
         .ok()
         .map(|value| value.parse::<usize>())
@@ -2780,24 +3117,51 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         return Err("HORARY_EVAL_BATCH must be 1 (exact production decoding) or 4 (unconstrained exploration)".into());
     }
     let full_reading = std::env::var("HORARY_EVAL_FULL").as_deref() == Ok("1");
-    if batch_size == 4 && full_reading {
+    if batch_size == 4 && full_reading && hosted.is_none() {
         return Err("HORARY_EVAL_BATCH=4 is an elicitation exploration; HORARY_EVAL_FULL requires exact production batch=1".into());
     }
-    let model = PathBuf::from(
-        std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL")
-            .ok_or("Set HORARY_NATIVE_LLAMA_TEST_MODEL")?,
-    );
+    let model = if hosted.is_none() {
+        Some(PathBuf::from(
+            std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL")
+                .ok_or("Set HORARY_NATIVE_LLAMA_TEST_MODEL")?,
+        ))
+    } else {
+        None
+    };
     fs::create_dir(dir.join("cases")).map_err(|e| e.to_string())?;
     let all_cases = catalogue()?;
+    let rubrics = if full_reading {
+        let rubrics = crate::reading_eval::catalogue(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("test-fixtures/readings"),
+        )?;
+        validate_rubric_coverage(&all_cases, &rubrics)?;
+        Some(Arc::new(rubrics))
+    } else {
+        None
+    };
     let filter = std::env::var("HORARY_EVAL_FILTER").unwrap_or_default();
     let filters: Vec<_> = filter
         .split(',')
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .collect();
+    let modes = std::env::var("HORARY_EVAL_MODES").unwrap_or_default();
+    let modes: Vec<Mode> = modes
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|mode| match mode {
+            "explicit" => Ok(Mode::Explicit),
+            "implicit" => Ok(Mode::Implicit),
+            "missing" => Ok(Mode::Missing),
+            _ => Err(format!("Unknown case mode {mode}")),
+        })
+        .collect::<Result<_, _>>()?;
     let cases: Vec<_> = all_cases
         .iter()
-        .filter(|case| case_selected(case, &filters))
+        .filter(|case| {
+            case_selected(case, &filters) && (modes.is_empty() || modes.contains(&case.mode))
+        })
         .cloned()
         .collect();
     if cases.is_empty() {
@@ -2839,7 +3203,13 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         (None, Value::Null)
     };
     let prompt_experiment = experiment_origin(&program_manifest)?;
-    let metadata = fs::metadata(&model).map_err(|e| e.to_string())?;
+    let model_manifest = if let Some(hosted) = &hosted {
+        hosted.metadata()
+    } else {
+        let model = model.as_ref().ok_or("Native model path missing")?;
+        let metadata = fs::metadata(model).map_err(|e| e.to_string())?;
+        json!({"provider":"native_llama","path":model,"bytes":metadata.len(),"sha256":model_digest(model)?})
+    };
     let manifest = json!({"version":EVALUATOR_VERSION,"authorship":"All case words, expectations and device data are authored synthetic fixtures; actual Gemma outputs are separately traced",
         "campaign_phase":std::env::var("HORARY_EVAL_PHASE").unwrap_or_else(|_|"exploration".into()),
         "prompt_program":program_manifest,
@@ -2849,21 +3219,25 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         "working_diff_sha256":horary_lessons::digest(&git(root,&["diff","--binary","HEAD"])?),
         "sources":sources,"catalogue_version":reading_contracts::VERSION,
         "book_ocr_sha256":horary_lessons::BOOK_OCR_SHA256,
-        "model":{"path":model,"bytes":metadata.len(),"sha256":model_digest(&model)?},
-        "all_fixture_count":all_cases.len(),"selected_count":cases.len(),"selection_filter":filter,
+        "model":model_manifest,
+        "all_fixture_count":all_cases.len(),"selected_count":cases.len(),"selection_filter":filter,"selection_modes":modes,
         "fixture_sha256":horary_lessons::digest(&serde_json::to_string(&all_cases).map_err(|e|e.to_string())?),
-        "entry_point":if full_reading {"horary_pipeline::run"}else{"horary_pipeline::run_elicitation"},
-        "decoder":if batch_size==1{"exact production single constrained text; production independent batching only inside full reading"}else{"EXPLORATION unconstrained native independent batches of up to4; exact production executor validates each proposal"},
+        "entry_point":if full_reading {"horary_pipeline::run"}else{"horary_pipeline::run_elicitation"},"full_reading":full_reading,
+        "reading_rubric_sha256":rubrics.as_ref().map(|rubrics|horary_lessons::digest(&serde_json::to_string(rubrics).expect("Reading rubrics serialize"))),
+        "decoder":if hosted.is_some(){"hosted unconstrained text; exact application prompts, executor and independent analysis stages; not native-model qualification"}else if batch_size==1{"exact production single constrained text; production independent batching only inside full reading"}else{"EXPLORATION unconstrained native independent batches of up to4; exact production executor validates each proposal"},
         "case_flow_parallelism":batch_size,
-        "cancellation_scope":if batch_size==1{"individual case"}else{"shared four-case group; deadline cancellation affects every peer and is an infrastructure interruption"},
+        "cancellation_scope":if hosted.is_some() || batch_size==1{"individual case"}else{"shared four-case group; deadline cancellation affects every peer and is an infrastructure interruption"},
         "frozen_clock":{"local":"2026-10-07T12:00","timezone":"America/New_York","timestamp_ms":frozen_moment()},
         "device":device(),"temperature":0,"seed":0,"ctx_tokens":crate::native_llama_worker::READING_CONTEXT_TOKENS,
-        "case_deadline_seconds":if batch_size==1{Some(seconds)}else{None},
-        "group_deadline_seconds":if batch_size==4{Some(seconds)}else{None},
+        "case_deadline_seconds":if hosted.is_some() || batch_size==1{Some(seconds)}else{None},
+        "group_deadline_seconds":if batch_size==4 && hosted.is_none(){Some(seconds)}else{None},
         "case_max_calls":max_calls,"expected_answers_sent_to_model":false});
     progress.manifest = Some(manifest.clone());
     write_new(&dir.join("manifest.json"), &manifest)?;
     write_new(&dir.join("fixtures.json"), &all_cases)?;
+    if let Some(rubrics) = &rubrics {
+        write_new(&dir.join("reading-rubrics.json"), rubrics.as_ref())?;
+    }
     let state = NativeLlamaState::default();
     struct Stop<'a>(&'a NativeLlamaState);
     impl Drop for Stop<'_> {
@@ -2871,10 +3245,14 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
             let _ = stop_native_llama(self.0);
         }
     }
-    start_native_llama_from_path(&state,"horary-catalogue-eval".into(),String::new(),model,PathBuf::new(),
-        serde_json::from_value(json!({"modelId":"horary-catalogue-eval","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"})).map_err(|e|e.to_string())?)
-        .map_err(|e|e.message)?;
-    let _stop = Stop(&state);
+    let _stop = if let Some(model) = model {
+        start_native_llama_from_path(&state,"horary-catalogue-eval".into(),String::new(),model,PathBuf::new(),
+            serde_json::from_value(json!({"modelId":"horary-catalogue-eval","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"})).map_err(|e|e.to_string())?)
+            .map_err(|e|e.message)?;
+        Some(Stop(&state))
+    } else {
+        None
+    };
     save_report(dir, &manifest, &progress.results)?;
     let config = CaseRun {
         full_reading,
@@ -2884,6 +3262,8 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         shared_cancelled: None,
         group: None,
         program,
+        rubrics,
+        hosted,
     };
     for (group_index, group) in cases.chunks(batch_size).enumerate() {
         progress.active_case_ids = group.iter().map(|case| case.id.clone()).collect();
@@ -2892,6 +3272,28 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         }
         let outcomes = if batch_size == 1 {
             vec![evaluate_case(&state, dir, group[0].clone(), config.clone())]
+        } else if config.hosted.is_some() {
+            // Independent cases retain their own deadlines. The hosted client's
+            // four-request limiter also covers each case's analysis branches.
+            std::thread::scope(|scope| {
+                let workers = group
+                    .iter()
+                    .cloned()
+                    .map(|case| {
+                        let config = config.clone();
+                        let state_ref = &state;
+                        scope.spawn(move || evaluate_case(state_ref, dir, case, config))
+                    })
+                    .collect::<Vec<_>>();
+                workers
+                    .into_iter()
+                    .map(|worker| {
+                        worker
+                            .join()
+                            .unwrap_or_else(|_| Err("A hosted case worker panicked".into()))
+                    })
+                    .collect::<Vec<_>>()
+            })
         } else {
             let group_cancelled = Arc::new(AtomicBool::new(false));
             let group_deadline = Deadline::start(seconds, group_cancelled.clone());
@@ -2933,6 +3335,9 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
             match outcome {
                 Ok(outcome) => {
                     if let Some(error) = outcome["infrastructure_error"].as_str() {
+                        infrastructure_errors.push(error.to_owned());
+                    }
+                    if let Some(error) = outcome["provider_stop"].as_str() {
                         infrastructure_errors.push(error.to_owned());
                     }
                     progress.results.push(outcome);

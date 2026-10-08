@@ -77,7 +77,7 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
         _ => {
             let mut checks = serde_json::Map::new();
             for key in stage.checks() {
-                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":text(220)})));
+                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":{"type":"string","minLength":1,"maxLength":220,"description":"A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."}})));
             }
             let mut fields = serde_json::Map::from_iter([
                 ("checks".into(), object(Value::Object(checks))),
@@ -492,6 +492,15 @@ fn validate_shape_at(value: &Value, schema: &Value, path: &str) -> Result<(), St
     }
     if let Some(s) = value.as_str() {
         let actual = s.chars().count();
+        if schema["minLength"]
+            .as_u64()
+            .is_some_and(|n| (actual as u64) < n)
+        {
+            return Err(format!(
+                "{path}: string has {actual} characters; minimum is {}. Supply the requested explanation even when the check is not relevant.",
+                schema["minLength"]
+            ));
+        }
         if schema["maxLength"]
             .as_u64()
             .is_some_and(|n| actual > n as usize)
@@ -553,6 +562,22 @@ fn validate_shape_at(value: &Value, schema: &Value, path: &str) -> Result<(), St
 #[cfg(test)]
 mod shape_feedback_tests {
     use super::*;
+
+    #[test]
+    fn irrelevant_checks_still_require_an_explanation_in_the_public_contract() {
+        let schema = schema(Stage::Condition, &[]);
+        let mut value = json!({"checks":{
+            "own_dignity":{"state":"unestablished","evidence":[],"finding":"No essential dignity data is supplied in this unit fixture."},
+            "ability_to_act":{"state":"unestablished","evidence":[],"finding":"No native house-capacity fact is supplied here."},
+            "context_exceptions":{"state":"not_relevant","evidence":[],"finding":""}
+        },"summary":"No judgment from missing native facts.","unknowns":[]});
+        let error = validate_shape(&value, &schema).unwrap_err();
+        assert!(error.contains("$.checks.context_exceptions.finding"));
+        assert!(error.contains("minimum is 1"));
+        value["checks"]["context_exceptions"]["finding"] =
+            json!("No relevant house or solar exception is established in the stated context.");
+        validate_shape(&value, &schema).unwrap();
+    }
 
     #[test]
     fn classifier_people_error_identifies_the_field_and_empty_array_repair() {

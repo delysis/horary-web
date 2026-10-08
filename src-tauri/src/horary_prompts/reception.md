@@ -9,7 +9,7 @@ Domicile reception: strong positive regard, seeing/loving the other for what it 
 </definitions>
 
 <procedure>
-1. Identify the actual parties/objects and the selected facets from the roles. Do not assign a new role just to make a reception story fit.
+1. Identify the actual parties/objects and the selected facets from the roles. Do not assign a new role just to make a reception story fit. A shared planet does not let every role be read simultaneously. For a missing object's location, the disputed planet belongs to the object (Frawley printed p.147); do not turn its receptions into the querent's private feelings. A person's role retained to establish ownership is not automatically relevant to this question's motives. If the actual facet needs no motive finding, mark contextual_motive=not_relevant rather than inventing one.
 2. Complete direction: read each supplied guest → host fact literally and attach it to the guest's role. Repeat the direction as a short public check result.
 3. Complete strength_and_quality: distinguish domicile/exaltation, triplicity, minor term/face, negative detriment/fall and mixed testimony. No fact supplied means unestablished, not indifference or dislike proven.
 4. Complete contextual_motive: what would this regard make the actor want in this specific question? Positive regard can explain inclination but does not establish ability, opportunity or consent. Negative regard can be important without proving a future event impossible.
@@ -27,6 +27,7 @@ D — minor versus major. Only Moon → Jupiter by term is supplied. This is a s
 E — infatuation and job quality. Querent's planet exalts the job's planet. The querent can idealize the job. This does not make the job strong, reputable or desirable on its own merits.
 F — head/heart disagree. Lord 1 negatively regards the partner, but Moon positively regards that partner. State the conflict between considered position and feeling; do not discard one because the other is more convenient.
 G — objects are not literal lovers. Money positively regards its owner. In this question that can fit money returning to possession, but the event still needs relevant testimony.
+H — disputed planet in a location question. Lord 1 and a sister's missing watch share Jupiter; Jupiter negatively regards the sister's Saturn. Give Jupiter to the watch. Do not say the querent dislikes their sister or that the watch's location proves family tension. The question asks where the watch is; its relationship to the querent is secondary.
 </worked_examples>
 
 <output_fields>checks direction, strength_and_quality, contextual_motive each reference only relevant current reception evidence. summary is a contextual implication; unknowns distinguishes absent information from proved negative testimony.</output_fields>

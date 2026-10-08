@@ -218,8 +218,426 @@ fn guide_document(
     Ok(json!({"teaching_regions":teaching_regions,"quoted_source":quoted_source}))
 }
 
+/// Share exact repeated values, never approximate evidence. The marker cannot
+/// collide with an original object key, and IDs use exact serialized equality
+/// rather than a truncated digest. Case identities and citation tables stay in
+/// place so the host can inspect them without resolving the dictionary.
+fn intern_reading_view(view: &mut Value) -> Result<()> {
+    const MIN_BYTES: usize = 32;
+    fn has_key(value: &Value, key: &str) -> bool {
+        match value {
+            Value::Object(fields) => {
+                fields.contains_key(key) || fields.values().any(|v| has_key(v, key))
+            }
+            Value::Array(items) => items.iter().any(|v| has_key(v, key)),
+            _ => false,
+        }
+    }
+    fn eligible(path: &[String]) -> bool {
+        if path.len() < 2 || path[0] == "receipt_table" {
+            return false;
+        }
+        if path[0] == "cases" {
+            // Keep summary/state containers and the observed result tag direct.
+            if path.len() <= 3
+                || (path.len() == 4
+                    && [
+                        "first_state",
+                        "final_state",
+                        "reading_rubric",
+                        "evidence_refs",
+                    ]
+                    .contains(&path[3].as_str()))
+                || (path.len() == 5
+                    && ["first_state", "final_state"].contains(&path[3].as_str())
+                    && path[4] == "methodResult")
+            {
+                return false;
+            }
+        }
+        true
+    }
+    fn strings(value: &Value, candidates: &mut BTreeSet<String>) {
+        match value {
+            Value::String(text) if text.len() >= 128 => {
+                candidates.insert(text.clone());
+            }
+            Value::Object(fields) => {
+                for value in fields.values() {
+                    strings(value, candidates);
+                }
+            }
+            Value::Array(items) => {
+                for value in items {
+                    strings(value, candidates);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn text_parts(text: &str, candidates: &[String], marker: &str) -> Value {
+        let mut offset = 0;
+        let mut parts = Vec::new();
+        while offset < text.len() {
+            let next = candidates
+                .iter()
+                .filter(|candidate| candidate.len() < text.len())
+                .filter_map(|candidate| text[offset..].find(candidate).map(|at| (at, candidate)))
+                .min_by(|(at, a), (other_at, b)| {
+                    at.cmp(other_at)
+                        .then_with(|| b.len().cmp(&a.len()))
+                        .then_with(|| a.cmp(b))
+                });
+            let Some((at, candidate)) = next else {
+                break;
+            };
+            if at > 0 {
+                parts.push(json!(&text[offset..offset + at]));
+            }
+            parts.push(text_parts(candidate, candidates, marker));
+            offset += at + candidate.len();
+        }
+        if parts.is_empty() {
+            return json!(text);
+        }
+        if offset < text.len() {
+            parts.push(json!(&text[offset..]));
+        }
+        json!({marker:parts})
+    }
+    fn segment(value: &mut Value, path: &mut Vec<String>, candidates: &[String], marker: &str) {
+        if path.first().is_some_and(|p| p == "receipt_table") {
+            return;
+        }
+        match value {
+            Value::String(text) if eligible(path) => *value = text_parts(text, candidates, marker),
+            Value::Object(fields) => {
+                for (key, value) in fields {
+                    path.push(key.clone());
+                    segment(value, path, candidates, marker);
+                    path.pop();
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter_mut().enumerate() {
+                    path.push(index.to_string());
+                    segment(value, path, candidates, marker);
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
+    }
+    fn count(
+        value: &Value,
+        path: &mut Vec<String>,
+        counts: &mut BTreeMap<String, usize>,
+    ) -> Result<()> {
+        if path.first().is_some_and(|p| p == "receipt_table") {
+            return Ok(());
+        }
+        if eligible(path) {
+            let key = serde_json::to_string(value).map_err(|e| e.to_string())?;
+            if key.len() >= MIN_BYTES {
+                *counts.entry(key).or_default() += 1;
+            }
+        }
+        match value {
+            Value::Object(fields) => {
+                for (name, value) in fields {
+                    path.push(name.clone());
+                    count(value, path, counts)?;
+                    path.pop();
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter().enumerate() {
+                    path.push(index.to_string());
+                    count(value, path, counts)?;
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    fn replace(
+        value: &mut Value,
+        path: &mut Vec<String>,
+        counts: &BTreeMap<String, usize>,
+        marker: &str,
+        ids: &mut BTreeMap<String, String>,
+        values: &mut BTreeMap<String, Value>,
+    ) -> Result<()> {
+        if path.first().is_some_and(|p| p == "receipt_table") {
+            return Ok(());
+        }
+        let key = if eligible(path) {
+            let key = serde_json::to_string(value).map_err(|e| e.to_string())?;
+            (counts.get(&key).copied().unwrap_or_default() > 1).then_some(key)
+        } else {
+            None
+        };
+        if let Some(id) = key.as_ref().and_then(|key| ids.get(key)) {
+            *value = json!({marker:id});
+            return Ok(());
+        }
+        match value {
+            Value::Object(fields) => {
+                for (name, value) in fields {
+                    path.push(name.clone());
+                    replace(value, path, counts, marker, ids, values)?;
+                    path.pop();
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter_mut().enumerate() {
+                    path.push(index.to_string());
+                    replace(value, path, counts, marker, ids, values)?;
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
+        if let Some(key) = key {
+            let id = format!("{:x}", ids.len() + 1);
+            ids.insert(key, id.clone());
+            values.insert(id.clone(), std::mem::replace(value, json!({marker:id})));
+        }
+        Ok(())
+    }
+    fn ref_counts(value: &Value, marker: &str, counts: &mut BTreeMap<String, usize>) {
+        match value {
+            Value::Object(fields) => {
+                if fields.len() == 1 {
+                    if let Some(id) = fields.get(marker).and_then(Value::as_str) {
+                        *counts.entry(id.into()).or_default() += 1;
+                        return;
+                    }
+                }
+                for value in fields.values() {
+                    ref_counts(value, marker, counts);
+                }
+            }
+            Value::Array(items) => {
+                for value in items {
+                    ref_counts(value, marker, counts);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn inline(value: &mut Value, marker: &str, id: &str, replacement: &Value) {
+        match value {
+            Value::Object(fields) => {
+                if fields.len() == 1 && fields.get(marker).and_then(Value::as_str) == Some(id) {
+                    *value = replacement.clone();
+                    return;
+                }
+                for value in fields.values_mut() {
+                    inline(value, marker, id, replacement);
+                }
+            }
+            Value::Array(items) => {
+                for value in items {
+                    inline(value, marker, id, replacement);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn object_shapes(
+        value: &Value,
+        path: &mut Vec<String>,
+        counts: &mut BTreeMap<Vec<String>, usize>,
+    ) {
+        if path.first().is_some_and(|p| p == "receipt_table") {
+            return;
+        }
+        match value {
+            Value::Object(fields) => {
+                if eligible(path) && fields.len() > 1 {
+                    *counts.entry(fields.keys().cloned().collect()).or_default() += 1;
+                }
+                for (key, value) in fields {
+                    path.push(key.clone());
+                    object_shapes(value, path, counts);
+                    path.pop();
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter().enumerate() {
+                    path.push(index.to_string());
+                    object_shapes(value, path, counts);
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
+    }
+    fn share_object_keys(
+        value: &mut Value,
+        path: &mut Vec<String>,
+        shapes: &BTreeMap<Vec<String>, String>,
+        marker: &str,
+        object_marker: &str,
+    ) {
+        if path.first().is_some_and(|p| p == "receipt_table") {
+            return;
+        }
+        match value {
+            Value::Object(fields) => {
+                let keys: Vec<_> = fields.keys().cloned().collect();
+                for (key, value) in fields.iter_mut() {
+                    path.push(key.clone());
+                    share_object_keys(value, path, shapes, marker, object_marker);
+                    path.pop();
+                }
+                if eligible(path) {
+                    if let Some(id) = shapes.get(&keys) {
+                        let ordered: Vec<_> = std::mem::take(fields).into_values().collect();
+                        *value = json!({object_marker:[{marker:id},ordered]});
+                    }
+                }
+            }
+            Value::Array(items) => {
+                for (index, value) in items.iter_mut().enumerate() {
+                    path.push(index.to_string());
+                    share_object_keys(value, path, shapes, marker, object_marker);
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
+    }
+    let original = view.clone();
+    let original_bytes = serde_json::to_vec(&original).map_err(|e| e.to_string())?;
+    let mut marker = "@".to_owned();
+    while has_key(view, &marker) {
+        marker.push('_');
+    }
+    let mut text_marker = "~".to_owned();
+    while has_key(view, &text_marker) {
+        text_marker.push('_');
+    }
+    let mut object_marker = "#".to_owned();
+    while has_key(view, &object_marker) {
+        object_marker.push('_');
+    }
+    let mut candidates = BTreeSet::new();
+    strings(view, &mut candidates);
+    segment(
+        view,
+        &mut Vec::new(),
+        &candidates.into_iter().collect::<Vec<_>>(),
+        &text_marker,
+    );
+    let mut counts = BTreeMap::new();
+    count(view, &mut Vec::new(), &mut counts)?;
+    let mut values = BTreeMap::new();
+    replace(
+        view,
+        &mut Vec::new(),
+        &counts,
+        &marker,
+        &mut BTreeMap::new(),
+        &mut values,
+    )?;
+    // Sharing a parent can leave a child referenced once. Inline those children
+    // so the dictionary contains only values that still occur more than once.
+    loop {
+        let mut uses = BTreeMap::new();
+        ref_counts(view, &marker, &mut uses);
+        for value in values.values() {
+            ref_counts(value, &marker, &mut uses);
+        }
+        let single: Vec<_> = values
+            .iter()
+            .filter(|(id, value)| {
+                let occurrences = uses.get(*id).copied().unwrap_or_default();
+                let size = value.to_string().len();
+                let reference_size = json!({&marker:id}).to_string().len();
+                occurrences <= 1
+                    || size.saturating_mul(occurrences - 1)
+                        <= reference_size * occurrences + id.len() + 4
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        if single.is_empty() {
+            break;
+        }
+        for id in single {
+            let replacement = values
+                .remove(&id)
+                .expect("collected existing dictionary ID");
+            inline(view, &marker, &id, &replacement);
+            for value in values.values_mut() {
+                inline(value, &marker, &id, &replacement);
+            }
+        }
+    }
+    // Distinct worksheets/contracts often have the same long member names.
+    // Share their ordered keys as well; every original field/value is retained.
+    let mut shape_counts = BTreeMap::new();
+    object_shapes(view, &mut Vec::new(), &mut shape_counts);
+    for value in values.values() {
+        object_shapes(
+            value,
+            &mut vec!["dictionary".into(), "value".into()],
+            &mut shape_counts,
+        );
+    }
+    let mut shapes = BTreeMap::new();
+    let mut next = values
+        .keys()
+        .filter_map(|id| usize::from_str_radix(id, 16).ok())
+        .max()
+        .unwrap_or_default()
+        + 1;
+    for (keys, occurrences) in shape_counts {
+        let id = format!("{next:x}");
+        let original: serde_json::Map<String, Value> =
+            keys.iter().map(|key| (key.clone(), Value::Null)).collect();
+        let encoded = json!({&object_marker:[{&marker:&id},vec![Value::Null;keys.len()]]});
+        let saving = Value::Object(original)
+            .to_string()
+            .len()
+            .saturating_sub(encoded.to_string().len());
+        if saving * occurrences > json!(keys).to_string().len() + id.len() + 4 {
+            values.insert(id.clone(), json!(keys));
+            shapes.insert(keys, id);
+            next += 1;
+        }
+    }
+    share_object_keys(view, &mut Vec::new(), &shapes, &marker, &object_marker);
+    for value in values.values_mut() {
+        share_object_keys(
+            value,
+            &mut vec!["dictionary".into(), "value".into()],
+            &shapes,
+            &marker,
+            &object_marker,
+        );
+    }
+    if !values.is_empty() || *view != original {
+        view["context_interning"] = json!({"format":"exact-json-values-v1","ref_key":marker,
+            "text_key":text_marker,"object_key":object_marker,
+            "expanded_sha256":horary_prompt_program::digest(&original_bytes),
+            "instructions":"An object containing only ref_key resolves to the named value in values. An object containing only text_key is an ordered array of exact text parts: resolve each part and concatenate without separators. An object containing only object_key is [ordered_keys,ordered_values]: resolve both arrays, then pair each key with its value to reconstruct the object. Resolve recursively before interpreting a field. All facts, roles, requests, worksheets, source quotations and RAW strings retain their exact values and bytes. Value IDs are not evidence_refs: cite only receipt_table IDs.",
+            "values":values});
+    }
+    if serde_json::to_vec(view).map_err(|e| e.to_string())?.len() >= original_bytes.len() {
+        *view = original;
+    }
+    Ok(())
+}
+
 /// All full primary files are preserved in Packet; this is the bounded model view.
 pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Index)> {
+    context_view(packet, reviews, true)
+}
+
+fn context_view(packet: &Packet, reviews: Option<&[Value]>, share: bool) -> Result<(Value, Index)> {
     let mut index = Index::default();
     let mut cases = Vec::new();
     let mut calls = Vec::new();
@@ -247,6 +665,12 @@ pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Ind
             .map(|(stage, _)| stage)
     });
     let mut selected_guides = Vec::new();
+    let mut source_documents = BTreeMap::new();
+    let full_reading_judge = reviews.is_none()
+        && packet
+            .cases
+            .iter()
+            .any(|case| case.summary["full_reading"] == true);
     let mut guide_documents = BTreeMap::new();
     let mut chunks = Vec::new();
     let mut chunk_ids = BTreeMap::new();
@@ -267,6 +691,13 @@ pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Ind
         }
         let full_text = packet.guide_text(guide)?;
         let regions = horary_prompt_program::guide_parts(&full_text)?;
+        if full_reading_judge {
+            for block in &regions.quoted_source {
+                source_documents
+                    .entry(horary_prompt_program::digest(block))
+                    .or_insert_with(|| block.to_string());
+            }
+        }
         if edit_stage.as_deref() == Some(guide.stage.as_str())
             && !guide_documents.contains_key(&guide.sha256)
         {
@@ -325,9 +756,37 @@ pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Ind
         };
         summary["evidence_refs"] = json!({"native_grade":grade_ref,"reply":reply_ref,"expected":expected_ref,
             "words":words_ref,"first_dialogue":first_ref,"final_dialogue":final_ref,"after_grade":after_ref});
+        if summary["full_reading"] == true {
+            let rubric_file = format!("{root}/reading-rubric.json");
+            summary["evidence_refs"]["reading_rubric"] =
+                json!(index.citation(packet, &case.id, &rubric_file, "")?);
+            for (name, file, pointer) in [
+                ("first_hurdles", &first_file, "/hurdles"),
+                ("final_hurdles", &final_file, "/hurdles"),
+                ("final_method", &final_file, "/session/method"),
+            ] {
+                summary["evidence_refs"][name] =
+                    json!(index.citation(packet, &case.id, file, pointer)?);
+            }
+            if summary["first_state"]["methodRecords"] == summary["final_state"]["methodRecords"] {
+                summary["first_state"]["methodRecords"] =
+                    json!({"same_as":"final_state.methodRecords"});
+            }
+        }
         // ReadyReading is revalidated by the native grader, not by repeating bindings in the model prompt.
         for state in ["first_state", "final_state"] {
             if let Some(object) = summary[state].as_object_mut() {
+                if case.summary["full_reading"] == true {
+                    // Keep actual answer, verdict, checked worksheet and source
+                    // IDs. Binding bytes remain in the immutable final method.
+                    if let Some(result) = object
+                        .get_mut("methodResult")
+                        .and_then(Value::as_object_mut)
+                    {
+                        result.remove("binding");
+                    }
+                    continue;
+                }
                 let kind = object
                     .get("methodResult")
                     .map(|r| r["result"].clone())
@@ -391,13 +850,36 @@ pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Ind
             let result = call["result_file"]
                 .as_str()
                 .ok_or("Result source missing")?;
-            let input_ref = index.citation(packet, &case.id, request, "/input")?;
-            let guide_ref = index.citation(packet, &case.id, request, "/prompt/0/content")?;
+            let input_ref = index.citation(
+                packet,
+                &case.id,
+                request,
+                call["input_pointer"].as_str().unwrap_or("/input"),
+            )?;
+            let guide_ref = index.citation(
+                packet,
+                &case.id,
+                request,
+                call["guide_pointer"]
+                    .as_str()
+                    .unwrap_or("/prompt/0/content"),
+            )?;
             let result_ref = if output_id.is_some() {
-                index.citation(packet, &case.id, result, "/result/Ok/content")?
+                index.citation(
+                    packet,
+                    &case.id,
+                    result,
+                    call["result_pointer"]
+                        .as_str()
+                        .unwrap_or("/result/Ok/content"),
+                )?
             } else {
                 index.citation(packet, &case.id, result, "/result")?
             };
+            let provider_ref = call["provider_pointer"]
+                .as_str()
+                .map(|pointer| index.citation(packet, &case.id, result, pointer))
+                .transpose()?;
             schema_hashes.insert(
                 call["schema_sha256"]
                     .as_str()
@@ -405,6 +887,8 @@ pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Ind
                     .to_owned(),
             );
             calls.push(json!({"case_id":case.id,"sequence":call["sequence"],"stage":call["stage"],
+                "batch_branch":call["batch_branch"],"batch_size":call["batch_size"],"decoder":call["decoder"],
+                "provider":call["provider"],"provider_wire":call["provider_wire"],"provider_ref":provider_ref,
                 "phase":call["recognition_phase"],"method":call["method"],"guide_sha":call["guide_sha256"],
                 "schema_sha":call["schema_sha256"],"input":input_id,"output":output_id,
                 "native_error":call["native_validation_error"],"backend_error":call["result_error"],
@@ -431,15 +915,19 @@ pub fn context(packet: &Packet, reviews: Option<&[Value]>) -> Result<(Value, Ind
             }
         }
     }
-    let view = json!({"format":"compact-ref-v1","phase":packet.phase,"manifest_sha256":packet.manifest_sha256,
+    let mut view = json!({"format":"compact-ref-v1","phase":packet.phase,"manifest_sha256":packet.manifest_sha256,
         "candidate_sha256":packet.candidate_sha256,"qualification":packet.qualification,
         "omissions":["Full originals are retained by SHA; this bounded view omits duplicate consultation changes/histories, chart geometry, repeated ReadyReading bindings and invariant input instructions.",
             "Inputs are original accepted task views plus native repair errors by sequence; intermediate accepted state is omitted unless final/first. Large schema enums show enum_count; exact schema stays immutable.",
-            "guides are typed selectors with full guide SHA. Each document contains ordered teaching_regions; concatenate teaching_chunks within one region only. Immutable book_extracts blocks separate regions, are omitted and retained by hash/length in full originals. This projection cannot certify quoted source interpretation. Writer receives only scopes implicated by training findings.",
+            if full_reading_judge {"Guides have exact SHA and typed scope. source_documents contains exact deduplicated book_extracts blocks for independent reading review; full guides, provider wire requests/responses and every branch remain hashed originals. Hosted evidence does not qualify the on-device model."} else {"guides are typed selectors with full guide SHA. Each document contains ordered teaching_regions; concatenate teaching_chunks within one region only. Immutable book_extracts blocks separate regions, are omitted and retained by hash/length in full originals. This projection cannot certify quoted source interpretation. Writer receives only scopes implicated by training findings."},
             "Output evidence_refs resolve through receipt_table. The host expands them and verifies every file hash and JSON pointer. Never invent a reference."],
         "editable_stage":edit_stage,"cases":cases,"calls":calls,"outputs":outputs,"inputs":inputs,"accepted_consultations":consultations,
         "guide_scopes":selected_guides,"guide_documents":guide_documents,"teaching_chunks":chunks,
+        "source_documents":source_documents,
         "schema_summaries":schemas,"training_reviews":reviews,"receipt_table":index.table()});
+    if full_reading_judge && share {
+        intern_reading_view(&mut view)?;
+    }
     Ok((view, index))
 }
 
@@ -485,6 +973,177 @@ pub fn schema(mut schema: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn expanded_view(mut view: Value) -> Value {
+        fn expand(
+            value: &mut Value,
+            marker: &str,
+            text_marker: &str,
+            object_marker: &str,
+            values: &Value,
+            stack: &mut BTreeSet<String>,
+        ) {
+            match value {
+                Value::Object(fields) => {
+                    if fields.len() == 1 {
+                        if let Some(id) = fields.get(marker).and_then(Value::as_str) {
+                            let id = id.to_owned();
+                            assert!(stack.insert(id.clone()), "cyclic dictionary value");
+                            *value = values.get(&id).expect("known dictionary ID").clone();
+                            expand(value, marker, text_marker, object_marker, values, stack);
+                            stack.remove(&id);
+                            return;
+                        }
+                        if let Some(parts) =
+                            fields.get_mut(text_marker).and_then(Value::as_array_mut)
+                        {
+                            let mut text = String::new();
+                            for part in parts {
+                                expand(part, marker, text_marker, object_marker, values, stack);
+                                text.push_str(part.as_str().expect("exact text part"));
+                            }
+                            *value = json!(text);
+                            return;
+                        }
+                        if let Some(mut pair) = fields.remove(object_marker) {
+                            expand(&mut pair, marker, text_marker, object_marker, values, stack);
+                            let keys = pair[0].as_array().expect("ordered object keys");
+                            let ordered = pair[1].as_array().expect("ordered object values");
+                            assert_eq!(keys.len(), ordered.len());
+                            let object: serde_json::Map<String, Value> = keys
+                                .iter()
+                                .zip(ordered)
+                                .map(|(key, value)| {
+                                    (key.as_str().unwrap().to_owned(), value.clone())
+                                })
+                                .collect();
+                            assert_eq!(object.len(), keys.len());
+                            *value = Value::Object(object);
+                            return;
+                        }
+                    }
+                    for value in fields.values_mut() {
+                        expand(value, marker, text_marker, object_marker, values, stack);
+                    }
+                }
+                Value::Array(items) => {
+                    for value in items {
+                        expand(value, marker, text_marker, object_marker, values, stack);
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(dictionary) = view.as_object_mut().unwrap().remove("context_interning") {
+            expand(
+                &mut view,
+                dictionary["ref_key"].as_str().unwrap(),
+                dictionary["text_key"].as_str().unwrap(),
+                dictionary["object_key"].as_str().unwrap(),
+                &dictionary["values"],
+                &mut BTreeSet::new(),
+            );
+            assert_eq!(
+                horary_prompt_program::digest(serde_json::to_vec(&view).unwrap()),
+                dictionary["expanded_sha256"]
+            );
+        }
+        view
+    }
+
+    #[test]
+    fn exact_interning_preserves_nested_values_raw_outputs_and_colliding_marker_keys() {
+        let fact = json!({"id":"jupiter-position","longitude":121.25,"house":1,
+            "testimony":"Exact location testimony with degree, direction, source and role preserved. ".repeat(4)});
+        let worksheet = json!({"facts":[fact.clone(),fact.clone()],"source":"Printed p. 147: \"A numbered source quotation.\""});
+        let raw = format!(
+            "{{\"value\":1,\"value\":2,\"because\":\"{}\"}}",
+            "Raw duplicate keys. ".repeat(12)
+        );
+        let original = json!({"format":"compact-ref-v1","manifest_sha256":"a".repeat(64),
+            "qualification":format!("Scope: {};",fact["testimony"].as_str().unwrap()),
+            "cases":[{"id":"lost_object-implicit","method":"lost_object","summary":{
+                "full_reading":true,"first_state":{"methodResult":{"result":"judgment","worksheet":worksheet}},
+                "final_state":{"methodResult":{"result":"judgment","worksheet":worksheet}}}}],
+            "inputs":{"i1":{"reading_request":{"roles":[worksheet.clone(),worksheet.clone()]},"facts":[fact.clone(),fact.clone()]}},
+            "outputs":{"raw":raw,"malformed":"{\"unclosed\": RAW","collision":{"@":"v1","~":[],"#":"v1"}},
+            "receipt_table":{"files":{"f1":{"sha256":"b".repeat(64),"file":"cases/a/final.json"}},"receipts":{"r1":{"file":"f1","pointer":"/session/method"}}}});
+        let mut compact = original.clone();
+        intern_reading_view(&mut compact).unwrap();
+        assert!(compact.to_string().len() < original.to_string().len());
+        assert_eq!(compact["context_interning"]["ref_key"], "@_");
+        assert_eq!(compact["context_interning"]["text_key"], "~_");
+        assert_eq!(compact["context_interning"]["object_key"], "#_");
+        assert_eq!(compact["receipt_table"], original["receipt_table"]);
+        assert_eq!(compact["qualification"], original["qualification"]);
+        assert_eq!(compact["cases"][0]["id"], "lost_object-implicit");
+        assert_eq!(
+            compact["cases"][0]["summary"]["final_state"]["methodResult"]["result"],
+            "judgment"
+        );
+        let mut again = original.clone();
+        intern_reading_view(&mut again).unwrap();
+        assert_eq!(compact, again);
+        assert_eq!(expanded_view(compact), original);
+    }
+
+    #[test]
+    #[ignore = "read-only saved campaign size check; requires HORARY_PACKET_SMOKE_CAMPAIGN and HORARY_PACKET_SMOKE_SPLIT"]
+    fn saved_reading_context_fits_without_changing_evidence() {
+        use crate::{packet, store, types::Split};
+        use std::path::PathBuf;
+        let campaign = PathBuf::from(std::env::var("HORARY_PACKET_SMOKE_CAMPAIGN").unwrap());
+        let split_file = PathBuf::from(std::env::var("HORARY_PACKET_SMOKE_SPLIT").unwrap());
+        let split: Split = serde_json::from_value(store::json(&split_file).unwrap()).unwrap();
+        let case_id = std::env::var("HORARY_PACKET_SMOKE_CASE")
+            .unwrap_or_else(|_| "lost_object-implicit".into());
+        let case = split.cases.iter().find(|case| case.id == case_id).unwrap();
+        let state = tempfile::tempdir().unwrap();
+        let packet = packet::build(
+            &campaign,
+            state.path(),
+            &split,
+            std::slice::from_ref(&case.id),
+            &horary_prompt_program::digest(store::read(&campaign.join("manifest.json")).unwrap()),
+            case.partition == crate::types::Partition::ReservedValidation,
+            None,
+        )
+        .unwrap();
+        let (original, _) = context_view(&packet, None, false).unwrap();
+        let (compact, index) = context(&packet, None).unwrap();
+        assert_eq!(expanded_view(compact.clone()), original);
+        let before = serde_json::to_vec(&original).unwrap();
+        let after = serde_json::to_vec(&compact).unwrap();
+        let prompt = crate::judge_prompt(&compact).unwrap();
+        let output_schema = schema(crate::types::judge_schema());
+        let submitted_bytes = prompt.len() + output_schema.to_string().len();
+        if let Ok(output) = std::env::var("HORARY_PACKET_SMOKE_OUTPUT") {
+            let output = PathBuf::from(output);
+            std::fs::create_dir_all(&output).unwrap();
+            store::atomic(&output.join("original-context.json"), &before, true).unwrap();
+            store::atomic(&output.join("interned-context.json"), &after, true).unwrap();
+        }
+        assert!(
+            submitted_bytes <= 120_000,
+            "{submitted_bytes} byte judge submission exceeds its budget"
+        );
+        assert_eq!(compact["receipt_table"], original["receipt_table"]);
+        index.verify_prompt(&prompt).unwrap();
+        for evidence in index.citations.values() {
+            packet::validate_evidence(&packet, state.path(), evidence).unwrap();
+        }
+        assert!(original["outputs"]
+            .as_object()
+            .unwrap()
+            .values()
+            .all(Value::is_string));
+        for (sha, block) in original["source_documents"].as_object().unwrap() {
+            assert_eq!(*sha, horary_prompt_program::digest(block.as_str().unwrap()));
+        }
+        eprintln!("{} exact context: {} -> {} bytes; total_submission_bytes={}; before_sha256={}; after_sha256={}; receipts={}; sources={}",
+            case_id, before.len(), after.len(), submitted_bytes, horary_prompt_program::digest(&before), horary_prompt_program::digest(&after),
+            index.citations.len(), original["source_documents"].as_object().unwrap().len());
+    }
     #[test]
     fn writer_can_see_method_appendix_without_reconstructing_quoted_source() {
         let text = "General teaching.\n<book_extracts>Source one</book_extracts>\nMethod teaching.\n<book_extracts>Source two</book_extracts>\nFinal teaching.";

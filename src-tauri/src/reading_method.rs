@@ -253,7 +253,7 @@ pub enum NaturalRole {
 }
 
 impl NaturalRole {
-    fn planet(self) -> &'static str {
+    pub(crate) fn planet(self) -> &'static str {
         match self {
             Self::Moon => "Moon",
             Self::Sun => "Sun",

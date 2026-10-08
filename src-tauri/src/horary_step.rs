@@ -361,7 +361,10 @@ pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &
             // Classification selects the next lesson; it cannot establish
             // facts that lesson has not yet checked.
             schema["properties"]["subject"] = json!({"type":"null"});
-            schema["properties"]["people"]["maxItems"] = json!(0);
+            // This phase cannot extract people. Showing the whole person
+            // item contract beside maxItems=0 primed unconstrained models to
+            // populate it anyway; the only legal value remains [].
+            schema["properties"]["people"] = json!({"type":"array","maxItems":0});
             // No observations may be emitted, so do not prefill the extractor's
             // field/value alternatives in this unrelated classification call.
             schema["properties"]["updates"] = json!({"type":"array","maxItems":0});

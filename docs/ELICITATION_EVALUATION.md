@@ -4,7 +4,7 @@ The 166 executable cases in `src-tauri/test-fixtures/elicitation/` include the o
 
 `src-tauri/src/elicitation_eval.rs` loads the banks strictly. Ordinary tests fail if a method lacks one of the three groups, a case has an unknown field, or an identifier repeats. Every additional JSON file in that directory must be an ordinary file containing a case array; metadata belongs elsewhere. All loaded banks, including ignored files, enter the campaign fingerprint. Expected answers belong only to the evaluator. They never enter the model prompt.
 
-Ordinary Rust and frontend regressions do not run Gemma. The ignored real-model campaign must be explicitly invoked with the local weights and a fresh evidence directory. Its manifest identifies the weights and decoder; actual request/result files count model calls. Runtime logs identify the hardware backend. Codex teacher/judge jobs use the saved account separately and are not Gemma inference. Report these three categories separately; fan noise and a green unit-test count are not model-execution evidence.
+Ordinary Rust and frontend regressions do not run Gemma. The ignored real-model campaign must be explicitly invoked with a selected provider and a fresh evidence directory. Native campaigns identify their actual weights and decoder. Hosted campaigns identify Google's actual model and wire configuration and never load local weights. Codex teacher/judge jobs use the saved account separately and are not Gemma inference. Report these categories separately; fan noise and a green unit-test count are not model-execution evidence.
 
 ```mermaid
 flowchart TD
@@ -44,6 +44,12 @@ Native acceptance separately guards a narrow family of explicit earlier-consulta
 
 ## Grades and review
 
+Every scenario also has a strict, source-cited reading contract in `src-tauri/test-fixtures/readings/`. All 166 IDs must have exactly one matching rubric before a full-reading campaign starts. Each rubric states its reading method and native support boundary, contingent context requirements, required significator roles, decisive textbook tests, evidence owed for each test, answer obligations and forbidden inferences. The same method can share a recipe while retaining case-specific ownership, operative relationship, answer scope and source rules. These rubrics are evaluation gold, never instructions secretly added to the oracle's input.
+
+Full campaigns report four independent hurdles: **classification, elicitation, extraction, reading**. An interpretation failure does not erase successful input collection. Conversely, successful input collection cannot qualify an absent reading. Rust checks the current input binding, actual chart, required accepted specialist worksheets and delivered answer; a completed procedure receives `structure_pass_review_pending`, not a semantic reading pass. An independent reviewer must examine it against the source rubric and actual chart witnesses. Known unimplemented recipes remain explicit boundaries; a chart or a valid worksheet alone is not a completed reading.
+
+`first-turn.json`, `final.json` and `outcome.json` retain their separate hurdle observations. Immutable call files preserve every original and repaired prompt, schema, raw response and rejection. Each `live.json` checkpoint exposes the current stage and accepted records while a case runs. `report.json` and `review.html` update as cases finish. The full-reading Codex reviewer retains every branch of independent analysis batches and requires four source-supported scores. Unobserved or blocked interpretations cannot receive a reading score.
+
 | Dimension | Checked evidence |
 | --- | --- |
 | Classification | The substantive method and requested answer facet, including negation and authorized reframing |
@@ -56,6 +62,12 @@ Native acceptance separately guards a narrow family of explicit earlier-consulta
 | Cost and repair | Every call, rejected attempt, prompt/cache/output token count, first-token time, total wall time and cancellation |
 
 A valid JSON response alone earns no semantic pass. A first-turn pass does not imply a follow-up pass, and neither certifies an astrological interpretation. The 28 methods awaiting specialist review can collect all their inputs correctly while remaining unable to issue an interpretation. A heuristic fluidity flag is a request to examine the words, not an automated judgment of taste.
+
+The first unconstrained hosted full reading completed its three input hurdles but failed independent source review. Its condition lesson contradicted printed p.56 by treating houses 3/9 as weak, and its reception lesson used a disputed object/speaker planet to infer personal feelings, contrary to p.147. The editorial lessons now state the exact native house-capacity exceptions and object-role priority, with the house-capacity source passage included in the actual prompt. An available-job pay role also binds wages to the job's second house, required for a profit facet and selectable for a pay-priority situation. These are source and role repairs, not a declaration that the model's interpretations now pass; original failed readings remain intact.
+
+The next full-catalogue baseline selected all 166 cases but closed after its first four when corrections changed the frozen source. Its three delivered relationship readings collected their inputs, yet failed independent source review: Moon testimony was omitted, an already arranged wedding was treated as needing a fresh occasion, and limited future-contact coverage was converted into evidence of absence. The fourth case, a missing watch, exhausted its deadline after repeatedly selecting both alternative object rulers. This is an interrupted four-case observation, not a completed 166-case campaign. Separate saved-login Codex reviews also scored the two reviewed interpretations only partially correct; structural success did not override those findings.
+
+The revised role contract makes the relationship Moon obligatory unless a selected house ruler claims it, while preserving that house ruler's first claim and the emotional meaning when Moon already represents the querent (printed pp.191–193). Alternative object rulers now receive precise missing-versus-overfilled feedback: compare both, select one now. Contacts and synthesis explicitly start from the stated baseline (printed p.140), distinguish new arrangements from an already agreed event, and retain the source's separating-agreement exception (printed p.99) without inventing its presence in a chart. Empty check explanations are rejected at their exact path; lessons use only the actual allowed state labels. Classification no longer presents an irrelevant person-item structure when the only legal people value is `[]`, and conversational teaching examples are complete literal reply objects. Original receipts and gold remain unchanged. A fresh hosted run must establish whether these repairs improve the actual pipeline.
 
 ## Independent conversation review
 
@@ -102,6 +114,30 @@ The exact `smoke-3b` run stopped on disk exhaustion after eleven completed cases
 Before the broad run, the lost-pet first-turn rubric was strengthened to require the already identified generic animal and forbid invented appearance, clock occurrence and chart overrides. "Escaped this morning" belongs to search context, not appearance (printed p. 147). Smoke-3b's bad appearance previously surfaced only when the supplied tabby description conflicted with it. The original expectations and result remain unchanged; the separate `review-notes/lost-pet-gold-strengthening.json` records the rationale and before/after hashes.
 
 ## Running
+
+### Hosted Gemma
+
+The test-only Rust adapter uses Google's `gemma-4-26b-a4b-it` through the Gemini `generateContent` endpoint. It translates the application's existing system/user/assistant messages, including rejected proposals and repair instructions, without replacing their content. Hosted output is **unconstrained text**, with neither `responseMimeType` nor `responseJsonSchema`. The requested worksheet contract remains in the actual application prompt; the model must follow it. Malformed or invalid proposals enter native rejection and repair. Token-limited text also reaches those checks verbatim, with Google's actual finish reason retained in the provider receipt; truncation is not recast as a service error that bypasses repair. All acceptance, requirement checks, native chart tools and specialist scheduling still run through the application. Thinking is disabled (`minimal`), temperature and seed are zero. This is hosted exploration, not qualification of the on-device 12B model. The application's inference default remains local, with constrained individual text steps and unconstrained independent analysis batches.
+
+Store the API credential in a private ordinary file (0600) **outside this repository**, then select the hosted provider explicitly. The key travels in an auth header, never a URL, prompt, manifest or trace. Redirects are disabled. Codex reviewer children discard hosted credential variables and credential-file paths.
+
+```sh
+HORARY_EVAL_PROVIDER=google \
+HORARY_GOOGLE_KEY_FILE=/private/path/google-api.key \
+HORARY_EVAL_EVIDENCE=/fresh/path/hosted-campaign \
+HORARY_EVAL_FULL=1 HORARY_EVAL_BATCH=4 \
+HORARY_EVAL_CASE_SECONDS=1800 \
+cargo test --manifest-path src-tauri/Cargo.toml --locked --lib \
+  elicitation_eval::real_model_catalogue_campaign -- --ignored --nocapture
+```
+
+Hosted `BATCH=4` runs four independent consultations with separate deadlines. Their independent analysis steps can also proceed concurrently, under a shared four-request HTTP limit. Exact provider request/response bodies and reported usage remain in each call receipt; partial successful analysis branches survive an outer batch failure. Cached tokens are recorded only when Google actually reports them. The first schema-constrained probe succeeded, but the larger extraction schema returned an HTTP 400. Those attempts remain separate failed receipts; after the user's explicit direction, hosted evaluation measures prompt-following without provider output constraints.
+
+The supplied project's initial live run hit a 16,000-input-token/minute free-tier quota. The adapter now asks Google's `countTokens` for each exact request and reserves its tokens in a shared 61-second window, defaulting to 14,000 tokens for margin. `HORARY_GOOGLE_INPUT_TPM` overrides that explicitly configured budget. Quota waiting is visible separately from HTTP generation time and is cancellable. A single over-budget prompt is not silently truncated. Authentication, unavailable-model and quota errors stop a campaign with preserved receipts. Completed generation HTTP 500/502/503/504 responses permit at most two cancellable, paced service retries; every failed response remains in `generation_attempts`, and the actual submitted-request count includes retries. Uncertain transport, quota, authentication, request errors and unusable model outputs are not resubmitted by this layer. Model-output rejection goes through native semantic repair. Case deadlines include pacing and service retries, so hosted campaigns need longer deadlines than native campaigns. Other uses of the same Google project can still exhaust its shared quota.
+
+`HORARY_EVAL_MODES=explicit,implicit` selects complete-information groups; omit it to retain all three groups and edge cases. Filters remain exact IDs or method names. Google's [Gemma API guide](https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api) documents this hosted model; its [token-count API](https://ai.google.dev/api/tokens) supplies the pacing counts.
+
+### Native Gemma
 
 The [bounded Rust optimization driver](../tools/horary-loop/README.md) consumes completed cases while discovery runs, reviews through the saved Codex login, proposes typed teaching edits and measures paired control/candidate trials. It retains every failed receipt, reuses verified completed work and stops behind uncertain paid jobs. The [optimization guide](PROMPT_OPTIMIZATION.md) distinguishes discovery, training, reserved validation and interpretation qualification.
 

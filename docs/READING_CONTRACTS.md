@@ -179,9 +179,9 @@ Use re-entry testimony, not the generic get/keep assumption. State limitations o
 
 Frawley, *The Horary Textbook*, printed pp. 224–226. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: situation, choice, profit.
 
-Job and its pay have distinct roles. An offer already available is not a new acquisition.
+The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 
-Judge quality and stated priorities. Ask priorities only if the answer truly depends on what 'good' means.
+Judge quality and stated priorities using their relevant roles. A pay priority needs wages testimony; a wages aspect does not prove job acquisition. Ask priorities only if the answer truly depends on what 'good' means.
 
 ### Boss, colleague or subordinate (`work_person`)
 
@@ -636,7 +636,7 @@ investment: Shares and investments — printed pp. 156–161. Owned shares are t
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
-job_offer: Assessing an available job — printed pp. 224–226. Job and its pay have distinct roles. An offer already available is not a new acquisition.
+job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.
 rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
@@ -684,6 +684,8 @@ INPUT: How many candles will Ren sell at the stall?
 OUTPUT: {"intent":"read","question":"How many candles will Ren sell at the stall?","frame":{"method":"movable_deal","facet":"quantity"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: I don't want a job; I want to know where my missing passport is.
 OUTPUT: {"intent":"read","question":"I don't want a job; I want to know where my missing passport is.","frame":{"method":"lost_object","facet":"location"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: My partner Jamie and I share a home, but things feel distant. How are things between us?
+OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but things feel distant. How are things between us?","frame":{"method":"relationship","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 ```
 
 ## Actual selected recognition lessons
@@ -2056,8 +2058,8 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Assessing an available job (job_offer)
 Source: Frawley, The Horary Textbook, printed pp. 224–226.
-Role distinctions: Job and its pay have distinct roles. An offer already available is not a new acquisition.
-Method distinctions: Judge quality and stated priorities. Ask priorities only if the answer truly depends on what 'good' means.
+Role distinctions: The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
+Method distinctions: Judge quality and stated priorities using their relevant roles. A pay priority needs wages testimony; a wages aspect does not prove job acquisition. Ask priorities only if the answer truly depends on what 'good' means.
 
 Permitted subject kinds: ["job"].
 Judgment-supported facets: situation, choice, profit. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
@@ -2118,8 +2120,8 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Assessing an available job (job_offer)
 Source: Frawley, The Horary Textbook, printed pp. 224–226.
-Role distinctions: Job and its pay have distinct roles. An offer already available is not a new acquisition.
-Method distinctions: Judge quality and stated priorities. Ask priorities only if the answer truly depends on what 'good' means.
+Role distinctions: The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
+Method distinctions: Judge quality and stated priorities using their relevant roles. A pay priority needs wages testimony; a wages aspect does not prove job acquisition. Ask priorities only if the answer truly depends on what 'good' means.
 
 Permitted subject kinds: ["job"].
 Judgment-supported facets: situation, choice, profit. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
@@ -5533,7 +5535,7 @@ investment: Shares and investments — printed pp. 156–161. Owned shares are t
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
-job_offer: Assessing an available job — printed pp. 224–226. Job and its pay have distinct roles. An offer already available is not a new acquisition.
+job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.
 rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
@@ -5581,6 +5583,8 @@ INPUT: How many candles will Ren sell at the stall?
 OUTPUT: {"intent":"read","question":"How many candles will Ren sell at the stall?","frame":{"method":"movable_deal","facet":"quantity"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: I don't want a job; I want to know where my missing passport is.
 OUTPUT: {"intent":"read","question":"I don't want a job; I want to know where my missing passport is.","frame":{"method":"lost_object","facet":"location"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: My partner Jamie and I share a home, but things feel distant. How are things between us?
+OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but things feel distant. How are things between us?","frame":{"method":"relationship","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 
 ```
 
@@ -6261,7 +6265,7 @@ investment: Shares and investments — printed pp. 156–161. Owned shares are t
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
-job_offer: Assessing an available job — printed pp. 224–226. Job and its pay have distinct roles. An offer already available is not a new acquisition.
+job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.
 rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
@@ -6309,6 +6313,8 @@ INPUT: How many candles will Ren sell at the stall?
 OUTPUT: {"intent":"read","question":"How many candles will Ren sell at the stall?","frame":{"method":"movable_deal","facet":"quantity"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: I don't want a job; I want to know where my missing passport is.
 OUTPUT: {"intent":"read","question":"I don't want a job; I want to know where my missing passport is.","frame":{"method":"lost_object","facet":"location"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: My partner Jamie and I share a home, but things feel distant. How are things between us?
+OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but things feel distant. How are things between us?","frame":{"method":"relationship","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 
 ```
 
@@ -7736,47 +7742,6 @@ This base vocabulary is further constrained by the actual recognition phase. The
     },
     "people": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "maxLength": 40
-          },
-          "label": {
-            "type": "string",
-            "maxLength": 80
-          },
-          "relationship": {
-            "type": "string",
-            "enum": [
-              "unknown",
-              "partner",
-              "child",
-              "sibling",
-              "friend",
-              "mother",
-              "father",
-              "employer",
-              "employee",
-              "other_party",
-              "neighbor",
-              "querent"
-            ]
-          },
-          "source_quote": {
-            "type": "string",
-            "maxLength": 240
-          }
-        },
-        "required": [
-          "id",
-          "label",
-          "relationship",
-          "source_quote"
-        ],
-        "additionalProperties": false
-      },
       "maxItems": 0
     },
     "subject": {

@@ -210,10 +210,20 @@ impl Stage {
             },
             Self::Condition => &[
                 "essential_quality",
+                "house_capacity",
                 "solar_exceptions",
                 "combustion_sign",
                 "cazimi",
                 "no_automatic_damage",
+            ],
+            Self::Reception if matches!(matter, Matter::LostObject | Matter::LostAnimal) => &[
+                "own_or_others_dignities",
+                "reception_example",
+                "reception_by_sign",
+                "reception_exaltation",
+                "reception_triplicity",
+                "same_object_candidates",
+                "moon_object_role",
             ],
             Self::Reception => &[
                 "own_or_others_dignities",
@@ -225,6 +235,8 @@ impl Stage {
             ],
             Self::Contacts => &[
                 "occasion_motive_ability",
+                "default_baseline",
+                "separating_agreement",
                 "translation",
                 "collection",
                 "next_contacts",
@@ -247,7 +259,12 @@ impl Stage {
                 "volition",
                 "timing_examples",
             ],
-            Self::Judgment => &["no_forced_certainty", "occasion_motive_ability"],
+            Self::Judgment => &[
+                "no_forced_certainty",
+                "occasion_motive_ability",
+                "default_baseline",
+                "separating_agreement",
+            ],
             Self::Explanation => &[
                 "simplicity",
                 "same_issue",

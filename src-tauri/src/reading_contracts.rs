@@ -406,7 +406,7 @@ pub const CATALOGUE: &[Contract] = &[
         "Principal and relevant job; keep the old-job re-entry context.", "Use re-entry testimony, not the generic get/keep assumption. State limitations of contact coverage."),
     card!(JobOffer, "Assessing an available job", "224–226", Required, &[],
         &[Facet::Situation, Facet::Choice, Facet::Profit], Implemented,
-        "Job and its pay have distinct roles. An offer already available is not a new acquisition.", "Judge quality and stated priorities. Ask priorities only if the answer truly depends on what 'good' means."),
+        "The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.", "Judge quality and stated priorities using their relevant roles. A pay priority needs wages testimony; a wages aspect does not prove job acquisition. Ask priorities only if the answer truly depends on what 'good' means."),
     card!(WorkPerson, "Boss, colleague or subordinate", "224–225", None,
         &[required(Field::WorkCapacity)], EVENT_STATE, Implemented,
         "Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.", "Address the actual work relationship; do not reclassify a friendly colleague as eleventh by habit."),
@@ -2688,6 +2688,11 @@ fn classification_guide() -> String {
             "I don't want a job; I want to know where my missing passport is.",
             Method::LostObject,
             Facet::Location,
+        ),
+        (
+            "My partner Jamie and I share a home, but things feel distant. How are things between us?",
+            Method::Relationship,
+            Facet::Situation,
         ),
     ] {
         let mut patch = control(Intent::Read);

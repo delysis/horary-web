@@ -90,6 +90,27 @@ pub struct Rubric {
     pub natural_phrasing: Dimension,
     pub continuity: Dimension,
 }
+
+/// Independent semantic review of the four actual pipeline hurdles. Native
+/// shape acceptance is evidence, never an automatic horary reading score.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PipelineReview {
+    pub classification: Dimension,
+    pub extraction: Dimension,
+    pub elicitation: Dimension,
+    pub reading: Dimension,
+}
+impl PipelineReview {
+    pub fn dimensions(&self) -> [(&Dimension, bool); 4] {
+        [
+            (&self.classification, false),
+            (&self.extraction, false),
+            (&self.elicitation, true),
+            (&self.reading, false),
+        ]
+    }
+}
 impl Rubric {
     pub fn dimensions(&self) -> [(&Dimension, bool); 5] {
         [
@@ -141,6 +162,8 @@ pub struct CaseReview {
     pub first_turn: Rubric,
     pub follow_up: Option<Rubric>,
     pub findings: Vec<Finding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline: Option<PipelineReview>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -209,6 +232,12 @@ fn rubric_schema() -> Value {
         "useful_inquiry":dimension_schema(),"natural_phrasing":dimension_schema(),"continuity":dimension_schema()}),
     )
 }
+fn pipeline_schema() -> Value {
+    object(
+        json!({"classification":dimension_schema(),"extraction":dimension_schema(),
+        "elicitation":dimension_schema(),"reading":dimension_schema()}),
+    )
+}
 fn failure_schema() -> Value {
     json!({"type":"string","enum":["classification","missing_fact","redundant_inquiry","actor_ownership", "source_grounding","chart_anchor","format_schema","native_boundary","repair_loop","conversation", "unsupported_claim","execution_interruption","infrastructure"]})
 }
@@ -224,7 +253,8 @@ pub fn judge_schema() -> Value {
     object(json!({"version":{"type":"integer","enum":[1]},
         "reviews":list(object(json!({"case_id":text(),"native_semantic_pass":{"type":"boolean"},
             "native_journey_pass":{"type":["boolean","null"]},"first_turn":rubric_schema(),
-            "follow_up":nullable(rubric_schema()),"findings":list(finding_schema())}))),
+            "follow_up":nullable(rubric_schema()),"findings":list(finding_schema()),
+            "pipeline":nullable(pipeline_schema())}))),
         "clusters":list(object(json!({"id":text(),"failure_class":failure_schema(),"stage":optional_text(),
             "case_ids":list(text()),"summary":text(),"evidence":list(evidence_schema())}))),
         "qualification":text()}))

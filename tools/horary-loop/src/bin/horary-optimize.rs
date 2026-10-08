@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 use clap::Parser;
 use fs2::FileExt;
+use horary_loop::campaign::FrozenExecution;
 use horary_loop::{Action, Options};
 use horary_prompt_program::{digest, Program};
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,7 @@ struct Cli {
     #[arg(long)]
     native_executable: PathBuf,
     #[arg(long)]
-    model: PathBuf,
+    model: Option<PathBuf>,
     #[arg(long)]
     state: PathBuf,
     /// Watch a running discovery campaign until a review batch is available.
@@ -56,7 +57,10 @@ struct Plan {
     fixtures: PathBuf,
     manifest_sha256: String,
     native_executable: PathBuf,
-    model: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    model: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    execution: Option<FrozenExecution>,
     codex: PathBuf,
     watch: bool,
     batch_size: usize,
@@ -174,13 +178,17 @@ fn run(cli: Cli) -> Result<()> {
             "An automatic round requires finite, positive review and native-case budgets".into(),
         );
     }
+    let manifest_bytes = read(&cli.discovery.join("manifest.json"))?;
+    let manifest: Value = serde_json::from_slice(&manifest_bytes).map_err(|e| e.to_string())?;
+    let execution = FrozenExecution::from_manifest(&manifest, cli.model.as_deref())?;
     let plan = Plan {
         version: 1,
         discovery: fs::canonicalize(&cli.discovery).map_err(|e| e.to_string())?,
         fixtures: fs::canonicalize(&cli.fixtures).map_err(|e| e.to_string())?,
-        manifest_sha256: digest(read(&cli.discovery.join("manifest.json"))?),
+        manifest_sha256: digest(manifest_bytes),
         native_executable: fs::canonicalize(&cli.native_executable).map_err(|e| e.to_string())?,
-        model: fs::canonicalize(&cli.model).map_err(|e| e.to_string())?,
+        model: execution.native_model.clone(),
+        execution: Some(execution),
         codex: cli.codex.clone(),
         watch: cli.watch,
         batch_size: cli.batch_size,
@@ -204,7 +212,24 @@ fn run(cli: Cli) -> Result<()> {
         .map_err(|e| e.to_string())?;
     lock.try_lock_exclusive()
         .map_err(|e| format!("Another process owns this round: {e}"))?;
-    keep(&state.join("plan.json"), &plan)?;
+    let plan_path = state.join("plan.json");
+    if plan_path.exists() {
+        let mut old: Plan =
+            serde_json::from_slice(&read(&plan_path)?).map_err(|e| e.to_string())?;
+        if old.execution.is_none()
+            && plan
+                .execution
+                .as_ref()
+                .is_some_and(FrozenExecution::legacy_native_scope)
+        {
+            old.execution = plan.execution.clone();
+        }
+        if old != plan {
+            return Err("Immutable optimization round/provider/scope changed; preserve this round and use fresh state".into());
+        }
+    } else {
+        keep(&plan_path, &plan)?;
+    }
     let reviews = state.join("training-review");
     let options = |action, max_jobs| Options {
         action,
@@ -266,6 +291,22 @@ fn run(cli: Cli) -> Result<()> {
     )?;
     let candidate = state.join("candidate.json");
     keep(&candidate, &program)?;
+    if let Err(reason) = plan
+        .execution
+        .as_ref()
+        .ok_or("Missing frozen pipeline scope")?
+        .require_settled_discovery(&plan.discovery)
+    {
+        keep(
+            &state.join("awaiting-discovery.json"),
+            &json!({"state":"paired_inference_withheld_until_discovery_settles",
+            "candidate_sha256":digest(read(&candidate)?),"discovery_manifest_sha256":plan.manifest_sha256,
+            "reason":"Hosted discovery still owns project quota; reviews/writer may stream, inference will resume only after closed completion",
+            "provider_requests_started":false}),
+        )?;
+        println!("{reason}. Fixed candidate is preserved; resume this same round after discovery completes.");
+        return Ok(());
+    }
     let experiment = state.join("experiment");
     let experiment_binary = std::env::current_exe()
         .map_err(|e| e.to_string())?
@@ -275,31 +316,16 @@ fn run(cli: Cli) -> Result<()> {
             "horary-experiment"
         });
     println!("Fixed candidate: {count} affected cases; paired training then reserved validation.");
-    let status = Command::new(&experiment_binary)
-        .arg("--candidate")
-        .arg(&candidate)
-        .arg("--discovery")
-        .arg(&plan.discovery)
-        .arg("--split")
-        .arg(reviews.join("split.json"))
-        .arg("--fixtures")
-        .arg(&plan.fixtures)
-        .arg("--native-executable")
-        .arg(&plan.native_executable)
-        .arg("--model")
-        .arg(&plan.model)
-        .arg("--state")
-        .arg(&experiment)
-        .arg("--codex")
-        .arg(&cli.codex)
-        .arg("--case-seconds")
-        .arg(cli.case_seconds.to_string())
-        .arg("--max-calls")
-        .arg(cli.max_calls.to_string())
-        .arg("--judge-seconds")
-        .arg(cli.judge_seconds.to_string())
-        .status()
-        .map_err(|e| format!("Start paired experiment: {e}"))?;
+    let status = experiment_command(
+        &experiment_binary,
+        &cli,
+        &plan,
+        &reviews,
+        &candidate,
+        &experiment,
+    )
+    .status()
+    .map_err(|e| format!("Start paired experiment: {e}"))?;
     if !status.success() {
         return Err("Paired experiment stopped; its receipts remain resumable, no paid/native retry was made".into());
     }
@@ -313,9 +339,166 @@ fn run(cli: Cli) -> Result<()> {
     Ok(())
 }
 
+fn experiment_command(
+    binary: &Path,
+    cli: &Cli,
+    plan: &Plan,
+    reviews: &Path,
+    candidate: &Path,
+    experiment: &Path,
+) -> Command {
+    let mut command = Command::new(binary);
+    command
+        .arg("--candidate")
+        .arg(candidate)
+        .arg("--discovery")
+        .arg(&plan.discovery)
+        .arg("--split")
+        .arg(reviews.join("split.json"))
+        .arg("--fixtures")
+        .arg(&plan.fixtures)
+        .arg("--native-executable")
+        .arg(&plan.native_executable)
+        .arg("--state")
+        .arg(experiment)
+        .arg("--codex")
+        .arg(&cli.codex)
+        .arg("--case-seconds")
+        .arg(cli.case_seconds.to_string())
+        .arg("--max-calls")
+        .arg(cli.max_calls.to_string())
+        .arg("--judge-seconds")
+        .arg(cli.judge_seconds.to_string());
+    if let Some(model) = &plan.model {
+        command.arg("--model").arg(model);
+    }
+    command
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use horary_loop::campaign::GOOGLE_MODEL;
+
+    #[test]
+    fn hosted_optimization_forwards_discovery_without_requiring_or_fabricating_weights() {
+        let cli = Cli::try_parse_from([
+            "horary-optimize",
+            "--discovery",
+            "discovery",
+            "--fixtures",
+            "fixtures",
+            "--native-executable",
+            "worker",
+            "--state",
+            "round",
+        ])
+        .unwrap();
+        assert!(cli.model.is_none());
+        let manifest = json!({"entry_point":"horary_pipeline::run","full_reading":true,"decoder":"hosted unconstrained text","case_flow_parallelism":1,
+            "model":{"provider":"google_gemini_api","id":GOOGLE_MODEL,"endpoint":"https://generativelanguage.googleapis.com/v1beta/models/gemma-4-26b-a4b-it:generateContent",
+                "local_inference":false,"credential_in_evidence":false}});
+        let scope = FrozenExecution::from_manifest(&manifest, None).unwrap();
+        let plan = Plan {
+            version: 1,
+            discovery: cli.discovery.clone(),
+            fixtures: cli.fixtures.clone(),
+            manifest_sha256: digest(manifest.to_string()),
+            native_executable: cli.native_executable.clone(),
+            model: None,
+            execution: Some(scope.clone()),
+            codex: cli.codex.clone(),
+            watch: false,
+            batch_size: cli.batch_size,
+            review_jobs: cli.review_jobs,
+            max_native_cases: cli.max_native_cases,
+            judge_seconds: cli.judge_seconds,
+            case_seconds: cli.case_seconds,
+            max_calls: cli.max_calls,
+        };
+        let command = experiment_command(
+            Path::new("must-not-run"),
+            &cli,
+            &plan,
+            Path::new("reviews"),
+            Path::new("candidate"),
+            Path::new("experiment"),
+        );
+        let args: Vec<_> = command
+            .get_args()
+            .map(|v| v.to_string_lossy().to_string())
+            .collect();
+        assert!(!args.iter().any(|arg| arg == "--model"));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--discovery", "discovery"]));
+        let serialized = serde_json::to_string(&plan).unwrap();
+        assert!(!serialized.contains("HORARY_GOOGLE_KEY_FILE"));
+        assert!(!serialized.contains("model_sha256"));
+        assert_eq!(plan.execution.unwrap(), scope);
+    }
+
+    #[test]
+    fn native_cli_keeps_model_flag_and_the_same_verified_model_goes_to_experiment() {
+        let root = tempfile::tempdir().unwrap();
+        let weights = root.path().join("native.gguf");
+        fs::write(&weights, b"fixture").unwrap();
+        let cli = Cli::try_parse_from([
+            "horary-optimize",
+            "--discovery",
+            "d",
+            "--fixtures",
+            "f",
+            "--native-executable",
+            "e",
+            "--state",
+            "s",
+            "--model",
+            weights.to_str().unwrap(),
+        ])
+        .unwrap();
+        let manifest = json!({"entry_point":"horary_pipeline::run_elicitation","decoder":"native single","model":{"provider":"native_llama","path":weights,
+            "bytes":7,"sha256":horary_loop::campaign::file_digest(&weights).unwrap()}});
+        let scope = FrozenExecution::from_manifest(&manifest, cli.model.as_deref()).unwrap();
+        let plan = Plan {
+            version: 1,
+            discovery: cli.discovery.clone(),
+            fixtures: cli.fixtures.clone(),
+            manifest_sha256: digest(manifest.to_string()),
+            native_executable: cli.native_executable.clone(),
+            model: scope.native_model.clone(),
+            execution: Some(scope),
+            codex: cli.codex.clone(),
+            watch: false,
+            batch_size: cli.batch_size,
+            review_jobs: cli.review_jobs,
+            max_native_cases: cli.max_native_cases,
+            judge_seconds: cli.judge_seconds,
+            case_seconds: cli.case_seconds,
+            max_calls: cli.max_calls,
+        };
+        let command = experiment_command(
+            Path::new("must-not-run"),
+            &cli,
+            &plan,
+            Path::new("reviews"),
+            Path::new("candidate"),
+            Path::new("experiment"),
+        );
+        let args: Vec<_> = command
+            .get_args()
+            .map(|v| v.to_string_lossy().to_string())
+            .collect();
+        let at = args.iter().position(|arg| arg == "--model").unwrap();
+        assert_eq!(
+            args[at + 1],
+            fs::canonicalize(&weights).unwrap().to_string_lossy()
+        );
+        let mut legacy = serde_json::to_value(&plan).unwrap();
+        legacy.as_object_mut().unwrap().remove("execution");
+        let old: Plan = serde_json::from_value(legacy).unwrap();
+        assert!(old.model.is_some() && old.execution.is_none());
+    }
     #[test]
     fn writer_abstention_does_not_become_an_experiment() {
         assert!(candidate_from(&[

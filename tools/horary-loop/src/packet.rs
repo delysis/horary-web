@@ -210,12 +210,121 @@ fn method(input: &Value) -> Option<String> {
 }
 
 fn state_summary(state: &Value) -> Value {
+    let hurdles = state["hurdles"].clone();
     let state = state.get("session").unwrap_or(state);
+    let records = state
+        .pointer("/method/records")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|record| json!({"stage":record["stage"],"revision":record["revision"],
+            "guide_sha256":record["guideSha256"],"schema_sha256":record["schemaSha256"],
+            "input_sha256":record["inputSha256"],"worksheet":record["worksheet"],
+            "source_passages":record["sourcePassages"],"validation_error":record["validationError"]}))
+        .collect::<Vec<_>>();
+    let sections = state["sections"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|section| {
+            json!({"stage":section.get("method_stage").or_else(||section.get("methodStage")),
+            "roles":section["roles"],"rules":section["rules"],"evidence":section["evidence"],
+            "body":section["body"],"because":section["because"],"draft":section["draft"]})
+        })
+        .collect::<Vec<_>>();
     json!({"messages":state["messages"],"consultation":state.pointer("/method/consultation"),
         "candidateMomentMs":state["candidateMomentMs"],"methodResult":state.pointer("/method/result"),
+        "methodRecords":records,"flow":state.pointer("/method/flow"),
+        "sections":sections,"hurdles":hurdles,
         "pending":state.pointer("/method/flow/pending"),
-        "chart":{"moment":state.pointer("/chart/timestamp_ms"),"place":state["place"],
+        "chart":{"moment":state.pointer("/chart/timestampMs").or_else(||state.pointer("/chart/timestamp_ms")),"place":state["place"],
             "created":!state["chart"].is_null()},"chartAfterMessage":state["chartAfterMessage"]})
+}
+
+struct CallBranch {
+    request: Value,
+    result: Option<Value>,
+    input_pointer: String,
+    guide_pointer: String,
+    result_pointer: String,
+    provider_pointer: String,
+}
+
+/// Batch branches keep the parent file's hash and exact JSON pointer. Virtual
+/// per-stage projections never replace or rewrite the original request/result.
+fn call_branches(request: &Value, result: Option<&Value>) -> Result<Vec<CallBranch>> {
+    let Some(tasks) = request.get("tasks") else {
+        return Ok(vec![CallBranch {
+            request: request.clone(),
+            result: result.cloned(),
+            input_pointer: "/input".into(),
+            guide_pointer: "/prompt/0/content".into(),
+            result_pointer: "/result/Ok/content".into(),
+            provider_pointer: "/provider_receipt".into(),
+        }]);
+    };
+    let tasks = tasks
+        .as_array()
+        .ok_or("Native batch tasks are not an array")?;
+    let prompts = request["prompts"]
+        .as_array()
+        .ok_or("Native batch lacks exact branch prompts")?;
+    if tasks.is_empty() || tasks.len() > 4 || tasks.len() != prompts.len() {
+        return Err("Native analysis batch needs one to four matched tasks/prompts".into());
+    }
+    let outputs = result.and_then(|value| value.pointer("/result/Ok"));
+    if let Some(outputs) = outputs {
+        if outputs
+            .as_array()
+            .is_none_or(|outputs| outputs.len() != tasks.len())
+        {
+            return Err("Native batch results do not match its branch count".into());
+        }
+    }
+    tasks
+        .iter()
+        .zip(prompts)
+        .enumerate()
+        .map(|(index, (task, prompt))| {
+            let task = task.as_array().ok_or("Native batch task is not a tuple")?;
+            if task.len() != 4 || task[0].as_str().is_none() {
+                return Err("Native batch task must be [stage,matter,input,schema]".into());
+            }
+            let guide = prompt
+                .pointer("/0/content")
+                .and_then(Value::as_str)
+                .ok_or("Native branch lacks actual system teaching")?;
+            let program = request["prompt_program"]
+                .get(index)
+                .cloned()
+                .unwrap_or(Value::Null);
+            let guide_sha = program["original_guide_sha256"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| digest(guide));
+            let projected_result = result.map(|result| {
+                let generation = if let Some(outputs) = outputs {
+                    json!({"Ok":outputs[index]})
+                } else {
+                    result["result"].clone()
+                };
+                json!({"wall_ms":result["wall_ms"],"result":generation,
+                    "provider_receipt":result["provider_receipts"].get(index)})
+            });
+            Ok(CallBranch {
+                request: json!({"sequence":request["sequence"],"batch_branch":index,
+                    "batch_size":tasks.len(),"stage":task[0],"matter":task[1],
+                    "input":task[2],"schema":task[3],"prompt":prompt,
+                    "guide_sha256":guide_sha,"prompt_program":program,"decoder":request["decoder"],
+                    "provider":request["provider"]}),
+                result: projected_result,
+                input_pointer: format!("/tasks/{index}/2"),
+                guide_pointer: format!("/prompts/{index}/0/content"),
+                result_pointer: format!("/result/Ok/{index}/content"),
+                provider_pointer: format!("/provider_receipts/{index}"),
+            })
+        })
+        .collect()
 }
 
 fn compact_consultation(packet: &mut Packet, value: &mut Value) {
@@ -301,6 +410,47 @@ pub fn recorded_follow_up(state: &Path, case: &CasePacket) -> Result<FollowUpPro
     Ok(provenance)
 }
 
+/// A reviewer cannot turn a partial or blocked run into an observed judgment by
+/// changing the compact projection. Presence comes from the immutable final.
+pub fn recorded_reading(state: &Path, case: &CasePacket) -> Result<bool> {
+    let snapshot = |name: &str| {
+        let file = format!("cases/{}/{name}.json", case.id);
+        let source = case
+            .files
+            .iter()
+            .find(|source| source.file == file)
+            .ok_or_else(|| format!("Full reading lacks immutable {name}"))?;
+        store::resolve_blob(state, source)
+    };
+    let first = snapshot("first-turn")?;
+    let final_state = snapshot("final")?;
+    let rubric = snapshot("reading-rubric")?;
+    if first["hurdles"].is_null()
+        || final_state["hurdles"].is_null()
+        || first["hurdles"] != case.summary["first_hurdles"]
+        || final_state["hurdles"] != case.summary["final_hurdles"]
+        || rubric != case.summary["reading_rubric"]
+        || rubric["case_id"] != case.id
+        || final_state.pointer("/session/method/result")
+            != case.summary.pointer("/final_state/methodResult")
+    {
+        return Err(
+            "Full-reading projection differs from immutable hurdles, rubric or result".into(),
+        );
+    }
+    let blocked = matches!(
+        final_state
+            .pointer("/hurdles/reading/status")
+            .and_then(Value::as_str),
+        Some("blocked" | "not_run" | "awaiting_information")
+    );
+    Ok(!blocked
+        && final_state
+            .pointer("/session/method/result/result")
+            .and_then(Value::as_str)
+            == Some("judgment"))
+}
+
 fn compact_follow_up(outcome: &Value, case_id: &str, source: &FileRef) -> Value {
     let after = &outcome["follow_up"];
     if after.is_null() {
@@ -357,6 +507,9 @@ pub fn build(
     validation: bool,
     candidate_sha: Option<String>,
 ) -> Result<Packet> {
+    let manifest = store::json(&campaign.join("manifest.json"))?;
+    let full_reading =
+        manifest["full_reading"] == true || manifest["entry_point"] == "horary_pipeline::run";
     let mut packet = Packet {
         version: 1,
         phase: if validation { "validation" } else { "training" }.into(),
@@ -374,7 +527,7 @@ pub fn build(
         omissions: vec!["Reviewer packet is a compact processing view, not a replacement for exact original receipts. Every original JSON/JSONL file remains immutable in blobs and retains its file/SHA citation.".into(),
             "Repeated guide paragraphs are teaching_chunks; guide_documents list their order and reconstruct the exact guide SHA. Guide scopes are metadata, not duplicated source.".into(),
             "Repair wrappers are represented as the original accepted task, rejected worksheet and native feedback by sequence. Full repair messages/input remain in each hashed request.".into(),
-            "Duplicate consultation histories/changes, chart geometry and repeated ReadyReading payloads are omitted here; accepted sourced facts and dialogue remain visible.".into()],
+            "Duplicate consultation histories/changes and chart geometry are omitted. Full-reading views retain checked worksheets/roles/source references, native flow/results and numerical facts in actual stage inputs; exact primary records remain available by hash.".into()],
     };
     let mut guide_keys = BTreeSet::new();
     let mut chunks = BTreeMap::new();
@@ -429,84 +582,101 @@ pub fn build(
             .filter(|(file, _)| file.ends_with("-request.json"))
         {
             let result_file = file.replace("-request.json", "-result.json");
-            let original = original_input(&request["input"]);
-            let stage = request["stage"]
-                .as_str()
-                .ok_or("Call has no typed stage")?
-                .to_owned();
-            let phase = original["recognition_phase"].as_str().map(str::to_owned);
-            let selected_method = method(original);
-            let guide = request
-                .pointer("/prompt/0/content")
-                .and_then(Value::as_str)
-                .ok_or("Call has no guide")?;
-            let base_guide_sha = request["guide_sha256"]
-                .as_str()
-                .ok_or("Call has no guide digest")?;
-            let guide_sha_owned = digest(guide);
-            if guide_sha_owned != base_guide_sha
-                && (request
-                    .pointer("/prompt_program/original_guide_sha256")
+            for branch in call_branches(request, values.get(&result_file))? {
+                let request = &branch.request;
+                let original = original_input(&request["input"]);
+                let stage = request["stage"]
+                    .as_str()
+                    .ok_or("Call has no typed stage")?
+                    .to_owned();
+                let phase = original["recognition_phase"].as_str().map(str::to_owned);
+                let selected_method = method(original);
+                let guide = request
+                    .pointer("/prompt/0/content")
                     .and_then(Value::as_str)
-                    != Some(base_guide_sha)
-                    || request
-                        .pointer("/prompt_program/replacement_guide_sha256")
+                    .ok_or("Call has no guide")?;
+                let base_guide_sha = request["guide_sha256"]
+                    .as_str()
+                    .ok_or("Call has no guide digest")?;
+                let guide_sha_owned = digest(guide);
+                if guide_sha_owned != base_guide_sha
+                    && (request
+                        .pointer("/prompt_program/original_guide_sha256")
                         .and_then(Value::as_str)
-                        != Some(guide_sha_owned.as_str()))
-            {
-                return Err(format!(
-                    "Guide does not match baseline or applied program receipt at {file}"
-                ));
-            }
-            let guide_sha = guide_sha_owned.as_str();
-            let key = (
-                stage.clone(),
-                phase.clone(),
-                selected_method.clone(),
-                guide_sha.to_owned(),
-            );
-            if guide_keys.insert(key) {
-                packet.guides.push(Guide {
-                    stage: stage.clone(),
-                    recognition_phase: phase.clone(),
-                    method: selected_method.clone(),
-                    sha256: guide_sha.into(),
-                    text: None,
-                });
-            }
-            if !packet.guide_documents.contains_key(guide_sha) {
-                let mut document = Vec::new();
-                for part in guide.split_inclusive("\n\n") {
-                    let key = digest(part);
-                    let index = *chunks.entry(key).or_insert_with(|| {
-                        let index = packet.teaching_chunks.len();
-                        packet.teaching_chunks.push(part.to_owned());
-                        index
-                    });
-                    document.push(index);
+                        != Some(base_guide_sha)
+                        || request
+                            .pointer("/prompt_program/replacement_guide_sha256")
+                            .and_then(Value::as_str)
+                            != Some(guide_sha_owned.as_str()))
+                {
+                    return Err(format!(
+                        "Guide does not match baseline or applied program receipt at {file}"
+                    ));
                 }
-                packet.guide_documents.insert(guide_sha.into(), document);
-            }
-            let schema = &request["schema"];
-            let schema_sha = digest(schema.to_string());
-            packet
-                .schemas
-                .entry(schema_sha.clone())
-                .or_insert_with(|| schema.clone());
-            let mut input = original.clone();
-            compact_consultation(&mut packet, &mut input);
-            let input_sha = digest(input.to_string());
-            packet.inputs.entry(input_sha.clone()).or_insert(input);
-            let result = values.get(&result_file);
-            let raw = result.and_then(|r| r.pointer("/result/Ok/content"));
-            let output_sha = raw.map(|r| digest(r.to_string()));
-            if let (Some(raw), Some(sha)) = (raw, &output_sha) {
+                let guide_sha = guide_sha_owned.as_str();
+                let key = (
+                    stage.clone(),
+                    phase.clone(),
+                    selected_method.clone(),
+                    guide_sha.to_owned(),
+                );
+                if guide_keys.insert(key) {
+                    packet.guides.push(Guide {
+                        stage: stage.clone(),
+                        recognition_phase: phase.clone(),
+                        method: selected_method.clone(),
+                        sha256: guide_sha.into(),
+                        text: None,
+                    });
+                }
+                if !packet.guide_documents.contains_key(guide_sha) {
+                    let mut document = Vec::new();
+                    for part in guide.split_inclusive("\n\n") {
+                        let key = digest(part);
+                        let index = *chunks.entry(key).or_insert_with(|| {
+                            let index = packet.teaching_chunks.len();
+                            packet.teaching_chunks.push(part.to_owned());
+                            index
+                        });
+                        document.push(index);
+                    }
+                    packet.guide_documents.insert(guide_sha.into(), document);
+                }
+                let schema = &request["schema"];
+                let schema_sha = digest(schema.to_string());
                 packet
-                    .outputs
-                    .entry(sha.clone())
-                    .or_insert_with(|| raw.clone());
-            }
-            calls.push(json!({"sequence":request["sequence"],"stage":stage,"recognition_phase":phase,
+                    .schemas
+                    .entry(schema_sha.clone())
+                    .or_insert_with(|| schema.clone());
+                let mut input = original.clone();
+                compact_consultation(&mut packet, &mut input);
+                let input_sha = digest(input.to_string());
+                packet.inputs.entry(input_sha.clone()).or_insert(input);
+                let result = branch.result.as_ref();
+                // A hosted analysis batch may reject as a group while individual
+                // branches already returned usable proposals. Keep those proposals
+                // as observed attempts; the outer error still prevents acceptance.
+                let native_raw = result.and_then(|r| r.pointer("/result/Ok/content"));
+                let provider_raw =
+                    result.and_then(|r| r.pointer("/provider_receipt/native_result/Ok/content"));
+                let raw = native_raw.or(provider_raw);
+                let result_pointer = if native_raw.is_some() || provider_raw.is_none() {
+                    branch.result_pointer.clone()
+                } else {
+                    format!("{}/native_result/Ok/content", branch.provider_pointer)
+                };
+                let provider_receipt = result
+                    .and_then(|r| r.get("provider_receipt"))
+                    .filter(|r| !r.is_null());
+                let output_sha = raw.map(|r| digest(r.to_string()));
+                if let (Some(raw), Some(sha)) = (raw, &output_sha) {
+                    packet
+                        .outputs
+                        .entry(sha.clone())
+                        .or_insert_with(|| raw.clone());
+                }
+                calls.push(json!({"sequence":request["sequence"],"stage":stage,"recognition_phase":phase,
+                "batch_branch":request["batch_branch"],"batch_size":request["batch_size"],
                 "method":selected_method,"guide_sha256":guide_sha,"schema_sha256":schema_sha,
                 "input_sha256":input_sha,"output_sha256":output_sha,
                 "request_input_sha256":digest(request["input"].to_string()),
@@ -518,7 +688,18 @@ pub fn build(
                     "batchSize":v["batchSize"],"elapsedMs":v["elapsedMs"],"promptTokens":v["promptTokens"],
                     "generatedTokens":v["generatedTokens"],"lessonPrepareMs":v["lessonPrepareMs"],
                     "cachedPromptTokens":v["cachedPromptTokens"],"prefilledPromptTokens":v["prefilledPromptTokens"]})),
-                "decoder":request["decoder"],"request_file":file,"result_file":result_file}));
+                "decoder":request["decoder"],"provider":request["provider"],
+                "provider_wire":provider_receipt.map(|r|json!({"submitted":r["submitted"],
+                    "request_sha256":r.get("request").map(|v|digest(v.to_string())),
+                    "response_sha256":r.get("response").map(|v|digest(v.to_string())),
+                    "http_status":r.pointer("/response/http_status"),"transport_error":r.pointer("/response/transport_error"),
+                    "provider_error":r.pointer("/native_result/Err"),
+                    "queue_ms":r["queue_ms"],"http_wall_ms":r["http_wall_ms"]})),
+                "provider_pointer":provider_receipt.map(|_|&branch.provider_pointer),
+                "request_file":file,"result_file":result_file,
+                "input_pointer":branch.input_pointer,"guide_pointer":branch.guide_pointer,
+                "result_pointer":result_pointer}));
+            }
         }
         let actual = &outcome["grade"]["actual"];
         let mut first_state = state_summary(first);
@@ -530,8 +711,26 @@ pub fn build(
             .find(|f| f.file == format!("cases/{id}/outcome.json"))
             .ok_or("Missing native outcome snapshot")?;
         let follow_up = compact_follow_up(outcome, id, outcome_source);
+        let reading_rubric = values.get(&format!("cases/{id}/reading-rubric.json"));
+        if full_reading && reading_rubric.is_none() {
+            return Err(format!(
+                "Full reading {id} lacks its source-bound reading-rubric.json"
+            ));
+        }
+        if full_reading
+            && (first["hurdles"].is_null()
+                || final_state["hurdles"].is_null()
+                || reading_rubric.is_some_and(|rubric| rubric["case_id"] != *id))
+        {
+            return Err(format!(
+                "Full reading {id} has absent hurdles or a mismatched rubric ID"
+            ));
+        }
         packet.cases.push(CasePacket { id:id.clone(),method:spec.method.clone(),mode:spec.mode.clone(),
             partition:spec.partition,fingerprint,files:refs, summary:json!({
+                "full_reading":full_reading,"reading_rubric":reading_rubric,
+                "inference":manifest["model"],
+                "first_hurdles":first["hurdles"],"final_hurdles":final_state["hurdles"],
                 "words":fixture["words"],"scripted_follow_up":fixture["follow_up"],
                 "expected":fixture["expected"],"follow_up_expected":fixture["follow_up_expected"],
                 "first_execution_completed":outcome["first_turn_execution_completed"],
@@ -578,6 +777,226 @@ pub fn validate_evidence(packet: &Packet, state: &Path, evidence: &Evidence) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn analysis_batch() -> (Value, Value) {
+        let guide = "Check the accepted roles.\n<book_extracts>Printed p. 147: Source witness.</book_extracts>\nMethod teaching.";
+        let tasks: Vec<_> = ["condition", "reception", "contacts"].iter().map(|stage| {
+            json!([stage,"lost_object",{"reading_request":{"binding":{"frame":{"method":"lost_object"}}},
+                "facts":[{"id":"jupiter-position","longitude":121.25}],"roles":[{"id":"owner","house":1}]},
+                {"type":"object"}])
+        }).collect();
+        let prompts: Vec<_> = tasks
+            .iter()
+            .map(|task| {
+                json!([
+            {"role":"system","content":guide},{"role":"user","content":task[2].to_string()}])
+            })
+            .collect();
+        let outputs: Vec<_> = tasks
+            .iter()
+            .map(|task| {
+                json!({"content":json!({"stage":task[0],"because":"Native testimony."}).to_string(),
+            "batchSize":3,"promptTokens":42,"generatedTokens":12})
+            })
+            .collect();
+        (
+            json!({"sequence":7,"tasks":tasks,"prompts":prompts,"decoder":"production independent batch",
+            "provider":{"provider":"google_gemini_api","id":"gemma-4-26b-a4b-it","local_inference":false}}),
+            json!({"wall_ms":150,"result":{"Ok":outputs}}),
+        )
+    }
+
+    #[test]
+    fn batch_normalization_preserves_exact_branch_pointers_and_group_errors() {
+        let (request, result) = analysis_batch();
+        let branches = call_branches(&request, Some(&result)).unwrap();
+        assert_eq!(branches.len(), 3);
+        for (index, branch) in branches.iter().enumerate() {
+            assert_eq!(
+                request.pointer(&branch.input_pointer),
+                Some(&branch.request["input"])
+            );
+            assert_eq!(
+                request.pointer(&branch.guide_pointer),
+                branch.request.pointer("/prompt/0/content")
+            );
+            assert_eq!(
+                result.pointer(&branch.result_pointer),
+                branch
+                    .result
+                    .as_ref()
+                    .and_then(|r| r.pointer("/result/Ok/content"))
+            );
+            assert_eq!(branch.request["batch_branch"], index);
+            assert_eq!(branch.request["batch_size"], 3);
+            assert_eq!(branch.request["provider"], request["provider"]);
+        }
+        let interrupted = json!({"wall_ms":150,"result":{"Err":"Shared native batch interrupted"}});
+        assert!(call_branches(&request, Some(&interrupted))
+            .unwrap()
+            .iter()
+            .all(|b| b.result.as_ref().unwrap()["result"] == interrupted["result"]));
+        let mut mismatch = result;
+        mismatch["result"]["Ok"].as_array_mut().unwrap().pop();
+        assert!(call_branches(&request, Some(&mismatch)).is_err());
+        let mut invalid = request.clone();
+        invalid["prompts"].as_array_mut().unwrap().pop();
+        assert!(call_branches(&invalid, None).is_err());
+        let mut oversized = request;
+        for _ in 0..2 {
+            let task = oversized["tasks"][0].clone();
+            let prompt = oversized["prompts"][0].clone();
+            oversized["tasks"].as_array_mut().unwrap().push(task);
+            oversized["prompts"].as_array_mut().unwrap().push(prompt);
+        }
+        assert!(call_branches(&oversized, None).is_err());
+    }
+
+    #[test]
+    fn full_packet_preserves_reading_witnesses_and_successful_hosted_attempts_after_batch_failure()
+    {
+        let dir = tempfile::tempdir().unwrap();
+        let campaign = dir.path().join("campaign");
+        let state = dir.path().join("review");
+        let case_dir = campaign.join("cases/train");
+        let fixture = json!({"id":"train","method":"lost_object","mode":"explicit","words":"Where is my ring?","expected":{"needs":[]}});
+        let manifest = json!({"full_reading":true,"entry_point":"horary_pipeline::run",
+            "model":{"provider":"google_gemini_api","id":"gemma-4-26b-a4b-it","local_inference":false}});
+        let hurdles = json!({"classification":{"status":"pass"},"extraction":{"status":"pass"},
+            "elicitation":{"status":"pass"},"reading":{"status":"structure_pass_review_pending"}});
+        let final_state = json!({"hurdles":hurdles,"session":{"messages":[{"role":"assistant","content":"The ring may be near the doorway."}],
+            "chart":{"timestampMs":1791388800000_i64},"place":{"label":"Woodbridge, VA"},"candidateMomentMs":1791388800000_i64,
+            "method":{"result":{"result":"judgment","answer":"The ring may be near the doorway.","evidence":["jupiter-position"],
+                "worksheet":{"checks":{"location":{"evidence":["jupiter-position"]}}}},
+                "records":[{"stage":"location","revision":1,"guideSha256":digest("guide"),"worksheet":{"house":1,"because":"Location testimony."},"sourcePassages":["lost-location"]}],
+                "flow":{"pending":null,"jobs":[{"stage":"location","phase":"complete"}]}},
+            "sections":[{"method_stage":"location","roles":[{"id":"owner","house":1}],"rules":["lost-location"],"evidence":["jupiter-position"],"body":"A location testimony."}]}});
+        let rubric = json!({"case_id":"train","source":{"printed_pages":"147","rule_ids":["lost-location"]},
+            "required_roles":[{"role":"owner","house_or_derivation":"1"}],
+            "decisive_tests":[{"id":"ring_location","test":"Use actual location testimonies"}],
+            "forbidden_inferences":["Invented address"]});
+        let outcome = json!({"id":"train","first_turn_execution_completed":true,
+            "grade":{"semantic_pass":true,"actual":{"reply":"The ring may be near the doorway.","needs":[]}},
+            "follow_up":{"status":"not scripted"},"follow_up_pass":null});
+        store::atomic_json(&campaign.join("manifest.json"), &manifest, true).unwrap();
+        store::atomic_json(
+            &campaign.join("fixtures.json"),
+            &vec![fixture.clone()],
+            true,
+        )
+        .unwrap();
+        for (name, value) in [
+            ("fixture", &fixture),
+            ("first-turn", &final_state),
+            ("final", &final_state),
+            ("outcome", &outcome),
+            ("reading-rubric", &rubric),
+        ] {
+            store::atomic_json(&case_dir.join(format!("{name}.json")), value, true).unwrap();
+        }
+        let (request, mut result) = analysis_batch();
+        let native_outputs = result["result"]["Ok"].clone();
+        result["result"] =
+            json!({"Err":"Contacts HTTP branch failed; no batch worksheet accepted"});
+        result["provider_receipts"] = json!([
+            {"submitted":true,"request":{"contents":[{"parts":[{"text":"Exact condition wire"}]}]},"response":{"http_status":200,"body":{"usageMetadata":{"promptTokenCount":42}}},
+                "generation_attempts":[{"attempt":1,"submitted":true,"http_status":503,"body":{"error":{"message":"Original service failure"}}},{"attempt":2,"submitted":true,"http_status":200,"body":{"usageMetadata":{"promptTokenCount":42}}}],
+                "native_result":{"Ok":native_outputs[0]}},
+            {"submitted":true,"request":{"contents":[{"parts":[{"text":"Exact reception wire"}]}]},"response":{"http_status":200},"native_result":{"Ok":native_outputs[1]}},
+            {"submitted":true,"request":{"contents":[{"parts":[{"text":"Exact contacts wire"}]}]},"response":{"http_status":429},"native_result":{"Err":"Quota"}}
+        ]);
+        store::atomic_json(&case_dir.join("calls/0007-request.json"), &request, true).unwrap();
+        store::atomic_json(&case_dir.join("calls/0007-result.json"), &result, true).unwrap();
+        let split = Split {
+            version: 1,
+            policy: "test".into(),
+            qualification: "Synthetic method review".into(),
+            fixture_files: vec![],
+            cases: vec![SplitCase {
+                id: "train".into(),
+                method: "lost_object".into(),
+                mode: "explicit".into(),
+                bank: "core".into(),
+                partition: Partition::Training,
+                fixture_sha256: digest("fixture"),
+            }],
+        };
+        let packet = build(
+            &campaign,
+            &state,
+            &split,
+            &["train".into()],
+            &digest(manifest.to_string()),
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(packet.cases[0].calls.len(), 3);
+        assert_eq!(packet.outputs.len(), 2);
+        assert_eq!(
+            packet.cases[0].summary["final_state"]["methodResult"]["answer"],
+            "The ring may be near the doorway."
+        );
+        assert_eq!(
+            packet.cases[0].summary["final_state"]["methodRecords"][0]["worksheet"]["house"],
+            1
+        );
+        assert_eq!(
+            packet.cases[0].summary["final_state"]["sections"][0]["roles"][0]["house"],
+            1
+        );
+        assert_eq!(
+            packet.cases[0].summary["final_state"]["chart"]["moment"],
+            1791388800000_i64
+        );
+        assert!(recorded_reading(&state, &packet.cases[0]).unwrap());
+        for call in &packet.cases[0].calls {
+            assert!(call["result_error"]
+                .as_str()
+                .unwrap()
+                .contains("no batch worksheet accepted"));
+            assert_eq!(call["provider"]["local_inference"], false);
+        }
+        let (view, index) = crate::refs::context(&packet, None).unwrap();
+        assert!(view["source_documents"]
+            .to_string()
+            .contains("Printed p. 147"));
+        assert!(view["inputs"].to_string().contains("121.25"));
+        assert!(
+            view["cases"][0]["summary"]["reading_rubric"]["decisive_tests"][0]["test"].is_string()
+        );
+        for evidence in index.citations.values() {
+            validate_evidence(&packet, &state, evidence).unwrap();
+        }
+        let condition_result = index
+            .citations
+            .values()
+            .find(|e| e.json_pointer == "/provider_receipts/0/native_result/Ok/content")
+            .unwrap();
+        assert_eq!(condition_result.file, "cases/train/calls/0007-result.json");
+        let result_source = packet.cases[0]
+            .files
+            .iter()
+            .find(|source| source.file == condition_result.file)
+            .unwrap();
+        let original_result = store::resolve_blob(&state, result_source).unwrap();
+        assert_eq!(
+            original_result["provider_receipts"][0]["generation_attempts"],
+            result["provider_receipts"][0]["generation_attempts"]
+        );
+        let reviews = vec![
+            json!({"findings":[{"repair_owner":"prompt","stage":"condition","recognition_phase":null,"method":"lost_object"}]}),
+        ];
+        let (writer, _) = crate::refs::context(&packet, Some(&reviews)).unwrap();
+        assert_eq!(writer["source_documents"], json!({}));
+        assert!(!writer["teaching_chunks"]
+            .to_string()
+            .contains("Printed p. 147"));
+        assert_eq!(
+            store::json(&case_dir.join("calls/0007-result.json")).unwrap(),
+            result
+        );
+    }
     #[test]
     fn compaction_keeps_native_follow_up_execution_provenance() {
         let source = FileRef {

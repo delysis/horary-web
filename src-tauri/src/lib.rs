@@ -52,6 +52,8 @@ mod horary_lessons;
 mod horary_pipeline;
 mod horary_role_options;
 mod horary_step;
+#[cfg(test)]
+mod hosted_gemma_eval;
 mod inference;
 mod llama;
 mod local_dictation;
@@ -64,6 +66,8 @@ mod permissions;
 #[cfg(test)]
 mod process_reference;
 mod reading_contracts;
+#[cfg(test)]
+mod reading_eval;
 mod reading_method;
 mod reading_store;
 mod recognition_programs;

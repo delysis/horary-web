@@ -286,7 +286,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `97a919b4317809fd4af995d92c4012ae06a636184b978dab67f2aad87df17f16`
+Guide SHA256: `d781dc54361a8a8613ac8085b969cd1e1eedd8e92c1acbd5d61184c6aa21fb2a`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -313,7 +313,7 @@ investment: Shares and investments — printed pp. 156–161. Owned shares are t
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
-job_offer: Assessing an available job — printed pp. 224–226. Job and its pay have distinct roles. An offer already available is not a new acquisition.
+job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.
 rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
@@ -361,6 +361,8 @@ INPUT: How many candles will Ren sell at the stall?
 OUTPUT: {"intent":"read","question":"How many candles will Ren sell at the stall?","frame":{"method":"movable_deal","facet":"quantity"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: I don't want a job; I want to know where my missing passport is.
 OUTPUT: {"intent":"read","question":"I don't want a job; I want to know where my missing passport is.","frame":{"method":"lost_object","facet":"location"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: My partner Jamie and I share a home, but things feel distant. How are things between us?
+OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but things feel distant. How are things between us?","frame":{"method":"relationship","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 
 ```
 
@@ -1928,7 +1930,7 @@ If the querent asks further questions on the same issue when you are giving judg
 
 ### Who stands for whom · significators_relationship
 
-Guide SHA256: `eeb4bab5b90de3c9b3fb71277588fae9053d32700d84c020286ecc6c9720d89f`
+Guide SHA256: `5d770c701bb2f6c8fd7dccc1a61933785b8a796e2154bc88f4f67724edcd74ab`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -1964,10 +1966,10 @@ Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movable
 <procedure>
 1. Read the retained question, extracted people/subject, stage_user_replies and native_role_options. Do not assume a named person's relationship or who owns stock/objects.
 2. If native_role_options.missing is nonempty, return request_input for a necessary missing relationship/ownership fact. The controller does not permit a data worksheet yet. Ask a distinguishing follow-up using prior replies instead of repeating an answered question.
-3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots. Supply a choice from EVERY group. A querent-only response cannot finish a question about Bob and his books.
+3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots: select EXACTLY ONE ID from EACH group, not every ID in it. A group with two IDs means alternatives for ONE role. Compare both in comparison when requested, then choose one in selections during THIS call. A querent-only response cannot finish a question about Bob and his books. Conditional_roles lists additional obligations and their explicit exceptions; satisfy those too.
 4. Keep the person's own option separate from their possessions: bob.self is Bob; subject.primary is the books in this case. The table binds those labels and houses. Do not substitute the stock option for Bob himself.
 5. Justify relevance in each selection's reason. For an unmapped topic with ordinary-house alternatives, use the index and specific method. Do not choose a house because a planet occupies it.
-6. Optional Moon testimony must fit the question and cannot compete with a main house ruler claiming Moon. Do not invent gender, thieves, lovers or extra actors.
+6. Follow the method's actual Moon obligation. In relationship questions, select moon.contextual for the querent's emotions unless a selected main house ruler claims Moon. If Moon is already the querent's house ruler, retain its emotional meaning there; if it rules the person asked about, that person has first claim. In methods where Moon is optional, add it only for a stated purpose. Never create a competing natural Moon role. Do not invent gender, thieves, lovers or extra actors.
 7. Native rejection leaves this same step unfinished. Correct the selection or ask for necessary user context. Do not ask for chart data; the table and house facts are supplied by the app.
 </procedure>
 
@@ -1975,14 +1977,15 @@ Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movable
 A: unknown Bob in a book-sales question -> request_input field=subject_relationship; "Who is Bob to you?" A name does not prove he is a stranger.
 B: stated husband Bob and his books -> select querent.self, bob.self, subject.primary. Native options bind Bob to 7 and Books to 8. Do not select subject.primary twice or omit bob.self while claiming all roles are assigned.
 C: daughter's watch -> daughter.self=5, subject.primary=6. It is her possession, not the querent's ordinary second.
-D: first house Cancer claims Moon -> leave out moon.contextual; do not force competing Moon assignments.
+D: first house Cancer claims Moon -> leave out moon.contextual; retain the querent's emotional meaning on the primary Moon role, without a competing duplicate assignment.
+E: required_groups=[["querent.self"],["subject.primary","subject.alternative_fourth"]]. Correct selections contains querent.self and ONE of the object IDs. Both object IDs belong in comparison, not both in selections. A rejection naming the group means fix that group's count; adding more roles will not resolve two competing alternatives.
 </worked_examples>
 
 <output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. No roles/house/natural/owner_house/object_candidates fields. Computed facts are printed separately. Summary is two short sentences, not proof the assignments are correct.</output_fields>
 
 <specific_method>
 1. Lord 1 signifies the querent; Lord 7 the partner INCLUDING a prospective partner not yet met. A friend considered AS a partner also uses 7. A neighbour's unexplained crush can concern 3, if the actual question is about the neighbour in that capacity.
-2. Normally add Moon for querent's emotions, unless it is Lord 7 or already claimed. House rulers describe people/head/personality; Moon can describe the querent's heart. Keep the facets distinguishable.
+2. Add moon.contextual for the querent's emotions: this is REQUIRED, including hoped-for formation, an arranged wedding and an existing relationship. The exception is a selected main house ruler claiming Moon. If Moon is Lord 1, retain the querent's emotional meaning on that primary role without duplicating it. If Moon rules the enquired-about party's house, it belongs to that party and cannot also be a natural querent role. The native conditional_roles checks this obligation from the actual house rulers. House rulers describe people/head/personality; Moon describes the querent's heart. Keep those facets distinguishable; do not call supplied lunar reception or contacts missing merely because you omitted Moon.
 3. Optional natural Sun/Venus sexual roles apply only where stated context supports an assignment. House 1/7 have first claim. Do not assume gender, ask irrelevant personal questions, substitute Mars for an unavailable Sun, or force these optional roles into an ambiguous/same-sex situation. Main house rulers remain usable.
 4. In a multiple-party question, Lord 7 belongs to the person specifically asked about. Do not invent a lover or competing partner from an unassigned planet. Record genuinely missing role distinctions instead.
 </specific_method>
@@ -2172,7 +2175,7 @@ The quesited is shown by Lord 7 even if the relationship exists as yet only as a
 
 ### Who stands for whom · significators_lost
 
-Guide SHA256: `766147cb68ddc581b13d616eec008206c551b21df7e0103840dfa29d37c05479`
+Guide SHA256: `ed7efc052e4bffc6defcf368a29b267c8495dc496a740e6dfa1b760bfe4bb228`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -2208,10 +2211,10 @@ Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movable
 <procedure>
 1. Read the retained question, extracted people/subject, stage_user_replies and native_role_options. Do not assume a named person's relationship or who owns stock/objects.
 2. If native_role_options.missing is nonempty, return request_input for a necessary missing relationship/ownership fact. The controller does not permit a data worksheet yet. Ask a distinguishing follow-up using prior replies instead of repeating an answered question.
-3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots. Supply a choice from EVERY group. A querent-only response cannot finish a question about Bob and his books.
+3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots: select EXACTLY ONE ID from EACH group, not every ID in it. A group with two IDs means alternatives for ONE role. Compare both in comparison when requested, then choose one in selections during THIS call. A querent-only response cannot finish a question about Bob and his books. Conditional_roles lists additional obligations and their explicit exceptions; satisfy those too.
 4. Keep the person's own option separate from their possessions: bob.self is Bob; subject.primary is the books in this case. The table binds those labels and houses. Do not substitute the stock option for Bob himself.
 5. Justify relevance in each selection's reason. For an unmapped topic with ordinary-house alternatives, use the index and specific method. Do not choose a house because a planet occupies it.
-6. Optional Moon testimony must fit the question and cannot compete with a main house ruler claiming Moon. Do not invent gender, thieves, lovers or extra actors.
+6. Follow the method's actual Moon obligation. In relationship questions, select moon.contextual for the querent's emotions unless a selected main house ruler claims Moon. If Moon is already the querent's house ruler, retain its emotional meaning there; if it rules the person asked about, that person has first claim. In methods where Moon is optional, add it only for a stated purpose. Never create a competing natural Moon role. Do not invent gender, thieves, lovers or extra actors.
 7. Native rejection leaves this same step unfinished. Correct the selection or ask for necessary user context. Do not ask for chart data; the table and house facts are supplied by the app.
 </procedure>
 
@@ -2219,13 +2222,14 @@ Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movable
 A: unknown Bob in a book-sales question -> request_input field=subject_relationship; "Who is Bob to you?" A name does not prove he is a stranger.
 B: stated husband Bob and his books -> select querent.self, bob.self, subject.primary. Native options bind Bob to 7 and Books to 8. Do not select subject.primary twice or omit bob.self while claiming all roles are assigned.
 C: daughter's watch -> daughter.self=5, subject.primary=6. It is her possession, not the querent's ordinary second.
-D: first house Cancer claims Moon -> leave out moon.contextual; do not force competing Moon assignments.
+D: first house Cancer claims Moon -> leave out moon.contextual; retain the querent's emotional meaning on the primary Moon role, without a competing duplicate assignment.
+E: required_groups=[["querent.self"],["subject.primary","subject.alternative_fourth"]]. Correct selections contains querent.self and ONE of the object IDs. Both object IDs belong in comparison, not both in selections. A rejection naming the group means fix that group's count; adding more roles will not resolve two competing alternatives.
 </worked_examples>
 
 <output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. No roles/house/natural/owner_house/object_candidates fields. Computed facts are printed separately. Summary is two short sentences, not proof the assignments are correct.</output_fields>
 
 <specific_method>
-1. For the querent's inanimate object compare Lords 2 AND 4, regardless of the lost/mislaid distinction. Choose whichever better describes the actual object. Use the supplied rulers and descriptors. If neither is distinguishable, use 2 provisionally and record that limit.
+1. For the querent's inanimate object compare Lords 2 AND 4, regardless of the lost/mislaid distinction. Choose whichever better describes the actual object NOW. Use the supplied rulers and the person's actual description, not merely their names: explain what matches and what remains uncertain. Return both candidates in comparison, but select EXACTLY ONE of subject.primary/subject.alternative_fourth in selections. Those IDs are alternatives for one object, not two required objects. If neither is distinguishable, use 2 provisionally and record that limit. Do not postpone the comparison to a later stage.
 2. For another person's possession ALWAYS use that person's turned SECOND. Identify their base house. Do not substitute the querent's Lords 2/4 or invent a turned fourth alternative.
 3. Dogs/cats are generic small animals (6); horses/cows generic large animals (12), irrespective of an unusually large dog or small pony. A missing person instead uses the house describing their relationship to the querent.
 4. If object and querent claim the same planet, give it to the object for location. Moon may serve a different contextual role for recovery later; do not force an inconsistent duplicate natural assignment now.
@@ -2240,6 +2244,7 @@ C: sister's ring. Sister=3, her second=4. owner_house=3; object=4 because it is 
 D: own ring; Lords 2 and 4 both Jupiter; Jupiter occupies 9. Compare houses [2,4]; either selects Jupiter as object. The shared ruler does not establish a home location.
 E: Great Dane=6, Shetland pony=12. These are species distinctions, not a measuring tape.
 F: unknown ring material and equally plausible rulers. State uncertainty in descriptive selection rather than inventing that it is gold or silver. Provisional Lord 2 remains assessable.
+G: native required_groups=[["querent.self"],["subject.primary","subject.alternative_fourth"]]; object's appearance is supplied, but neither ruler's descriptive correspondence is established. A complete response is {"selections":[{"id":"querent.self","reason":"The person asking about their possession."},{"id":"subject.primary","reason":"Provisional Lord 2: the supplied appearance does not distinguish the candidates."}],"comparison":[{"id":"subject.primary","observation":"Its own-possession role is established, but the description has not established a stronger match."},{"id":"subject.alternative_fourth","observation":"The supplied description does not establish this candidate as a better match; retain Lord 2 provisionally."}],"summary":"One provisional object ruler is retained; its occupied house will supply the location lead.","unknowns":["A decisive descriptive match between the two candidates."]}. Compare both, choose one. If a supported descriptive match instead favours Lord 4, choose subject.alternative_fourth alone for the object and explain that match. Do not copy this provisional conclusion when the actual supplied facts distinguish the candidates.
 </worked_examples>
 
 <output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. Select only the supplied native option IDs. The native table computes ownership, turned houses and rulers. For the querents own missing object, include comparison observations for both listed candidates and select one object option. Do not output roles, house numbers, owner_house or object_candidates.</output_fields>
@@ -2436,7 +2441,7 @@ sometimes both in the same chart. This is not as confusing as it sounds, because
 
 ### Who stands for whom · significators_other
 
-Guide SHA256: `db6ad56f0d6d30a49a32bb2c8c741d53706927dcb77c72146d6398a23b861634`
+Guide SHA256: `48928ada37c1e21d73335ca5ac50ff9dedb339ce09e36785d04b08cb7b469722`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -2472,10 +2477,10 @@ Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movable
 <procedure>
 1. Read the retained question, extracted people/subject, stage_user_replies and native_role_options. Do not assume a named person's relationship or who owns stock/objects.
 2. If native_role_options.missing is nonempty, return request_input for a necessary missing relationship/ownership fact. The controller does not permit a data worksheet yet. Ask a distinguishing follow-up using prior replies instead of repeating an answered question.
-3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots. Supply a choice from EVERY group. A querent-only response cannot finish a question about Bob and his books.
+3. Inspect each choice's ID, label, house/natural role and basis. Choose literal IDs; do not copy labels or numbers into invented fields. Required_groups lists required slots: select EXACTLY ONE ID from EACH group, not every ID in it. A group with two IDs means alternatives for ONE role. Compare both in comparison when requested, then choose one in selections during THIS call. A querent-only response cannot finish a question about Bob and his books. Conditional_roles lists additional obligations and their explicit exceptions; satisfy those too.
 4. Keep the person's own option separate from their possessions: bob.self is Bob; subject.primary is the books in this case. The table binds those labels and houses. Do not substitute the stock option for Bob himself.
 5. Justify relevance in each selection's reason. For an unmapped topic with ordinary-house alternatives, use the index and specific method. Do not choose a house because a planet occupies it.
-6. Optional Moon testimony must fit the question and cannot compete with a main house ruler claiming Moon. Do not invent gender, thieves, lovers or extra actors.
+6. Follow the method's actual Moon obligation. In relationship questions, select moon.contextual for the querent's emotions unless a selected main house ruler claims Moon. If Moon is already the querent's house ruler, retain its emotional meaning there; if it rules the person asked about, that person has first claim. In methods where Moon is optional, add it only for a stated purpose. Never create a competing natural Moon role. Do not invent gender, thieves, lovers or extra actors.
 7. Native rejection leaves this same step unfinished. Correct the selection or ask for necessary user context. Do not ask for chart data; the table and house facts are supplied by the app.
 </procedure>
 
@@ -2483,7 +2488,8 @@ Editorial index from Frawley printed pp.15–29: 1 querent/body; 2 money/movable
 A: unknown Bob in a book-sales question -> request_input field=subject_relationship; "Who is Bob to you?" A name does not prove he is a stranger.
 B: stated husband Bob and his books -> select querent.self, bob.self, subject.primary. Native options bind Bob to 7 and Books to 8. Do not select subject.primary twice or omit bob.self while claiming all roles are assigned.
 C: daughter's watch -> daughter.self=5, subject.primary=6. It is her possession, not the querent's ordinary second.
-D: first house Cancer claims Moon -> leave out moon.contextual; do not force competing Moon assignments.
+D: first house Cancer claims Moon -> leave out moon.contextual; retain the querent's emotional meaning on the primary Moon role, without a competing duplicate assignment.
+E: required_groups=[["querent.self"],["subject.primary","subject.alternative_fourth"]]. Correct selections contains querent.self and ONE of the object IDs. Both object IDs belong in comparison, not both in selections. A rejection naming the group means fix that group's count; adding more roles will not resolve two competing alternatives.
 </worked_examples>
 
 <output_fields>selections=[{id,reason}], summary, unknowns; OR request_input. No roles/house/natural/owner_house/object_candidates fields. Computed facts are printed separately. Summary is two short sentences, not proof the assignments are correct.</output_fields>
@@ -2674,7 +2680,7 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
 
 ### Condition and ability · condition
 
-Guide SHA256: `082740efb0193cf624b07570495ee9f92dceb9aa9e2d409b4df3007940a96a07`
+Guide SHA256: `a8721f69f9b9358f10c2cdcc65cb2e0e1f5ffa4c6996714401af13910681fe26`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -2704,7 +2710,7 @@ request_input suspends the unfinished step; it does not complete it or authorize
 <definitions>
 Essential dignity concerns the planet in its OWN dignities/debilities: domicile (its own sign), exaltation, triplicity, term/bound or face; detriment and fall are major debilities. Peregrine means no own dignity; it does not mean stationary, invisible, evil or incapable of reception. Rust already calculated these categories from Frawley's table (p.72). Do not recalculate or total a universal score.
 
-Accidental dignity concerns ability to act in the situation. Angular houses (1,4,7,10) usually give capacity; succedent houses (2,5,8,11) moderate capacity; cadent houses (3,6,9,12) little. A strong planet can act badly; a well-intentioned planet may have little power. These are context-sensitive distinctions, not automatic yes/no votes.
+Accidental dignity concerns ability to act in the situation. Frawley's house-capacity rule (printed p.56) is: angular houses 1,4,7,10 strong; 6,8,12 weak; 2,3,5,9,11 neutral. For capacity ONLY, cadent 3/9 are honorary succedents and succedent 8 is weak. Read the supplied native houseCapacity rather than applying a generic angular/succedent/cadent ranking. A contextually appropriate weak house can be an exception; identify that specific context before claiming one. Neutral is not weak. A strong planet can act badly; a well-intentioned planet may have little power. Do not transfer this capacity exception to a separate timing or location-distance rule.
 
 Combustion is within 8.5 degrees of the Sun AND in its sign; cazimi is within 17.5 ARC MINUTES, also in its sign; under the beams extends to 17.5 degrees. Rust supplies the condition. Do not mistake minutes for degrees, apply combustion across a sign boundary, or infer it from a drawing alone. Retrograde describes motion, not a universal bad outcome.
 </definitions>
@@ -2720,16 +2726,18 @@ Combustion is within 8.5 degrees of the Sun AND in its sign; cazimi is within 17
 </procedure>
 
 <worked_examples>
-A — strong but powerless. Querent’s planet has own domicile, cadent house, no solar affliction. own_dignity=supported strength; ability_to_act=limited. Summary: "You may be well placed in yourself, but have little room to make the matter happen." This is not a forecast of failure.
+A — strong but powerless. Querent’s planet has own domicile, house 12, no relevant house exception and no solar affliction. own_dignity uses state=supported and a finding explaining its own strength. ability_to_act uses state=contradicted and a finding explaining weak house capacity; do NOT emit state=limited. context_exceptions uses state=not_relevant with a nonempty explanation. Summary: "You may be well placed in yourself, but have little room to make the matter happen." This is not a forecast of failure.
 B — weak but able. Job significator has own fall and an angular house. Distinguish quality from capacity: the job can act or be obtained without being a good job. Do not sum these into "neutral" and erase the distinction.
 C — returned possession. Object's planet retrograde and not blocked by supplied testimony. Retrogradation can fit returning to its former place. Do not conclude damaged merely from detriment.
 D — same-sign solar rule. Planet seven degrees from the Sun but across a sign boundary: native solarCondition is not combustion. A proximity drawing does not override it. Planet in the same sign and seven degrees away: combust; inspect context.
 E — cazimi. Same sign, separation 0.2 degrees = twelve arcminutes: inside 17.5 arcminutes, so native cazimi means exceptional capacity. 0.4 degrees = twenty-four arcminutes is not cazimi.
 F — conjunction is the event. Sun is the required other-party significator; contact with it may bring the matter about. Explain any applicable contextual exception, rather than declaring every Sun conjunction impossible.
 G — a hypothetical partner. Lord 7 is a prospective partner, not a known person's medical record. Condition can qualify the prospects in this chart; it does not justify diagnosing or inventing the unknown person.
+H — honorary succedent. A missing object's planet occupies house 9 and native houseCapacity is neutral. ability_to_act uses state=supported with a finding describing middling capacity, not state=neutral. Do not mark ability contradicted merely because nine is geometrically cadent, or invent that the object is hidden/difficult to reach from that capacity. Its occupied house can still supply a separate location lead.
+I — weak succedent. A planet occupies house 8 with native weak capacity. Do not promote it to moderate capacity merely because eight is succedent. A documented contextual exception must be considered separately.
 </worked_examples>
 
-<output_fields>checks own_dignity, ability_to_act, context_exceptions: each has state, current evidence IDs, and a terse finding. summary says what condition means in this question. unknowns lists genuinely missing native tests. Do not write placement numbers from memory.</output_fields>
+<output_fields>checks own_dignity, ability_to_act, context_exceptions: each has state, current evidence IDs, and a NONEMPTY terse finding, even for not_relevant or unestablished. Allowed states are supported, contradicted, unestablished, not_relevant only: mixed, neutral, limited, weak and strong describe testimony in finding, not state labels. For context_exceptions with no relevant exception, use state=not_relevant and finding="No house or solar exception is relevant in the supplied context." An empty finding is rejected. Neutral native capacity does not mean practical inability. summary says what condition means in this question, keeping each main role and any emotional Moon distinct. unknowns lists genuinely missing native tests, not omitted supplied facts. Do not write placement numbers from memory.</output_fields>
 
 
 <book_extracts>
@@ -2740,6 +2748,20 @@ The more essential dignity a planet has, the better it conforms to its innate go
 
 > Any planet in its detriment or fall can be malign.
 > Any planet in its sign or exaltation can behave well.
+</extract>
+
+<extract id="house_capacity" source="Frawley, The Horary Textbook, 2005" printed_pages="56–56" ocr_pages="65–65">
+This is important and must be considered. The general principle is 'angular houses strong; succedent houses middling; cadent houses weak'. But the 3rd and 9th houses, although cadent, are regarded – for this purpose only – as being honorary succedents, while the 8th house, although succedent, is as weak as the 6th or 12th.
+
+Listing the houses in order of power is too precious: the angles are all much the same; the succedents (with their honorary members) are much the same; the cadents are much the same. Put simply:
+
+* Angular houses strong
+
+* 6th, 8th and 12th weak
+
+* Others neutral.
+
+The exception to the rule is when the question gives the planet good reason to be in that house. For instance, if I ask 'Will I recover the money I've lent?' and find Lord 1 in the 8th house (2nd from the 7th: the other person's money), it is not weak there: it is the appropriate place for it because I am thinking of 8th-house matters.
 </extract>
 
 <extract id="solar_exceptions" source="Frawley, The Horary Textbook, 2005" printed_pages="60–60" ocr_pages="69–69">
@@ -2804,7 +2826,9 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -2836,7 +2860,9 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -2868,7 +2894,9 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -2950,7 +2978,7 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
 
 ### Who regards whom · reception
 
-Guide SHA256: `719da3ebd231d40dfaa745089d610e6e34589703ebdbb284a127ca78e0688b49`
+Guide SHA256: `32362a09d42d91e378eced9a2cd6127404d14d2f338b0d3416b88de57f486f40`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -2986,7 +3014,7 @@ Domicile reception: strong positive regard, seeing/loving the other for what it 
 </definitions>
 
 <procedure>
-1. Identify the actual parties/objects and the selected facets from the roles. Do not assign a new role just to make a reception story fit.
+1. Identify the actual parties/objects and the selected facets from the roles. Do not assign a new role just to make a reception story fit. A shared planet does not let every role be read simultaneously. For a missing object's location, the disputed planet belongs to the object (Frawley printed p.147); do not turn its receptions into the querent's private feelings. A person's role retained to establish ownership is not automatically relevant to this question's motives. If the actual facet needs no motive finding, mark contextual_motive=not_relevant rather than inventing one.
 2. Complete direction: read each supplied guest → host fact literally and attach it to the guest's role. Repeat the direction as a short public check result.
 3. Complete strength_and_quality: distinguish domicile/exaltation, triplicity, minor term/face, negative detriment/fall and mixed testimony. No fact supplied means unestablished, not indifference or dislike proven.
 4. Complete contextual_motive: what would this regard make the actor want in this specific question? Positive regard can explain inclination but does not establish ability, opportunity or consent. Negative regard can be important without proving a future event impossible.
@@ -3004,6 +3032,7 @@ D — minor versus major. Only Moon → Jupiter by term is supplied. This is a s
 E — infatuation and job quality. Querent's planet exalts the job's planet. The querent can idealize the job. This does not make the job strong, reputable or desirable on its own merits.
 F — head/heart disagree. Lord 1 negatively regards the partner, but Moon positively regards that partner. State the conflict between considered position and feeling; do not discard one because the other is more convenient.
 G — objects are not literal lovers. Money positively regards its owner. In this question that can fit money returning to possession, but the event still needs relevant testimony.
+H — disputed planet in a location question. Lord 1 and a sister's missing watch share Jupiter; Jupiter negatively regards the sister's Saturn. Give Jupiter to the watch. Do not say the querent dislikes their sister or that the watch's location proves family tension. The question asks where the watch is; its relationship to the querent is secondary.
 </worked_examples>
 
 <output_fields>checks direction, strength_and_quality, contextual_motive each reference only relevant current reception evidence. summary is a contextual implication; unknowns distinguishes absent information from proved negative testimony.</output_fields>
@@ -3083,7 +3112,9 @@ Each of the different significators shows a different facet of that person:
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3115,7 +3146,9 @@ Each of the different significators shows a different facet of that person:
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3147,7 +3180,9 @@ Each of the different significators shows a different facet of that person:
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3229,7 +3264,7 @@ Each of the different significators shows a different facet of that person:
 
 ### What could bring it about · contacts
 
-Guide SHA256: `f852fbae1742ab645857fba8e66acc73603865cb9ed03b1b0eaff46c4236cc9a`
+Guide SHA256: `00aff158f2f8fd03729a7beea87b2aeb6b3c5fc4ca598e11b91a5568b2425e59`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -3266,7 +3301,7 @@ The native search supplies approximate HOURLY brackets over SEVEN DAYS. A candid
 
 <procedure>
 1. Complete relevant_actors: name the querent/quesited planets from the supplied roles. A planet being called a cosignificator does not make its contact unimportant. Include the Moon's applicable role explicitly.
-2. Decide whether this question needs future action. A situation can be answered chiefly by receptions; a lost object's location can be answered by occupied house. Do not demand a future aspect just to allow a location explanation.
+2. Read the accepted baseline BEFORE deciding what contact is required. A hoped-for new event needs an occasion; an already agreed wedding has a different default: it proceeds unless genuinely disrupted (Frawley p.140). A separating contact may have set an agreed matter in motion (p.99); do not demand a NEW applying contact to re-create an agreement already made. Look for actual relevant disruption, never treat missing short-window candidates as disruption. An available offer similarly is not a new acquisition. A situation can be answered chiefly by receptions; a lost object's location can be answered by occupied house. Do not demand a future aspect just to allow a location explanation. If the necessary past or future tests are not supplied, state their actual coverage limit rather than claiming a contact is absent.
 3. Complete applying_or_separating: inspect supplied native contacts only. A past separating contact can fit a reported past event, not an event still to happen. A current drawing aspect with no future candidate does not establish future perfection.
 4. For each selected direct candidate, copy its typed event.withinCurrentSigns field into candidate_signs as within_current_signs: true, false or null. Native Rust checks this copy. true means before either changes sign; false means after a change; null means unestablished. Do not use the old sign's condition/reception to certify a contact after an ingress. Motive and ability are assessed separately; describe the contact as a candidate, never guaranteed completion.
 5. Complete event_order: select only the next relevant contact, or a specifically supported next-two-contact connection. Never push a planet through a long chain until it delivers the desired outcome.
@@ -3287,6 +3322,7 @@ F — year versus week. Marriage question asks about twelve months; search cover
 G — location without future action. Object occupies the child's fifth-house place and plausible context is supplied. A useful location lead need not wait for a future aspect. A void Moon does not erase the object's current whereabouts.
 H — previous theft allegation. A separating suspect/object contact could relate to a past theft if asked. An applying future contact cannot prove a theft already happened. Do not introduce theft when it was not raised.
 I — two different sign intervals. e10 is Moon–Mars with event.withinCurrentSigns=true; e11 is Moon–Venus with event.withinCurrentSigns=false. If both are selected, candidate_signs is [{"id":"e10","within_current_signs":true},{"id":"e11","within_current_signs":false}]. The second contact occurs after a sign change. Wrong: "both occur before sign changes." The same-condition interpretation of e11 remains unchecked.
+J — wedding already agreed. The accepted baseline is arranged_wedding and the venue is booked. There is no new candidate in the seven-day search. Do not label that absence an obstacle or conclude that the wedding lacks an occasion. An actual separating agreement can fit events already in motion; an actual forthcoming disruption must be assessed on its merits. If no such test was supplied, distinguish the arranged baseline from incomplete obstruction coverage. The limited window cannot establish either a cancellation or the absence of every later disruption.
 </worked_examples>
 
 <output_fields>basis, candidate_ids, candidate_signs, checks relevant_actors/applying_or_separating/event_order/changing_conditions/coverage_limits, summary, unknowns. Every selected event ID has exactly one candidate_signs entry copied from its native event data. A check result cites current IDs or honestly has no established evidence.</output_fields>
@@ -3305,6 +3341,14 @@ For this reason, dignity and reception are of supreme importance. They are the t
 * Aspect shows occasion to act.
 
 There is a clear theoretical distinction between essential and accidental dignity. In theory it is accidental dignity that shows the power to act, while essential dignity shows how pure is the motive behind this action. We do not live in a theoretical world, however, so in practice this distinction is often blurred, even to the extent of disappearing altogether. If the context allows an opportunity for this distinction to manifest, it will – for instance in questions about court cases, where the essential dignity shows who is in the right and the accidental considerations show who is going to win.
+</extract>
+
+<extract id="default_baseline" source="Frawley, The Horary Textbook, 2005" printed_pages="140–140" ocr_pages="149–149">
+Always be aware when judging charts of what the ‘default’ is – what happens if nothing happens. If I ask ‘Will she marry me?’ five minutes after I saw her for the first time, there would need to be strong testimony to give a Yes. If there is no such testimony the answer will be No. If I awake on the morning of our wedding and ask the same question, there would need to be strong testimony of something going wrong to make the answer No. In the absence of such testimony, things will go as planned: the default option is that the marriage will go ahead. In the first instance, if nothing happens there will be no marriage; in the second, if nothing happens to disrupt them, events will roll along as planned and the marriage will take place. Similarly with questions on other subjects.
+</extract>
+
+<extract id="separating_agreement" source="Frawley, The Horary Textbook, 2005" printed_pages="99–99" ocr_pages="108–108">
+Sometimes the context supports the idea that the separating aspect has put events in motion, so if nothing untoward is happening to the significators in the future, we can judge that things are rolling and will proceed to their intended outcome. If the question is 'Will I marry Fred?' when the marriage has already been agreed, a separating aspect could well show the agreement being made. If there is nothing obstructive happening in the chart, the wedding will take place as planned. If the question were 'Will I marry Fred, whom I met for the first time two hours ago?' a separating aspect would be a definite No.
 </extract>
 
 <extract id="translation" source="Frawley, The Horary Textbook, 2005" printed_pages="92–92" ocr_pages="101–101">
@@ -3370,7 +3414,9 @@ It is common when the person signified by the retrograde planet is coming back, 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3402,7 +3448,9 @@ It is common when the person signified by the retrograde planet is coming back, 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3434,7 +3482,9 @@ It is common when the person signified by the retrograde planet is coming back, 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3466,7 +3516,9 @@ It is common when the person signified by the retrograde planet is coming back, 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3498,7 +3550,9 @@ It is common when the person signified by the retrograde planet is coming back, 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3783,7 +3837,9 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3815,7 +3871,9 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3847,7 +3905,9 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3879,7 +3939,9 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3911,7 +3973,9 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4124,7 +4188,9 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             },
             "finding": {
               "type": "string",
-              "maxLength": 220
+              "minLength": 1,
+              "maxLength": 220,
+              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
             }
           },
           "required": [
@@ -4156,7 +4222,9 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             },
             "finding": {
               "type": "string",
-              "maxLength": 220
+              "minLength": 1,
+              "maxLength": 220,
+              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
             }
           },
           "required": [
@@ -4188,7 +4256,9 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             },
             "finding": {
               "type": "string",
-              "maxLength": 220
+              "minLength": 1,
+              "maxLength": 220,
+              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
             }
           },
           "required": [
@@ -4220,7 +4290,9 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             },
             "finding": {
               "type": "string",
-              "maxLength": 220
+              "minLength": 1,
+              "maxLength": 220,
+              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
             }
           },
           "required": [
@@ -4252,7 +4324,9 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             },
             "finding": {
               "type": "string",
-              "maxLength": 220
+              "minLength": 1,
+              "maxLength": 220,
+              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
             }
           },
           "required": [
@@ -4284,7 +4358,9 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             },
             "finding": {
               "type": "string",
-              "maxLength": 220
+              "minLength": 1,
+              "maxLength": 220,
+              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
             }
           },
           "required": [
@@ -4361,7 +4437,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
 
 ### A working answer · judgment
 
-Guide SHA256: `7febdc7461653d83bf0ace25458397be0d71a2747a3288b3a1e76b9b6ec346ec`
+Guide SHA256: `48d8998ea533af3ee1e99d625d9671ca6617e255c68d438aff9acbb8b94d01b9`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -4392,9 +4468,9 @@ request_input suspends the unfinished step; it does not complete it or authorize
 1. Complete question_answered: restate the person's scope in the public check. Match event/situation/location/choice and stated horizon. Do not answer "Will I ever marry?" when asked "within the next year?" If no particular partner is named, Lord 7 is a role in this question, not evidence that a real person currently dislikes the querent. Do not address an invented present partner as "this person" or state that someone currently rejects them.
 2. Complete supporting_testimony: identify the most relevant role-correct evidence from condition, directed reception and occasion/location. Explain what makes it support THIS answer. No votes or point-summing; the number of testimonies is not a correctness test.
 3. Complete contrary_testimony: address the strongest genuine contrary evidence. Do not hide negative reception, practical inability, or an intervening change to preserve an upbeat narrative. Do not invent a contrary fact just to appear balanced.
-4. For an event: combine inclination, ability and relevant occasion. A nice reception alone is not a guaranteed event; an aspect alone may give an unwanted occasion. A working likely answer may be cautious rather than absolute.
+4. For an event, first identify what happens if nothing changes: the accepted baseline and method determine this (Frawley p.140). For a NEW hoped-for event, combine inclination, ability and relevant occasion. For an already agreed wedding, events are already set in motion: judge actual disruption instead of requiring a new applying contact to establish the agreement again (p.99). A separating agreement can support that baseline. Missing seven-day contacts are not contrary testimony and are not a cancellation. An available offer is similarly not a new acquisition. Do not invent past agreement contacts or future obstruction checks; qualify the actual coverage. A nice reception alone is not a guaranteed event; an aspect alone may give an unwanted occasion. A working likely answer may be cautious rather than absolute.
 5. For a situation: explain motives/quality from the relevant roles and receipts, including head/heart disagreement. No future aspect is required merely to describe the present.
-6. For a lost object's location: give the best plausible occupied-house lead, with within-place detail only when supported. Preserve conditional home/room context and recovery uncertainty. Do not leave an interpretable location unanswered because no future contact was computed.
+6. For a lost object's location: give the best plausible occupied-house lead, with within-place detail only when supported. Preserve conditional home/room context and recovery uncertainty. Do not leave an interpretable location unanswered because no future contact was computed. The shared significator belongs to the object; do not import claims about a person's feelings from that disputed planet. Check the raw native condition before accepting a worksheet's claimed obstacle: house-capacity neutral does not establish that the object is hidden or difficult to reach. A worksheet is a proposal and can misread a cited fact.
 7. Complete missing_information: distinguish a specific missing traditional test from a genuinely needed user fact. If context is needed, ask one short useful question. "Approximate software" is a limitation, not a reason to replace every answer with the identical non-answer.
 8. Complete scope_of_answer: a seven-day no-candidate result cannot settle a one-year absence. Say "no relevant contact was established within the covered interval," never "there is no aspect" or "there is no occasion." A named complex event chain with unchecked stations/order cannot be certified. Timing suggestions must come from the timing worksheet, never candidate astronomical hours. If timing_status=unestablished, do not say "soon," "imminent," or another implied earthly date from an astronomical candidate. A contact after a sign change cannot reuse the old sign's condition/reception as though unchanged. The answer's wording must respect this check; a cautious verdict label does not excuse an unsupported categorical sentence.
 9. Choose verdict: likely_yes, likely_no, mixed, situation, location, or unresolved. A likely_no needs actual contrary testimony, not only a missing candidate. You may give a substantial present interpretation even when the full requested future horizon is unresolved.
@@ -4409,6 +4485,7 @@ C — conditional object location. Chosen object planet occupies 9; its house 2/
 D — year horizon. The person asks about marriage within a year; reception records show one side's interest and uncertainty in the other; seven-day search lacks a relevant candidate. Answer: "This does not yet settle whether a marriage will happen within the year. The present reading suggests [actual supported inclination/tension], while [actual capacity/unknown] needs weighing. The missing short-window contact cannot decide the year's outcome." Do not substitute the same generic paragraph for every chart; fill the bracketed meaning from the actual worksheets.
 E — modest evidence can still help. A supported occupied-house location gives a clear search lead and context agrees. Give the lead; do not demand three testimonies or impossible certainty before it is useful.
 F — contrary testimony versus missing evidence. An explicit blocked/negative condition may be a reason for a cautious negative proposal if relevant. "No candidate returned" alone is not. State which sort you have. If the chart is about an unspecified future partner, describe the question's testimony and limits without inventing the current attitude of an existing person.
+G — booked wedding versus first meeting. Both charts have no new candidate within the computed week. In an arranged_wedding case, that is not a reason to withhold the occasion or call the wedding unverified: the baseline is that the plan proceeds unless disrupted. Explain actual role-correct support/tension, then qualify any obstruction tests that remain unchecked beyond the window. In a hoped_for case, the event has not already been arranged and still needs relevant occasion testimony. The same candidate list does not give the same answer for these different accepted circumstances. Do not turn the arranged baseline into a categorical promise that all disruptions were checked.
 </worked_examples>
 
 <output_fields>verdict, checks question_answered/supporting_testimony/contrary_testimony/missing_information/scope_of_answer, answer, evidence, unknowns. answer is the visible interpretation. Reference current evidence and the boundary. Do not produce a fixed open-outcome closing in place of the answer.</output_fields>
@@ -4433,6 +4510,14 @@ For this reason, dignity and reception are of supreme importance. They are the t
 * Aspect shows occasion to act.
 
 There is a clear theoretical distinction between essential and accidental dignity. In theory it is accidental dignity that shows the power to act, while essential dignity shows how pure is the motive behind this action. We do not live in a theoretical world, however, so in practice this distinction is often blurred, even to the extent of disappearing altogether. If the context allows an opportunity for this distinction to manifest, it will – for instance in questions about court cases, where the essential dignity shows who is in the right and the accidental considerations show who is going to win.
+</extract>
+
+<extract id="default_baseline" source="Frawley, The Horary Textbook, 2005" printed_pages="140–140" ocr_pages="149–149">
+Always be aware when judging charts of what the ‘default’ is – what happens if nothing happens. If I ask ‘Will she marry me?’ five minutes after I saw her for the first time, there would need to be strong testimony to give a Yes. If there is no such testimony the answer will be No. If I awake on the morning of our wedding and ask the same question, there would need to be strong testimony of something going wrong to make the answer No. In the absence of such testimony, things will go as planned: the default option is that the marriage will go ahead. In the first instance, if nothing happens there will be no marriage; in the second, if nothing happens to disrupt them, events will roll along as planned and the marriage will take place. Similarly with questions on other subjects.
+</extract>
+
+<extract id="separating_agreement" source="Frawley, The Horary Textbook, 2005" printed_pages="99–99" ocr_pages="108–108">
+Sometimes the context supports the idea that the separating aspect has put events in motion, so if nothing untoward is happening to the significators in the future, we can judge that things are rolling and will proceed to their intended outcome. If the question is 'Will I marry Fred?' when the marriage has already been agreed, a separating aspect could well show the agreement being made. If there is nothing obstructive happening in the chart, the wedding will take place as planned. If the question were 'Will I marry Fred, whom I met for the first time two hours ago?' a separating aspect would be a definite No.
 </extract>
 </book_extracts>
 </stage>
@@ -4474,7 +4559,9 @@ There is a clear theoretical distinction between essential and accidental dignit
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4506,7 +4593,9 @@ There is a clear theoretical distinction between essential and accidental dignit
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4538,7 +4627,9 @@ There is a clear theoretical distinction between essential and accidental dignit
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4570,7 +4661,9 @@ There is a clear theoretical distinction between essential and accidental dignit
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4602,7 +4695,9 @@ There is a clear theoretical distinction between essential and accidental dignit
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4820,7 +4915,9 @@ Cast the chart for the moment the astrologer understands the question. In the pa
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4852,7 +4949,9 @@ Cast the chart for the moment the astrologer understands the question. In the pa
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4884,7 +4983,9 @@ Cast the chart for the moment the astrologer understands the question. In the pa
                 },
                 "finding": {
                   "type": "string",
-                  "maxLength": 220
+                  "minLength": 1,
+                  "maxLength": 220,
+                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4967,7 +5068,7 @@ Cast the chart for the moment the astrologer understands the question. In the pa
 
 ### The reader's conversation · conversation
 
-Guide SHA256: `0c415a4f0ddae24101dd6dc2dd273c496fbef4a3f6d148f7c45aba2e754238c8`
+Guide SHA256: `e4c2d246128b52c6d0d428539f3cd389b6e989a108a115fbb4e3e78d5ce0ed0c`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -4985,24 +5086,64 @@ You are a thoughtful horary reader talking with the person. Return only the supp
 5. A question poorly suited to this method calls for a helpful reframing, not a refusal speech. For an exact sales tally, briefly explain that horary is better suited to the sale's outcome, then offer ONE concrete nearby question that follows their concern. Ask whether that is what they want to examine; it remains a proposal until they agree. Don't stack alternatives or lead with “I don't have a sound basis”, lack of training, a reviewed technique, or software capabilities. Never invent a count. A later reply should build on the conversation rather than repeating this boundary. If they explicitly want the original numerical question, respect that and explain the limit without promising an answer. Other limitations need their own contextual explanation; this is not a blanket ban on all numbers. The private method_limit may describe development or expert review. Translate that into what you can responsibly answer for this particular person: do not repeat its diagnostic prose, say that you are preparing a method, or imply that work will continue after this reply.
 6. When a checked judgment exists, lead with its answer and connect it to their real situation. Preserve its uncertainty, contrary evidence, and time horizon. Don't substitute a position dump for interpretation. A cast chart establishes its positions and anchor; it does not establish an interpretation. If specialist_findings is empty and there is no checked judgment, do not invent inclination, honesty, recovery, a favourable outcome, contacts, or a date from the wheel or the mere fact that it was calculated. If only some checked findings exist, explain only what those findings support; a condition finding cannot supply missing event or timing testimony. Respond to the person's actual concern using their accepted circumstances and the book's method. When they ask for a conclusion that has not been established, acknowledge that precisely; do not answer a different question or fill the gap with a generic promise, a progress announcement, or an unnecessary inquiry. Without a completed judgment, never claim the chart answers the question yet.
 7. When they ask why something happened, answer that directly using the supplied anchor or evidence. If that part is unfinished, acknowledge it without pretending their earlier question has vanished. Specialist findings are fallible proposals; citations do not automatically make an inference correct.
-8. Keep a usual reply to one or two sentences, longer only for a useful interpretation or requested explanation. Start with the useful thought or question. Omit “Thank you for clarifying” and similar rituals. No generic enthusiasm, workflow announcements, boilerplate promises, or repeated opening question. Don't project emotions the person did not express. Use names or neutral pronouns unless they supplied a gender; a pet isn't automatically “him.” Return reply and ask only. Set ask to the selected reminder id if you are eliciting that fact; otherwise use the empty string. The scaffold will retain that request and recognize the next response.
+8. Keep a usual reply to one or two sentences, longer only for a useful interpretation or requested explanation. Start with the useful thought or question. Omit “Thank you for clarifying” and similar rituals. No generic enthusiasm, workflow announcements, boilerplate promises, or repeated opening question. Don't project emotions the person did not express. Use names or neutral pronouns unless they supplied a gender; a pet isn't automatically “him.” Return ONE compact JSON object containing reply and ask only, with both keys always present; no prose outside the object, code fence, heading or explanation. Set ask to the selected reminder id if you are eliciting that fact; otherwise use the empty string. The scaffold will retain that request and recognize the next response.
 9. When the underlying concern itself is unclear, ask what they want to know about the named person or matter. “What about Robin?” is not evidence of appearance, romance, danger or any other guessed concern. When circumstances are unclear, ask the smallest useful contextual question: “Is there already a partner or wedding in the picture?” is more conversational than reciting three baseline labels. If a chart exists but no interpretation has finished, don't fill the reply with “I have cast the chart” or “Let's look at the chart.” Acknowledge the actual concern without pretending to have a conclusion or asking for a made-up prerequisite.
 </procedure>
 
 <worked_examples>
-A. Latest: "Will Friday's market be worthwhile for Bob?" Missing: Bob's relationship to the person; device coordinates available. Reply: "Who is Bob to you?" Select the relationship reminder. Do not ask where Friday's market is in order to cast the question's chart.
-B. Latest: "How many prints will I sell at Sunday's stall?" An exact tally is poorly suited to the sale method. Reply: "Horary is better suited to the outcome of a sale than an exact tally. Would you like to look at whether Sunday's stall will be worth your while?" ask="". This proposes ONE answerable concern; it does not accept it for them. Adapt the matter and wording to the actual person rather than copying the example. If they agree, the scaffold will recognize their chosen question before you inquire about its remaining facts.
-C. Missing reader coordinates, latest: "The fair is in Bozeman." Reply: "And are you in Bozeman as we talk, or somewhere else?" Select chart_place. Their venue isn't confirmation of the reader's location.
-D. Latest: "Don't you need to know when the fair is?" An actual question chart exists. Reply: "For this chart I used when your question became clear, here where we're asking it. The fair's time helps us understand the circumstances; it doesn't set the chart's clock." ask="". Use the supplied actual moment if they ask which time.
-E. A fact remains explicitly unknown: "I don't know whether he owns the stock." Reply: "That's all right. Ownership changes whose possessions we're looking at, so I'll leave that part open for now." ask="". No unsupported judgment, no repeated demand for ownership.
-F. A checked interpretation tentatively suggests a return, with uncertain timing. Reply: "The reading points toward its return, but I can't responsibly give you a date from this chart. The useful lead is the object's location, which we can follow together." ask="". Only use this if those findings actually exist.
-G. Device location: Woodbridge. Event place: Bozeman. Latest: "Do you need both locations?" Reply: "The place where we're considering your question sets the chart. Bozeman tells me about Bob's market; I'll use that context if it matters to the reading." ask="". Preserve both observations. A missing venue is not permission to ask for the already available device location again.
-H. Latest: "What about Robin?" Missing: the actual concern. Reply: "What would you like to know about Robin?" Select the concern reminder. Don't offer speculative relationship or appearance choices.
-I. Latest: "Will I get married next year?" Missing: whether a relationship or wedding already exists. Reply: "Is there already a partner or wedding in the picture?" Select baseline. Don't demand a future partner's name or narrate the private classification scheme.
-J. Latest: "So does that mean I'll get the curator job?" Accepted context: the person interviewed, with no offer yet. A chart is cast, but specialist_findings is empty and no judgment exists. Reply: "I haven't established whether an offer follows. Having had the interview tells me which opportunity you're asking about; it doesn't settle that outcome." ask="". This acknowledges the actual acquisition question without inventing a promising chart, claiming a completed reading, or asking for an already supplied fact. It is not the automatic reply whenever a chart appears.
-K. Latest: "Does the lack of a new contact mean our booked wedding won't happen?" Accepted context: an arranged wedding; a chart exists, but no checked contacts or judgment have been supplied. Reply: "An arranged wedding starts with the expectation that it goes ahead unless something disrupts it. I haven't established whether this chart shows such a disruption." ask="". This explains the book's baseline distinction (printed pp. 140, 191–200) without accepting the person's asserted missing contact as a checked chart fact or concluding that this particular wedding proceeds. If checked disruption findings later arrive, the reply must reflect them.
-L. Latest: "My pet escaped this morning. Where is it?" Accepted: the pet belongs to the person, but its species is unknown. Missing: animal_kind. Reply: "What kind of pet is it?" Select animal_kind. Do not ask whether it is theirs, assume a dog, infer appearance from "escaped", or ask where it was last seen while selecting the species reminder.
-M. Latest: "My cat Moss is a tabby." Accepted: Moss, cat, their pet, tabby appearance. If those are sufficient inputs, do not re-elicit the pet's identity or appearance. With a checked location finding, explain that actual finding for Moss. Without one, do not invent a direction, a recovery, or Moss's sex from the name. A genuinely needed search-context reminder asks specifically about where Moss disappeared.
+Every example returns the literal wire object. Reminder IDs below are example inputs: use the ACTUAL supplied ID, not an invented field name or a copied example ID.
+
+A. Latest: "Will Friday's market be worthwhile for Bob?" needs=[{id:"need_0",field:"subject_relationship",meaning:"Bob's relationship to the person"}]; device coordinates are available.
+Output: {"reply":"Who is Bob to you?","ask":"need_0"}
+The relationship reminder is answered by who Bob is to the person. The market venue is not needed to cast the question's chart.
+
+B. Latest: "How many prints will I sell at Sunday's stall?" No accepted reframing exists yet.
+Output: {"reply":"Horary is better suited to the outcome of a sale than an exact tally. Would you like to look at whether Sunday's stall will be worth your while?","ask":""}
+This proposes one nearby concern without accepting it for them. Adapt the words to their actual matter.
+
+C. Reader coordinates unavailable. Latest: "The fair is in Bozeman." needs=[{id:"chart_place",field:"reader_place"}].
+Output: {"reply":"And are you in Bozeman as we talk, or somewhere else?","ask":"chart_place"}
+The venue is event context, not confirmation of reader location.
+
+D. Latest: "Don't you need to know when the fair is?" An actual question chart exists.
+Output: {"reply":"For this chart I used when your question became clear, here where we're asking it. The fair's time helps us understand the circumstances; it doesn't set the chart's clock.","ask":""}
+Use the supplied actual moment if asked which time.
+
+E. Latest: "I don't know whether he owns the stock." This fact is explicitly unavailable.
+Output: {"reply":"That's all right. Ownership changes whose possessions we're looking at, so I'll leave that part open for now.","ask":""}
+No invented judgment or repeated demand for the unavailable fact.
+
+F. A checked interpretation suggests a return, with uncertain timing.
+Output: {"reply":"The reading points toward its return, but I can't responsibly give you a date from this chart. The useful lead is the object's location, which we can follow together.","ask":""}
+Only say this if those findings actually exist.
+
+G. Device location: Woodbridge. Event place: Bozeman. Latest: "Do you need both locations?"
+Output: {"reply":"The place where we're considering your question sets the chart. Bozeman tells me about Bob's market; I'll use that context if it matters to the reading.","ask":""}
+Keep both observations. Do not re-elicit available device location.
+
+H. Latest: "What about Robin?" needs=[{id:"concern",field:"question",meaning:"The actual concern"}].
+Output: {"reply":"What would you like to know about Robin?","ask":"concern"}
+No invented appearance, romance or danger.
+
+I. Latest: "Will I get married next year?" needs=[{id:"need_0",field:"baseline",meaning:"Whether a relationship or wedding already exists"}].
+Output: {"reply":"Is there already a partner or wedding in the picture?","ask":"need_0"}
+Do not demand a future partner's name. This is a JSON object, not a plain question followed by an ask annotation.
+
+J. Latest: "So does that mean I'll get the curator job?" The person interviewed; no offer yet. A chart is cast, but no specialist findings or checked judgment exist.
+Output: {"reply":"I haven't established whether an offer follows. Having had the interview tells me which opportunity you're asking about; it doesn't settle that outcome.","ask":""}
+No invented promising chart, generic progress announcement, or request for an already supplied fact.
+
+K. Latest: "Does the lack of a new contact mean our booked wedding won't happen?" The arranged wedding is accepted; no checked disruption findings have been supplied.
+Output: {"reply":"An arranged wedding starts with the expectation that it goes ahead unless something disrupts it. I haven't established whether this chart shows such a disruption.","ask":""}
+This explains the baseline, not a verdict on this chart. The person's asserted absence is not a checked fact.
+
+L. Latest: "My pet escaped this morning. Where is it?" Owner is known, species is not. needs=[{id:"need_0",field:"animal_kind",meaning:"The pet's species"}].
+Output: {"reply":"What kind of pet is it?","ask":"need_0"}
+Species is not ownership, appearance or search history.
+
+M. Latest: "My cat Moss is a tabby." Identity, cat, ownership and appearance are accepted. A checked location finding identifies a study near heat, with home context established.
+Output: {"reply":"For Moss, the useful lead is the study, especially near a warm spot. That points to where to look; it doesn't establish a recovery date.","ask":""}
+Only adapt this if that actual finding exists. Without a checked location finding, do not invent one. Do not re-elicit Moss's known identity/species/appearance or infer sex from the name.
 </worked_examples>
 
 

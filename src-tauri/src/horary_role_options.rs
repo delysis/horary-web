@@ -55,9 +55,18 @@ pub struct Choice {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
+pub struct ConditionalRole {
+    pub choice_id: String,
+    pub unless_house_claims: NaturalRole,
+    pub basis: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Options {
     pub choices: Vec<Choice>,
     pub required_groups: Vec<Vec<String>>,
+    #[serde(default)]
+    pub conditional_roles: Vec<ConditionalRole>,
     pub missing: Vec<String>,
     pub compare: Vec<String>,
 }
@@ -639,6 +648,7 @@ pub fn build(matter: Matter, people: &[Person], subject: &Subject) -> Options {
     let mut options = Options {
         choices: Vec::new(),
         required_groups: Vec::new(),
+        conditional_roles: Vec::new(),
         missing: Vec::new(),
         compare: Vec::new(),
     };
@@ -903,6 +913,29 @@ pub fn build_for(
         options.required_groups.push(vec!["subject.primary".into()]);
         options.missing.retain(|s| !s.starts_with(&subject.name));
     }
+    if method == Some(Method::JobOffer) {
+        if let Some(job_house) = options
+            .choices
+            .iter()
+            .find(|choice| choice.id == "subject.primary")
+            .and_then(|choice| choice.house)
+        {
+            options.choices.push(Choice {
+                id: "job.wages".into(),
+                label: "The offered job's pay".into(),
+                house: Some(turn(job_house, 2)),
+                natural: None,
+                basis: "The job's money is its second house, distinct from the job and the worker's pocket. External job tenth/pay eleventh; tenth-house person's job seventh/pay eighth. A wages aspect is not acquiring the job (Frawley pp. 223–227).".into(),
+            });
+            if case
+                .frame
+                .resolved()
+                .is_some_and(|frame| frame.facet == crate::reading_contracts::Facet::Profit)
+            {
+                options.required_groups.push(vec!["job.wages".into()]);
+            }
+        }
+    }
     if method == Some(Method::Relationship)
         && (subject.owner_id.is_empty() || case.text(Field::Baseline) == Some("hoped_for"))
     {
@@ -933,6 +966,21 @@ pub fn build_for(
             .required_groups
             .retain(|g| !g.iter().any(|id| id.starts_with("subject.")));
         options.required_groups.push(vec!["subject.primary".into()]);
+    }
+    if method == Some(Method::Relationship) {
+        options.conditional_roles.push(ConditionalRole {
+            choice_id: "moon.contextual".into(),
+            unless_house_claims: NaturalRole::Moon,
+            basis: "The querent has Lord 1 and the Moon as heart, including prospective or arranged relationships. A house ruler has first claim on Moon; if Moon already rules the querent, keep its emotional meaning on that role, and if it rules the enquired-about party do not also assign it to the querent (Frawley pp. 191–193).".into(),
+        });
+        if let Some(moon) = options
+            .choices
+            .iter_mut()
+            .find(|c| c.id == "moon.contextual")
+        {
+            moon.label = "Your feelings".into();
+            moon.basis = "Required querent-emotions testimony in this relationship question unless a selected main house ruler already claims Moon; do not infer gender (Frawley pp. 191–193).".into();
+        }
     }
     if matches!(method, Some(Method::Property | Method::Rental)) {
         options.choices.push(Choice{id:"deal.price".into(),label:"The price".into(),house:Some(turn(base,10)),natural:None,basis:"Property and its price are distinct: fourth/tenth in the relevant frame, Frawley pp. 167–170.".into()});
@@ -976,6 +1024,19 @@ pub fn build_for(
     }
     // Some method overrides rebuild the choices. Apply the relay identity last.
     if relay {
+        if method == Some(Method::Relationship) {
+            if let Some(moon) = options
+                .choices
+                .iter_mut()
+                .find(|c| c.id == "moon.contextual")
+            {
+                moon.label = case
+                    .people
+                    .get(principal)
+                    .map(|p| format!("{}'s feelings", p.label))
+                    .unwrap_or_else(|| "The principal's feelings".into());
+            }
+        }
         if let Some(querent) = options.choices.iter_mut().find(|c| c.id == "querent.self") {
             querent.label = case
                 .people
@@ -1041,14 +1102,17 @@ pub fn resolve(options: &Options, value: &Value, facts: &[Fact]) -> Result<Vec<R
             reason: selection["reason"].as_str().unwrap_or("").into(),
         });
     }
-    if options.required_groups.iter().any(|group| {
-        group
+    for group in &options.required_groups {
+        let count = group
             .iter()
             .filter(|id| selected.contains(id.as_str()))
-            .count()
-            != 1
-    }) {
-        return Err("Supply every required person/object role. A person's own house is distinct from the house of their possessions.".into());
+            .count();
+        if count == 0 {
+            return Err(format!("Missing required role: select exactly one of [{}]. A person's own role is distinct from their possessions.", group.join(", ")));
+        }
+        if count > 1 {
+            return Err(format!("Select exactly ONE alternative from [{}]; you selected {count}. Compare alternatives in comparison, then choose one in selections now. Do not select every alternative or postpone the choice.", group.join(", ")));
+        }
     }
     if !options.compare.is_empty() {
         let comparison = value["comparison"]
@@ -1074,7 +1138,21 @@ pub fn resolve(options: &Options, value: &Value, facts: &[Fact]) -> Result<Vec<R
             );
         }
     }
-    reading_method::assign_from_facts(facts, choices)
+    let roles = reading_method::assign_from_facts(facts, choices)?;
+    for requirement in &options.conditional_roles {
+        let claimed = roles.iter().any(|role| {
+            role.house.is_some() && role.planet == requirement.unless_house_claims.planet()
+        });
+        if !claimed && !selected.contains(requirement.choice_id.as_str()) {
+            return Err(format!(
+                "Missing conditional role {}: {} Select it now; the supplied main house rulers do not claim {}.",
+                requirement.choice_id,
+                requirement.basis,
+                requirement.unless_house_claims.planet()
+            ));
+        }
+    }
+    Ok(roles)
 }
 
 #[cfg(test)]
@@ -1084,6 +1162,130 @@ mod tests {
     fn facts() -> Vec<Fact> {
         let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
         reading_method::facts(Some(&chart))
+    }
+
+    #[test]
+    fn relationship_requires_emotional_moon_without_competing_with_a_house_ruler() {
+        use crate::reading_contracts::{
+            Consultation, Evidence, Facet, Frame, Method, Observation, Slot,
+        };
+        for (relationship, target_house) in [("partner", 7), ("neighbor", 3)] {
+            let case = Consultation {
+                frame: Slot::Resolved {
+                    observation: Observation {
+                        value: Frame {
+                            method: Method::Relationship,
+                            facet: Facet::Situation,
+                        },
+                        evidence: Evidence::Migration {
+                            detail: "Relationship Moon coverage".into(),
+                        },
+                    },
+                },
+                ..Default::default()
+            };
+            let person = Person {
+                id: "alex".into(),
+                label: "Alex".into(),
+                relationship: relationship.into(),
+                source_quote: "Alex's stated relationship".into(),
+            };
+            let subject = Subject {
+                name: "Alex".into(),
+                kind: "person".into(),
+                owner_id: "alex".into(),
+                source_quote: "Alex's stated relationship".into(),
+            };
+            let options = build_for(&case, Matter::Relationship, &[person], &subject);
+            assert_eq!(options.conditional_roles.len(), 1);
+            for claimed_house in [None, Some(1), Some(target_house)] {
+                let mut native = facts();
+                for fact in native.iter_mut().filter(|f| f.kind == "house") {
+                    if fact.label == "House 1" {
+                        fact.planets = vec!["Jupiter".into()];
+                    }
+                    if fact.label == format!("House {target_house}") {
+                        fact.planets = vec!["Mercury".into()];
+                    }
+                    if claimed_house.is_some_and(|h| fact.label == format!("House {h}")) {
+                        fact.planets = vec!["Moon".into()];
+                    }
+                }
+                let mut worksheet = json!({"selections":[
+                    {"id":"querent.self","reason":"The querent's considered position."},
+                    {"id":"alex.self","reason":"The person in their actual capacity."}
+                ],"summary":"Head and heart remain distinct.","unknowns":[]});
+                let result = resolve(&options, &worksheet, &native);
+                if claimed_house.is_none() {
+                    assert!(result.unwrap_err().contains("moon.contextual"));
+                } else {
+                    assert!(result
+                        .unwrap()
+                        .iter()
+                        .any(|r| r.planet == "Moon" && r.house == claimed_house));
+                }
+                worksheet["selections"].as_array_mut().unwrap().push(json!({"id":"moon.contextual","reason":"The querent's emotional facet, distinct from their primary ruler."}));
+                let with_moon = resolve(&options, &worksheet, &native);
+                if claimed_house.is_none() {
+                    assert!(with_moon
+                        .unwrap()
+                        .iter()
+                        .any(|r| r.planet == "Moon" && r.house.is_none()));
+                } else {
+                    assert!(with_moon.unwrap_err().contains("first claim"));
+                }
+            }
+            // This obligation belongs to the relationship method, not to the
+            // mere existence of a Moon option in every role table.
+            assert!(build(Matter::Other, &[], &Subject::default())
+                .conditional_roles
+                .is_empty());
+            assert!(build(
+                Matter::LostObject,
+                &[],
+                &Subject {
+                    name: "Watch".into(),
+                    kind: "movable".into(),
+                    owner_id: "querent".into(),
+                    source_quote: "My watch".into()
+                }
+            )
+            .conditional_roles
+            .is_empty());
+        }
+    }
+
+    #[test]
+    fn competing_object_candidates_receive_exact_one_feedback_instead_of_missing_role_feedback() {
+        let options = build(
+            Matter::LostObject,
+            &[],
+            &Subject {
+                name: "Watch".into(),
+                kind: "movable".into(),
+                owner_id: "querent".into(),
+                source_quote: "My gold watch".into(),
+            },
+        );
+        let mut worksheet = json!({"selections":[
+            {"id":"querent.self","reason":"The querent owns the missing watch."},
+            {"id":"subject.primary","reason":"The second-house candidate."},
+            {"id":"subject.alternative_fourth","reason":"The fourth-house candidate."}
+        ],"comparison":[
+            {"id":"subject.primary","observation":"One candidate fits part of the supplied appearance."},
+            {"id":"subject.alternative_fourth","observation":"The other fits the supplied appearance less closely."}
+        ],"summary":"Compare candidates, then choose one now.","unknowns":[]});
+        let error = resolve(&options, &worksheet, &facts()).unwrap_err();
+        assert!(error.contains("exactly ONE"));
+        assert!(error.contains("subject.primary"));
+        assert!(error.contains("subject.alternative_fourth"));
+        assert!(!error.contains("Missing required role"));
+        worksheet["selections"].as_array_mut().unwrap().pop();
+        assert_eq!(resolve(&options, &worksheet, &facts()).unwrap().len(), 2);
+        worksheet["selections"].as_array_mut().unwrap().pop();
+        let missing = resolve(&options, &worksheet, &facts()).unwrap_err();
+        assert!(missing.contains("Missing required role"));
+        assert!(missing.contains("select exactly one"));
     }
 
     fn stock(relationship: &str) -> Options {
@@ -1102,6 +1304,119 @@ mod tests {
                 source_quote: "They are his books.".into(),
             },
         )
+    }
+
+    #[test]
+    fn available_job_pay_is_bound_to_the_job_not_indiscriminately_to_the_worker() {
+        use crate::reading_contracts::{
+            Consultation, Evidence, Facet, Frame, Method, Observation, Slot,
+        };
+        for (relationship, job_house, pay_house) in
+            [("querent", 10, 11), ("child", 10, 11), ("mother", 7, 8)]
+        {
+            let mut case = Consultation {
+                frame: Slot::Resolved {
+                    observation: Observation {
+                        value: Frame {
+                            method: Method::JobOffer,
+                            facet: Facet::Profit,
+                        },
+                        evidence: Evidence::Migration {
+                            detail: "Available-offer role regression".into(),
+                        },
+                    },
+                },
+                ..Default::default()
+            };
+            let person = Person {
+                id: "worker".into(),
+                label: "The worker".into(),
+                relationship: relationship.into(),
+                source_quote: "The worker has an available offer.".into(),
+            };
+            let owner = if relationship == "querent" {
+                "querent"
+            } else {
+                "worker"
+            };
+            let subject = Subject {
+                name: "Available job".into(),
+                kind: "job".into(),
+                owner_id: owner.into(),
+                source_quote: "The worker has an available offer.".into(),
+            };
+            let people = if owner == "querent" {
+                vec![]
+            } else {
+                vec![person]
+            };
+            let options = build_for(&case, Matter::Other, &people, &subject);
+            assert_eq!(
+                options
+                    .choices
+                    .iter()
+                    .find(|c| c.id == "subject.primary")
+                    .unwrap()
+                    .house,
+                Some(job_house)
+            );
+            assert_eq!(
+                options
+                    .choices
+                    .iter()
+                    .find(|c| c.id == "job.wages")
+                    .unwrap()
+                    .house,
+                Some(pay_house)
+            );
+            let mut selections = vec![
+                json!({"id":"querent.self","reason":"The principal."}),
+                json!({"id":"subject.primary","reason":"The external available job."}),
+            ];
+            if owner != "querent" {
+                selections.push(json!({"id":"worker.self","reason":"The identified worker."}));
+            }
+            let mut value = json!({"selections":selections,"summary":"Offer pay is distinct from job acquisition.","unknowns":[]});
+            assert!(
+                resolve(&options, &value, &facts()).is_err(),
+                "A profit judgment cannot omit pay"
+            );
+            value["selections"].as_array_mut().unwrap().push(
+                json!({"id":"job.wages","reason":"Job money rather than an acquisition aspect."}),
+            );
+            let roles = resolve(&options, &value, &facts()).unwrap();
+            assert_eq!(
+                roles
+                    .iter()
+                    .find(|role| role.label == "The offered job's pay")
+                    .unwrap()
+                    .house,
+                Some(pay_house)
+            );
+            case.frame = Slot::Resolved {
+                observation: Observation {
+                    value: Frame {
+                        method: Method::JobOffer,
+                        facet: Facet::Situation,
+                    },
+                    evidence: Evidence::Migration {
+                        detail: "Non-financial offer suitability".into(),
+                    },
+                },
+            };
+            let situation = build_for(&case, Matter::Other, &people, &subject);
+            assert!(situation
+                .choices
+                .iter()
+                .any(|choice| choice.id == "job.wages"));
+            assert!(
+                !situation
+                    .required_groups
+                    .iter()
+                    .any(|group| group.iter().any(|id| id == "job.wages")),
+                "An evenings-only concern must not compulsorily become a pay judgment"
+            );
+        }
     }
 
     #[test]

@@ -280,7 +280,7 @@ fn every_role_rejection_returns_to_the_same_step_until_data_is_delivered() {
         .validation_error
         .as_ref()
         .unwrap()
-        .contains("every required")));
+        .contains("Missing required role: select exactly one")));
     let job = session.method.flow.jobs.last().unwrap();
     assert_eq!(job.attempts, 6);
     assert!(matches!(job.phase(), step::Phase::Complete { .. }));
