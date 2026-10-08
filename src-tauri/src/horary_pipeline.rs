@@ -1458,6 +1458,138 @@ mod real_reading {
         }
     }
     #[test]
+    #[ignore = "Real Gemma conversational reframing and affirmative recognition; immutable evidence directory required"]
+    fn real_guru_proposes_one_reframing_and_accepts_the_persons_yes() {
+        use crate::reading_contracts::{self as contracts, Facet, Method, ReadingResult};
+        let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");
+        let dir = std::path::PathBuf::from(
+            std::env::var_os("HORARY_READING_EVIDENCE").expect("new evidence directory"),
+        );
+        std::fs::create_dir(&dir).expect("Preserve every earlier probe");
+        let reader = Reader {
+            state: NativeLlamaState::default(),
+            dir,
+            records: Mutex::new(Vec::new()),
+            stop_before_batch: true,
+            deadline: Some(std::time::Instant::now() + std::time::Duration::from_secs(180)),
+        };
+        start_native_llama_from_path(
+            &reader.state,
+            "reframing-probe".into(),
+            String::new(),
+            path.into(),
+            std::path::PathBuf::new(),
+            serde_json::from_value(json!({"modelId":"reframing-probe",
+                "ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}))
+            .unwrap(),
+        )
+        .unwrap();
+        let question = "How many fish will Bob sell at the market on Friday?";
+        let turn: contracts::Turn = serde_json::from_value(json!({
+            "intent":"read","question":question,"frame":{"method":"movable_deal","facet":"quantity"},
+            "people":[{"id":"bob","label":"Bob","relationship":"unknown","source_quote":"Bob"}],
+            "subject":{"name":"fish","kind":"movable","owner_id":"","source_quote":"fish"},
+            "updates":[{"field":"deal_capacity","value":"sell","quote":"sell","mode":"supply"},
+                {"field":"seller","value":"bob","quote":"Bob","mode":"supply"},
+                {"field":"event_time","value":"Friday","quote":"Friday","mode":"supply"}],
+            "heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null
+        })).unwrap();
+        let mut case = contracts::Consultation::default();
+        case.apply(&turn, 1, question, false).unwrap();
+        let mut session = Session {
+            question: question.into(),
+            candidate_moment_ms: Some(1789387200000.),
+            ..Session::default()
+        };
+        session.method.brief = contracts::brief(&case, &turn);
+        session.method.result = Some(ReadingResult::Limited {
+            limitation: case.plan(None).limitation.as_ref().unwrap().into(),
+        });
+        session.method.consultation = Some(case);
+        session.messages.push(Message {
+            role: "user".into(),
+            text: question.into(),
+        });
+        session.candidates.push(LocationCandidate {
+            id: "device-location".into(),
+            label: "Near Woodbridge".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        });
+        crate::horary_conversation::respond(&mut session, &reader).unwrap();
+        std::fs::write(reader.dir.join("proposal.json"), serde_json::to_vec_pretty(&json!({
+            "authorship":"Synthetic checked intake; actual Gemma conversation output", "session":session
+        })).unwrap()).unwrap();
+        assert_eq!(
+            session.question, question,
+            "An invitation cannot change the question"
+        );
+        assert_eq!(
+            session
+                .method
+                .consultation
+                .as_ref()
+                .unwrap()
+                .frame
+                .resolved()
+                .unwrap()
+                .facet,
+            Facet::Quantity
+        );
+        assert_eq!(
+            session.method.records.last().unwrap().worksheet["ask"],
+            "",
+            "Offer the reframing before interrogating irrelevant missing-role inputs"
+        );
+        assert!(session.chart.is_none());
+        let previous = session.clone();
+        session.messages.push(Message {
+            role: "user".into(),
+            text: "Yes, that is what I want to know.".into(),
+        });
+        let result = run(
+            &mut session,
+            &reader,
+            &GeocodeState::default(),
+            1789387260000.,
+            None,
+            &previous,
+        );
+        std::fs::write(reader.dir.join("accepted.json"), serde_json::to_vec_pretty(&json!({
+            "authorship":"Actual Gemma recognition and reply to an authored affirmative turn", "result":result,"session":session
+        })).unwrap()).unwrap();
+        result.unwrap();
+        let case = session.method.consultation.as_ref().unwrap();
+        assert_eq!(case.method(), Some(Method::MovableDeal));
+        assert!(matches!(
+            case.frame.resolved().unwrap().facet,
+            Facet::Profit | Facet::Situation | Facet::Event
+        ));
+        assert_ne!(session.question, question);
+        assert!(session.question.contains("Bob") && session.question.contains("Friday"));
+        assert_eq!(case.people["bob"].relationship, "unknown");
+        assert_eq!(case.subject.resolved().unwrap().owner_id, "");
+        assert_eq!(
+            case.requested,
+            Some(contracts::RequirementKey::PersonRelationship("bob".into()))
+        );
+        assert!(session.chart.is_none() && session.sections.is_empty());
+        assert_eq!(session.candidate_moment_ms, Some(1789387200000.));
+        assert_eq!(session.messages[0].text, question);
+        assert!(reader
+            .records
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|r| matches!(r["stage"].as_str(), Some("conversation" | "intake"))));
+        stop_native_llama(&reader.state).unwrap();
+    }
+
+    #[test]
     #[ignore = "Real Gemma elicitation and conversation; synthetic fish-sale case; immutable evidence directory required"]
     fn real_guru_keeps_the_count_question_and_converses_with_device_defaults() {
         let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");

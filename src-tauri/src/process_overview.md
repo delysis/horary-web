@@ -25,6 +25,8 @@ Location acquisition and permission refresh wait for Core Location's initial aut
 
 Every accepted control request stays attached to its unfinished step. A model proposal becomes data only through the shared native acceptance path. Repeated repairs and user clarification continue until the required data arrives; cancellation/backend interruption pauses that work. Neither an existing chart nor an error message means that an interpretation is finished.
 
+For a question poorly suited to the selected method, the reader can explain briefly and propose one nearby question. That suggestion does not change the consultation. Recognition reads the reader's last question alongside the person's reply: a clear acceptance of one proposal can correct the concern, while an ambiguous affirmation leaves it unchanged. The original dialogue and correction receipt remain; unrelated facts and the candidate moment survive. Eileen confirmed that this kind of redirect is appropriate for numerical sales questions.
+
 ## Present calculation boundary
 
 Planetary positions are approximate. The event search uses hourly brackets over seven days; fine event order, intermediate stations, fixed stars and antiscia are not certified. It does not supply the applying planet's travel to exact moving-target perfection. The timing lesson is ready for review but its model call is bypassed with an explicit native unestablished receipt. The model is not asked to invent a numeric duration from the angular gap or astronomical hours. No missing seven-day candidate can by itself answer a one-year question negatively.
