@@ -1,6 +1,7 @@
 //! The optimizer may change teaching proposals, never the oracle's authority.
 #![forbid(unsafe_code)]
 pub mod campaign;
+pub mod catalogue;
 pub mod comparison;
 mod packet;
 mod refs;

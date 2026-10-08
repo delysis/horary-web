@@ -2,7 +2,25 @@
 
 This Rust sidecar reads completed synthetic evaluation cases, obtains structured reviews through the existing Codex login, and proposes executable teaching edits. It never edits fixtures, native guards, application source, or campaign receipts. Native first-turn and journey results remain separate from the five conversational scores. Full-reading campaigns also receive independent classification, extraction, elicitation and reading scores, using each case's source rubric, accepted specialist worksheets and actual final answer.
 
-There are three entry points: `horary-loop` streams and reviews receipts, `horary-experiment` tests a fixed candidate, and `horary-optimize` coordinates a complete bounded round. Their artifacts remain separate from private readings and the end-user interface.
+There are four entry points: `horary-loop` streams and reviews receipts, `horary-experiment` tests a fixed candidate, `horary-optimize` coordinates a bounded round, and `horary-catalogue` recovers a stopped hosted catalogue. Their artifacts remain separate from private readings and the end-user interface.
+
+## Interrupted catalogue recovery
+
+Use a platform-owned process for long campaigns so interrupting a chat does not stop inference. On macOS, launch the compiled `horary-catalogue` through a one-shot launchd job (`RunAtLoad=true`, `KeepAlive=false`), with a unique label and evidence log paths. Legacy `launchctl submit` keeps failed processes alive; it needs a separate one-shot cleanup that removes the exact job after the original owner exits. Keep the credential-file locator in its invocation environment; the key itself never goes in arguments or receipts.
+
+Recovery requires an append-only `orphaned-worker.json` in the parent campaign containing its `worker_pid`; the runner checks that this PID no longer exists. The destination must be fresh and outside both the parent evidence and source checkout. The native executable and its source checkout must remain frozen.
+
+One parent-scoped ownership lock and an immutable assignment prevent two different destinations from replaying the same remaining cases. A supplied executable SHA is checked before creation and again before submission. Existing destinations and assignments fail closed; a relaunch does not silently restart inference.
+
+```sh
+horary-catalogue --parent INTERRUPTED_CAMPAIGN --state FRESH_COLLECTION \
+  --repository FROZEN_CHECKOUT --native-executable FROZEN_TEST_EXECUTABLE \
+  --native-executable-sha256 FROZEN_EXECUTABLE_SHA256
+```
+
+The collector reconstructs progress from durable outcomes, not a stale index. It copies every completed case unchanged, including failures, verifies whole-tree hashes, and records each origin separately. Missing outcomes receive explicit whole-case replacement attempts; previous requests without results remain remotely uncertain in their original traces. The new native child selects only those remaining IDs and has identical source, provider, clock, device, decoder and budgets. Its individual outcomes update the collection index immediately. The original manifest bytes stay exact; `recovery.json` identifies this as a composed collection. Completion means all selected terminal outcomes exist, never that readings are correct.
+
+Optional `--optimizer-state`, `--completed-review-state`, `--fixtures`, and `--codex` run the queued comparison afterward. Paid jobs are verified in their original ledger, and copied training case trees must hash-match before reuse. Their campaign identity is never rewritten and teacher/writer submissions are not repeated. Fresh hosted processes wait for the previous rolling quota window. An interrupted submitted child or failed review is preserved without automatic retry.
 
 ## Build
 

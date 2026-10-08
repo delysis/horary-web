@@ -370,6 +370,16 @@ fn native(
         .as_ref()
         .ok_or("Missing frozen pipeline scope")?
         .require_settled_discovery(&cli.discovery)?;
+    if plan
+        .execution
+        .as_ref()
+        .is_some_and(|scope| scope.provider == horary_loop::campaign::Provider::Google)
+    {
+        // Independent child processes have independent token windows. Leave
+        // the preceding child's reservations behind before starting this one.
+        println!("Waiting for the hosted provider window before the next fixed trial.");
+        std::thread::sleep(std::time::Duration::from_secs(61));
+    }
     if file_digest(&cli.native_executable)? != plan.native_executable_sha256 {
         return Err("Native executable changed mid experiment".into());
     }

@@ -263,7 +263,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "897ad4b7c71a6e525dccefbed5ecef8d28285ac4de52730eed106891ff30f40b"
+      "sha256": "d49b18383b70040177db78a2d2cf8131baa76b9d97001ea41d3fe94d88bba8a0"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -363,11 +363,15 @@
     },
     {
       "path": "tools/horary-loop/README.md",
-      "sha256": "a7f5b52777c76a8341ea0c5a02285becfd51e1e13e166391a6d52b5192b4531f"
+      "sha256": "a23fb334d543b5a432a2ba01ef46eb266b7923c0d49b57529e65ebf508e3e703"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-catalogue.rs",
+      "sha256": "9955b5801d7898b68b4258ff10f45dbcefbb2bd76d73cc684025e427a9be4574"
     },
     {
       "path": "tools/horary-loop/src/bin/horary-experiment.rs",
-      "sha256": "8d13c4f15fa9ced9bb4589e0b4d23b5da864be7673fd4d89e1fd13748fe27e27"
+      "sha256": "9edd242ef1400f4dac0c34c0400423a30c27c4e588e7a84edc6a9f876b6c8aa5"
     },
     {
       "path": "tools/horary-loop/src/bin/horary-optimize.rs",
@@ -378,12 +382,16 @@
       "sha256": "c505989b599698c823ccf0ff0f7b8bc9a6315f2ca8796fdc46a5413d3f73ee1a"
     },
     {
+      "path": "tools/horary-loop/src/catalogue.rs",
+      "sha256": "0812ed9d4e38c9d30010687e3b83d0670ba880208f6fbc67078d4468260383b9"
+    },
+    {
       "path": "tools/horary-loop/src/comparison.rs",
       "sha256": "57215a11a11728b22869a68d3dcd5b86f72529b5cb0e27aac039cbeb850d9351"
     },
     {
       "path": "tools/horary-loop/src/lib.rs",
-      "sha256": "c23271368a2cbb7ccaf4cf374e9b7e76ea43f058fde2a896e7024f63736d849a"
+      "sha256": "ee80639b4d9eb5e51b5cf064f042a7b7e66922da991606de686437afc601246e"
     },
     {
       "path": "tools/horary-loop/src/main.rs",
