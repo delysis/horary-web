@@ -111,7 +111,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "6587e8248810eb1697a8ec1054efb817f7b49b639a5e7ef4de60a6a661a1717a"
+      "sha256": "18f373772008be21ad802ba0660df0bdde53a69c5db068d4607aa8076e5b785b"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -395,7 +395,7 @@
     },
     {
       "path": "tools/horary-loop/src/refs.rs",
-      "sha256": "897fa71b2b282152f7004029ef17ea786577ccce4387fd26733af6300bccb25f"
+      "sha256": "0dbb34e14882e9f0dfd3d5f2256408a500368b57598396f070709fcdac112cb9"
     },
     {
       "path": "tools/horary-loop/src/review_events.rs",

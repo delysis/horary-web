@@ -167,17 +167,44 @@ fn summarize_contract(schema: &Value) -> Value {
         _ => schema.clone(),
     }
 }
+// Reviewers may group a failure across adjacent stages ("condition/reception").
+// Preserve that finding, but select each actual executor stage independently.
+fn finding_stages(finding: &Value) -> impl Iterator<Item = &str> {
+    finding["stage"]
+        .as_str()
+        .into_iter()
+        .flat_map(|stage| stage.split('/').map(str::trim))
+        .filter(|stage| {
+            matches!(
+                *stage,
+                "intake"
+                    | "place"
+                    | "moment"
+                    | "significators"
+                    | "condition"
+                    | "reception"
+                    | "contacts"
+                    | "location"
+                    | "judgment"
+                    | "explanation"
+                    | "conversation"
+            )
+        })
+}
+
 fn prompt_scopes(reviews: &[Value]) -> BTreeSet<(String, Option<String>, Option<String>)> {
     reviews
         .iter()
         .flat_map(|review| review["findings"].as_array().into_iter().flatten())
         .filter(|finding| finding["repair_owner"] == "prompt")
-        .filter_map(|finding| {
-            Some((
-                finding["stage"].as_str()?.into(),
-                finding["recognition_phase"].as_str().map(str::to_owned),
-                finding["method"].as_str().map(str::to_owned),
-            ))
+        .flat_map(|finding| {
+            finding_stages(finding).map(|stage| {
+                (
+                    stage.into(),
+                    finding["recognition_phase"].as_str().map(str::to_owned),
+                    finding["method"].as_str().map(str::to_owned),
+                )
+            })
         })
         .collect()
 }
@@ -223,7 +250,7 @@ fn guide_document(
 /// rather than a truncated digest. Case identities and citation tables stay in
 /// place so the host can inspect them without resolving the dictionary.
 fn intern_reading_view(view: &mut Value) -> Result<()> {
-    const MIN_BYTES: usize = 32;
+    const MIN_BYTES: usize = 16;
     fn has_key(value: &Value, key: &str) -> bool {
         match value {
             Value::Object(fields) => {
@@ -259,7 +286,7 @@ fn intern_reading_view(view: &mut Value) -> Result<()> {
     }
     fn strings(value: &Value, candidates: &mut BTreeSet<String>) {
         match value {
-            Value::String(text) if text.len() >= 128 => {
+            Value::String(text) if text.len() >= 64 => {
                 candidates.insert(text.clone());
             }
             Value::Object(fields) => {
@@ -654,7 +681,7 @@ fn context_view(packet: &Packet, reviews: Option<&[Value]>, share: bool) -> Resu
             .flat_map(|review| review["findings"].as_array().into_iter().flatten())
         {
             if finding["repair_owner"] == "prompt" {
-                if let Some(stage) = finding["stage"].as_str() {
+                for stage in finding_stages(finding) {
                     *counts.entry(stage.into()).or_default() += 1;
                 }
             }
@@ -666,11 +693,11 @@ fn context_view(packet: &Packet, reviews: Option<&[Value]>, share: bool) -> Resu
     });
     let mut selected_guides = Vec::new();
     let mut source_documents = BTreeMap::new();
-    let full_reading_judge = reviews.is_none()
-        && packet
-            .cases
-            .iter()
-            .any(|case| case.summary["full_reading"] == true);
+    let full_reading = packet
+        .cases
+        .iter()
+        .any(|case| case.summary["full_reading"] == true);
+    let full_reading_judge = reviews.is_none() && full_reading;
     let mut guide_documents = BTreeMap::new();
     let mut chunks = Vec::new();
     let mut chunk_ids = BTreeMap::new();
@@ -925,7 +952,7 @@ fn context_view(packet: &Packet, reviews: Option<&[Value]>, share: bool) -> Resu
         "guide_scopes":selected_guides,"guide_documents":guide_documents,"teaching_chunks":chunks,
         "source_documents":source_documents,
         "schema_summaries":schemas,"training_reviews":reviews,"receipt_table":index.table()});
-    if full_reading_judge && share {
+    if full_reading && share {
         intern_reading_view(&mut view)?;
     }
     Ok((view, index))
@@ -1052,6 +1079,25 @@ mod tests {
     }
 
     #[test]
+    fn short_repeated_role_labels_and_raw_prose_share_without_losing_meaning() {
+        let label = "Mercury (Lord 7)";
+        let statement = "Mercury is peregrine; no essential dignity is established for this role.";
+        let original = json!({"inputs":{
+            "i1":{"roles":vec![json!({"label":label,"finding":statement});24]},
+            "i2":{"roles":vec![json!({"label":label,"finding":statement});24]}},
+            "outputs":{"o1":format!("RAW answer: {statement} Do not infer mutual affection."),
+                "o2":format!("Different RAW answer: {statement} Keep the direction of reception.")},
+            "receipt_table":{"r1":{"file":"cases/a/final.json","pointer":"/session/method"}}});
+        let mut compact = original.clone();
+        intern_reading_view(&mut compact).unwrap();
+        assert_eq!(expanded_view(compact.clone()), original);
+        assert_eq!(compact["receipt_table"], original["receipt_table"]);
+        let dictionary = compact["context_interning"]["values"].as_object().unwrap();
+        assert!(dictionary.values().any(|value| value == statement));
+        assert!(compact.to_string().len() < original.to_string().len());
+    }
+
+    #[test]
     fn exact_interning_preserves_nested_values_raw_outputs_and_colliding_marker_keys() {
         let fact = json!({"id":"jupiter-position","longitude":121.25,"house":1,
             "testimony":"Exact location testimony with degree, direction, source and role preserved. ".repeat(4)});
@@ -1109,13 +1155,34 @@ mod tests {
             None,
         )
         .unwrap();
-        let (original, _) = context_view(&packet, None, false).unwrap();
-        let (compact, index) = context(&packet, None).unwrap();
+        let reviews = std::env::var("HORARY_PACKET_SMOKE_REVIEW")
+            .ok()
+            .map(|path| {
+                store::json(&PathBuf::from(path)).unwrap()["reviews"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|review| review["case_id"] == case_id)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            });
+        assert!(reviews.as_ref().is_none_or(|reviews| !reviews.is_empty()));
+        let (original, _) = context_view(&packet, reviews.as_deref(), false).unwrap();
+        let (compact, index) = context(&packet, reviews.as_deref()).unwrap();
         assert_eq!(expanded_view(compact.clone()), original);
         let before = serde_json::to_vec(&original).unwrap();
         let after = serde_json::to_vec(&compact).unwrap();
-        let prompt = crate::judge_prompt(&compact).unwrap();
-        let output_schema = schema(crate::types::judge_schema());
+        let (prompt, output_schema) = if reviews.is_some() {
+            (
+                crate::propose_prompt(&compact, &split).unwrap(),
+                schema(crate::types::propose_schema()),
+            )
+        } else {
+            (
+                crate::judge_prompt(&compact).unwrap(),
+                schema(crate::types::judge_schema()),
+            )
+        };
         let submitted_bytes = prompt.len() + output_schema.to_string().len();
         if let Ok(output) = std::env::var("HORARY_PACKET_SMOKE_OUTPUT") {
             let output = PathBuf::from(output);
@@ -1125,7 +1192,7 @@ mod tests {
         }
         assert!(
             submitted_bytes <= 120_000,
-            "{submitted_bytes} byte judge submission exceeds its budget"
+            "{submitted_bytes} byte review submission exceeds its budget"
         );
         assert_eq!(compact["receipt_table"], original["receipt_table"]);
         index.verify_prompt(&prompt).unwrap();
@@ -1140,9 +1207,34 @@ mod tests {
         for (sha, block) in original["source_documents"].as_object().unwrap() {
             assert_eq!(*sha, horary_prompt_program::digest(block.as_str().unwrap()));
         }
+        if reviews.is_some() {
+            assert!(original["source_documents"].as_object().unwrap().is_empty());
+            assert!(!original["guide_documents"].as_object().unwrap().is_empty());
+            assert!(!original["teaching_chunks"]
+                .to_string()
+                .contains("<book_extracts>"));
+        }
         eprintln!("{} exact context: {} -> {} bytes; total_submission_bytes={}; before_sha256={}; after_sha256={}; receipts={}; sources={}",
             case_id, before.len(), after.len(), submitted_bytes, horary_prompt_program::digest(&before), horary_prompt_program::digest(&after),
             index.citations.len(), original["source_documents"].as_object().unwrap().len());
+    }
+
+    #[test]
+    fn grouped_findings_select_real_stages_without_broadening_method_or_phase() {
+        let reviews = [json!({"findings":[
+            {"repair_owner":"prompt","stage":"condition / reception","recognition_phase":null,"method":"relationship"},
+            {"repair_owner":"prompt","stage":"intake","recognition_phase":"classify_question","method":null},
+            {"repair_owner":"native_code","stage":"significators","recognition_phase":null,"method":null},
+            {"repair_owner":"prompt","stage":"unknown_stage","recognition_phase":null,"method":null}
+        ]})];
+        assert_eq!(
+            prompt_scopes(&reviews),
+            BTreeSet::from([
+                ("condition".into(), None, Some("relationship".into())),
+                ("reception".into(), None, Some("relationship".into())),
+                ("intake".into(), Some("classify_question".into()), None)
+            ])
+        );
     }
     #[test]
     fn writer_can_see_method_appendix_without_reconstructing_quoted_source() {

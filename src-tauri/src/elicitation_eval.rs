@@ -1846,6 +1846,12 @@ fn git(root: &Path, args: &[&str]) -> Result<String, String> {
     String::from_utf8(output.stdout).map_err(|e| e.to_string())
 }
 
+fn source_name(path: &Path) -> Result<String, String> {
+    path.to_str()
+        .map(|name| name.replace('\\', "/"))
+        .ok_or_else(|| "A source fingerprint needs a UTF-8 repository path".into())
+}
+
 fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
     let mut names: BTreeSet<String> = git(
         root,
@@ -1894,21 +1900,14 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
     // excludes it from Git's development-file listing.
     for bank in optional_fixture_banks(&root.join("src-tauri/test-fixtures/elicitation"))? {
         let relative = bank.strip_prefix(root).map_err(|error| error.to_string())?;
-        let name = relative
-            .to_str()
-            .ok_or("A fixture bank needs a UTF-8 repository path")?;
-        names.insert(name.to_owned());
+        names.insert(source_name(relative)?);
     }
     let rubric_directory = root.join("src-tauri/test-fixtures/readings");
     if rubric_directory.exists() {
         for bank in crate::reading_eval::banks(&rubric_directory)? {
-            let name = bank
-                .strip_prefix(root)
-                .map_err(|e| e.to_string())?
-                .to_str()
-                .ok_or("A reading rubric needs a UTF-8 path")?
-                .to_owned();
-            names.insert(name);
+            names.insert(source_name(
+                bank.strip_prefix(root).map_err(|e| e.to_string())?,
+            )?);
         }
     }
     names
@@ -3448,13 +3447,26 @@ fn a_new_optional_bank_name_is_loaded_without_changing_the_required_case_banks()
 }
 
 #[test]
+fn fingerprint_names_use_git_separators_for_both_host_path_styles() {
+    let expected = "src-tauri/test-fixtures/readings/local-rubrics.json";
+    assert_eq!(source_name(Path::new(expected)).unwrap(), expected);
+    assert_eq!(
+        source_name(Path::new(
+            r"src-tauri\test-fixtures\readings\local-rubrics.json"
+        ))
+        .unwrap(),
+        expected
+    );
+}
+
+#[test]
 fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     use sha2::{Digest, Sha256};
     let repository = tempfile::tempdir().unwrap();
     git(repository.path(), &["init", "--quiet"]).unwrap();
     fs::write(
         repository.path().join(".gitignore"),
-        "invariant-adversarial.json\n",
+        "invariant-adversarial.json\nlocal-rubrics.json\n",
     )
     .unwrap();
     let directory = repository
@@ -3463,15 +3475,31 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     fs::create_dir_all(&directory).unwrap();
     let data = include_str!("../test-fixtures/elicitation/invariant-adversarial.json");
     fs::write(directory.join("invariant-adversarial.json"), data).unwrap();
+    let rubric_directory = repository.path().join("src-tauri/test-fixtures/readings");
+    fs::create_dir_all(&rubric_directory).unwrap();
+    let rubric_path = rubric_directory.join("local-rubrics.json");
+    let rubric_data = "[]\n";
+    fs::write(&rubric_path, rubric_data).unwrap();
     let before = source_hashes(repository.path()).unwrap();
     let key = "src-tauri/test-fixtures/elicitation/invariant-adversarial.json";
+    let rubric_key = "src-tauri/test-fixtures/readings/local-rubrics.json";
     assert_eq!(before[key], format!("{:x}", Sha256::digest(data)));
+    assert_eq!(
+        before[rubric_key],
+        format!("{:x}", Sha256::digest(rubric_data))
+    );
+    assert!(before.keys().all(|name| !name.contains('\\')));
     fs::write(
         directory.join("invariant-adversarial.json"),
         format!("{data}\n"),
     )
     .unwrap();
     assert_ne!(before[key], source_hashes(repository.path()).unwrap()[key]);
+    fs::write(&rubric_path, format!("{rubric_data}\n")).unwrap();
+    assert_ne!(
+        before[rubric_key],
+        source_hashes(repository.path()).unwrap()[rubric_key]
+    );
 }
 
 #[cfg(unix)]
