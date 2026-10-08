@@ -207,7 +207,7 @@
     },
     {
       "path": "src-tauri/src/horary_recovery_tests.rs",
-      "sha256": "0ff2fabb5c935dc38b85f8e409b02825182b75f8da2ef566856ff4710f904a59"
+      "sha256": "b15b90e2d652f6da88cfc0dc7af784d9f994c2256b1c8022b165fcd30587ad8c"
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
@@ -215,7 +215,7 @@
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "78379be8403d772e35ab6d8c4209a31aeea612bee405b731d7a047a739c4220f"
+      "sha256": "756b3fc81e2837861873387d4aaefff5bd2a0d94021a65cf372f671fc9e59fe0"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
@@ -259,7 +259,7 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "bdbebe4e0b41b41166b413da09bc3a5e17bbee26908bb06199b2a876aec67520"
+      "sha256": "72d922d6a04c6ba869b765560ed8d47d35cd49aeb595c58be14bce5195c69e0b"
     },
     {
       "path": "src-tauri/src/process_reference.rs",

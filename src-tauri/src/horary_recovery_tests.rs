@@ -7,6 +7,7 @@ struct Script {
     outputs: Mutex<VecDeque<(Stage, String)>>,
     calls: Mutex<Vec<(Stage, Value)>>,
     focused: Mutex<Option<Value>>,
+    split_intake: bool,
     cancel_after: Option<usize>,
     locations: Mutex<VecDeque<Result<Option<LocationCandidate>, String>>>,
     location_calls: std::sync::atomic::AtomicUsize,
@@ -23,9 +24,17 @@ impl Script {
             ),
             calls: Mutex::new(Vec::new()),
             focused: Mutex::new(None),
+            split_intake: true,
             cancel_after: None,
             locations: Mutex::new(VecDeque::new()),
             location_calls: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    fn exact(outputs: Vec<(Stage, Value)>) -> Self {
+        Self {
+            split_intake: false,
+            ..Self::new(outputs)
         }
     }
 }
@@ -49,7 +58,8 @@ impl Runtime for Script {
     ) -> Result<NativeGenerationResult, String> {
         self.calls.lock().unwrap().push((stage, input.clone()));
         let mut outputs = self.outputs.lock().unwrap();
-        let (expected, mut content) = if stage == Stage::Intake
+        let (expected, mut content) = if self.split_intake
+            && stage == Stage::Intake
             && crate::horary_step::original_input(input)["recognition_phase"]
                 == "complete_selected_program"
         {
@@ -80,7 +90,7 @@ impl Runtime for Script {
             outputs.pop_front().expect("Unexpected extra model call")
         };
         assert_eq!(stage, expected);
-        if stage == Stage::Intake {
+        if self.split_intake && stage == Stage::Intake {
             let mut proposal: Value = serde_json::from_str(&content).unwrap();
             if crate::horary_step::original_input(input)["recognition_phase"] == "classify_question"
                 || proposal["intent"] == "new_question"
@@ -313,6 +323,174 @@ fn every_role_rejection_returns_to_the_same_step_until_data_is_delivered() {
             repair["native_validation_error"]
         );
     }
+}
+
+#[test]
+fn a_scope_only_repair_keeps_its_proposed_frame_then_runs_the_new_extractor() {
+    use crate::reading_contracts::{control, Facet, Frame, Intent, Method};
+    let words = "My sister Rhea applied for the railway signal-engineer vacancy. They are still choosing applicants and have not offered her a post. Will she get that job?";
+    let noted_moment = 1789387200000.;
+    let later_receipt = noted_moment + 60_000.;
+    let mut classification = control(Intent::Read);
+    classification.question = Some(words.into());
+    classification.frame = Some(Frame {
+        method: Method::JobOffer,
+        facet: Facet::Event,
+    });
+    let mut premature = control(Intent::Clarify);
+    premature.frame = Some(Frame {
+        method: Method::NewJob,
+        facet: Facet::Event,
+    });
+    premature.people.push(crate::horary_role_options::Person {
+        id: "rhea".into(),
+        label: "Rhea".into(),
+        relationship: "sibling".into(),
+        source_quote: "My sister Rhea".into(),
+    });
+    premature.subject = Some(crate::horary_role_options::Subject {
+        name: "railway signal-engineer vacancy".into(),
+        kind: "job".into(),
+        owner_id: "rhea".into(),
+        source_quote: "railway signal-engineer vacancy".into(),
+    });
+    let mut frame_only = control(Intent::Clarify);
+    frame_only.frame = premature.frame.clone();
+    let mut extraction = premature.clone();
+    extraction.frame = None;
+    let script = Script::exact(vec![
+        (Stage::Intake, serde_json::to_value(classification).unwrap()),
+        (Stage::Intake, serde_json::to_value(&premature).unwrap()),
+        (Stage::Intake, serde_json::to_value(&frame_only).unwrap()),
+        (Stage::Intake, serde_json::to_value(&extraction).unwrap()),
+    ]);
+    let mut session = Session {
+        candidate_moment_ms: Some(noted_moment),
+        candidates: vec![LocationCandidate {
+            id: "device-location".into(),
+            label: "Near Albany".into(),
+            name: "Albany".into(),
+            country: "US".into(),
+            latitude: 42.6526,
+            longitude: -73.7562,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        }],
+        ..Default::default()
+    };
+    session.messages.push(Message {
+        role: "user".into(),
+        text: words.into(),
+    });
+    let previous = session.clone();
+    run_elicitation(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        later_receipt,
+        None,
+        &previous,
+    )
+    .unwrap();
+
+    let calls = script.calls.lock().unwrap();
+    assert_eq!(
+        calls.len(),
+        5,
+        "Four intake calls and one private conversation fixture"
+    );
+    assert!(calls[..4].iter().all(|(stage, _)| *stage == Stage::Intake));
+    let repair = &calls[2].1;
+    assert_eq!(
+        repair["previous_worksheet"],
+        serde_json::to_value(&premature).unwrap()
+    );
+    let error = repair["native_validation_error"].as_str().unwrap();
+    assert!(error.contains("frame-only refinement"));
+    assert!(error.contains("You proposed {\"method\":\"new_job\",\"facet\":\"event\"}"));
+    assert!(error.contains("premature and remain unsaved"));
+    assert!(error.contains("still an unverified hypothesis"));
+    let original = crate::horary_step::original_input(repair);
+    assert_eq!(
+        original["consultation"]["frame"]["observation"]["value"]["method"],
+        "job_offer"
+    );
+    assert_eq!(original["consultation"]["people"], json!({}));
+    assert_eq!(original["consultation"]["subject"]["state"], "missing");
+
+    let newly_selected = &calls[3].1;
+    assert!(newly_selected.get("previous_worksheet").is_none());
+    assert_eq!(
+        newly_selected["recognition_phase"],
+        "complete_selected_program"
+    );
+    assert_eq!(
+        newly_selected["consultation"]["frame"]["observation"]["value"]["method"],
+        "new_job"
+    );
+    assert_eq!(newly_selected["consultation"]["people"], json!({}));
+    assert_eq!(
+        newly_selected["consultation"]["subject"]["state"],
+        "missing"
+    );
+    assert_eq!(newly_selected["canonical_question"], words);
+    let new_guide =
+        crate::horary_contract::guide_for(Stage::Intake, Matter::Other, newly_selected).unwrap();
+    let old_guide =
+        crate::horary_contract::guide_for(Stage::Intake, Matter::Other, original).unwrap();
+    assert_ne!(
+        new_guide, old_guide,
+        "The reroute must dispatch the newly selected teaching"
+    );
+    assert_eq!(
+        session.method.records[3].guide_sha256,
+        crate::horary_lessons::digest(&new_guide)
+    );
+    assert!(session.method.records[1].validation_error.is_some());
+    assert!(session.method.records[2..]
+        .iter()
+        .all(|record| record.validation_error.is_none()));
+    assert_eq!(
+        session.method.records[1].worksheet,
+        serde_json::to_value(&premature).unwrap()
+    );
+    assert_eq!(
+        session.method.records[1].raw,
+        serde_json::to_value(&premature).unwrap().to_string()
+    );
+
+    let case = session.method.consultation.as_ref().unwrap();
+    assert_eq!(case.method(), Some(Method::NewJob));
+    assert_eq!(case.question.resolved().map(String::as_str), Some(words));
+    assert_eq!(case.people["rhea"].relationship, "sibling");
+    assert_eq!(case.subject.resolved().unwrap().owner_id, "rhea");
+    assert_eq!(case.changes.len(), 3);
+    assert!(case.changes[..2]
+        .iter()
+        .all(|change| { change.proposal.people.is_empty() && change.proposal.subject.is_none() }));
+    assert_eq!(
+        serde_json::to_value(&case.changes[2].proposal).unwrap(),
+        serde_json::to_value(&extraction).unwrap()
+    );
+    assert_eq!(session.question, words);
+    assert_eq!(session.candidate_moment_ms, Some(noted_moment));
+    assert_eq!(session.chart.as_ref().unwrap()["timestampMs"], noted_moment);
+    assert_eq!(
+        session.messages.iter().filter(|m| m.role == "user").count(),
+        1
+    );
+    assert!(session
+        .audit
+        .iter()
+        .any(|event| event["event"] == "recognition_program_refined"
+            && event["from"] == "job_offer"
+            && event["to"] == "new_job"));
+    assert!(session
+        .audit
+        .iter()
+        .any(|event| event["event"] == "contract_handoff"
+            && event["binding"]["frame"]["method"] == "new_job"));
+    assert!(script.outputs.lock().unwrap().is_empty());
 }
 
 #[test]

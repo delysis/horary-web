@@ -30,6 +30,8 @@ Location acquisition and permission refresh wait for Core Location's initial aut
 
 Every accepted control request stays attached to its unfinished step. A model proposal becomes data only through the shared native acceptance path. Repeated repairs and user clarification continue until the required data arrives; cancellation/backend interruption pauses that work. Neither an existing chart nor an error message means that an interpretation is finished.
 
+When a focused extractor proposes a different method together with facts, native scope checks reject the facts as premature. The repair names the proposed method and facet explicitly so it can request a frame-only reroute. That proposal remains unverified; its own lesson must check the original question and establish its facts before a reading can proceed. The rejected patch remains in the receipts, and the original question and candidate moment survive.
+
 For a question poorly suited to the selected method, the reader can explain briefly and propose one nearby question. That suggestion does not change the consultation. Recognition reads the reader's last question alongside the person's reply: a clear acceptance of one proposal can correct the concern, while an ambiguous affirmation leaves it unchanged. The original dialogue and correction receipt remain; unrelated facts and the candidate moment survive. Eileen confirmed that this kind of redirect is appropriate for numerical sales questions.
 
 ## Present calculation boundary

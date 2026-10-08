@@ -548,7 +548,10 @@ fn recognition_scope(
     if prior.is_none_or(|prior| prior.method != frame.method)
         && (turn.subject.is_some() || !turn.people.is_empty() || !turn.updates.is_empty())
     {
-        return Err("A different selected method is a frame-only refinement. Return its frame with subject=null, people=[], updates=[]; the controller must run that method's lesson before accepting its facts.".into());
+        return Err(format!(
+            "A different selected method is a frame-only refinement. You proposed {{\"method\":\"{}\",\"facet\":\"{}\"}}. To request that reroute, keep this proposed frame and return subject=null, people=[], updates=[]. The accompanying facts are premature and remain unsaved. The proposed frame is still an unverified hypothesis: its own lesson must verify it against the original question before accepting facts. Do not restore the old tentative method merely to satisfy this scope rule.",
+            frame.method.name(), frame.facet.name()
+        ));
     }
     Ok(prior.is_none_or(|prior| prior != frame))
 }
