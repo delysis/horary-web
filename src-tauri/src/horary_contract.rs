@@ -64,6 +64,7 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
     };
     match stage {
         Stage::Intake => crate::reading_contracts::turn_schema(None),
+        Stage::Conversation => object(json!({"reply":text(1600),"ask":text(180)})),
         Stage::Place => object(
             json!({"mode":choice(&["select","ask"]),"place_id":text(100),"query":text(240),"clarification":text(180),"basis":text(240)}),
         ),
@@ -156,6 +157,21 @@ pub fn prompt(
     // Stable teaching and stable contract precede changing data. No whole chart
     // or conversation history is smuggled into this prefix.
     let fixed = guide_for(stage, matter, input)?;
+    if input.get("original_input").is_some() && input.get("native_validation_error").is_some() {
+        // Present repair as a rejected answer followed by native feedback.
+        // Keeping the bad worksheet beside accepted input in one example-like
+        // JSON object encouraged small models to copy the same mistake.
+        return Ok(json!([
+            {"role":"system","content":fixed},
+            {"role":"user","content":json!({"input":crate::horary_step::original_input(input),"worksheet_contract":schema}).to_string()},
+            {"role":"assistant","content":input["previous_worksheet"].to_string()},
+            {"role":"user","content":json!({
+                "native_validation_error":input["native_validation_error"],
+                "instruction":"Your preceding answer was REJECTED. None of its proposed changes were saved. Produce the complete corrected object using the original input and the output contract. Make the specific correction requested by the native validation error; do not repeat the forbidden entry. Do not change the person's question or ask them to correct your output.",
+                "worksheet_contract":schema
+            }).to_string()}
+        ]).to_string());
+    }
     Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
 }
 

@@ -769,6 +769,23 @@ impl Consultation {
             self.people.insert(person.id.clone(), person.clone());
         }
         if let Some(subject) = &turn.subject {
+            if !subject.owner_id.is_empty()
+                && matches!(
+                    subject.kind.as_str(),
+                    "movable" | "property" | "small_animal" | "large_animal"
+                )
+                && subject.source_quote.split_whitespace().count() == 1
+                && subject
+                    .source_quote
+                    .trim()
+                    .eq_ignore_ascii_case(subject.name.trim())
+                && self
+                    .subject
+                    .resolved()
+                    .is_none_or(|old| old.owner_id != subject.owner_id)
+            {
+                return Err("The object's name alone does not establish its owner. Leave owner_id empty unless ownership is explicitly stated; being the seller is not ownership.".into());
+            }
             if subject.name.trim().is_empty() {
                 return Err("A subject needs a name.".into());
             }
@@ -783,7 +800,7 @@ impl Consultation {
             }
             let old = self.subject.resolved();
             let compatible = old.is_none_or(|old| {
-                old.name == subject.name
+                old.name.trim().eq_ignore_ascii_case(subject.name.trim())
                     && old.kind == subject.kind
                     && (old.owner_id.is_empty() || old.owner_id == subject.owner_id)
             });
@@ -809,10 +826,20 @@ impl Consultation {
         }
         let mut updated = std::collections::BTreeSet::new();
         for update in &turn.updates {
+            if update.field == Field::Baseline
+                && self.method().is_some_and(|m| m != Method::Relationship)
+            {
+                return Err("Remove the baseline entry from updates: baseline applies only to a relationship question. A husband in a sale belongs in people with relationship=partner. Keep other explicitly supplied updates; if none remain, return updates=[].".into());
+            }
             if !updated.insert(update.field) {
                 return Err("A turn must not update the same field twice.".into());
             }
             let proof = evidence(&update.quote)?;
+            if matches!(update.field, Field::ReaderPlace | Field::QuestionTime)
+                && matches!(proof, Evidence::RetainedQuestion { .. })
+            {
+                return Err("A reader_place or question_time override must be stated in the CURRENT words, or answer the pending chart-anchor question. Remove this override: quoting a venue or event time from the retained question cannot change the chart anchor during an unrelated clarification.".into());
+            }
             if update.value.trim().is_empty() || update.value.len() > 700 {
                 return Err("A fact update needs a nonempty bounded value.".into());
             }
@@ -1075,13 +1102,12 @@ impl Consultation {
             plan.limitation = Some(Limitation {
                 code: "unsupported_facet".into(),
                 message: if frame.facet == Facet::Quantity {
-                    "I can keep this exact-count question for review, but I do not yet have a reviewed method for that count. I won't turn it into a different question unless you choose to change it.".into()
+                    "This method has no reviewed exact-count judgment. Preserve the requested quantity; a different question requires the person's choice.".into()
                 } else {
-                    "I do not yet have a reviewed method for the kind of answer you are asking for. Your question is kept for review.".into()
+                    "This method has no reviewed judgment for the requested answer facet.".into()
                 },
                 printed_pages: card.printed_pages.into(),
             });
-            return plan;
         }
         let principal_mode = self.text(Field::PrincipalMode);
         if principal_mode.is_none() {
@@ -1238,10 +1264,13 @@ impl Consultation {
                 "The resolved native chart anchor is invalid.",
             );
         }
-        if matches!(card.coverage, Coverage::ExpertReview) {
+        if plan.limitation.is_none() && matches!(card.coverage, Coverage::ExpertReview) {
             plan.limitation = Some(Limitation { code: "judgment_program_needs_review".into(), message: format!("I have kept the {} question and its context. Its particular judgment method still needs Eileen's review before I can give you an interpretation.", card.title.to_lowercase()), printed_pages: card.printed_pages.into() });
         }
-        if frame.method == Method::Money && self.text(Field::MoneySource) == Some("other") {
+        if plan.limitation.is_none()
+            && frame.method == Method::Money
+            && self.text(Field::MoneySource) == Some("other")
+        {
             plan.limitation=Some(Limitation{code:"money_source_needs_review".into(),message:"This source of money needs a more specific role assignment before I can interpret it. I have kept the question for review.".into(),printed_pages:card.printed_pages.into()});
         }
         let principal = if principal_mode == Some("relay") {
@@ -1252,7 +1281,8 @@ impl Consultation {
         let other_owner = self.subject.resolved().is_some_and(|subject| {
             !subject.owner_id.is_empty() && Some(subject.owner_id.as_str()) != principal
         });
-        if other_owner
+        if plan.limitation.is_none()
+            && other_owner
             && (matches!(frame.method, Method::Property | Method::Rental)
                 || (frame.method == Method::MovableDeal
                     && self.text(Field::DealCapacity) == Some("buy")))
@@ -1711,11 +1741,37 @@ pub fn turn_schema(_case: Option<&Consultation>) -> Value {
 }
 
 pub fn recognition_guide(case: Option<&Consultation>) -> String {
-    let mut text = String::from("You recognise this person's current conversational intent and propose fact updates. You never speak about the person in the third person, invent circumstances, choose coordinates, cast a chart, or improvise a horary method. Rust supplies the next conversational question.\nRead consultation and pending_requirement first. question/frame/subject are null when unchanged; people and updates are empty when unchanged. Never reconstruct the whole brief. Supply exact source quotes from the current words or the retained ORIGINAL question for new people, subject or facts. A fresh question cannot quote a prior matter. A name does not identify a relationship; a seller does not establish an owner. Correct only when the person corrects a fact. Mark ambiguity with mode=propose and ignorance with mode=unavailable; never guess.\nA fresh matter supplies question, frame, subject, and any stated facts. Keep the literal goal and its facet: quantity is not event. Every reply can add multiple facts and interrupt with why, pause, device acquisition, correction, resume, or a fresh question. Explain is not completion. A known chart is not a finished reading.\nThe reader's coordinates and the moment of understanding are the chart anchor (Frawley printed pp. 7–8). Ordinary questions use device place and receipt UTC; reader_place/question_time are only EXPLICIT overrides. A city's name in an event story is event_place; an event start is event_time. 'Here'/'use my device' means intent=use_device, never a guessed city.\nFor direct audio heard is a faithful short meaning summary retaining negation/numbers/place/time and uncertainty; it is not claimed to be a transcript. Empty heard is rejected before completion.\n");
-    text.push_str("When the person cannot answer pending_requirement, unavailable_quote is the exact current phrase such as 'I don't know'. Otherwise it is empty. Do not keep interrogating someone who already said this. Before the core concern is understood, clarification may refine the tentative question; after understanding, preserve it unless explicitly corrected. Actor fields principal_id, seller, deal_party (and sender in a relative-money question) contain a known person's ID or querent, not prose. Leave an unspecified deal_party absent: Rust supplies the generic counterparty. Never invent an identified customer.\n");
+    let method = case.and_then(Consultation::method);
+    let teaches = |methods: &[Method]| method.is_none_or(|method| methods.contains(&method));
+    let mut text = String::from("You recognise this person's current conversational intent and propose fact updates. You never speak about the person in the third person, invent circumstances, choose coordinates, cast a chart, or improvise a horary method. You supply a private fact patch to the reader’s clipboard; a separate conversational model decides how to speak and inquire.\nRead consultation and pending_requirement first. question/frame/subject are null when unchanged; people and updates are empty when unchanged. Never reconstruct the whole brief. Supply exact source quotes from the current words or the retained ORIGINAL question for new people, subject or facts. A fresh question cannot quote a prior matter. A name does not identify a relationship; a seller does not establish an owner. Correct only when the person corrects a fact. Mark ambiguity with mode=propose and ignorance with mode=unavailable; never guess.\nA fresh matter supplies question, frame, subject, and any stated facts. Keep the literal goal and its facet: quantity is not event. Every reply can add multiple facts and interrupt with why, pause, device acquisition, correction, resume, or a fresh question. Explain is not completion. A known chart is not a finished reading.\nThe reader's coordinates and the moment of understanding are the chart anchor (Frawley printed pp. 7–8). Ordinary questions use device place and receipt UTC; reader_place/question_time are only EXPLICIT overrides. A city's name in an event story is event_place; an event start is event_time. 'Here'/'use my device' means intent=use_device, never a guessed city.\nFor direct audio heard is a faithful short meaning summary retaining negation/numbers/place/time and uncertainty; it is not claimed to be a transcript. Empty heard is rejected before completion.\n");
+    text.push_str("When the person cannot answer pending_requirement, unavailable_quote is the exact current phrase such as 'I don't know'. Otherwise it is empty. Do not keep interrogating someone who already said this. Before the core concern is understood, clarification may refine the tentative question; after understanding, preserve it unless explicitly corrected. reader_place and question_time overrides require CURRENT words stating the reader location/question moment or answering its pending anchor inquiry. Never replay the original story's venue or event time as a chart override during a later reply. Actor fields principal_id, seller, deal_party (and sender in a relative-money question) contain a known person's ID or querent, not prose. Leave an unspecified deal_party absent: Rust supplies the generic counterparty. Never invent an identified customer.\n");
     text.push_str("In a repair request, original_input contains the actual consultation and current words. previous_worksheet is REJECTED and has no authority: nothing in it was accepted or saved as a fact. Null means unchanged only when the original consultation already has that fact. Preserve the initial question and identify its subject. For a name alone, such as Bob, relationship MUST be unknown; neither seller nor other_party is their personal relationship to the person asking.\n");
-    text.push_str("Identify the subject as the thing or role asked about, even when no person is named. In 'Will I marry?', the quesited is a prospective partner: name='prospective partner', kind='person', owner_id='', source_quote='marry'. This is a role, not an invented person. Existing people are identified separately. Do not leave a clear subject null on the first turn. 'Will ... within a year?' has facet=event plus horizon; facet=timing means 'WHEN will ...?', and quantity means 'HOW MANY ...?'.\nThe baseline labels are hoped_for (formation), ongoing (an existing relationship's situation), arranged_wedding (a wedding already arranged). Infer only from stated circumstances: an unspecified baseline remains absent and Rust will ask. Other labels: deal_capacity=buy|sell|rent|profit|quality, money_source=customer|partner|job|government|relative|other, work_capacity=boss|colleague|subordinate, animal_kind=small_kind|large_kind (species, not size).\n");
-    if let Some(method) = case.and_then(Consultation::method) {
+    text.push_str("Identify the subject as the thing or role asked about, even when no person is named. Existing people are identified separately. Do not leave a clear subject null on the first turn. 'Will ... within a year?' has facet=event plus horizon; facet=timing means 'WHEN will ...?', and quantity means 'HOW MANY ...?'.\n");
+    if teaches(&[Method::Relationship]) {
+        text.push_str("In 'Will I marry?', the quesited is a prospective partner: name='prospective partner', kind='person', owner_id='', source_quote='marry'. This is a role, not an invented person. The relationship question's baseline labels are hoped_for (formation), ongoing (an existing relationship's situation), arranged_wedding (a wedding already arranged). Infer only from stated circumstances: an unspecified baseline remains absent and the reader will inquire.\n");
+    } else {
+        text.push_str("baseline is not an input of this selected question type. Someone's personal capacity (husband, friend, boss) is recorded in people, not baseline.\n");
+    }
+    if teaches(&[
+        Method::MovableDeal,
+        Method::Property,
+        Method::Rental,
+        Method::BusinessProperty,
+    ]) {
+        text.push_str("Deal labels: deal_capacity=buy|sell|rent|profit|quality. Worked extraction: 'How many fish will Bob sell at the market on Friday?' -> movable_deal/quantity, Bob relationship unknown, Fish kind movable, owner_id EMPTY (seller is not proof of ownership), seller=bob, deal_capacity=sell, event_time=Friday, event_place=the market, unit=fish. A husband mentioned in a sale supplies a person capacity, never a relationship baseline or ongoing business.\n");
+    }
+    if teaches(&[Method::Money]) {
+        text.push_str(
+            "Money labels: money_source=customer|partner|job|government|relative|other.\n",
+        );
+    }
+    if teaches(&[Method::WorkPerson]) {
+        text.push_str("Work labels: work_capacity=boss|colleague|subordinate.\n");
+    }
+    if teaches(&[Method::LostAnimal]) {
+        text.push_str("Animal labels: animal_kind=small_kind|large_kind (species, not size).\n");
+    }
+    if let Some(method) = method {
         let card = contract(method);
         text.push_str(&format!("\nSELECTED PROGRAM: {} ({}) — Frawley printed pp. {}.\nRole distinctions: {}\nJudgment distinctions: {}\nRelevant facts:\n", card.title, method.name(), card.printed_pages, card.roles, card.judgment));
         for r in card.requirements {
@@ -1742,14 +1798,17 @@ pub fn recognition_guide(case: Option<&Consultation>) -> String {
             ));
         }
     }
-    text.push_str("\nExamples (output is a patch):\n'Will I marry within a year?' -> relationship/event; prospective partner/person; principal is self; horizon=within a year; do not assume a baseline. Never invent an existing partner.\n'Bob is my husband. These are his books.' -> people bob/partner with exact 'Bob is my husband' quote; subject Books/movable/bob with exact 'These are his books' quote; question/frame null. The seller need not own the books.\n'The fair is in Bozeman tomorrow at three' -> event_place/event_time only; question/frame/subject null; never chart overrides.\n'Why that moment?' -> explain/moment; no invented factual updates. 'Continue' -> resume; don't answer a pending factual question for the person.\n'I do not know who owns it' -> owner remains unresolved; never write querent. 'Actually it is my sister's watch' -> correct; update person and subject ownership; preserve original chart.\n'My friend asked me to ask her own question' -> principal_mode=relay; identify principal_id. 'Will my friend get a job?' -> principal_mode=concerning_other and friend capacity. New external job remains radical tenth except the tenth-house-person exception.\n");
-    for (words, output) in recognition_examples() {
+    text.push_str("\nExamples (output is a patch):\n'The fair is in Bozeman tomorrow at three' -> event_place/event_time only; question/frame/subject null; never chart overrides.\n'Why that moment?' -> explain/moment; no invented factual updates. 'Continue' -> resume; don't answer a pending factual question for the person.\n'I do not know who owns it' -> owner remains unresolved; never write querent. 'Actually it is my sister's watch' -> correct; update person and subject ownership; preserve original chart.\n'My friend asked me to ask her own question' -> principal_mode=relay; identify principal_id.\n");
+    for (example_method, words, output) in recognition_examples() {
+        if method.is_some() && example_method.is_some() && method != example_method {
+            continue;
+        }
         text.push_str(&format!("\nINPUT: {words}\nOUTPUT: {}\n", output));
     }
     text
 }
 
-fn recognition_examples() -> Vec<(&'static str, Value)> {
+fn recognition_examples() -> Vec<(Option<Method>, &'static str, Value)> {
     let mut marriage = control(Intent::Read);
     marriage.question = Some("I'm single. Will I get married in the next year?".into());
     marriage.frame = Some(Frame {
@@ -1825,20 +1884,42 @@ fn recognition_examples() -> Vec<(&'static str, Value)> {
             mode: UpdateMode::Supply,
         },
     ];
+    let mut husband = control(Intent::Clarify);
+    husband.people = vec![Person {
+        id: "bob".into(),
+        label: "Bob".into(),
+        relationship: "partner".into(),
+        source_quote: "Bob is my husband".into(),
+    }];
+    husband.subject = Some(Subject {
+        name: "fish".into(),
+        kind: "movable".into(),
+        owner_id: "bob".into(),
+        source_quote: "They are his fish".into(),
+    });
     vec![
         (
+            Some(Method::Relationship),
             "I'm single. Will I get married in the next year?",
             serde_json::to_value(marriage).expect("example"),
         ),
         (
+            Some(Method::MovableDeal),
             "Will Bob sell his books at the fair?",
             serde_json::to_value(sale).expect("example"),
         ),
         (
+            Some(Method::MovableDeal),
+            "Bob is my husband. They are his fish. (reply within the retained fish sale)",
+            serde_json::to_value(husband).expect("example"),
+        ),
+        (
+            None,
             "The fair is in Bozeman, Montana tomorrow at three",
             serde_json::to_value(event).expect("example"),
         ),
         (
+            None,
             "I don't know (reply to a pending ownership question)",
             serde_json::to_value(unknown).expect("example"),
         ),

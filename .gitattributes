@@ -10,4 +10,5 @@
 *.mjs text eol=lf
 *.lock text eol=lf
 *.toml text eol=lf
+*.plist text eol=lf
 .gitattributes text eol=lf

@@ -228,6 +228,27 @@ fn normalize_timeout_ms(timeout_ms: Option<u64>) -> u64 {
         .clamp(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
 }
 
+/// Narrow native consent boundary; all scheduling and policy remain safe Rust.
+#[cfg(target_os = "macos")]
+pub(crate) fn permission_status(microphone: bool, request: bool) -> i32 {
+    extern "C" {
+        fn horary_microphone_permission(request: i32) -> i32;
+        fn horary_request_location_permission() -> i32;
+        fn horary_location_permission_status() -> i32;
+    }
+    // SAFETY: these no-pointer functions return native enum values and are
+    // invoked only from background workers, never the Cocoa main queue.
+    unsafe {
+        if microphone {
+            horary_microphone_permission(i32::from(request))
+        } else if request {
+            horary_request_location_permission()
+        } else {
+            horary_location_permission_status()
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn request_current_location(timeout_ms: u64) -> Result<CurrentLocation, CurrentLocationError> {
     use std::ffi::CStr;

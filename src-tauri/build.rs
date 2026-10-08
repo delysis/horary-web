@@ -27,12 +27,15 @@ fn main() {
         // executables. Resolve Apple's Swift runtime from the OS, not Xcode.
         println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
         println!("cargo:rerun-if-changed=native/location_bridge.m");
+        println!("cargo:rerun-if-changed=native/permissions_bridge.m");
         cc::Build::new()
             .file("native/location_bridge.m")
+            .file("native/permissions_bridge.m")
             .flag("-fobjc-arc")
             .compile("horary_location_bridge");
         println!("cargo:rustc-link-lib=framework=CoreLocation");
         println!("cargo:rustc-link-lib=framework=Foundation");
+        println!("cargo:rustc-link-lib=framework=AVFoundation");
     }
 
     tauri_build::build()

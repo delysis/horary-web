@@ -390,7 +390,7 @@ pub async fn voice_listen(
     generation: u64,
     enabled: bool,
     follow_up: bool,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<VoiceState>();
         let focused = app.get_webview_window("main").is_some_and(|window| {
@@ -411,6 +411,7 @@ pub async fn voice_listen(
         state
             .wake
             .configure(app.clone(), generation, enabled && focused, follow_up)
+            .map(|()| enabled && focused)
     })
     .await
     .map_err(|e| e.to_string())?

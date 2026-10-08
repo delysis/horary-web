@@ -1,7 +1,7 @@
 //! One acceptance, retry, wait and checkpoint path for single and batch steps.
 #![forbid(unsafe_code)]
 use crate::{
-    conversation::{Message, Session},
+    conversation::Session,
     horary_contract::decode_json,
     horary_lessons::{self as lessons, Matter, Stage},
     horary_pipeline::{Record, Runtime},
@@ -146,7 +146,18 @@ fn receive(
                         need.reason = request.reason.clone();
                     }
                 }
-                let question = case.question_for(&key);
+                let question = if matches!(
+                    key,
+                    crate::reading_contracts::RequirementKey::ChartPlace
+                        | crate::reading_contracts::RequirementKey::ChartMoment
+                        | crate::reading_contracts::RequirementKey::Field(
+                            crate::reading_contracts::Field::TimeOccurrence
+                        )
+                ) {
+                    request.question.clone()
+                } else {
+                    case.question_for(&key)
+                };
                 session.method.result =
                     Some(crate::reading_contracts::ReadingResult::NeedsInformation {
                         need: crate::reading_contracts::InformationNeed {
@@ -179,7 +190,12 @@ pub(crate) fn execute(
 ) -> Result<Option<CheckedData>, String> {
     let supplied = work_input(session, stage, input);
     let original = step::original_input(&supplied).clone();
-    if audio.is_none() && !matches!(stage, Stage::Intake | Stage::Explanation) {
+    if audio.is_none()
+        && !matches!(
+            stage,
+            Stage::Intake | Stage::Explanation | Stage::Conversation
+        )
+    {
         if let Some((data, index)) = cached_data(session, stage, &original, facts)? {
             let key = work_key(session, stage, &original, facts)?;
             session
@@ -192,7 +208,10 @@ pub(crate) fn execute(
         }
     }
     let mut key = work_key(session, stage, &original, facts)?;
-    if matches!(stage, Stage::Intake | Stage::Explanation) {
+    if matches!(
+        stage,
+        Stage::Intake | Stage::Explanation | Stage::Conversation
+    ) {
         key.push_str(&format!("-{}", session.method.records.len()));
     }
     session.status = stage.activity().into();
@@ -393,48 +412,14 @@ pub(crate) fn execute_batch(
 }
 
 pub(crate) fn ask_pending(session: &mut Session) {
-    if let Some(case) = session.method.consultation.as_ref() {
-        if let Some(key) = &case.requested {
-            let native_anchor_question = session.method.flow.pending.iter().find(|pending| {
-                matches!(key, crate::reading_contracts::RequirementKey::ChartPlace)
-                    && pending.request.field == "chart_place"
-                    || matches!(key, crate::reading_contracts::RequirementKey::ChartMoment)
-                        && pending.request.field == "chart_moment"
-            });
-            let question = native_anchor_question.map_or_else(
-                || case.question_for(key),
-                |pending| pending.request.question.clone(),
-            );
-            if !session
-                .messages
-                .last()
-                .is_some_and(|m| m.role == "assistant" && m.text == question)
-            {
-                session.messages.push(Message {
-                    role: "assistant".into(),
-                    text: question,
-                });
+    // Workers request data from the clipboard. Only the reader's conversation
+    // stage turns a reminder into words for the person.
+    if let Some(case) = session.method.consultation.as_mut() {
+        if case.requested.is_none() {
+            if let Some(pending) = session.method.flow.pending.first() {
+                case.requested =
+                    crate::reading_contracts::need_key(&pending.request.field, case).ok();
             }
-            return;
         }
-    }
-    let question = session
-        .method
-        .flow
-        .pending
-        .iter()
-        .map(|pending| pending.request.question.as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
-    if !question.is_empty()
-        && !session
-            .messages
-            .last()
-            .is_some_and(|message| message.role == "assistant" && message.text == question)
-    {
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: question,
-        });
     }
 }

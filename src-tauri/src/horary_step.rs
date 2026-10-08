@@ -348,6 +348,9 @@ pub fn response_schema(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
 }
 
 pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &[Fact]) -> Value {
+    if stage == Stage::Conversation {
+        return crate::horary_conversation::schema(original_input(input));
+    }
     if stage == Stage::Intake {
         let case = serde_json::from_value::<crate::reading_contracts::Consultation>(
             original_input(input)["consultation"].clone(),
@@ -440,6 +443,20 @@ pub fn check(
     input: &Value,
     facts: &[Fact],
 ) -> Result<Checked, String> {
+    if stage == Stage::Conversation {
+        let input = original_input(input);
+        horary_contract::validate_shape(value, &crate::horary_conversation::schema(input))?;
+        if value["reply"].as_str().is_none_or(|s| s.trim().is_empty()) {
+            return Err("The reader must give a nonempty conversational reply.".into());
+        }
+        return Ok(Checked::Data(CheckedData {
+            stage,
+            input_sha256: crate::horary_lessons::digest(&input.to_string()),
+            worksheet: value.clone(),
+            roles: Vec::new(),
+            turn: None,
+        }));
+    }
     if stage == Stage::Intake {
         let input = original_input(input);
         horary_contract::validate_shape(value, &response_schema_for(stage, matter, input, facts))?;

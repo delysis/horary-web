@@ -1,7 +1,9 @@
 //! Explicit horary tasks. Native calculations own facts; worksheets own proposals.
 #![forbid(unsafe_code)]
+#[cfg(test)]
+use crate::conversation::Message;
 use crate::{
-    conversation::{Message, Section, Session},
+    conversation::{Section, Session},
     geocode::{geocode_with_cache, GeocodeRequest, GeocodeState, LocationCandidate},
     horary_executor::{ask_pending, execute, execute_batch, task},
     horary_lessons::{self as lessons, Matter, Stage},
@@ -149,7 +151,10 @@ fn intake_input(session: &Session, spoken: bool) -> Value {
         .rev()
         .find(|job| {
             job.revision == session.revision
-                && !matches!(job.stage, Stage::Intake | Stage::Explanation)
+                && !matches!(
+                    job.stage,
+                    Stage::Intake | Stage::Explanation | Stage::Conversation
+                )
                 && !matches!(job.phase(), step::Phase::Complete { .. })
         })
         .map(|job| json!({"stage":job.stage,"phase":job.phase()}));
@@ -222,7 +227,6 @@ fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result
         });
     if native_context.is_null() && passage.is_none() {
         session.audit.push(json!({"event":"explanation_prerequisite","target":target,"result":"not_yet_available"}));
-        session.messages.push(Message { role:"assistant".into(), text:format!("The chart is cast, but I haven't completed {} yet. Say ‘continue’ to pick up the unfinished reading.",target.title().to_lowercase()) });
         ask_pending(session);
         return Ok(());
     }
@@ -253,13 +257,8 @@ fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result
         "chart_context":native_context,"reading_complete":session.sections.iter().any(|section|section.method_stage == Some(Stage::Judgment)),
         "prior_worksheet":record.map(|record|&record.worksheet).or_else(||passage.map(|section|&section.worksheet)),
         "prior_assignment":passage.map(|section|&section.roles),"pending_user_requests":session.method.flow.pending,"facts":facts});
-    if let Some(data) = task(session, runtime, Stage::Explanation, input, &facts)? {
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: data.worksheet()["summary"].as_str().unwrap_or("").into(),
-        });
-        ask_pending(session);
-    }
+    let _ = task(session, runtime, Stage::Explanation, input, &facts)?;
+    ask_pending(session);
     Ok(())
 }
 
@@ -486,24 +485,11 @@ fn contract_question(session: &mut Session, need: &crate::reading_contracts::Nee
             question: Some(need.question.clone()),
         },
     });
-    let text = if need.state == "unavailable" {
-        "That detail is still unknown, so I can't settle this part of the reading. I've kept the question and what you do know; we can return to it when the detail becomes available.".into()
-    } else {
-        need.question.clone()
-    };
-    session.messages.push(Message {
-        role: "assistant".into(),
-        text,
-    });
 }
 
 fn contract_limitation(session: &mut Session, limitation: &crate::reading_contracts::Limitation) {
     session.method.result = Some(crate::reading_contracts::ReadingResult::Limited {
         limitation: limitation.into(),
-    });
-    session.messages.push(Message {
-        role: "assistant".into(),
-        text: limitation.message.clone(),
     });
 }
 
@@ -548,7 +534,12 @@ pub fn run(
     audio: Option<&[u8]>,
     previous: &Session,
 ) -> Result<(), String> {
-    let result = run_inner(session, runtime, geocode, instant, audio, previous);
+    let result = run_inner(session, runtime, geocode, instant, audio, previous).and_then(|()| {
+        if session.method.brief.intent != "pause" {
+            crate::horary_conversation::respond(session, runtime)?;
+        }
+        Ok(())
+    });
     if let Err(error) = &result {
         session.method.flow.pause(error.clone());
         runtime.publish(session)?;
@@ -585,6 +576,7 @@ fn run_inner(
             .as_ref()
             .is_some_and(|c| c.method().is_some());
     let acquire_device = session.place.is_none()
+        && session.device_context.is_none()
         && !session.candidates.iter().any(|p| p.provider == "device")
         && !session.method.device_attempted;
     let input = intake_input(session, audio.is_some());
@@ -736,15 +728,6 @@ fn run_inner(
         return Ok(());
     }
     if turn.intent == Intent::Explain {
-        let text=match turn.focus.as_str(){
-            "moment"=>"I keep the moment when your question becomes clear. The fair's starting time is part of its circumstances; it doesn't set the question's chart. An explicitly earlier question can use its earlier moment. This follows Frawley, printed pp. 7–8.",
-            "place"=>"I cast from the reader's place. Here I can ask this device for its location; the event's venue is kept separately. You can give a different place if this is an earlier consultation. This follows Frawley, printed pp. 7–8.",
-            _=>"I haven't completed that part of the reading yet. Your question and its context are still here; we can continue with the missing detail.",
-        };
-        session.messages.push(Message {
-            role: "assistant".into(),
-            text: text.into(),
-        });
         return Ok(());
     }
     if turn.intent == Intent::Pause {
@@ -897,6 +880,9 @@ fn run_inner(
         return Ok(());
     }
     let place = place.ok_or("A chart needs its reader's place")?;
+    if session.chart.is_none() {
+        session.place = Some(place.clone());
+    }
     session
         .method
         .flow
@@ -918,7 +904,15 @@ fn run_inner(
             session
                 .audit
                 .push(json!({"event":"moment_validation","error":error}));
-            session.messages.push(Message{role:"assistant".into(),text:if error.contains("occurs twice"){"That clock time happened twice as the clocks changed. Do you mean the earlier occurrence or the later one?"}else if error.contains("does not exist"){"The clocks skipped that time. What time before or after the change should I use?"}else{"What date and local time should this earlier question use?"}.into()});
+            contract_question(
+                session,
+                &contracts::Need {
+                    key: RequirementKey::ChartMoment,
+                    state: "invalid_civil_time".into(),
+                    question: "Which earlier date and local time should this question use?".into(),
+                    reason: error,
+                },
+            );
             return Ok(());
         }
     };
@@ -1464,6 +1458,119 @@ mod real_reading {
         }
     }
     #[test]
+    #[ignore = "Real Gemma elicitation and conversation; synthetic fish-sale case; immutable evidence directory required"]
+    fn real_guru_keeps_the_count_question_and_converses_with_device_defaults() {
+        let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");
+        let dir = std::path::PathBuf::from(
+            std::env::var_os("HORARY_READING_EVIDENCE").expect("new evidence directory"),
+        );
+        std::fs::create_dir(&dir).expect("Preserve every earlier probe");
+        let reader = Reader {
+            state: NativeLlamaState::default(),
+            dir,
+            records: Mutex::new(Vec::new()),
+            stop_before_batch: true,
+            deadline: Some(std::time::Instant::now() + std::time::Duration::from_secs(240)),
+        };
+        start_native_llama_from_path(
+            &reader.state,
+            "guru-probe".into(),
+            String::new(),
+            path.into(),
+            std::path::PathBuf::new(),
+            serde_json::from_value(json!({"modelId":"guru-probe",
+                "ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut session = Session::default();
+        session.candidates.push(LocationCandidate {
+            id: "device-location".into(),
+            label: "Near Woodbridge".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        });
+        let question = "How many fish will Bob sell at the market in Bozeman, Montana, on Friday?";
+        for (index, words) in [
+            question,
+            "Bob is my husband. They are his fish.",
+            "Do you need both locations, mine and the market's?",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let previous = session.clone();
+            session.messages.push(Message {
+                role: "user".into(),
+                text: words.into(),
+            });
+            let result = run(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387200000. + index as f64 * 60000.,
+                None,
+                &previous,
+            );
+            std::fs::write(reader.dir.join(format!("turn-{index}.json")),serde_json::to_vec_pretty(&json!({
+                "authorship":"Actual Gemma outputs over authored synthetic inputs", "result":result,"session":session
+            })).unwrap()).unwrap();
+            result.unwrap();
+            let case = session.method.consultation.as_ref().unwrap();
+            assert_eq!(
+                case.frame.resolved().unwrap().facet,
+                crate::reading_contracts::Facet::Quantity
+            );
+            assert_eq!(
+                case.method(),
+                Some(crate::reading_contracts::Method::MovableDeal)
+            );
+            assert_eq!(session.question, question);
+            assert!(case
+                .text(crate::reading_contracts::Field::EventPlace)
+                .unwrap()
+                .contains("Bozeman"));
+            assert!(case
+                .text(crate::reading_contracts::Field::ReaderPlace)
+                .is_none());
+            assert!(
+                session.sections.is_empty(),
+                "Unsupported counts must not enter a substitute event judgment"
+            );
+            let response = session.messages.last().unwrap();
+            assert_eq!(response.role, "assistant");
+            let record = session.method.records.last().unwrap();
+            assert_eq!(record.stage, Stage::Conversation);
+            assert_eq!(response.text, record.worksheet["reply"].as_str().unwrap());
+            let lower = response.text.to_lowercase();
+            assert!(
+                !lower.contains("catalogue")
+                    && !lower.contains("eileen")
+                    && !lower.contains("for review")
+            );
+            assert!(!lower.contains("which city") && !lower.contains("where are you asking"));
+            assert!(case
+                .text(crate::reading_contracts::Field::Baseline)
+                .is_none());
+            if index == 0 {
+                assert!(
+                    case.subject.resolved().unwrap().owner_id.is_empty(),
+                    "Selling does not establish ownership"
+                );
+            }
+            if index >= 1 {
+                assert_eq!(case.people["bob"].relationship, "partner");
+            }
+            eprintln!("GURU turn={index}: {}", response.text);
+        }
+        stop_native_llama(&reader.state).unwrap();
+    }
+
+    #[test]
     #[ignore = "Actual full Gemma reading over synthetic question/device data; preserves failures in HORARY_READING_EVIDENCE"]
     fn real_reader_reaches_an_interpreted_answer_with_device_defaults() {
         let path = std::env::var_os("HORARY_NATIVE_LLAMA_TEST_MODEL").expect("model");
@@ -1729,6 +1836,10 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
         ) -> Result<NativeGenerationResult, String> {
             self.requests.lock().unwrap().push(json!({"stage":stage,"messages":serde_json::from_str::<Value>(&prompt(stage,matter,input,contract)?).map_err(|e|e.to_string())?,"responseSchema":contract}));
             let answer = match stage {
+                Stage::Conversation => {
+                    json!({"reply":"Authored conversational fixture, not a model response.",
+                    "ask":input["reminders"].as_array().and_then(|r|r.first()).map_or("",|n|n["id"].as_str().unwrap_or(""))})
+                }
                 Stage::Intake => {
                     if input["latest_words"] == "Woodbridge, Virginia, United States." {
                         json!({"intent":"clarify","question":null,"frame":null,"people":[],"subject":null,"updates":[{"field":"reader_place","value":"Woodbridge, Virginia, United States.","quote":"Woodbridge, Virginia, United States.","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})

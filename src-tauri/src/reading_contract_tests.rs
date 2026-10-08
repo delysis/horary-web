@@ -431,3 +431,128 @@ fn a_reader_place_declaration_is_distinct_from_a_venue_and_a_question() {
     assert!(reader_place_statement("The fair is in Bozeman, Montana.").is_none());
     assert!(reader_place_statement("I'm asking from London; does that change things?").is_none());
 }
+
+#[test]
+fn a_seller_and_a_spouse_are_not_evidence_for_ownership_or_a_relationship_baseline() {
+    let words = "How many fish will Bob sell at the market on Friday?";
+    let mut patch = control(Intent::Read);
+    patch.question = Some(words.into());
+    patch.frame = Some(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Quantity,
+    });
+    patch.people = vec![Person {
+        id: "bob".into(),
+        label: "Bob".into(),
+        relationship: "unknown".into(),
+        source_quote: "Bob".into(),
+    }];
+    patch.subject = Some(Subject {
+        name: "Fish".into(),
+        kind: "movable".into(),
+        owner_id: "bob".into(),
+        source_quote: "fish".into(),
+    });
+    let mut case = Consultation::default();
+    assert!(case
+        .apply(&patch, 1, words, false)
+        .unwrap_err()
+        .contains("name alone"));
+    assert!(
+        case.question.resolved().is_none(),
+        "Rejected extraction is atomic"
+    );
+    patch.subject.as_mut().unwrap().owner_id.clear();
+    case.apply(&patch, 1, words, false).unwrap();
+    let mut reply = control(Intent::Clarify);
+    reply.updates.push(Update {
+        field: Field::Baseline,
+        value: "ongoing".into(),
+        quote: "Bob is my husband".into(),
+        mode: UpdateMode::Supply,
+    });
+    assert!(case
+        .apply(&reply, 2, "Bob is my husband. They are his fish.", false)
+        .unwrap_err()
+        .contains("baseline"));
+    assert!(case.text(Field::Baseline).is_none());
+}
+
+#[test]
+fn an_object_labels_capitalization_does_not_make_an_owner_clarification_a_correction() {
+    let mut case = case(Method::MovableDeal, "");
+    if let Slot::Resolved { observation } = &mut case.subject {
+        observation.value.name = "fish".into();
+    }
+    let mut patch = control(Intent::Clarify);
+    patch.subject = Some(Subject {
+        name: "Fish".into(),
+        kind: "movable".into(),
+        owner_id: "friend".into(),
+        source_quote: "my friend's fish".into(),
+    });
+    case.apply(&patch, 2, "They are my friend's fish.", false)
+        .unwrap();
+    assert_eq!(case.subject.resolved().unwrap().owner_id, "friend");
+    patch.subject.as_mut().unwrap().owner_id = "daughter".into();
+    patch.subject.as_mut().unwrap().source_quote = "my daughter's fish".into();
+    assert!(
+        case.apply(&patch, 3, "They are my daughter's fish.", false)
+            .is_err(),
+        "Known ownership still requires explicit correction"
+    );
+}
+
+#[test]
+fn recognition_teaching_keeps_other_question_types_out_of_a_selected_sale() {
+    let sale = recognition_guide(Some(&case(Method::MovableDeal, "")));
+    assert!(sale.contains("(movable_deal)"));
+    assert!(sale.contains("Bob is my husband. They are his fish."));
+    assert!(sale.contains("\"updates\":[]"));
+    assert!(!sale.contains("hoped_for"));
+    assert!(!sale.contains("I'm single. Will I get married"));
+    assert!(!sale.contains("money_source=customer"));
+    let relationship = recognition_guide(Some(&case(Method::Relationship, "")));
+    assert!(relationship.contains("hoped_for"));
+    assert!(relationship.contains("I'm single. Will I get married"));
+    assert!(!relationship.contains("Will Bob sell his books at the fair?"));
+    // Reclassification remains expressible in the shared patch vocabulary.
+    let schema = turn_schema(Some(&case(Method::MovableDeal, "")));
+    assert!(schema.to_string().contains("baseline"));
+}
+
+#[test]
+fn retained_event_words_cannot_become_new_chart_overrides_on_an_unrelated_reply() {
+    let mut case = case(Method::MovableDeal, "querent");
+    case.question = resolved("Will my books sell at the fair in Bozeman tomorrow at three?".into());
+    let before = serde_json::to_value(&case).unwrap();
+    for (field, value) in [
+        (Field::ReaderPlace, "Bozeman"),
+        (Field::QuestionTime, "tomorrow at three"),
+    ] {
+        let mut patch = control(Intent::Clarify);
+        patch.updates = vec![Update {
+            field,
+            value: value.into(),
+            quote: value.into(),
+            mode: UpdateMode::Supply,
+        }];
+        assert!(case
+            .apply(&patch, 2, "They are my books.", false)
+            .unwrap_err()
+            .contains("Remove this override"));
+        assert_eq!(serde_json::to_value(&case).unwrap(), before);
+    }
+    // A real answer to the reader's place question still works, including a
+    // city mentioned earlier as an event venue. Its CURRENT source matters.
+    case.requested = Some(RequirementKey::ChartPlace);
+    let mut patch = control(Intent::Clarify);
+    patch.updates = vec![Update {
+        field: Field::ReaderPlace,
+        value: "Bozeman".into(),
+        quote: "Bozeman".into(),
+        mode: UpdateMode::Supply,
+    }];
+    case.apply(&patch, 3, "Bozeman", false).unwrap();
+    assert_eq!(case.text(Field::ReaderPlace), Some("Bozeman"));
+}

@@ -46,12 +46,20 @@ impl Runtime for Script {
         _audio: Option<&[u8]>,
     ) -> Result<NativeGenerationResult, String> {
         self.calls.lock().unwrap().push((stage, input.clone()));
-        let (expected, content) = self
-            .outputs
-            .lock()
-            .unwrap()
-            .pop_front()
-            .expect("Unexpected extra model call");
+        let mut outputs = self.outputs.lock().unwrap();
+        let (expected, content) = if stage == Stage::Conversation
+            && outputs
+                .front()
+                .is_none_or(|(s, _)| *s != Stage::Conversation)
+        {
+            let reminder = input["reminders"].as_array().and_then(|r| r.first());
+            (Stage::Conversation, json!({"reply":reminder.map_or("Authored conversational fixture.", |n|
+                if n["state"]=="unavailable" {"Authored fixture: detail is still unknown."}
+                else { n["example_question"].as_str().unwrap_or("Authored conversational fixture.") }),
+                "ask":reminder.map_or("",|n|n["id"].as_str().unwrap_or(""))}).to_string())
+        } else {
+            outputs.pop_front().expect("Unexpected extra model call")
+        };
         assert_eq!(stage, expected);
         Ok(NativeGenerationResult {
             content,
@@ -85,10 +93,15 @@ impl Runtime for Script {
         crate::reading_store::write(&self.dir.path().join("reading.json"), session, false)
     }
     fn check(&self) -> Result<(), String> {
-        if self
-            .cancel_after
-            .is_some_and(|limit| self.calls.lock().unwrap().len() >= limit)
-        {
+        if self.cancel_after.is_some_and(|limit| {
+            self.calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(s, _)| *s != Stage::Conversation)
+                .count()
+                >= limit
+        }) {
             Err("Cancelled during repair".into())
         } else {
             Ok(())
@@ -243,6 +256,31 @@ fn every_role_rejection_returns_to_the_same_step_until_data_is_delivered() {
     for (_, repair) in script.calls.lock().unwrap().iter().skip(1) {
         assert_eq!(repair["original_input"], input);
         assert!(repair["original_input"].get("original_input").is_none());
+        let messages: Value = serde_json::from_str(
+            &crate::horary_contract::prompt(
+                Stage::Significators,
+                Matter::Other,
+                repair,
+                &step::response_schema_for(Stage::Significators, Matter::Other, repair, &facts),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let accepted: Value =
+            serde_json::from_str(messages[1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(accepted["input"], input);
+        assert!(accepted["input"].get("previous_worksheet").is_none());
+        assert_eq!(messages[2]["role"], "assistant");
+        let rejected: Value =
+            serde_json::from_str(messages[2]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(rejected, repair["previous_worksheet"]);
+        assert_eq!(messages[3]["role"], "user");
+        let feedback: Value =
+            serde_json::from_str(messages[3]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            feedback["native_validation_error"],
+            repair["native_validation_error"]
+        );
     }
 }
 
@@ -264,9 +302,19 @@ fn asking_the_user_does_not_complete_roles_or_dispatch_testimony() {
         &previous,
     )
     .unwrap();
-    assert!(script.calls.lock().unwrap().is_empty());
+    assert!(script
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|(s, _)| *s == Stage::Conversation));
     assert!(session.sections.is_empty());
-    assert!(session.method.flow.jobs.is_empty());
+    assert!(session
+        .method
+        .flow
+        .jobs
+        .iter()
+        .all(|j| j.stage == Stage::Conversation));
     assert_eq!(
         session.method.consultation.as_ref().unwrap().requested,
         Some(crate::reading_contracts::RequirementKey::PersonRelationship("bob".into()))
@@ -340,13 +388,26 @@ fn missing_internal_explanation_data_is_not_sent_to_a_model_or_requested_from_a_
         &previous,
     )
     .unwrap();
-    assert_eq!(script.calls.lock().unwrap().len(), 1);
+    assert_eq!(
+        script
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(s, _)| *s != Stage::Conversation)
+            .count(),
+        1
+    );
     assert!(session
-        .messages
-        .last()
+        .audit
+        .iter()
+        .any(|r| r["event"] == "explanation_prerequisite"));
+    assert!(script
+        .calls
+        .lock()
         .unwrap()
-        .text
-        .contains("haven't completed"));
+        .iter()
+        .any(|(s, _)| *s == Stage::Conversation));
     assert!(!session
         .messages
         .last()
@@ -469,7 +530,12 @@ fn a_reply_resumes_the_waiting_stage_and_an_explicit_resume_reuses_completed_dat
         &previous,
     )
     .unwrap();
-    assert!(empty.calls.lock().unwrap().is_empty());
+    assert!(empty
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|(s, _)| *s == Stage::Conversation));
     assert_eq!(session.sections.len(), 5);
 }
 
@@ -566,7 +632,16 @@ fn explicit_reader_place_survives_an_empty_neural_patch_in_text_and_audio() {
             .audit
             .iter()
             .any(|receipt| receipt["rule"] == "explicit_reader_place_statement"));
-        assert_eq!(script.calls.lock().unwrap().len(), 1);
+        assert_eq!(
+            script
+                .calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(s, _)| *s != Stage::Conversation)
+                .count(),
+            1
+        );
     }
 }
 
@@ -623,7 +698,16 @@ fn an_explicit_count_cannot_be_accepted_as_a_yes_or_no_sale() {
         session.method.result,
         Some(crate::reading_contracts::ReadingResult::Limited { .. })
     ));
-    assert_eq!(script.calls.lock().unwrap().len(), 2);
+    assert_eq!(
+        script
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(s, _)| *s != Stage::Conversation)
+            .count(),
+        2
+    );
 }
 
 #[test]
@@ -780,7 +864,12 @@ fn exact_book_count_stops_at_a_named_method_limit_without_substituting_a_predict
         &previous,
     )
     .unwrap();
-    assert!(script.calls.lock().unwrap().is_empty());
+    assert!(script
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|(s, _)| *s == Stage::Conversation));
     assert_eq!(session.question, question);
     assert!(
         matches!(&session.method.result,Some(crate::reading_contracts::ReadingResult::Limited{limitation}) if limitation.code=="unsupported_facet")
@@ -798,11 +887,10 @@ fn empty_audio_meaning_is_repaired_inside_acceptance_and_never_completed() {
     let mut repaired = invalid.clone();
     repaired.heard = "Continue".into();
     invalid.heard = String::new();
-    let mut script = Script::new(vec![
+    let script = Script::new(vec![
         (Stage::Intake, serde_json::to_value(invalid).unwrap()),
         (Stage::Intake, serde_json::to_value(repaired).unwrap()),
     ]);
-    script.cancel_after = Some(2);
     let previous = session.clone();
     run(
         &mut session,
@@ -813,7 +901,15 @@ fn empty_audio_meaning_is_repaired_inside_acceptance_and_never_completed() {
         &previous,
     )
     .unwrap();
-    assert_eq!(session.method.records.len(), 2);
+    assert_eq!(
+        session
+            .method
+            .records
+            .iter()
+            .filter(|r| r.stage == Stage::Intake)
+            .count(),
+        2
+    );
     assert!(session.method.records[0]
         .validation_error
         .as_ref()
@@ -926,7 +1022,16 @@ fn a_gap_in_civil_time_asks_the_native_specific_question_and_accepts_ignorance()
         session.method.consultation.as_ref().unwrap().facts[&Field::QuestionTime],
         Slot::Unavailable { .. }
     ));
-    assert_eq!(script.calls.lock().unwrap().len(), 2);
+    assert_eq!(
+        script
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(s, _)| *s != Stage::Conversation)
+            .count(),
+        2
+    );
 }
 
 #[test]
@@ -1036,7 +1141,15 @@ fn a_reader_cannot_reask_known_ownership_instead_of_using_its_handoff() {
             .unwrap()
             .is_some()
     );
-    assert_eq!(session.method.records.len(), 2);
+    assert_eq!(
+        session
+            .method
+            .records
+            .iter()
+            .filter(|r| r.stage == Stage::Significators)
+            .count(),
+        2
+    );
     assert!(session.method.records[0]
         .validation_error
         .as_ref()
@@ -1206,7 +1319,16 @@ fn unavailable_device_coordinates_use_the_same_pending_fact_and_ignorance_path()
         .unwrap()
         .text
         .contains("detail is still unknown"));
-    assert_eq!(script.calls.lock().unwrap().len(), 2);
+    assert_eq!(
+        script
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(s, _)| *s != Stage::Conversation)
+            .count(),
+        2
+    );
 }
 
 #[test]
@@ -1245,7 +1367,15 @@ fn initial_recognition_cannot_treat_a_rejected_question_as_saved_context() {
         &previous,
     )
     .unwrap();
-    assert_eq!(session.method.records.len(), 2);
+    assert_eq!(
+        session
+            .method
+            .records
+            .iter()
+            .filter(|r| r.stage == Stage::Intake)
+            .count(),
+        2
+    );
     assert!(session.method.records[0]
         .validation_error
         .as_ref()
@@ -1253,4 +1383,91 @@ fn initial_recognition_cannot_treat_a_rejected_question_as_saved_context() {
         .contains("unsaved question"));
     assert_eq!(session.question, words);
     assert_eq!(session.method.flow.jobs[0].attempts, 2);
+}
+
+#[test]
+fn guru_speaks_and_selects_a_missing_fact_without_mutating_the_question_or_completing_roles() {
+    let mut session = session();
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    let script = Script::new(vec![(
+        Stage::Conversation,
+        json!({
+            "reply":"Before I follow Bob's sales, are these his own books?", "ask":"need_1"
+        }),
+    )]);
+    let original = session.clone();
+    run(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        1789387800000.,
+        None,
+        &original,
+    )
+    .unwrap();
+    assert_eq!(
+        session.messages.last().unwrap().text,
+        "Before I follow Bob's sales, are these his own books?"
+    );
+    assert_eq!(session.question, original.question);
+    assert!(session.sections.is_empty());
+    assert!(script
+        .calls
+        .lock()
+        .unwrap()
+        .iter()
+        .all(|(s, _)| *s == Stage::Conversation));
+    assert_eq!(
+        session.method.consultation.as_ref().unwrap().requested,
+        Some(crate::reading_contracts::RequirementKey::Owner)
+    );
+    let calls = script.calls.lock().unwrap();
+    assert_eq!(calls[0].1["canonical_question"], original.question);
+    assert!(calls[0].1["reminders"].as_array().unwrap().len() >= 2);
+}
+
+#[test]
+fn an_invalid_guru_reminder_is_repaired_before_the_person_sees_a_reply() {
+    let mut session = session();
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    let script = Script::new(vec![
+        (
+            Stage::Conversation,
+            json!({"reply":"Invalid private reminder.","ask":"made_up"}),
+        ),
+        (
+            Stage::Conversation,
+            json!({"reply":"What is your connection to Bob?","ask":"need_0"}),
+        ),
+    ]);
+    let previous = session.clone();
+    run(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        1789387800000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert!(session.method.records[0].validation_error.is_some());
+    assert_eq!(session.method.flow.jobs[0].attempts, 2);
+    assert_eq!(
+        session.messages.last().unwrap().text,
+        "What is your connection to Bob?"
+    );
+    assert!(!session
+        .messages
+        .iter()
+        .any(|m| m.text == "Invalid private reminder."));
+    assert!(matches!(
+        session.method.flow.jobs[0].phase(),
+        step::Phase::Complete { .. }
+    ));
 }

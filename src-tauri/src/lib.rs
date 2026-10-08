@@ -44,6 +44,7 @@ mod conversation;
 mod geocode;
 mod hf_cache;
 mod horary_contract;
+mod horary_conversation;
 mod horary_executor;
 mod horary_lessons;
 mod horary_pipeline;
@@ -57,6 +58,7 @@ mod model_manifest;
 mod native_llama;
 mod native_llama_worker;
 mod native_location;
+mod permissions;
 #[cfg(test)]
 mod process_reference;
 mod reading_contracts;
@@ -525,6 +527,7 @@ pub fn run() {
         .manage(AiGenerationState::default())
         .manage(conversation::ConversationState::default())
         .manage(voice::VoiceState::default())
+        .manage(permissions::PermissionState::default())
         .on_window_event(|window, event| {
             if matches!(
                 event,
@@ -565,6 +568,9 @@ pub fn run() {
 
     builder
         .invoke_handler(tauri::generate_handler![
+            permissions::startup_permissions,
+            permissions::permission_status,
+            permissions::open_microphone_permissions,
             conversation::conversation_snapshot,
             conversation::conversation_open,
             conversation::conversation_fresh,

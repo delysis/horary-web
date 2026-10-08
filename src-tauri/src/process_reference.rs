@@ -16,6 +16,7 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/worksheet_xml.rs",
     "src-tauri/src/conversation.rs",
     "src-tauri/src/horary_pipeline.rs",
+    "src-tauri/src/horary_conversation.rs",
     "src-tauri/src/horary_contract.rs",
     "src-tauri/src/horary_executor.rs",
     "src-tauri/src/horary_step.rs",
@@ -38,6 +39,9 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/native_llama_worker.rs",
     "src-tauri/src/native_location.rs",
     "src-tauri/native/location_bridge.m",
+    "src-tauri/native/permissions_bridge.m",
+    "src-tauri/src/permissions.rs",
+    "src-tauri/build.rs",
     "src-tauri/src/geocode.rs",
     "src-tauri/src/hf_cache.rs",
     "src-tauri/src/model_manifest.rs",
@@ -83,18 +87,18 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         .split_once("## What Eileen should examine")
         .ok_or("Missing review section")?;
     let mut document = preamble.to_string();
-    document.push_str("\nThe application is now governed by the [executable reading catalogue](READING_CONTRACTS.md). It generates the recognition contract, conditional elicitation, readiness gate and frozen reading request. The earlier [elicitation design](ELICITATION_DESIGN.md) is its research record.\n\n");
+    document.push_str("\nThe application is now governed by the [executable reading catalogue](READING_CONTRACTS.md). It generates the recognition contract, conditional fact reminders, readiness gate and frozen reading request. The earlier [elicitation design](ELICITATION_DESIGN.md) is its research record.\n\n");
     document.push_str("\n## The completion state machine\n\n```mermaid\nflowchart TB\n");
     for (from, to, reason) in crate::horary_step::Phase::EDGES {
         document.push_str(&format!("  {from} -->|{reason}| {to}\n"));
     }
-    document.push_str("```\n\nThese transition labels come from the Rust state catalog. `horary_step.rs` owns the completion permit and durable job journal. `horary_executor.rs` sends both single and batch results through one acceptance path. `horary_contract.rs` validates shapes and domain checks. `horary_role_options.rs` binds named roles, computes turned houses and derives rulers. `horary_pipeline.rs` assembles dependencies and the document. The normal regression suite checks their invariants.\n\nA JSON-shaped response is a proposal. No stage becomes complete until all native checks accept its required data. A request for user information leaves it awaiting input. Rejection returns to the same stage, with the unchanged original input and latest rejected proposal, until accepted data arrives or execution is cancelled/interrupted. There is no two-attempt abandonment. User replies are retained with the waiting stage; a changed input supersedes the old job rather than pretending it completed.\n\nA completion permit is bound to its stage and input fingerprint. Work identity also fingerprints the current native validation code, lesson, contract and chart revision. Saved data is revalidated before reuse. All batch results are recorded before any one case is repaired, so valid siblings survive cancellation. Reloaded unfinished work becomes paused; it is never inferred complete. Original outputs and rejections remain in the private receipts.\n\nFor place/moment explanations, the selected native chart context supplies the actual time, zone and place even before an interpretation exists. The current follow-up words are always included. If an interpretation or passage does not exist, the controller explains that it is unfinished rather than dispatching an actor with empty context or asking the person for chart data. Explicit continue/cast commands preserve the current matter and resume it.\n\n");
-    document.push_str(&format!("\n## Voice turns\n\n```mermaid\nflowchart TB\n  focus{{\"Active window; no speech, work or history\"}} --> wake[\"On-device streaming speech recognition\"]\n  wake --> addressed{{\"Oracle or expected reply?\"}}\n  addressed -->|No| discard[\"Discard ambient hypothesis; renew task after {} ms\"]\n  discard --> wake\n  addressed -->|Yes| words[\"Preserve addressed words; light listening mark\"]\n  words --> pause[\"{} ms of quiet and unchanged words\"]\n  pause --> final{{\"Final native recognition result?\"}}\n  final -->|Yes| receipt[\"Release microphone; one-use receipt\"]\n  final -->|No| fallback[\"Stop; retain manual microphone fallback\"]\n  receipt --> reading[\"Catalogue elicitation and reading\"]\n  reading --> reply[\"Installed voice speaks; await completion\"]\n  reply --> expected[\"{} ms expected-reply window, then Oracle\"]\n  expected --> focus\n  orb[\"Manual microphone mark\"] --> wav[\"Bounded in-memory WAV\"]\n  wav --> route[\"On-device dictation, direct Gemma audio, or transcription comparison\"]\n  route --> receipt\n```\n\nTiming values above are emitted from the native listener's constants. Callback and PCM queues are bounded. Ambient and partial recognition never enter a reading, model prompt, file or log. Wake recognition is macOS-only and requires local language assets and permission. No claim of native recognition accuracy follows from controller tests.\n", crate::wake_listening::RENEW_MS, crate::wake_listening::SILENCE_MS, crate::wake_listening::FOLLOW_UP_MS));
+    document.push_str("```\n\nThese transition labels come from the Rust state catalog. `horary_step.rs` owns the completion permit and durable job journal. `horary_executor.rs` sends both single and batch results through one acceptance path. `horary_contract.rs` validates shapes and domain checks. `horary_role_options.rs` binds named roles, computes turned houses and derives rulers. `horary_pipeline.rs` assembles dependencies and the document. The normal regression suite checks their invariants.\n\nA JSON-shaped response is a proposal. No stage becomes complete until all native checks accept its required data. A request for user information leaves it awaiting input. Rejection returns to the same stage, with the unchanged original input and latest rejected proposal, until accepted data arrives or execution is cancelled/interrupted. There is no two-attempt abandonment. Repair prompts retain the cached lesson and present the original input, the rejected assistant answer, then focused native feedback. The rejected proposal is never accepted by being included in that dialogue. Selected recognition lessons omit unrelated typed examples while the update vocabulary still permits explicit reclassification. User replies are retained with the waiting stage; a changed input supersedes the old job rather than pretending it completed.\n\nA completion permit is bound to its stage and input fingerprint. Work identity also fingerprints the current native validation code, lesson, contract and chart revision. Saved data is revalidated before reuse. All batch results are recorded before any one case is repaired, so valid siblings survive cancellation. Reloaded unfinished work becomes paused; it is never inferred complete. Original outputs and rejections remain in the private receipts.\n\nFor place/moment explanations, the selected native chart context supplies the actual time, zone and place even before an interpretation exists. The current follow-up words are always included. If an interpretation or passage does not exist, the controller explains that it is unfinished rather than dispatching an actor with empty context or asking the person for chart data. Explicit continue/cast commands preserve the current matter and resume it.\n\n");
+    document.push_str(&format!("\n## Voice turns\n\n```mermaid\nflowchart TB\n  launch[\"Launch: request microphone, speech and location consent\"] --> access{{\"Microphone available?\"}}\n  access -->|No| writing[\"Conditional text fallback; native microphone recovery\"]\n  writing --> reading\n  access -->|Yes| focus{{\"Active window; no speech, work or history\"}}\n  focus --> wake[\"On-device streaming speech recognition\"]\n  wake --> addressed{{\"Oracle or expected reply?\"}}\n  addressed -->|No| discard[\"Discard ambient hypothesis; renew task after {} ms\"]\n  discard --> wake\n  addressed -->|Yes| words[\"Preserve addressed words; light listening mark\"]\n  words --> pause[\"{} ms of quiet and unchanged words\"]\n  pause --> final{{\"Final native recognition result?\"}}\n  final -->|Yes| receipt[\"Release microphone; one-use receipt\"]\n  final -->|No| fallback[\"Stop; retain manual microphone fallback\"]\n  receipt --> reading[\"Private clipboard, conversational reader and specialist judgments\"]\n  reading --> reply[\"Installed voice speaks; await completion\"]\n  reply --> expected[\"{} ms expected-reply window, then Oracle\"]\n  expected --> focus\n  orb[\"Manual microphone mark\"] --> wav[\"Bounded in-memory WAV\"]\n  wav --> route[\"On-device dictation, direct Gemma audio, or transcription comparison\"]\n  route --> receipt\n```\n\nTiming values above are emitted from the native listener's constants. Callback and PCM queues are bounded. Ambient and partial recognition never enter a reading, model prompt, file or log. Wake recognition is macOS-only and requires local language assets and permission. No claim of native recognition accuracy follows from controller tests.\n", crate::wake_listening::RENEW_MS, crate::wake_listening::SILENCE_MS, crate::wake_listening::FOLLOW_UP_MS));
     document.push_str("\n## The judgment process\n\n```mermaid\nflowchart TB\n  words[\"Spoken question\"]\n  chart[\"N: calculate chart and derive rulers\"]\n  retained_step[\"N: selected prior worksheet and evidence\"]\n");
     for stage in Stage::ALL {
         let kind = match stage.kind() {
             "classification" => "C",
-            "explanation" => "W",
+            "explanation" | "conversation" => "W",
             _ => "J",
         };
         let suffix = match stage {
@@ -122,7 +126,7 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
             key
         ));
     }
-    document.push_str("  place --> chart\n  moment --> chart\n  judgment --> document[\"N: unfold the proposed answer, checks and sources\"]\n  explanation --> document\n```\n\nAn unclear matter returns one clarification before any chart. A new matter is archived into a separate leaf before downstream work; the previous conversation is not carried into its prompts. Condition, reception and contact mechanics, plus location when applicable, are submitted as **one native generation batch** with separate prompts and saved prefixes. Contact selection does not need the other worksheets: the final judgment combines those independent findings.\n\n");
+    document.push_str("  place --> chart\n  moment --> chart\n  intake --> consultation_clipboard[\"N: accepted facts, missing inputs and boundaries\"]\n  judgment --> consultation_clipboard\n  explanation --> consultation_clipboard\n  consultation_clipboard --> conversation\n  conversation --> document[\"Model reply + unfolding chart and evidence\"]\n  document --> words\n```\n\nThe model conducts the conversation. Rust holds the private clipboard, validates extracted observations and computes remaining prerequisites. A missing fact or method boundary becomes a reminder to the conversational reader, never a canned reply. The reader can select one reminder to pursue, without changing accepted facts or authorizing judgment. Specialized explanation and judgment findings return to that same reader. Its complete prompt and live constrained reminder IDs are exported below.\n\nA new matter is archived into a separate leaf before downstream work. Condition, reception and contact mechanics, plus location when applicable, are submitted as **one native generation batch** with separate prompts and saved prefixes. Contact selection does not need the other worksheets: the final judgment combines those independent findings.\n\n");
     document.push_str(r#"## Place and moment: independence and genuine dependencies
 
 ```mermaid
@@ -142,15 +146,17 @@ flowchart TB
   place -->|Selected time zone and native local clock| civil
   civil --> resolve["N: validate civil time, DST gap or overlap"]
   resolve --> ambiguous{"Needs clarification?"}
-  ambiguous -->|Yes| ask["One combined place / time inquiry"]
+  ambiguous -->|Yes| ask["Private place/time reminder to conversational reader"]
   geocode -->|No useful candidate| ask
   ambiguous -->|No| moment["Verified instant"]
   recorded --> moment
   place --> cast["N: cast after both results"]
   moment --> cast
+  intake --> event["Event place and time: retained contextual observations"]
+  event --> interpretation["Question-specific judgment; inquire if relevant"]
 ```
 
-Mentioning London or yesterday as the location/time of a lost object does not change the chart place or moment. A city-only clarification preserves the original question. A relative historical time needs the native clock in the **chosen place's** zone, not the model's guessed date. Nonexistent civil times fail; repeated civil times require an occurrence choice.
+The clipboard presents chart_context and event_context separately. Device location can supply the reader anchor without establishing an event venue. Ask about the venue when it matters to the selected question, rather than requiring it universally. Mentioning London or yesterday as the location/time of a lost object does not change the chart place or moment. A city-only clarification preserves the original question. A relative historical time needs the native clock in the **chosen place's** zone, not the model's guessed date. Nonexistent civil times fail; repeated civil times require an occurrence choice.
 
 ## The cache and native batch boundary
 
@@ -222,6 +228,7 @@ The bank contains only fixed teaching messages, not private question inputs or a
         String::from("# Actual runtime source\n\nGenerated verbatim; not a model transcript.\n\n");
     for path in [
         "src-tauri/src/horary_pipeline.rs",
+        "src-tauri/src/horary_conversation.rs",
         "src-tauri/src/horary_contract.rs",
         "src-tauri/src/horary_executor.rs",
         "src-tauri/src/horary_step.rs",
