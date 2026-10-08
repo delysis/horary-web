@@ -11,6 +11,333 @@ fn resolved<T>(value: T) -> Slot<T> {
         },
     }
 }
+
+fn named_sale_actor_patch() -> (Turn, String) {
+    let words = "Will my friend Bob sell his books? Bob owns the books and is the seller.";
+    let mut patch = control(Intent::Read);
+    patch.question = Some(words.into());
+    patch.frame = Some(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Event,
+    });
+    patch.people.push(Person {
+        id: "bob".into(),
+        label: "Bob".into(),
+        relationship: "friend".into(),
+        source_quote: "my friend Bob".into(),
+    });
+    patch.subject = Some(Subject {
+        name: "books".into(),
+        kind: "movable".into(),
+        owner_id: "bob".into(),
+        source_quote: "Bob owns the books".into(),
+    });
+    patch.updates = vec![
+        Update {
+            field: Field::DealCapacity,
+            value: "sell".into(),
+            quote: "sell".into(),
+            mode: UpdateMode::Supply,
+        },
+        Update {
+            field: Field::Seller,
+            value: "Bob".into(),
+            quote: "Bob owns the books and is the seller".into(),
+            mode: UpdateMode::Supply,
+        },
+    ];
+    (patch, words.into())
+}
+
+#[test]
+fn actor_binding_unique_label_keeps_source_and_raw_proposal_and_allows_handoff() {
+    for label in ["Bob", "BOB", "  Bob  "] {
+        let (mut patch, words) = named_sale_actor_patch();
+        patch.updates[1].value = label.into();
+        let raw = serde_json::to_value(&patch).unwrap();
+        let mut consultation = Consultation::default();
+        consultation.apply(&patch, 1, &words, false).unwrap();
+        assert_eq!(consultation.text(Field::Seller), Some("bob"));
+        assert_eq!(consultation.subject.resolved().unwrap().owner_id, "bob");
+        assert!(consultation
+            .plan(Some(&regression_anchor()))
+            .needs
+            .is_empty());
+        ReadyReading::prepare(&consultation, regression_anchor()).unwrap();
+        let Slot::Resolved { observation } = &consultation.facts[&Field::Seller] else {
+            panic!("Seller must be resolved");
+        };
+        assert!(
+            matches!(&observation.evidence, Evidence::User { turn: 1, quote }
+            if quote == "Bob owns the books and is the seller")
+        );
+        assert_eq!(serde_json::to_value(&patch).unwrap(), raw);
+        assert_eq!(
+            serde_json::to_value(&consultation.changes[0].proposal).unwrap(),
+            raw
+        );
+    }
+}
+
+#[test]
+fn actor_binding_exact_id_has_priority_over_colliding_display_labels() {
+    let (patch, words) = named_sale_actor_patch();
+    let mut consultation = Consultation::default();
+    consultation.apply(&patch, 1, &words, false).unwrap();
+    consultation.people.insert(
+        "other_bob".into(),
+        Person {
+            id: "other_bob".into(),
+            label: "bob".into(),
+            relationship: "unknown".into(),
+            source_quote: "Authored duplicate display label".into(),
+        },
+    );
+    let mut update = control(Intent::Clarify);
+    update.updates.push(Update {
+        field: Field::Seller,
+        value: "bob".into(),
+        quote: "bob".into(),
+        mode: UpdateMode::Supply,
+    });
+    consultation
+        .apply(&update, 2, "Use bob as the seller", false)
+        .unwrap();
+    assert_eq!(consultation.text(Field::Seller), Some("bob"));
+    assert_eq!(consultation.subject.resolved().unwrap().owner_id, "bob");
+}
+
+#[test]
+fn actor_binding_unknown_or_ambiguous_supply_rejects_atomically_in_native_intake() {
+    for ambiguous in [false, true] {
+        let (patch, words) = named_sale_actor_patch();
+        let mut consultation = Consultation::default();
+        consultation.apply(&patch, 1, &words, false).unwrap();
+        if ambiguous {
+            consultation.people.insert(
+                "other_bob".into(),
+                Person {
+                    id: "other_bob".into(),
+                    label: "Bob".into(),
+                    relationship: "unknown".into(),
+                    source_quote: "Authored duplicate display label".into(),
+                },
+            );
+        }
+        let value = if ambiguous { "Bob" } else { "Bobby" };
+        let words = format!("At the fair. {value} is the seller.");
+        let mut update = control(Intent::Clarify);
+        update.updates = vec![
+            Update {
+                field: Field::Context,
+                value: "At the fair".into(),
+                quote: "At the fair".into(),
+                mode: UpdateMode::Supply,
+            },
+            Update {
+                field: Field::Seller,
+                value: value.into(),
+                quote: format!("{value} is the seller"),
+                mode: UpdateMode::Supply,
+            },
+        ];
+        let before = serde_json::to_value(&consultation).unwrap();
+        let error = consultation.apply(&update, 2, &words, false).unwrap_err();
+        assert!(error.contains(if ambiguous {
+            "more than one"
+        } else {
+            "does not bind"
+        }));
+        assert_eq!(serde_json::to_value(&consultation).unwrap(), before);
+        let input = json!({"consultation":consultation,"latest_words":words,"spoken_input":false,
+            "recognition_phase":"update_selected_program"});
+        let rejected = crate::horary_step::check(
+            crate::horary_lessons::Stage::Intake,
+            crate::horary_lessons::Matter::Other,
+            &serde_json::to_value(&update).unwrap(),
+            &input,
+            &[],
+        )
+        .err()
+        .expect("Malformed actor reference must reach native extraction repair");
+        assert!(rejected.contains(if ambiguous {
+            "more than one"
+        } else {
+            "does not bind"
+        }));
+        assert_eq!(serde_json::to_value(&consultation).unwrap(), before);
+    }
+}
+
+#[test]
+fn actor_binding_genuine_missing_proposed_and_unavailable_facts_remain_elicitation() {
+    let (mut patch, _) = named_sale_actor_patch();
+    let words =
+        "Will my friend Bob's books sell? Bob owns the books. The seller has not been chosen.";
+    patch.question = Some(words.into());
+    patch.updates.retain(|update| update.field != Field::Seller);
+    let mut consultation = Consultation::default();
+    consultation.apply(&patch, 1, words, false).unwrap();
+    let seller_need = |case: &Consultation, state: &str| {
+        assert!(case
+            .plan(Some(&regression_anchor()))
+            .needs
+            .iter()
+            .any(|need| need.key == RequirementKey::Field(Field::Seller) && need.state == state));
+        assert!(ReadyReading::prepare(case, regression_anchor()).is_err());
+    };
+    seller_need(&consultation, "missing");
+    for (mode, value, quote, state) in [
+        (
+            UpdateMode::Propose,
+            "Bob or another person",
+            "Bob or another person could be the seller",
+            "proposed",
+        ),
+        (
+            UpdateMode::Unavailable,
+            "The seller has not been chosen",
+            "The seller has not been chosen",
+            "unavailable",
+        ),
+    ] {
+        let mut next = consultation.clone();
+        let mut update = control(Intent::Clarify);
+        update.updates.push(Update {
+            field: Field::Seller,
+            value: value.into(),
+            quote: quote.into(),
+            mode,
+        });
+        next.apply(&update, 2, quote, false).unwrap();
+        assert!(next.text(Field::Seller).is_none());
+        seller_need(&next, state);
+    }
+}
+
+#[test]
+fn actor_binding_applies_only_to_the_contracts_person_reference_fields() {
+    for (method, field) in [
+        (Method::NewJob, Field::PrincipalId),
+        (Method::MovableDeal, Field::Seller),
+        (Method::Property, Field::DealParty),
+        (Method::Rental, Field::Seller),
+        (Method::BusinessProperty, Field::DealParty),
+        (Method::Money, Field::Sender),
+    ] {
+        let mut consultation = case(method, "querent");
+        consultation.people.insert(
+            "bob".into(),
+            Person {
+                id: "bob".into(),
+                label: "Bob".into(),
+                relationship: "friend".into(),
+                source_quote: "Authored Bob".into(),
+            },
+        );
+        let mut update = control(Intent::Clarify);
+        update.updates.push(Update {
+            field,
+            value: "Bob".into(),
+            quote: "Bob".into(),
+            mode: UpdateMode::Supply,
+        });
+        consultation
+            .apply(&update, 2, "Bob is involved", false)
+            .unwrap();
+        assert_eq!(
+            consultation.text(field),
+            Some("bob"),
+            "{method:?}/{field:?}"
+        );
+    }
+    let mut parcel = case(Method::Parcel, "querent");
+    let mut update = control(Intent::Clarify);
+    update.updates.push(Update {
+        field: Field::Sender,
+        value: "Postal company".into(),
+        quote: "Postal company".into(),
+        mode: UpdateMode::Supply,
+    });
+    parcel.apply(&update, 2, "Postal company", false).unwrap();
+    assert_eq!(parcel.text(Field::Sender), Some("Postal company"));
+}
+
+#[test]
+fn actor_binding_keeps_actor_conflicts_title_ownership_and_correction_receipts() {
+    let (patch, words) = named_sale_actor_patch();
+    let mut consultation = Consultation::default();
+    consultation.apply(&patch, 1, &words, false).unwrap();
+    consultation.people.insert(
+        "alice".into(),
+        Person {
+            id: "alice".into(),
+            label: "Alice".into(),
+            relationship: "neighbor".into(),
+            source_quote: "Authored Alice".into(),
+        },
+    );
+    let mut update = control(Intent::Clarify);
+    update.updates.push(Update {
+        field: Field::Seller,
+        value: "Alice".into(),
+        quote: "Alice is the seller".into(),
+        mode: UpdateMode::Supply,
+    });
+    consultation
+        .apply(&update, 2, "Alice is the seller", false)
+        .unwrap();
+    let Slot::Conflicting { observations } = &consultation.facts[&Field::Seller] else {
+        panic!("A different seller must retain the conflicting earlier account");
+    };
+    assert_eq!(
+        observations
+            .iter()
+            .map(|item| item.value.as_str())
+            .collect::<Vec<_>>(),
+        ["bob", "alice"]
+    );
+    assert_eq!(consultation.subject.resolved().unwrap().owner_id, "bob");
+    update.intent = Intent::Correct;
+    consultation
+        .apply(&update, 3, "Actually, Alice is the seller", false)
+        .unwrap();
+    assert_eq!(consultation.text(Field::Seller), Some("alice"));
+    assert_eq!(consultation.subject.resolved().unwrap().owner_id, "bob");
+    assert_eq!(
+        consultation.changes.last().unwrap().proposal.updates[0].value,
+        "Alice"
+    );
+    let before = serde_json::to_value(&consultation).unwrap();
+    update.updates[0].quote = "Invented seller statement".into();
+    assert!(consultation
+        .apply(&update, 4, "Alice is the seller", false)
+        .is_err());
+    assert_eq!(serde_json::to_value(&consultation).unwrap(), before);
+}
+
+#[test]
+fn actor_binding_does_not_supply_an_unknown_personal_relationship() {
+    let (mut patch, _) = named_sale_actor_patch();
+    let words = "Will Bob sell his books? Bob owns the books and is the seller.";
+    patch.question = Some(words.into());
+    patch.people[0].relationship = "unknown".into();
+    patch.people[0].source_quote = "Bob".into();
+    let mut consultation = Consultation::default();
+    consultation.apply(&patch, 1, words, false).unwrap();
+    let plan = consultation.plan(Some(&regression_anchor()));
+    assert_eq!(consultation.text(Field::Seller), Some("bob"));
+    assert!(plan
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::PersonRelationship("bob".into())));
+    assert!(!plan
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::Field(Field::Seller)));
+    assert!(ReadyReading::prepare(&consultation, regression_anchor()).is_err());
+}
+
 fn case(method: Method, owner: &str) -> Consultation {
     let mut case = Consultation {
         question: resolved("The actual original question".into()),

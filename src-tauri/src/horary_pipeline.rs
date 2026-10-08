@@ -1618,6 +1618,78 @@ mod tests {
         assert!(validate(Stage::Contacts, &worksheet, &facts).is_err());
     }
     #[test]
+    fn payment_role_coverage_preserves_all_three_native_receipt_routes_for_contacts() {
+        use crate::reading_contracts::{
+            Consultation, Evidence, Facet, Field, Frame, Method, Observation, Slot,
+        };
+        fn resolved<T>(value: T) -> Slot<T> {
+            Slot::Resolved {
+                observation: Observation {
+                    value,
+                    evidence: Evidence::Migration {
+                        detail: "Authored payment-route inclusion regression, not a model result"
+                            .into(),
+                    },
+                },
+            }
+        }
+        let case = Consultation {
+            frame: resolved(Frame {
+                method: Method::Money,
+                facet: Facet::Event,
+            }),
+            facts: std::collections::BTreeMap::from([
+                (Field::PrincipalMode, resolved("self".into())),
+                (Field::MoneySource, resolved("job".into())),
+            ]),
+            ..Default::default()
+        };
+        let subject = crate::horary_role_options::Subject {
+            name: "salary".into(),
+            kind: "money".into(),
+            owner_id: "querent".into(),
+            source_quote: "my salary".into(),
+        };
+        let options = crate::horary_role_options::build_for(&case, Matter::Money, &[], &subject);
+        let events: Vec<_> = ["Jupiter", "Moon", "Saturn", "Mercury"]
+            .iter()
+            .map(|recipient| {
+                json!({"planet1":recipient,"planet2":"Venus","aspectName":"Sextile",
+            "withinCurrentSigns":true,"estimatedPerfectsWithinHours":0.5})
+            })
+            .collect();
+        let chart = json!({"houses":[{"number":1,"sign":"Sagittarius","degree":0.0},{"number":2,"sign":"Capricorn","degree":0.0},
+            {"number":11,"sign":"Libra","degree":0.0}],"derived":{"eventSearch":{"events":events}}});
+        let facts = reading_method::facts(Some(&chart));
+        let selections: Vec<_> = [
+            "querent.self",
+            "subject.primary",
+            "money.recipient_pocket",
+            "moon.contextual",
+        ]
+        .iter()
+        .map(
+            |id| json!({"id":id,"reason":"Preserve this distinct source-permitted receipt route."}),
+        )
+        .collect();
+        let roles = crate::horary_role_options::resolve(&options,
+            &json!({"selections":selections,"summary":"The amount is distinct from the arrival.","unknowns":[]}), &facts).unwrap();
+        let retained = relevant(&facts, &roles, &["event"]);
+        assert_eq!(
+            retained.len(),
+            3,
+            "Unselected incidental Mercury testimony stays excluded"
+        );
+        for recipient in ["Jupiter", "Moon", "Saturn"] {
+            assert!(
+                retained
+                    .iter()
+                    .any(|fact| fact.planets == [recipient, "Venus"]),
+                "The source-permitted {recipient} receipt route must reach the contacts worker"
+            );
+        }
+    }
+    #[test]
     fn relationship_role_contract_has_no_lost_object_fields() {
         let contract = schema_for(Stage::Significators, Matter::Relationship, &[]);
         assert!(contract["properties"].get("object_candidates").is_none());

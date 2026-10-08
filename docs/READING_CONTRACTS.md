@@ -9,7 +9,7 @@ flowchart TB
   words["Words + retained consultation"] --> literal["N: capture explicit standalone reader-place declaration"]
   literal --> recognise["C: classify a new concern, or update its selected program"]
   words --> device["N: acquire device place alongside recognition"]
-  recognise --> check{{"N: native patch validation"}}
+  recognise --> check{{"N: validate quotes, shapes and participant bindings"}}
   check -->|Rejected| repair["Same unfinished task + original input + exact rejection"]
   repair --> recognise
   check -->|Accepted| reduce["N: atomic reduction; preserve unmentioned facts"]
@@ -46,6 +46,8 @@ Every reading worker can return a typed factual need instead of pretending to co
 Known factual slots provide authored example questions to the conversational model. They never write directly into the conversation. A contextual detail discovered by a reading worker keeps that worker's specific, checked question in the same consultation. Both the question and its reason remain in the receipts. A worker cannot re-ask ownership or capacity already resolved in its handoff.
 
 Facts can be **missing, proposed, resolved, conflicting, or unavailable**. Applicability is computed, never saved as N/A. An unknown guard asks for its controlling fact; it does not act as false. An unavailable required fact prevents a handoff and is acknowledged without repeatedly demanding an answer. A correction retains its previous observation in the change receipts and invalidates dependent interpretation. A contextual correction retains the chart anchor; an explicit anchor correction can recast it.
+
+Participant-reference fields use the same policy during acceptance and readiness. An existing stable ID takes priority; otherwise a unique whole display label can bind to that participant. The reducer accepts trimmed, ASCII case-insensitive labels, with no fuzzy matching or inferred ownership or relationship. Unknown or ambiguous supplied references reject the entire patch and return to extraction repair; proposed, missing and unavailable identities remain genuine conversational gaps. The source quote, raw model proposal and change receipt keep their original values while the accepted reference becomes canonical.
 
 The reader's place and the question's understood moment are separate from an event's venue and start. Device acquisition is a real native operation, with failure receipts. A place or time explicitly supplied for an earlier chart must be resolved; it cannot silently fall back to device defaults. Civil clock gaps and overlaps return to the person for clarification.
 
@@ -133,9 +135,9 @@ Preserve deal, quality or profit as asked. Non-property opposition may complete 
 
 Frawley, *The Horary Textbook*, printed pp. 156–161. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: event, situation, timing, profit.
 
-Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
+Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 
-Arrival requires its own testimony. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.
+Arrival considers money contacting the recipient, their pocket, or the appropriate Moon; an absent direct money/Lord 1 contact cannot discard the other routes. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.
 
 | Input | Applicability | Exact elicitation | Accepted labels |
 |---|---|---|---|
@@ -631,7 +633,7 @@ lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost 
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
 missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.
-money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
+money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
@@ -1420,8 +1422,8 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Payment, debt, gift or grant (money)
 Source: Frawley, The Horary Textbook, printed pp. 156–161.
-Role distinctions: Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
-Method distinctions: Arrival requires its own testimony. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.
+Role distinctions: Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
+Method distinctions: Arrival considers money contacting the recipient, their pocket, or the appropriate Moon; an absent direct money/Lord 1 contact cannot discard the other routes. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.
 
 Permitted subject kinds: ["money", "movable"].
 Judgment-supported facets: event, situation, timing, profit. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
@@ -1487,8 +1489,8 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Payment, debt, gift or grant (money)
 Source: Frawley, The Horary Textbook, printed pp. 156–161.
-Role distinctions: Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
-Method distinctions: Arrival requires its own testimony. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.
+Role distinctions: Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
+Method distinctions: Arrival considers money contacting the recipient, their pocket, or the appropriate Moon; an absent direct money/Lord 1 contact cannot discard the other routes. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount.
 
 Permitted subject kinds: ["money", "movable"].
 Judgment-supported facets: event, situation, timing, profit. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
@@ -5530,7 +5532,7 @@ lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost 
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
 missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.
-money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
+money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
@@ -6260,7 +6262,7 @@ lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost 
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
 missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.
-money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
+money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.

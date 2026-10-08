@@ -9,7 +9,7 @@ flowchart TB
   words["Words + retained consultation"] --> literal["N: capture explicit standalone reader-place declaration"]
   literal --> recognise["C: classify a new concern, or update its selected program"]
   words --> device["N: acquire device place alongside recognition"]
-  recognise --> check{{"N: native patch validation"}}
+  recognise --> check{{"N: validate quotes, shapes and participant bindings"}}
   check -->|Rejected| repair["Same unfinished task + original input + exact rejection"]
   repair --> recognise
   check -->|Accepted| reduce["N: atomic reduction; preserve unmentioned facts"]
@@ -46,6 +46,8 @@ Every reading worker can return a typed factual need instead of pretending to co
 Known factual slots provide authored example questions to the conversational model. They never write directly into the conversation. A contextual detail discovered by a reading worker keeps that worker's specific, checked question in the same consultation. Both the question and its reason remain in the receipts. A worker cannot re-ask ownership or capacity already resolved in its handoff.
 
 Facts can be **missing, proposed, resolved, conflicting, or unavailable**. Applicability is computed, never saved as N/A. An unknown guard asks for its controlling fact; it does not act as false. An unavailable required fact prevents a handoff and is acknowledged without repeatedly demanding an answer. A correction retains its previous observation in the change receipts and invalidates dependent interpretation. A contextual correction retains the chart anchor; an explicit anchor correction can recast it.
+
+Participant-reference fields use the same policy during acceptance and readiness. An existing stable ID takes priority; otherwise a unique whole display label can bind to that participant. The reducer accepts trimmed, ASCII case-insensitive labels, with no fuzzy matching or inferred ownership or relationship. Unknown or ambiguous supplied references reject the entire patch and return to extraction repair; proposed, missing and unavailable identities remain genuine conversational gaps. The source quote, raw model proposal and change receipt keep their original values while the accepted reference becomes canonical.
 
 The reader's place and the question's understood moment are separate from an event's venue and start. Device acquisition is a real native operation, with failure receipts. A place or time explicitly supplied for an earlier chart must be resolved; it cannot silently fall back to device defaults. Civil clock gaps and overlaps return to the person for clarification.
 

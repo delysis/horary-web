@@ -12,6 +12,8 @@ Recovery requires an append-only `orphaned-worker.json` in the parent campaign c
 
 One parent-scoped ownership lock and an immutable assignment prevent two different destinations from replaying the same remaining cases. A supplied executable SHA is checked before creation and again before submission. Existing destinations and assignments fail closed; a relaunch does not silently restart inference.
 
+The owner checks for at least 4 GiB free before launch and 1 GiB while a child is active. Crossing that storage boundary stops its owned child and preserves the interruption; missing remote results remain uncertain. These checks cannot guarantee that another process will not consume space between checks. Original request-write errors are kept alongside later receipt/index failures, rather than replaced by them.
+
 ```sh
 horary-catalogue --parent INTERRUPTED_CAMPAIGN --state FRESH_COLLECTION \
   --repository FROZEN_CHECKOUT --native-executable FROZEN_TEST_EXECUTABLE \
@@ -21,6 +23,8 @@ horary-catalogue --parent INTERRUPTED_CAMPAIGN --state FRESH_COLLECTION \
 The collector reconstructs progress from durable outcomes, not a stale index. It copies every completed case unchanged, including failures, verifies whole-tree hashes, and records each origin separately. Missing outcomes receive explicit whole-case replacement attempts; previous requests without results remain remotely uncertain in their original traces. The new native child selects only those remaining IDs and has identical source, provider, clock, device, decoder and budgets. Its individual outcomes update the collection index immediately. The original manifest bytes stay exact; `recovery.json` identifies this as a composed collection. Completion means all selected terminal outcomes exist, never that readings are correct.
 
 Optional `--optimizer-state`, `--completed-review-state`, `--fixtures`, and `--codex` run the queued comparison afterward. Paid jobs are verified in their original ledger, and copied training case trees must hash-match before reuse. Their campaign identity is never rewritten and teacher/writer submissions are not repeated. Fresh hosted processes wait for the previous rolling quota window. An interrupted submitted child or failed review is preserved without automatic retry.
+
+A stopped recovered collection can itself become the next explicit recovery parent. If its native child completed a case before the controller imported it, the next collection imports that complete outcome after verifying the child's declared selection, frozen manifest, fixtures and rubrics. It retains partial child trees and follows the manifest-bound recovery ancestry to verify the original paid-review origin. Every ancestor must preserve the exact manifest, and paid packet files and copied reviewed case trees still have to match. Cycles or changed origins fail closed.
 
 ## Build
 

@@ -4,6 +4,8 @@ This is the review map for Eileen. A Rust reading catalogue governs two operatio
 
 The [scenario evaluation](ELICITATION_EVALUATION.md) specifies an executable scenario bank and independent grades across all 44 catalogue methods. The [bounded optimization loop](PROMPT_OPTIMIZATION.md) streams completed traces, obtains Codex reviews and tests fixed teaching candidates against separate reserved cases. First-turn facts, supplying follow-ups, conversation and completed interpretation have separate assessments. Full model traces remain outside the repository; authored fixtures alone do not qualify the model.
 
+Authored genuine field gaps also constrain extraction: resolving one of those missing facts to an invented value is an extraction failure, even if a method limitation still blocks the reading. Missing, proposed and unavailable facts remain unresolved. First-turn absence expectations end when the scripted follow-up supplies that information; its separate expectations then apply. Earlier frozen evaluation receipts keep their original grading version.
+
 The method is a working implementation for assessment. Source quotes are checked against the locally supplied OCR; editorial procedures and examples are identified separately. Correctly quoting a rule or producing a valid worksheet does not establish a correct judgment. The deployed model is Gemma 4 12B IT QAT; a 2B model has **not** been qualified.
 
 ## Reading the diagrams
@@ -250,6 +252,7 @@ The [scenario evaluation guide](ELICITATION_EVALUATION.md) documents the executa
    Recognition proposes people, the subject, ownership and exact source phrases. The catalogue resolves applicable ownership and capacity before dispatching the role program; a workplace capacity or generic future partner does not require an invented personal relationship. Named native options bind identities and compute turned houses. A numeric guess cannot complete that step. Contextual classification still needs Eileen's review, and the English quote checks do not prove a sentence's full meaning.
 3. Are quality, ability, and motive distinguished? Does each reception run from the planet in the dignity to that dignity's ruler? Are mixed or negative receptions retained?
 4. Is an applying contact relevant to the selected actors? What changes or intervenes before it? Does the calculation actually establish a claimed translation, collection, or prevention?
+   Payment-arrival roles must retain all permitted receipt routes: the incoming money to the recipient, their second-house pocket, or the appropriate Moon (printed p. 158). The native options require the pocket and conditionally require Moon when that recipient is the effective principal. A claimed house ruler retains its planet; Moon does not automatically transfer to a person merely enquired about (p. 32). Amount and quality do not acquire an arrival-aspect requirement. The existing ambiguous relay owner alias and relative-sender turning remain separate review boundaries.
 5. Does the final passage answer the original question in context? What supports it, what opposes it, and what remains unknown? An uncertain answer should still explain what the testimony means for the person.
 
 The main document carries the proposed interpretation and keeps spoken words as read-only passages; corrections are conversational. Text entry appears only when microphone access or capture is unavailable. Startup requests microphone, speech recognition and location consent before listening; refusal is not stored as an application preference. Chart facts, source extracts and structured checks remain inspectable in “Evidence.” The upper-right history icon opens saved readings and a plus icon for a new leaf. Detailed input, original output, validation and timing receipts are behind **History → Receipts → Processing**. Native macOS wake listening hears “Oracle” or an expected reply, stops after a pause, and waits for final words. It suspends for speech, inference, history and inactive windows. The luminous “?” remains a manual microphone fallback and pauses an in-progress reply. Space/Option–Space are not global speech shortcuts. These are local records.
@@ -286,7 +289,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `d781dc54361a8a8613ac8085b969cd1e1eedd8e92c1acbd5d61184c6aa21fb2a`
+Guide SHA256: `44655eb95332f0819dde131bbb1f96d066cb22af79413bd5bb4ab687eab82edd`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -308,7 +311,7 @@ lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost 
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
 missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.
-money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
+money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
 existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.

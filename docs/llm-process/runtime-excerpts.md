@@ -1625,6 +1625,78 @@ mod tests {
         assert!(validate(Stage::Contacts, &worksheet, &facts).is_err());
     }
     #[test]
+    fn payment_role_coverage_preserves_all_three_native_receipt_routes_for_contacts() {
+        use crate::reading_contracts::{
+            Consultation, Evidence, Facet, Field, Frame, Method, Observation, Slot,
+        };
+        fn resolved<T>(value: T) -> Slot<T> {
+            Slot::Resolved {
+                observation: Observation {
+                    value,
+                    evidence: Evidence::Migration {
+                        detail: "Authored payment-route inclusion regression, not a model result"
+                            .into(),
+                    },
+                },
+            }
+        }
+        let case = Consultation {
+            frame: resolved(Frame {
+                method: Method::Money,
+                facet: Facet::Event,
+            }),
+            facts: std::collections::BTreeMap::from([
+                (Field::PrincipalMode, resolved("self".into())),
+                (Field::MoneySource, resolved("job".into())),
+            ]),
+            ..Default::default()
+        };
+        let subject = crate::horary_role_options::Subject {
+            name: "salary".into(),
+            kind: "money".into(),
+            owner_id: "querent".into(),
+            source_quote: "my salary".into(),
+        };
+        let options = crate::horary_role_options::build_for(&case, Matter::Money, &[], &subject);
+        let events: Vec<_> = ["Jupiter", "Moon", "Saturn", "Mercury"]
+            .iter()
+            .map(|recipient| {
+                json!({"planet1":recipient,"planet2":"Venus","aspectName":"Sextile",
+            "withinCurrentSigns":true,"estimatedPerfectsWithinHours":0.5})
+            })
+            .collect();
+        let chart = json!({"houses":[{"number":1,"sign":"Sagittarius","degree":0.0},{"number":2,"sign":"Capricorn","degree":0.0},
+            {"number":11,"sign":"Libra","degree":0.0}],"derived":{"eventSearch":{"events":events}}});
+        let facts = reading_method::facts(Some(&chart));
+        let selections: Vec<_> = [
+            "querent.self",
+            "subject.primary",
+            "money.recipient_pocket",
+            "moon.contextual",
+        ]
+        .iter()
+        .map(
+            |id| json!({"id":id,"reason":"Preserve this distinct source-permitted receipt route."}),
+        )
+        .collect();
+        let roles = crate::horary_role_options::resolve(&options,
+            &json!({"selections":selections,"summary":"The amount is distinct from the arrival.","unknowns":[]}), &facts).unwrap();
+        let retained = relevant(&facts, &roles, &["event"]);
+        assert_eq!(
+            retained.len(),
+            3,
+            "Unselected incidental Mercury testimony stays excluded"
+        );
+        for recipient in ["Jupiter", "Moon", "Saturn"] {
+            assert!(
+                retained
+                    .iter()
+                    .any(|fact| fact.planets == [recipient, "Venus"]),
+                "The source-permitted {recipient} receipt route must reach the contacts worker"
+            );
+        }
+    }
+    #[test]
     fn relationship_role_contract_has_no_lost_object_fields() {
         let contract = schema_for(Stage::Significators, Matter::Relationship, &[]);
         assert!(contract["properties"].get("object_candidates").is_none());
@@ -6067,6 +6139,49 @@ pub fn build_for(
         options.required_groups.push(vec!["subject.primary".into()]);
         options.missing.retain(|s| !s.starts_with(&subject.name));
     }
+    if method == Some(Method::Money)
+        && case.frame.resolved().is_some_and(|frame| {
+            matches!(
+                frame.facet,
+                crate::reading_contracts::Facet::Event | crate::reading_contracts::Facet::Timing
+            )
+        })
+    {
+        options.choices.push(Choice {
+            id: "money.recipient_pocket".into(),
+            label: if chosen.owner_id == "querent" && !relay {
+                "Your pocket or bank account"
+            } else {
+                "The recipient's pocket or bank account"
+            }.into(),
+            house: Some(turn(base, 2)),
+            natural: None,
+            basis: format!("For arrival, incoming money may contact the recipient or their pocket/bank account. The pocket is second from the recipient's house {base}, house {}; it is distinct from the incoming money (Frawley printed p. 158).",turn(base,2)),
+        });
+        options
+            .required_groups
+            .push(vec!["money.recipient_pocket".into()]);
+        if chosen.owner_id == principal {
+            options.conditional_roles.push(ConditionalRole {
+                choice_id: "moon.contextual".into(),
+                unless_house_claims: NaturalRole::Moon,
+                basis: "For money arrival, the genuine querent is represented by Lord 1 or Moon, and the pocket by Lord 2. Select Moon unless a selected house ruler already claims it. Moon is not transferred to someone merely asked about (Frawley printed pp. 32, 158).".into(),
+            });
+            if let Some(moon) = options
+                .choices
+                .iter_mut()
+                .find(|choice| choice.id == "moon.contextual")
+            {
+                moon.label = if relay {
+                    "The principal's Moon as recipient"
+                } else {
+                    "Your Moon as recipient"
+                }
+                .into();
+                moon.basis = "Required genuine-recipient testimony for arrival, unless a selected house ruler has first claim on Moon. Incoming money may contact Lord 1, Moon or the recipient's second-house pocket; this is not an amount-only aspect requirement (Frawley printed pp. 32, 158).".into();
+            }
+        }
+    }
     if method == Some(Method::JobOffer) {
         if let Some(job_house) = options
             .choices
@@ -6312,10 +6427,304 @@ pub fn resolve(options: &Options, value: &Value, facts: &[Fact]) -> Result<Vec<R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reading_contracts::{
+        Consultation, Evidence, Facet, Field, Frame, Method, Observation, Slot,
+    };
 
     fn facts() -> Vec<Fact> {
         let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
         reading_method::facts(Some(&chart))
+    }
+
+    fn resolved<T>(value: T) -> Slot<T> {
+        Slot::Resolved {
+            observation: Observation {
+                value,
+                evidence: Evidence::Migration {
+                    detail: "Authored money role coverage".into(),
+                },
+            },
+        }
+    }
+
+    fn money_person(id: &str, relationship: &str) -> Person {
+        Person {
+            id: id.into(),
+            label: id.into(),
+            relationship: relationship.into(),
+            source_quote: "The supplied participant and their stated relationship.".into(),
+        }
+    }
+
+    fn money_case(
+        facet: Facet,
+        recipient: &str,
+        source: &str,
+        people: &[Person],
+    ) -> (Consultation, Subject) {
+        let subject = Subject {
+            name: "The incoming money".into(),
+            kind: "money".into(),
+            owner_id: recipient.into(),
+            source_quote: "The stated recipient's incoming money.".into(),
+        };
+        let mut case = Consultation {
+            frame: resolved(Frame {
+                method: Method::Money,
+                facet,
+            }),
+            subject: resolved(subject.clone()),
+            people: people.iter().cloned().map(|p| (p.id.clone(), p)).collect(),
+            ..Default::default()
+        };
+        case.facts
+            .insert(Field::MoneySource, resolved(source.into()));
+        (case, subject)
+    }
+
+    fn money_options(case: &Consultation, subject: &Subject) -> Options {
+        let people: Vec<_> = case.people.values().cloned().collect();
+        build_for(case, Matter::Other, &people, subject)
+    }
+
+    fn choice_house(options: &Options, id: &str) -> Option<u8> {
+        options.choices.iter().find(|c| c.id == id).unwrap().house
+    }
+
+    fn money_worksheet(options: &Options, moon: bool) -> Value {
+        let mut selections: Vec<_> = options
+            .required_groups
+            .iter()
+            .map(|group| {
+                assert_eq!(group.len(), 1, "Money roles have no rival-house candidates");
+                json!({"id":group[0],"reason":"The participant's supplied native capacity."})
+            })
+            .collect();
+        if moon {
+            selections.push(json!({"id":"moon.contextual","reason":"The genuine recipient's Moon without a competing house claim."}));
+        }
+        json!({"selections":selections,"summary":"Incoming money and its recipient's pocket are distinct roles.","unknowns":[]})
+    }
+
+    fn money_house_facts() -> Vec<Fact> {
+        // Authored ruler inputs exercise the native binding, not astronomy or
+        // a reading verdict. Initially no house has prior claim on Moon.
+        [
+            "Jupiter", "Saturn", "Mars", "Mercury", "Venus", "Saturn", "Sun", "Mars", "Jupiter",
+            "Mercury", "Venus", "Sun",
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, planet)| Fact {
+            id: format!("house.{}", index + 1),
+            kind: "house".into(),
+            label: format!("House {}", index + 1),
+            detail: "Authored house-ruler input for role coverage.".into(),
+            planets: vec![planet.into()],
+            event: None,
+        })
+        .collect()
+    }
+
+    #[test]
+    fn money_arrival_requires_pocket_and_keeps_all_three_contact_endpoints() {
+        for facet in [Facet::Event, Facet::Timing] {
+            let (case, subject) = money_case(facet, "querent", "job", &[]);
+            let options = money_options(&case, &subject);
+            assert_eq!(choice_house(&options, "subject.primary"), Some(11));
+            assert_eq!(choice_house(&options, "money.recipient_pocket"), Some(2));
+            assert_eq!(options.conditional_roles.len(), 1);
+            let native = money_house_facts();
+            let mut worksheet = json!({"selections":[
+                {"id":"querent.self","reason":"The genuine recipient of the wages."},
+                {"id":"subject.primary","reason":"The employer's money, eleventh house."}
+            ],"summary":"Arrival needs the recipient's actual routes.","unknowns":[]});
+            let missing_pocket = resolve(&options, &worksheet, &native).unwrap_err();
+            assert!(missing_pocket.contains("money.recipient_pocket"));
+            worksheet["selections"].as_array_mut().unwrap().push(json!({
+                "id":"money.recipient_pocket","reason":"The recipient's bank account, second house."
+            }));
+            let missing_moon = resolve(&options, &worksheet, &native).unwrap_err();
+            assert!(missing_moon.contains("Missing conditional role moon.contextual"));
+            worksheet["selections"].as_array_mut().unwrap().push(json!({
+                "id":"moon.contextual","reason":"The genuine recipient's unclaimed co-significator."
+            }));
+            let roles = resolve(&options, &worksheet, &native).unwrap();
+            assert_eq!(roles.len(), 4);
+            let money = roles.iter().find(|r| r.house == Some(11)).unwrap();
+            assert_eq!(money.planet, "Venus");
+            // Each valid arrival route has both endpoints in the selected
+            // role set. This makes no claim that an actual aspect perfects.
+            for (house, planet) in [(Some(1), "Jupiter"), (None, "Moon"), (Some(2), "Saturn")] {
+                assert!(roles.iter().any(|r| r.house == house && r.planet == planet));
+            }
+        }
+    }
+
+    #[test]
+    fn money_arrival_house_claim_on_moon_overrides_its_contextual_role() {
+        let (case, subject) = money_case(Facet::Timing, "querent", "job", &[]);
+        let options = money_options(&case, &subject);
+        for house in [1, 2, 11] {
+            let mut native = money_house_facts();
+            native
+                .iter_mut()
+                .find(|f| f.label == format!("House {house}"))
+                .unwrap()
+                .planets = vec!["Moon".into()];
+            let roles = resolve(&options, &money_worksheet(&options, false), &native).unwrap();
+            assert!(roles
+                .iter()
+                .any(|r| r.house == Some(house) && r.planet == "Moon"));
+            assert!(!roles.iter().any(|r| r.house.is_none()));
+            let duplicate =
+                resolve(&options, &money_worksheet(&options, true), &native).unwrap_err();
+            assert!(duplicate.contains("first claim"));
+        }
+    }
+
+    #[test]
+    fn money_arrival_relative_sender_retains_their_money_separately_from_the_recipient() {
+        for (relationship, sender_house, money_house) in [("sibling", 3, 4), ("friend", 11, 12)] {
+            let sender = money_person("debtor", relationship);
+            let (mut case, subject) = money_case(Facet::Event, "querent", "relative", &[sender]);
+            case.facts.insert(Field::Sender, resolved("debtor".into()));
+            let options = money_options(&case, &subject);
+            assert_eq!(choice_house(&options, "debtor.self"), Some(sender_house));
+            assert_eq!(choice_house(&options, "subject.primary"), Some(money_house));
+            assert_eq!(choice_house(&options, "money.recipient_pocket"), Some(2));
+            let roles = resolve(
+                &options,
+                &money_worksheet(&options, true),
+                &money_house_facts(),
+            )
+            .unwrap();
+            assert_eq!(roles.len(), 5);
+            assert!(roles.iter().any(|r| r.house == Some(money_house)));
+            assert!(roles
+                .iter()
+                .any(|r| r.house.is_none() && r.planet == "Moon"));
+        }
+    }
+
+    #[test]
+    fn money_arrival_about_another_person_turns_their_pocket_without_giving_them_moon() {
+        for (relationship, recipient_house, salary_house, pocket_house) in [
+            ("child", 5, 3, 6),
+            ("partner", 7, 5, 8),
+            ("friend", 11, 9, 12),
+        ] {
+            let recipient = money_person("recipient", relationship);
+            let (case, subject) = money_case(Facet::Event, "recipient", "job", &[recipient]);
+            let options = money_options(&case, &subject);
+            assert_eq!(
+                choice_house(&options, "recipient.self"),
+                Some(recipient_house)
+            );
+            assert_eq!(
+                choice_house(&options, "subject.primary"),
+                Some(salary_house)
+            );
+            assert_eq!(
+                choice_house(&options, "money.recipient_pocket"),
+                Some(pocket_house)
+            );
+            assert!(options.conditional_roles.is_empty());
+            let roles = resolve(
+                &options,
+                &money_worksheet(&options, false),
+                &money_house_facts(),
+            )
+            .unwrap();
+            assert_eq!(roles.len(), 4);
+            assert!(!roles.iter().any(|r| r.house.is_none()));
+        }
+    }
+
+    #[test]
+    fn money_arrival_genuine_relay_principal_has_first_house_pocket_and_moon() {
+        let recipient = money_person("recipient", "child");
+        let sender = money_person("debtor", "sibling");
+        for source in ["job", "relative"] {
+            let (mut case, subject) = money_case(
+                Facet::Timing,
+                "recipient",
+                source,
+                &[recipient.clone(), sender.clone()],
+            );
+            case.facts
+                .insert(Field::PrincipalMode, resolved("relay".into()));
+            case.facts
+                .insert(Field::PrincipalId, resolved("recipient".into()));
+            if source == "relative" {
+                case.facts.insert(Field::Sender, resolved("debtor".into()));
+            }
+            let options = money_options(&case, &subject);
+            assert_eq!(choice_house(&options, "querent.self"), Some(1));
+            assert_eq!(
+                options
+                    .choices
+                    .iter()
+                    .find(|c| c.id == "querent.self")
+                    .unwrap()
+                    .label,
+                "recipient"
+            );
+            assert!(!options.choices.iter().any(|c| c.id == "recipient.self"));
+            assert_eq!(choice_house(&options, "money.recipient_pocket"), Some(2));
+            // Relative sender turning is retained, not guessed or rebased
+            // from the speaker's presumed relationship to the principal.
+            assert_eq!(
+                choice_house(&options, "subject.primary"),
+                Some(if source == "job" { 11 } else { 4 })
+            );
+            assert_eq!(options.conditional_roles.len(), 1);
+            let roles = resolve(
+                &options,
+                &money_worksheet(&options, true),
+                &money_house_facts(),
+            )
+            .unwrap();
+            assert!(roles
+                .iter()
+                .any(|r| r.house.is_none() && r.planet == "Moon"));
+        }
+    }
+
+    #[test]
+    fn money_arrival_relay_owner_alias_does_not_invent_principal_ownership_for_moon() {
+        let principal = money_person("recipient", "child");
+        let (mut case, subject) = money_case(Facet::Event, "querent", "job", &[principal]);
+        case.facts
+            .insert(Field::PrincipalMode, resolved("relay".into()));
+        case.facts
+            .insert(Field::PrincipalId, resolved("recipient".into()));
+        let options = money_options(&case, &subject);
+        // Existing base logic treats the literal querent alias as first. This
+        // test does NOT qualify that ambiguous ownership/house frame; it only
+        // protects the new Moon obligation from transferring to an unbound ID.
+        assert!(options.conditional_roles.is_empty());
+    }
+
+    #[test]
+    fn money_amount_and_quality_do_not_acquire_arrival_role_obligations() {
+        for facet in [Facet::Profit, Facet::Situation, Facet::Quantity] {
+            let (case, subject) = money_case(facet, "querent", "job", &[]);
+            let options = money_options(&case, &subject);
+            assert_eq!(choice_house(&options, "subject.primary"), Some(11));
+            assert!(!options
+                .choices
+                .iter()
+                .any(|c| c.id == "money.recipient_pocket"));
+            assert!(options.conditional_roles.is_empty());
+            let roles = resolve(
+                &options,
+                &money_worksheet(&options, false),
+                &money_house_facts(),
+            )
+            .unwrap();
+            assert_eq!(roles.len(), 2);
+        }
     }
 
     #[test]

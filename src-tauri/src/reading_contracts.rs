@@ -393,8 +393,8 @@ pub const CATALOGUE: &[Contract] = &[
     card!(Money, "Payment, debt, gift or grant", "156–161", Required,
         &[required(Field::MoneySource), when(Field::Discretionary, Field::MoneySource, "government"), when(Field::Sender, Field::MoneySource, "relative")],
         &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Profit], Implemented,
-        "Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.",
-        "Arrival requires its own testimony. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount."),
+        "Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).",
+        "Arrival considers money contacting the recipient, their pocket, or the appropriate Moon; an absent direct money/Lord 1 contact cannot discard the other routes. Amount/quality does not universally require an arrival aspect. Do not turn signs/degrees into an invented exact currency amount."),
     card!(Investment, "Shares and investments", "156–161", Required, &[],
         &[Facet::Situation, Facet::Profit, Facet::Choice], Implemented,
         "Owned shares are the principal's second-house possessions, not automatically eighth-house money.", "Judge condition/value and scope. Do not promise an exact return or treat this as a payment-arrival question."),
@@ -636,6 +636,50 @@ fn validate_update_value(update: &Update) -> Result<(), String> {
         return Err("A fact update needs a nonempty bounded value.".into());
     }
     Ok(())
+}
+
+fn actor_reference_field(field: Field, method: Option<Method>) -> bool {
+    match field {
+        Field::PrincipalId => true,
+        Field::Seller | Field::DealParty => matches!(
+            method,
+            Some(
+                Method::MovableDeal | Method::Property | Method::Rental | Method::BusinessProperty
+            )
+        ),
+        Field::Sender => method == Some(Method::Money),
+        _ => false,
+    }
+}
+
+/// Bind only an existing ID or one unambiguous whole display label. The raw
+/// proposal and its exact quote remain in the change receipt; only the stored
+/// actor reference becomes canonical. A failed extraction is not a user gap.
+fn bind_actor_reference(
+    field: Field,
+    value: &str,
+    people: &BTreeMap<String, Person>,
+) -> Result<String, String> {
+    let value = value.trim();
+    if value == "querent" || people.contains_key(value) {
+        return Ok(value.into());
+    }
+    let mut matching = people
+        .iter()
+        .filter(|(_, person)| person.label.trim().eq_ignore_ascii_case(value));
+    let Some((id, _)) = matching.next() else {
+        return Err(format!(
+            "{} value {value:?} does not bind a known participant. Use the actual stable ID from people or querent; include a source-backed participant if needed. If the source leaves the identity unresolved, leave the fact missing or use mode=propose rather than resolving an invented actor ID.",
+            field.name()
+        ));
+    };
+    if matching.next().is_some() {
+        return Err(format!(
+            "{} label {value:?} matches more than one participant. Use a source-backed stable ID only when the source distinguishes them; otherwise use mode=propose so the genuine ambiguity can be elicited.",
+            field.name()
+        ));
+    }
+    Ok(id.clone())
 }
 
 fn field_prompt_for(method: Option<Method>, field: Field) -> &'static str {
@@ -1204,6 +1248,12 @@ impl Consultation {
                     return Err("time_occurrence selects the first/earlier or second/later occurrence of a repeated civil chart time. An event being 'this morning' or 'earlier' is not a clock-overlap choice. Remove this entry unless the person explicitly selects that occurrence or answers the pending overlap question.".into());
                 }
             }
+            let mut value = update.value.clone();
+            if matches!(update.mode, UpdateMode::Supply | UpdateMode::Correct)
+                && actor_reference_field(update.field, self.method())
+            {
+                value = bind_actor_reference(update.field, &value, &self.people)?;
+            }
             let slot = self.facts.entry(update.field).or_default();
             if update.mode == UpdateMode::Unavailable {
                 *slot = Slot::Unavailable {
@@ -1211,7 +1261,6 @@ impl Consultation {
                     evidence: proof,
                 };
             } else {
-                let mut value = update.value.clone();
                 if matches!(update.field, Field::Context | Field::SearchContext)
                     && !correct
                     && update.mode == UpdateMode::Supply
@@ -1533,16 +1582,7 @@ impl Consultation {
             Field::Sender,
             Field::DealParty,
         ] {
-            if (field == Field::Sender && frame.method != Method::Money)
-                || (matches!(field, Field::Seller | Field::DealParty)
-                    && !matches!(
-                        frame.method,
-                        Method::MovableDeal
-                            | Method::Property
-                            | Method::Rental
-                            | Method::BusinessProperty
-                    ))
-            {
+            if !actor_reference_field(field, Some(frame.method)) {
                 continue;
             }
             if let Some(id) = self.text(field) {

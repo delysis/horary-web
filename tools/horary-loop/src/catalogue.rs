@@ -15,6 +15,48 @@ use std::{
 };
 use store::Result;
 
+const START_FREE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+const ACTIVE_FREE_BYTES: u64 = 1024 * 1024 * 1024;
+
+fn storage_floor(available: u64, minimum: u64) -> Result<()> {
+    if available < minimum {
+        return Err(format!("Evidence storage has {available} free bytes; {minimum} required. Preserve this attempt; no further provider calls permitted."));
+    }
+    Ok(())
+}
+
+fn require_storage(directory: &Path, minimum: u64) -> Result<()> {
+    let available = fs2::available_space(directory)
+        .map_err(|error| format!("Cannot verify evidence storage: {error}"))?;
+    storage_floor(available, minimum)
+}
+
+fn review_origin_matches(parent: &Path, original: &Path, manifest_sha: &str) -> Result<()> {
+    let original = store::canonical(original)?;
+    let mut current = store::canonical(parent)?;
+    let mut visited = BTreeSet::new();
+    loop {
+        if !visited.insert(current.clone()) {
+            return Err("Recovery lineage contains a cycle".into());
+        }
+        if digest(store::read(&current.join("manifest.json"))?) != manifest_sha {
+            return Err("Paid-review recovery lineage changed its frozen manifest".into());
+        }
+        if current == original {
+            return Ok(());
+        }
+        let lineage = store::json(&current.join("recovery.json"))?;
+        if lineage["manifest_sha256"] != manifest_sha {
+            return Err("Recovery lineage has an unbound manifest".into());
+        }
+        current = store::canonical(Path::new(
+            lineage["parent"]
+                .as_str()
+                .ok_or("Missing recovery origin")?,
+        ))?;
+    }
+}
+
 pub struct Options {
     pub parent: PathBuf,
     pub state: PathBuf,
@@ -88,6 +130,86 @@ fn scope_matches(parent: &Value, child: &Value, selected: &[String]) -> Result<(
         );
     }
     Ok(())
+}
+
+// A controller may exit after the child commits an outcome but before importing
+// it. Bind that child to the parent's declared scope before selecting its cases.
+fn parent_child_attempt(
+    parent: &Path,
+    manifest: &Value,
+    all_ids: &[String],
+) -> Result<Option<(PathBuf, BTreeSet<String>)>> {
+    let child = parent.join("fresh-attempt");
+    if !child.is_dir() {
+        return Ok(None);
+    }
+    if !child.join("manifest.json").is_file() {
+        if all_ids
+            .iter()
+            .any(|id| child.join("cases").join(id).join("outcome.json").is_file())
+        {
+            return Err("Parent child has a terminal outcome without its frozen manifest".into());
+        }
+        return Ok(None);
+    }
+    let recovery = store::json(&parent.join("recovery.json"))?;
+    if recovery["manifest_sha256"] != digest(store::read(&parent.join("manifest.json"))?) {
+        return Err("Parent child scope is not bound to the frozen parent manifest".into());
+    }
+    let selected = recovery["replacement_case_ids"]
+        .as_array()
+        .ok_or("Parent child lacks its declared replacement scope")?
+        .iter()
+        .map(|id| {
+            id.as_str()
+                .filter(|id| {
+                    store::safe_id(id) && all_ids.iter().any(|known| known.as_str() == *id)
+                })
+                .map(str::to_owned)
+                .ok_or_else(|| "Parent child scope contains an unknown or unsafe case ID".into())
+        })
+        .collect::<Result<Vec<String>>>()?;
+    let selected_set = selected.iter().cloned().collect::<BTreeSet<_>>();
+    if selected_set.len() != selected.len() {
+        return Err("Parent child scope contains duplicate case IDs".into());
+    }
+    scope_matches(
+        manifest,
+        &store::json(&child.join("manifest.json"))?,
+        &selected,
+    )?;
+    for file in ["fixtures.json", "reading-rubrics.json"] {
+        if store::read(&child.join(file))? != store::read(&parent.join(file))? {
+            return Err(format!("Parent child changed the frozen {file}"));
+        }
+    }
+    for id in all_ids {
+        if !selected_set.contains(id) && child.join("cases").join(id).join("outcome.json").is_file()
+        {
+            return Err(format!(
+                "Parent child completed case outside its declared scope: {id}"
+            ));
+        }
+    }
+    Ok(Some((child, selected_set)))
+}
+
+fn import_retained_case(
+    parent: &Path,
+    state: &Path,
+    fixture: &Value,
+    child_attempt: Option<&(PathBuf, BTreeSet<String>)>,
+) -> Result<bool> {
+    if import_case(parent, state, fixture, "completed_parent_attempt")? {
+        return Ok(true);
+    }
+    if let Some((child, selected)) = child_attempt {
+        let id = fixture["id"].as_str().ok_or("Missing case ID")?;
+        if selected.contains(id) {
+            return import_case(child, state, fixture, "completed_parent_child_attempt");
+        }
+    }
+    Ok(false)
 }
 
 fn sources_match(repository: &Path, manifest: &Value) -> Result<()> {
@@ -307,6 +429,10 @@ pub fn run(options: Options) -> Result<()> {
     if digest(store::read(&options.executable)?) != options.expected_executable_sha256 {
         return Err("Frozen executable identity changed; no provider calls started".into());
     }
+    require_storage(
+        destination.parent().ok_or("Missing evidence parent")?,
+        START_FREE_BYTES,
+    )?;
     let origin_id = digest(format!(
         "{}:{}",
         parent.display(),
@@ -381,15 +507,18 @@ fn run_review(options: &Options, review: &Review) -> Result<()> {
     }
     let manifest_sha = digest(store::read(&options.state.join("manifest.json"))?);
     let ledger = store::json(&review.completed_review_state.join("ledger.json"))?;
-    if ledger["config"]["manifest_sha256"] != manifest_sha
-        || store::canonical(Path::new(
+    if ledger["config"]["manifest_sha256"] != manifest_sha {
+        return Err("Completed paid review belongs to a different original campaign".into());
+    }
+    review_origin_matches(
+        &options.parent,
+        Path::new(
             ledger["config"]["campaign"]
                 .as_str()
                 .ok_or("Missing review origin")?,
-        ))? != store::canonical(&options.parent)?
-    {
-        return Err("Completed paid review belongs to a different original campaign".into());
-    }
+        ),
+        &manifest_sha,
+    )?;
     for (id, job) in ledger["jobs"].as_object().ok_or("Missing paid jobs")? {
         if job["status"] != "complete" || !store::safe_id(id) {
             return Err("Unsettled paid jobs cannot be reused or resubmitted".into());
@@ -522,20 +651,28 @@ fn run_locked(options: &Options) -> Result<()> {
     }
     let mut reused = Vec::new();
     let mut prior_partial = Vec::new();
+    let child_attempt = parent_child_attempt(&options.parent, &manifest, &all_ids)?;
     for fixture in fixtures.as_array().ok_or("Missing fixture bank")? {
         let id = fixture["id"].as_str().ok_or("Missing case ID")?;
-        if import_case(
+        if import_retained_case(
             &options.parent,
             &options.state,
             fixture,
-            "completed_parent_attempt",
+            child_attempt.as_ref(),
         )? {
             reused.push(id.to_owned());
-        } else if options.parent.join("cases").join(id).exists() {
-            prior_partial.push(json!({"id":id,"directory":options.parent.join("cases").join(id),
-                "files":tree(&options.parent.join("cases").join(id))?,
-                "provider_completion":"uncertain: request without result is not proof of no submission",
-                "replacement":"Explicit whole-case replacement in a new child attempt; previous evidence is retained"}));
+        } else {
+            for directory in [
+                options.parent.join("cases").join(id),
+                options.parent.join("fresh-attempt/cases").join(id),
+            ] {
+                if directory.is_dir() {
+                    prior_partial.push(json!({"id":id,"directory":directory,
+                        "files":tree(&directory)?,
+                        "provider_completion":"Earlier requests and results remain unchanged; missing provider results remain uncertain",
+                        "replacement":"Explicit whole-case replacement in a new child attempt; previous evidence is retained"}));
+                }
+            }
         }
     }
     let remaining = all_ids
@@ -549,12 +686,14 @@ fn run_locked(options: &Options) -> Result<()> {
         "native_executable":options.executable,"native_executable_sha256":digest(store::read(&options.executable)?),
         "reused_case_ids":reused,"replacement_case_ids":remaining,"prior_partial_attempts":prior_partial,
         "source_repository":options.repository,"credentials_in_receipts":false,
+        "controller_storage_floor":{"before_launch_bytes":START_FREE_BYTES,"while_active_bytes":ACTIVE_FREE_BYTES},
         "review_qualification":"No completed paid review is repeated or changed by collection"}),
         true,
     )?;
     report(&options.state, &manifest, &fixtures, "running")?;
     if !remaining.is_empty() {
         let child_dir = options.state.join("fresh-attempt");
+        require_storage(&options.state, START_FREE_BYTES)?;
         if digest(store::read(&options.executable)?) != options.expected_executable_sha256 {
             return Err("Frozen executable changed before submission".into());
         }
@@ -619,6 +758,7 @@ fn run_locked(options: &Options) -> Result<()> {
         )?;
         let mut collected = BTreeSet::new();
         loop {
+            require_storage(&options.state, ACTIVE_FREE_BYTES)?;
             let exit = child.0.try_wait().map_err(|e| e.to_string())?;
             if child_dir.join("manifest.json").is_file() {
                 scope_matches(
@@ -684,6 +824,170 @@ fn run_locked(options: &Options) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stopped_after_child_outcome(root: &Path) -> (PathBuf, Value, Value) {
+        let parent = root.join("parent");
+        let child = parent.join("fresh-attempt");
+        fs::create_dir_all(child.join("cases/a")).unwrap();
+        let fixture = json!({"id":"a","words":"My ring"});
+        let manifest = json!({"selected_count":2,"selection_filter":"","model":{"id":"frozen"}});
+        store::atomic_json(&parent.join("manifest.json"), &manifest, true).unwrap();
+        store::atomic_json(
+            &parent.join("recovery.json"),
+            &json!({"manifest_sha256":digest(store::read(&parent.join("manifest.json")).unwrap()),"replacement_case_ids":["a"]}),
+            true,
+        )
+        .unwrap();
+        let mut child_manifest = manifest.clone();
+        child_manifest["selected_count"] = json!(1);
+        child_manifest["selection_filter"] = json!("a");
+        store::atomic_json(&child.join("manifest.json"), &child_manifest, true).unwrap();
+        for directory in [&parent, &child] {
+            store::atomic_json(
+                &directory.join("fixtures.json"),
+                &json!([fixture,{"id":"b"}]),
+                true,
+            )
+            .unwrap();
+            store::atomic_json(
+                &directory.join("reading-rubrics.json"),
+                &json!({"a":{},"b":{}}),
+                true,
+            )
+            .unwrap();
+        }
+        store::atomic_json(&child.join("cases/a/fixture.json"), &fixture, true).unwrap();
+        store::atomic_json(
+            &child.join("cases/a/outcome.json"),
+            &json!({"id":"a","full_reading":true,"hurdles":{"extraction":{"status":"fail"}}}),
+            true,
+        )
+        .unwrap();
+        for file in [
+            "initial.json",
+            "first-turn.json",
+            "final.json",
+            "reading-rubric.json",
+            "trace.html",
+        ] {
+            store::atomic(&child.join("cases/a").join(file), b"{}", true).unwrap();
+        }
+        (parent, manifest, fixture)
+    }
+
+    #[test]
+    fn a_committed_child_outcome_survives_its_controllers_missing_import() {
+        let root = tempfile::tempdir().unwrap();
+        let (parent, manifest, fixture) = stopped_after_child_outcome(root.path());
+        let state = root.path().join("next-recovery");
+        fs::create_dir_all(state.join("cases")).unwrap();
+        let all_ids = ids(&store::json(&parent.join("fixtures.json")).unwrap()).unwrap();
+        let child = parent_child_attempt(&parent, &manifest, &all_ids).unwrap();
+        assert!(!parent.join("cases/a/outcome.json").exists());
+        let original = tree(&parent.join("fresh-attempt/cases/a")).unwrap();
+        assert!(import_retained_case(&parent, &state, &fixture, child.as_ref()).unwrap());
+        let mut replacements = Vec::new();
+        for case in store::json(&parent.join("fixtures.json"))
+            .unwrap()
+            .as_array()
+            .unwrap()
+        {
+            if !import_retained_case(&parent, &state, case, child.as_ref()).unwrap() {
+                replacements.push(case["id"].as_str().unwrap().to_owned());
+            }
+        }
+        assert_eq!(replacements, ["b"]); // Completed failure a must not be paid for again.
+        assert_eq!(tree(&state.join("cases/a")).unwrap(), original);
+        assert_eq!(
+            tree(&parent.join("fresh-attempt/cases/a")).unwrap(),
+            original
+        );
+        let origin = store::json(&state.join("case-origins/a.json")).unwrap();
+        assert_eq!(origin["origin"], "completed_parent_child_attempt");
+        assert_eq!(origin["selected_outcome_unchanged"], true);
+    }
+
+    #[test]
+    fn child_outcome_reuse_refuses_changed_scope_fixtures_and_unbound_completion() {
+        let root = tempfile::tempdir().unwrap();
+        let (parent, manifest, _) = stopped_after_child_outcome(root.path());
+        let all_ids = vec!["a".to_owned(), "b".to_owned()];
+        let child = parent.join("fresh-attempt");
+        let manifest_path = child.join("manifest.json");
+        let frozen_manifest = store::read(&manifest_path).unwrap();
+        let mut changed = store::json(&manifest_path).unwrap();
+        changed["model"]["id"] = json!("different-provider-model");
+        store::atomic_json(&manifest_path, &changed, false).unwrap();
+        assert!(parent_child_attempt(&parent, &manifest, &all_ids)
+            .unwrap_err()
+            .contains("changed frozen"));
+        store::atomic(&manifest_path, &frozen_manifest, false).unwrap();
+        for file in ["fixtures.json", "reading-rubrics.json"] {
+            let path = child.join(file);
+            let frozen = store::read(&path).unwrap();
+            store::atomic(&path, b"changed", false).unwrap();
+            assert!(parent_child_attempt(&parent, &manifest, &all_ids)
+                .unwrap_err()
+                .contains(file));
+            store::atomic(&path, &frozen, false).unwrap();
+        }
+        fs::create_dir_all(child.join("cases/b")).unwrap();
+        store::atomic(&child.join("cases/b/outcome.json"), b"{}", true).unwrap();
+        assert!(parent_child_attempt(&parent, &manifest, &all_ids)
+            .unwrap_err()
+            .contains("outside its declared scope"));
+        fs::remove_file(child.join("cases/b/outcome.json")).unwrap();
+        fs::remove_file(manifest_path).unwrap();
+        assert!(parent_child_attempt(&parent, &manifest, &all_ids)
+            .unwrap_err()
+            .contains("without its frozen manifest"));
+    }
+
+    #[test]
+    fn storage_guard_stops_before_the_reserve_is_consumed() {
+        assert!(storage_floor(START_FREE_BYTES, START_FREE_BYTES).is_ok());
+        let error = storage_floor(ACTIVE_FREE_BYTES - 1, ACTIVE_FREE_BYTES).unwrap_err();
+        assert!(error.contains("no further provider calls permitted"));
+        assert!(error.contains(&(ACTIVE_FREE_BYTES - 1).to_string()));
+    }
+
+    #[test]
+    fn paid_review_origin_can_follow_only_a_frozen_recovery_chain() {
+        let root = tempfile::tempdir().unwrap();
+        let original = root.path().join("original");
+        let recovered = root.path().join("recovered");
+        let twice = root.path().join("twice");
+        let bytes = br#"{"source":"same immutable campaign"}"#;
+        let sha = digest(bytes);
+        for directory in [&original, &recovered, &twice] {
+            fs::create_dir(directory).unwrap();
+            store::atomic(&directory.join("manifest.json"), bytes, true).unwrap();
+        }
+        for (child, parent) in [(&recovered, &original), (&twice, &recovered)] {
+            store::atomic_json(
+                &child.join("recovery.json"),
+                &json!({"parent":parent,"manifest_sha256":sha}),
+                true,
+            )
+            .unwrap();
+        }
+        review_origin_matches(&twice, &original, &sha).unwrap();
+        store::atomic(&recovered.join("manifest.json"), b"changed", false).unwrap();
+        assert!(review_origin_matches(&twice, &original, &sha)
+            .unwrap_err()
+            .contains("changed its frozen manifest"));
+        store::atomic(&recovered.join("manifest.json"), bytes, false).unwrap();
+        store::atomic_json(
+            &recovered.join("recovery.json"),
+            &json!({"parent":twice,"manifest_sha256":sha}),
+            false,
+        )
+        .unwrap();
+        assert!(review_origin_matches(&twice, &original, &sha)
+            .unwrap_err()
+            .contains("cycle"));
+    }
+
     #[test]
     fn recovery_pins_all_scope_except_its_declared_selection() {
         let parent = json!({"selected_count":2,"selection_filter":"","model":{"id":"gemma","temperature":0},"frozen_clock":{"local":"noon"},"sources":{"rules":"sha"}});

@@ -111,7 +111,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "18f373772008be21ad802ba0660df0bdde53a69c5db068d4607aa8076e5b785b"
+      "sha256": "22c60a8dfc07d8798ca77e42c371e76c402029a5b28bb226a449fc3c3bcd5b29"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -139,7 +139,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "87ac34c7e030b38d4770289c9221d92d028348c4da152392090af2b895ab3f77"
+      "sha256": "b466e4d7b4fded466ffca9a8010759e6057240304978f13d62cc2b11f59612c4"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -211,7 +211,7 @@
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "86c9696b7bc92c2dec5a3e209a98061357fd316d20db0798f8e614daa19e5f8f"
+      "sha256": "8a58c2154237271506ec190ab3d013aa0dd40f8cb6427d40aed3f7f59ad76b42"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
@@ -259,7 +259,7 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "3ee1350618a6790f5964419be0995d17c90e53d9a63af3ac9bf7356b698f12d4"
+      "sha256": "bdbebe4e0b41b41166b413da09bc3a5e17bbee26908bb06199b2a876aec67520"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
@@ -267,15 +267,15 @@
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
-      "sha256": "0f912666b124bc2a898e2f150222ecdca19bc93d825f54c54e9f86f75187b110"
+      "sha256": "746d98b33ab846046a4e5086740a29380626f546571f1d26137ffd1fcdfc42de"
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "f8995a5ca944d4381946655c53f2a838d0d9a230ef351f5651afb0e9074c3b14"
+      "sha256": "5c7ea822b7ffa80b82bd7400c3b4ae0b4b0f5002b2b6cba7c1aa4c46d0b77435"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
-      "sha256": "588b32caded0cabade33b0c98177539dc300ddded361ba871f88e8342ba08745"
+      "sha256": "8709fe8794f0e26bcde06e37f6d598b47eb19604400702934f41f4ba14cd160c"
     },
     {
       "path": "src-tauri/src/reading_eval.rs",
@@ -363,7 +363,7 @@
     },
     {
       "path": "tools/horary-loop/README.md",
-      "sha256": "a23fb334d543b5a432a2ba01ef46eb266b7923c0d49b57529e65ebf508e3e703"
+      "sha256": "c8528d46993af7aa9ee9241e2f2fc246669a54e24376bb7812479f396e254f44"
     },
     {
       "path": "tools/horary-loop/src/bin/horary-catalogue.rs",
@@ -383,7 +383,7 @@
     },
     {
       "path": "tools/horary-loop/src/catalogue.rs",
-      "sha256": "0812ed9d4e38c9d30010687e3b83d0670ba880208f6fbc67078d4468260383b9"
+      "sha256": "0ebc67c2326fea2caa5d4c8f9eded9e7d3c60e57c977333da69da2d6c6e8cc7c"
     },
     {
       "path": "tools/horary-loop/src/comparison.rs",

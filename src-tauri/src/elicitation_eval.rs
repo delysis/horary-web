@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-08.1";
+const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-08.2";
 const CORE: &str = include_str!("../test-fixtures/elicitation/core.json");
 const SPECIALIST: &str = include_str!("../test-fixtures/elicitation/specialist.json");
 
@@ -326,6 +326,25 @@ fn grade_at_moment(
     }
     let evidence_start = mismatches.len();
     let consultation = session.method.consultation.as_ref();
+    let anchor = current_anchor(session);
+    let plan = consultation.map(|c| c.plan(anchor.as_ref()));
+    let clipboard = crate::horary_conversation::clipboard(session);
+    let needs: Vec<RequirementKey> = clipboard["reminders"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|need| serde_json::from_value(need["key"].clone()).ok())
+        .collect();
+    let expected_needs = std::iter::once(&case.expected.needs)
+        .chain(case.expected.needs_alternatives.iter())
+        .find(|expected| {
+            expected.iter().all(|need| {
+                needs
+                    .iter()
+                    .any(|actual| same_need(consultation, actual, need))
+            })
+        })
+        .unwrap_or(&case.expected.needs);
     for mention in &case.expected.canonical_mentions {
         let retained = consultation.is_some_and(|c| {
             c.subject
@@ -422,6 +441,20 @@ fn grade_at_moment(
             ));
         }
     }
+    // A required inquiry is also an authored statement that this fact cannot
+    // yet be resolved. A blocked handoff must not hide an invented input behind
+    // a limitation and receive an extraction pass just because it stayed blocked.
+    for need in expected_needs {
+        let RequirementKey::Field(field) = need else {
+            continue;
+        };
+        if let Some(value) = consultation.and_then(|c| c.text(*field)) {
+            mismatches.push(format!(
+                "Genuinely missing {} must remain unresolved; actual resolved {value:?}",
+                field.name()
+            ));
+        }
+    }
     if let Some(owner) = &case.expected.owner {
         let actual = consultation
             .and_then(|c| c.subject.resolved())
@@ -481,25 +514,6 @@ fn grade_at_moment(
         }
     }
     let elicitation_start = mismatches.len();
-    let anchor = current_anchor(session);
-    let plan = consultation.map(|c| c.plan(anchor.as_ref()));
-    let clipboard = crate::horary_conversation::clipboard(session);
-    let needs: Vec<RequirementKey> = clipboard["reminders"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|need| serde_json::from_value(need["key"].clone()).ok())
-        .collect();
-    let expected_needs = std::iter::once(&case.expected.needs)
-        .chain(case.expected.needs_alternatives.iter())
-        .find(|expected| {
-            expected.iter().all(|need| {
-                needs
-                    .iter()
-                    .any(|actual| same_need(consultation, actual, need))
-            })
-        })
-        .unwrap_or(&case.expected.needs);
     for expected in expected_needs {
         if !needs
             .iter()
@@ -2070,6 +2084,133 @@ fn semantic_grade_rejects_wrong_method_even_with_nonempty_reply() {
     assert!(result.mismatches.iter().any(|m| m.contains("not tracked")));
 }
 
+fn missing_money_source_fixture() -> (Case, Session) {
+    let case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "money-missing")
+        .unwrap();
+    let mut session = Session {
+        question: case.words.clone(),
+        place: Some(device()),
+        candidate_moment_ms: Some(frozen_moment()),
+        ..Default::default()
+    };
+    session.method.consultation = Some(reading_contracts::Consultation {
+        question: resolved_fixture(case.words.clone()),
+        frame: resolved_fixture(reading_contracts::Frame {
+            method: Method::Money,
+            facet: Facet::Event,
+        }),
+        subject: resolved_fixture(crate::horary_role_options::Subject {
+            name: "money".into(),
+            kind: "money".into(),
+            owner_id: "querent".into(),
+            source_quote: "the money I am waiting for".into(),
+        }),
+        facts: BTreeMap::from([(Field::PrincipalMode, resolved_fixture("self".into()))]),
+        requested: Some(RequirementKey::Field(Field::MoneySource)),
+        ..Default::default()
+    });
+    session.messages = vec![
+        Message {
+            role: "user".into(),
+            text: case.words.clone(),
+        },
+        Message {
+            role: "assistant".into(),
+            text: "Where is the money coming from?".into(),
+        },
+    ];
+    (case, session)
+}
+
+#[test]
+fn a_blocked_handoff_cannot_mask_an_invented_missing_field_as_an_extraction_pass() {
+    use crate::reading_eval::Status;
+    let (case, mut session) = missing_money_source_fixture();
+    session
+        .method
+        .consultation
+        .as_mut()
+        .unwrap()
+        .facts
+        .insert(Field::MoneySource, resolved_fixture("other".into()));
+    let graded = grade(&case, &session, None);
+    assert_eq!(graded.hurdles.classification.status, Status::Pass);
+    assert_eq!(graded.hurdles.extraction.status, Status::Fail);
+    assert_eq!(graded.actual["ready"], false);
+    assert_eq!(
+        graded.actual["plan"]["limitation"]["code"],
+        "money_source_needs_review"
+    );
+    assert!(graded
+        .hurdles
+        .extraction
+        .failures
+        .iter()
+        .any(|failure| failure.starts_with("Genuinely missing money_source")));
+}
+
+#[test]
+fn unresolved_field_states_and_a_completed_follow_up_have_distinct_extraction_expectations() {
+    use crate::reading_contracts::{Evidence, Observation, Slot};
+    use crate::reading_eval::Status;
+    let (case, session) = missing_money_source_fixture();
+    for state in [
+        Slot::Missing,
+        Slot::Proposed {
+            observation: Observation {
+                value: "other".into(),
+                evidence: Evidence::User {
+                    turn: 1,
+                    quote: "waiting for".into(),
+                },
+            },
+        },
+        Slot::Unavailable {
+            reason: "I do not know the source".into(),
+            evidence: Evidence::User {
+                turn: 1,
+                quote: "I do not know the source".into(),
+            },
+        },
+    ] {
+        let mut attempt = session.clone();
+        attempt
+            .method
+            .consultation
+            .as_mut()
+            .unwrap()
+            .facts
+            .insert(Field::MoneySource, state);
+        assert_eq!(
+            grade(&case, &attempt, None).hurdles.extraction.status,
+            Status::Pass,
+            "An unresolved fact isn't an asserted source; elicitation is graded separately"
+        );
+    }
+    let mut after_case = case.clone();
+    after_case.expected = after_case.follow_up_expected.take().unwrap();
+    let mut after = session;
+    after
+        .method
+        .consultation
+        .as_mut()
+        .unwrap()
+        .facts
+        .insert(Field::MoneySource, resolved_fixture("customer".into()));
+    after.method.consultation.as_mut().unwrap().requested = None;
+    after.chart = Some(json!({"timestampMs":frozen_moment()}));
+    let graded = grade(&after_case, &after, None);
+    assert_eq!(
+        graded.hurdles.extraction.status,
+        Status::Pass,
+        "Actual follow-up data must supersede the first-turn absence expectation: {:?}",
+        graded.hurdles.extraction.failures
+    );
+}
+
 fn resolved_fixture<T>(value: T) -> reading_contracts::Slot<T> {
     reading_contracts::Slot::Resolved {
         observation: reading_contracts::Observation {
@@ -2856,6 +2997,11 @@ fn evaluate_case(
         }
     };
     let result = execute(&mut session, frozen_moment(), &previous);
+    let mut execution_error = result.as_ref().err().cloned();
+    if let Err(error) = &result {
+        session.method.flow.pause(error.clone());
+        note_case_error(&case.id, "first_turn", error);
+    }
     let mut evidence_error = result
         .as_ref()
         .err()
@@ -2872,7 +3018,7 @@ fn evaluate_case(
     write_new(
         &case_dir.join("first-turn.json"),
         &json!({"result":result,"grade":first,"hurdles":first.hurdles,"session":session,"candidates":session.candidates}),
-    )?;
+    ).map_err(|error| retain_execution_error(error, result.as_ref().err().map(String::as_str)))?;
     let mut follow_up = json!({"status":"not scripted"});
     let mut follow_up_pass: Option<bool> = None;
     let mut follow_up_execution_completed: Option<bool> = None;
@@ -2886,6 +3032,11 @@ fn evaluate_case(
                 text: words.clone(),
             });
             let next = execute(&mut session, frozen_moment() + 60_000., &previous);
+            if let Err(error) = &next {
+                execution_error = Some(error.clone());
+                session.method.flow.pause(error.clone());
+                note_case_error(&case.id, "follow_up", error);
+            }
             if let Some(error) = next
                 .as_ref()
                 .err()
@@ -2923,15 +3074,19 @@ fn evaluate_case(
         }
     }
     drop(deadline);
-    let calls = reader.calls.into_inner().map_err(|e| e.to_string())?;
+    let calls = reader
+        .calls
+        .into_inner()
+        .map_err(|e| retain_execution_error(e.to_string(), execution_error.as_deref()))?;
     write_new(
         &case_dir.join("final.json"),
         &json!({"session":session,"candidates":session.candidates,"follow_up":follow_up,"hurdles":final_hurdles}),
-    )?;
+    ).map_err(|error| retain_execution_error(error, execution_error.as_deref()))?;
     write_index_text(
         &case_dir.join("trace.html"),
         &trace_html(&case, &first, &session, &calls, &follow_up),
-    )?;
+    )
+    .map_err(|error| retain_execution_error(error, execution_error.as_deref()))?;
     let repairs = session
         .method
         .records
@@ -2988,12 +3143,84 @@ fn evaluate_case(
             else if reader.sequence.load(Ordering::Acquire)>=max_calls && result.is_err(){"call_budget_exhausted"}
             else if result.is_err(){"execution_error"}else{"completed"},
         "health":if let Some(hosted)=&config.hosted {hosted.metadata()}else{json!(native_llama_health(state).map_err(|e|e.message))},"trace":format!("cases/{}/trace.html",case.id)});
-    write_new(&case_dir.join("outcome.json"), &outcome)?;
+    write_new(&case_dir.join("outcome.json"), &outcome)
+        .map_err(|error| retain_execution_error(error, execution_error.as_deref()))?;
     println!(
         "{}",
         json!({"event":"case_completed","case_id":case.id,"first_turn_execution_completed":first_turn_execution_completed,"hurdles":final_hurdles,"model_calls":calls.len(),"rejected_attempts":repairs,"elapsed_ms":started.elapsed().as_millis()})
     );
     Ok(outcome)
+}
+
+fn retain_execution_error(recording_error: String, original: Option<&str>) -> String {
+    match original {
+        Some(original) => format!(
+            "Original execution failure: {original}. Further recording failure: {recording_error}"
+        ),
+        None => recording_error,
+    }
+}
+
+fn note_case_error(case_id: &str, phase: &str, error: &str) {
+    // Logging itself may fail on the same full filesystem. Never turn that
+    // secondary failure into a panic which discards the original execution error.
+    let _ = writeln!(
+        std::io::stderr().lock(),
+        "{}",
+        json!({"event":"case_execution_error","case_id":case_id,"phase":phase,"error":error})
+    );
+}
+
+fn recorded_group(errors: Vec<String>, recording: Result<(), String>) -> Result<(), String> {
+    let mut errors = errors;
+    if let Err(error) = recording {
+        errors.push(error);
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+#[test]
+fn an_unsent_repair_write_and_later_index_failure_preserve_the_original_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let response = json!({"result":{"Ok":{"content":"{\"owner_id\":null}"}}});
+    let received = directory.path().join("0005-result.json");
+    write_new(&received, &response).unwrap();
+    let before = fs::read(&received).unwrap();
+    let request = directory.path().join("0006-request.json");
+    let original = atomic_evidence_file(&request, true, |file| {
+        file.write_all(b"{\"sequence\":6,")
+            .map_err(|e| e.to_string())?;
+        Err("injected ENOSPC while storing the next repair before submission".into())
+    })
+    .unwrap_err();
+    assert!(!request.exists());
+    assert!(original.contains("Partial evidence retained"));
+    let joined = retain_execution_error(
+        "first-turn receipt could not be saved".into(),
+        Some(&original),
+    );
+    let stopped =
+        recorded_group(vec![joined], Err("report.json could not be saved".into())).unwrap_err();
+    for detail in [
+        "0006-request.json",
+        "injected ENOSPC",
+        "first-turn receipt",
+        "report.json",
+    ] {
+        assert!(
+            stopped.contains(detail),
+            "Original and subsequent recording errors must remain: {stopped}"
+        );
+    }
+    assert_eq!(fs::read(&received).unwrap(), before);
+    assert!(
+        recorded_group(Vec::new(), Ok(())).is_ok(),
+        "A recorded semantic failure does not stop the next independent scenario"
+    );
 }
 
 #[derive(Default)]
@@ -3344,10 +3571,10 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
                 Err(error) => infrastructure_errors.push(error),
             }
         }
-        save_report(dir, &manifest, &progress.results)?;
-        if !infrastructure_errors.is_empty() {
-            return Err(infrastructure_errors.join("; "));
-        }
+        recorded_group(
+            infrastructure_errors,
+            save_report(dir, &manifest, &progress.results),
+        )?;
         if source_hashes(root)? != sources {
             return Err("Application source changed during a frozen group; case receipts remain, and no campaign completion is asserted.".into());
         }
