@@ -1327,6 +1327,7 @@ mod tests {
             label: format!("House {}", index + 1),
             detail: "Authored house-ruler input for role coverage.".into(),
             planets: vec![planet.into()],
+            condition_facet: None,
             event: None,
         })
         .collect()

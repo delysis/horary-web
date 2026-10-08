@@ -60,7 +60,9 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
     let evidence = if ids.is_empty() {
         list(text(1), 0)
     } else {
-        list(choice(&ids), 6)
+        // Seven selected traditional planets must fit the shared condition
+        // coverage checks; other stage contracts retain their existing cap.
+        list(choice(&ids), if stage == Stage::Condition { 7 } else { 6 })
     };
     match stage {
         Stage::Intake => crate::reading_contracts::turn_schema(None),

@@ -30,6 +30,8 @@ pub struct Fact {
     pub detail: String,
     pub planets: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition_facet: Option<horary_ai_core::book_method::ConditionFacet>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<EventCandidate>,
 }
 
@@ -43,16 +45,18 @@ pub struct EventCandidate {
 pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
     let mut out = Vec::new();
     let Some(chart) = chart else { return out };
-    let mut add = |kind: &str, label: String, detail: String, planets: Vec<String>| {
-        out.push(Fact {
-            id: format!("e{}", out.len()),
-            kind: kind.into(),
-            label,
-            detail,
-            planets,
-            event: None,
-        });
-    };
+    let mut add =
+        |kind: &str, label: String, detail: String, planets: Vec<String>, condition_facet| {
+            out.push(Fact {
+                id: format!("e{}", out.len()),
+                kind: kind.into(),
+                label,
+                detail,
+                planets,
+                condition_facet,
+                event: None,
+            });
+        };
     for body in chart["bodies"].as_array().into_iter().flatten() {
         let Some(name) = body["name"].as_str() else {
             continue;
@@ -76,6 +80,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             name.into(),
             format!("{name} at {degree:.3}° {sign}, house {house}, {motion}."),
             vec![name.into()],
+            None,
         );
     }
     for house in chart["houses"].as_array().into_iter().flatten() {
@@ -94,23 +99,29 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
                 degree
             ),
             vec![ruler.into()],
+            None,
         );
     }
     // Own condition and directed reception are different evidence. Keeping
     // them in distinct facts prevents conflating a planet's own detriment
     // with dislike of its dispositor.
-    for detail in horary_ai_core::book_method::evidence(chart) {
-        if detail.contains(" in ") && detail.contains("'s ") {
-            continue;
-        }
-        let planets = [
-            "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
-        ]
-        .into_iter()
-        .filter(|p| detail.contains(p))
-        .map(str::to_string)
-        .collect();
-        add("condition", "Calculated testimony".into(), detail, planets);
+    for testimony in horary_ai_core::book_method::condition_evidence(chart) {
+        add(
+            "condition",
+            "Calculated testimony".into(),
+            testimony.detail,
+            vec![testimony.planet],
+            Some(testimony.facet),
+        );
+    }
+    if let Some(detail) = horary_ai_core::book_method::moon_gap_evidence(chart) {
+        add(
+            "condition",
+            "Calculated testimony".into(),
+            detail,
+            vec!["Moon".into()],
+            None,
+        );
     }
     let mut pairs: std::collections::BTreeMap<(String, String), Vec<String>> =
         std::collections::BTreeMap::new();
@@ -141,7 +152,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
         }
     }
     for ((guest, host), meanings) in pairs {
-        add("reception",format!("{guest} → {host}"),format!("{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",meanings.join("; ")),vec![guest,host]);
+        add("reception",format!("{guest} → {host}"),format!("{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",meanings.join("; ")),vec![guest,host],None);
     }
     // Bounded, compact event summaries avoid dumping the raw ephemeris into every prompt.
     // Attach typed sign-change data so the worksheet need not guess from prose.
@@ -193,6 +204,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
                 label: format!("{a} · {b}"),
                 detail: format!("{aspect} candidate in approximately {hours:.2} astronomical hours, {signs}.{distance} This is not the predicted timing of the earthly event."),
                 planets: vec![a.into(),b.into()],
+                condition_facet: None,
                 event: Some(EventCandidate { within_current_signs: event["withinCurrentSigns"].as_bool(), astronomical_hours: hours }),
             });
         }
@@ -204,6 +216,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             label,
             detail,
             planets,
+            condition_facet: None,
             event: None,
         });
     };
@@ -348,6 +361,28 @@ fn assign_with<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn condition_facets_are_native_and_legacy_prose_cannot_supply_them() {
+        use horary_ai_core::book_method::ConditionFacet;
+        let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+        let generated = facts(Some(&chart));
+        for facet in [ConditionFacet::Essential, ConditionFacet::HouseCapacity] {
+            let fact = generated
+                .iter()
+                .find(|fact| fact.condition_facet == Some(facet) && fact.planets == ["Mercury"])
+                .unwrap();
+            let mut legacy = serde_json::to_value(fact).unwrap();
+            legacy.as_object_mut().unwrap().remove("condition_facet");
+            let decoded: Fact = serde_json::from_value(legacy.clone()).unwrap();
+            assert_eq!(decoded.condition_facet, None);
+            assert_eq!(serde_json::to_value(decoded).unwrap(), legacy);
+        }
+        assert!(generated
+            .iter()
+            .filter(|fact| fact.kind != "condition")
+            .all(|fact| fact.condition_facet.is_none()));
+    }
     use serde_json::json;
     #[test]
     fn natural_relationship_roles_cannot_displace_house_rulers() {

@@ -289,8 +289,8 @@ fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result
         .cloned()
         .collect();
     if !native_context.is_null() {
-        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),event:None });
-        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),event:None });
+        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),condition_facet:None,event:None });
+        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),condition_facet:None,event:None });
     }
     let input = json!({"brief":reading_brief(&session.method.brief),"follow_up_words":words,"focus":focus,
         "chart_context":native_context,"reading_complete":session.sections.iter().any(|section|section.method_stage == Some(Stage::Judgment)),
@@ -2558,6 +2558,24 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
                         checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Authored fixture, not a model assessment."}));
                     }
                     let mut answer = json!({"checks":checks,"summary":"Authored fixture; no astrology interpretation is asserted.","unknowns":[]});
+                    if stage == Stage::Condition {
+                        // The source-export fixture satisfies native coverage
+                        // without inventing an interpretation of any fact.
+                        let original = crate::horary_step::original_input(input);
+                        for (facet, key) in [
+                            ("essential", "own_dignity"),
+                            ("house_capacity", "ability_to_act"),
+                        ] {
+                            let ids: Vec<_> = original["facts"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter(|fact| fact["condition_facet"] == facet)
+                                .map(|fact| fact["id"].clone())
+                                .collect();
+                            answer["checks"][key]["evidence"] = json!(ids);
+                        }
+                    }
                     if stage == Stage::Contacts {
                         answer["basis"] = json!("no_candidate_covered");
                         answer["candidate_ids"] = json!([]);
@@ -3070,7 +3088,9 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
     let evidence = if ids.is_empty() {
         list(text(1), 0)
     } else {
-        list(choice(&ids), 6)
+        // Seven selected traditional planets must fit the shared condition
+        // coverage checks; other stage contracts retain their existing cap.
+        list(choice(&ids), if stage == Stage::Condition { 7 } else { 6 })
     };
     match stage {
         Stage::Intake => crate::reading_contracts::turn_schema(None),
@@ -4861,6 +4881,9 @@ pub fn check(
     if stage != Stage::Significators {
         horary_contract::validate_for(stage, matter, value, facts)?;
     }
+    if stage == Stage::Condition {
+        condition_coverage(value, input, facts)?;
+    }
     let roles = if stage == Stage::Significators {
         let options: crate::horary_role_options::Options =
             serde_json::from_value(input["native_role_options"].clone())
@@ -4956,6 +4979,51 @@ pub fn check(
         roles,
         turn: None,
     }))
+}
+
+/// Require coverage of supplied native testimony, not a particular verdict or
+/// an assertion that the model's interpretation of that testimony is correct.
+fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<(), String> {
+    use horary_ai_core::book_method::ConditionFacet;
+    let roles = input
+        .get("roles")
+        .or_else(|| input["question"].get("roles"))
+        .and_then(Value::as_array)
+        .ok_or("Condition review needs the original selected roles.")?;
+    let planets: std::collections::BTreeSet<_> = roles
+        .iter()
+        .filter_map(|role| role["planet"].as_str())
+        .collect();
+    for planet in planets {
+        for (facet, check) in [
+            (ConditionFacet::Essential, "own_dignity"),
+            (ConditionFacet::HouseCapacity, "ability_to_act"),
+        ] {
+            let available: Vec<_> = facts
+                .iter()
+                .filter(|fact| {
+                    fact.kind == "condition"
+                        && fact.condition_facet == Some(facet)
+                        && fact.planets.iter().any(|p| p == planet)
+                })
+                .collect();
+            if available.is_empty() {
+                continue; // Missing calculation is unknown, never fabricated.
+            }
+            let cited = value["checks"][check]["evidence"].as_array();
+            if !available.iter().any(|fact| {
+                cited.is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(fact.id.as_str())))
+            }) {
+                let ids = available
+                    .iter()
+                    .map(|fact| fact.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!("Condition review omits {planet} from {check}. Use its supplied native testimony ({ids}) in that check and assess each selected role. Preserve correctly sourced checks; repair this worksheet rather than asking the person for already supplied chart facts. Coverage does not require a positive state or event verdict."));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -6625,6 +6693,7 @@ mod tests {
             label: format!("House {}", index + 1),
             detail: "Authored house-ruler input for role coverage.".into(),
             planets: vec![planet.into()],
+            condition_facet: None,
             event: None,
         })
         .collect()

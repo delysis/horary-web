@@ -282,8 +282,8 @@ fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result
         .cloned()
         .collect();
     if !native_context.is_null() {
-        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),event:None });
-        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),event:None });
+        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),condition_facet:None,event:None });
+        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),condition_facet:None,event:None });
     }
     let input = json!({"brief":reading_brief(&session.method.brief),"follow_up_words":words,"focus":focus,
         "chart_context":native_context,"reading_complete":session.sections.iter().any(|section|section.method_stage == Some(Stage::Judgment)),
@@ -2551,6 +2551,24 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
                         checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Authored fixture, not a model assessment."}));
                     }
                     let mut answer = json!({"checks":checks,"summary":"Authored fixture; no astrology interpretation is asserted.","unknowns":[]});
+                    if stage == Stage::Condition {
+                        // The source-export fixture satisfies native coverage
+                        // without inventing an interpretation of any fact.
+                        let original = crate::horary_step::original_input(input);
+                        for (facet, key) in [
+                            ("essential", "own_dignity"),
+                            ("house_capacity", "ability_to_act"),
+                        ] {
+                            let ids: Vec<_> = original["facts"]
+                                .as_array()
+                                .into_iter()
+                                .flatten()
+                                .filter(|fact| fact["condition_facet"] == facet)
+                                .map(|fact| fact["id"].clone())
+                                .collect();
+                            answer["checks"][key]["evidence"] = json!(ids);
+                        }
+                    }
                     if stage == Stage::Contacts {
                         answer["basis"] = json!("no_candidate_covered");
                         answer["candidate_ids"] = json!([]);

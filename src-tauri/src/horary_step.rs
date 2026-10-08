@@ -721,6 +721,9 @@ pub fn check(
     if stage != Stage::Significators {
         horary_contract::validate_for(stage, matter, value, facts)?;
     }
+    if stage == Stage::Condition {
+        condition_coverage(value, input, facts)?;
+    }
     let roles = if stage == Stage::Significators {
         let options: crate::horary_role_options::Options =
             serde_json::from_value(input["native_role_options"].clone())
@@ -816,6 +819,51 @@ pub fn check(
         roles,
         turn: None,
     }))
+}
+
+/// Require coverage of supplied native testimony, not a particular verdict or
+/// an assertion that the model's interpretation of that testimony is correct.
+fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<(), String> {
+    use horary_ai_core::book_method::ConditionFacet;
+    let roles = input
+        .get("roles")
+        .or_else(|| input["question"].get("roles"))
+        .and_then(Value::as_array)
+        .ok_or("Condition review needs the original selected roles.")?;
+    let planets: std::collections::BTreeSet<_> = roles
+        .iter()
+        .filter_map(|role| role["planet"].as_str())
+        .collect();
+    for planet in planets {
+        for (facet, check) in [
+            (ConditionFacet::Essential, "own_dignity"),
+            (ConditionFacet::HouseCapacity, "ability_to_act"),
+        ] {
+            let available: Vec<_> = facts
+                .iter()
+                .filter(|fact| {
+                    fact.kind == "condition"
+                        && fact.condition_facet == Some(facet)
+                        && fact.planets.iter().any(|p| p == planet)
+                })
+                .collect();
+            if available.is_empty() {
+                continue; // Missing calculation is unknown, never fabricated.
+            }
+            let cited = value["checks"][check]["evidence"].as_array();
+            if !available.iter().any(|fact| {
+                cited.is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(fact.id.as_str())))
+            }) {
+                let ids = available
+                    .iter()
+                    .map(|fact| fact.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!("Condition review omits {planet} from {check}. Use its supplied native testimony ({ids}) in that check and assess each selected role. Preserve correctly sourced checks; repair this worksheet rather than asking the person for already supplied chart facts. Coverage does not require a positive state or event verdict."));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

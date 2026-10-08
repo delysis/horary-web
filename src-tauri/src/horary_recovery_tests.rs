@@ -102,6 +102,44 @@ impl Runtime for Script {
                 content = proposal.to_string();
             }
         }
+        if stage == Stage::Condition {
+            let mut value: Value = serde_json::from_str(&content).unwrap();
+            if value["summary"] == "Authored fixture summary, not a model answer." {
+                // This generic successful stub supplies native coverage from
+                // the actual task. Explicit fault worksheets remain untouched.
+                // It tests controller recovery, never model interpretation.
+                let original = crate::horary_step::original_input(input);
+                let facts: Vec<Fact> = serde_json::from_value(original["facts"].clone()).unwrap();
+                let roles = original
+                    .get("roles")
+                    .or_else(|| original["question"].get("roles"));
+                for (facet, key) in [
+                    (
+                        horary_ai_core::book_method::ConditionFacet::Essential,
+                        "own_dignity",
+                    ),
+                    (
+                        horary_ai_core::book_method::ConditionFacet::HouseCapacity,
+                        "ability_to_act",
+                    ),
+                ] {
+                    let ids: Vec<_> = facts
+                        .iter()
+                        .filter(|fact| {
+                            fact.condition_facet == Some(facet)
+                                && roles.and_then(Value::as_array).is_some_and(|roles| {
+                                    roles.iter().any(|role| {
+                                        fact.planets.iter().any(|planet| role["planet"] == *planet)
+                                    })
+                                })
+                        })
+                        .map(|fact| fact.id.clone())
+                        .collect();
+                    value["checks"][key]["evidence"] = json!(ids);
+                }
+                content = value.to_string();
+            }
+        }
         Ok(NativeGenerationResult {
             content,
             prompt_tokens: 0,
@@ -151,6 +189,73 @@ impl Runtime for Script {
     fn directory(&self) -> &Path {
         self.dir.path()
     }
+}
+
+#[test]
+fn omitted_job_condition_returns_to_repair_before_the_stage_can_complete() {
+    let mut session = session();
+    let chart = session.chart.as_ref().unwrap();
+    let facts = reading_method::facts(Some(chart));
+    let mut incomplete = worksheet(Stage::Condition, &facts);
+    incomplete["summary"] = json!("Authored applicant-only failure, not model evidence.");
+    for (facet, key) in [
+        (
+            horary_ai_core::book_method::ConditionFacet::Essential,
+            "own_dignity",
+        ),
+        (
+            horary_ai_core::book_method::ConditionFacet::HouseCapacity,
+            "ability_to_act",
+        ),
+    ] {
+        incomplete["checks"][key]["evidence"] = json!([facts
+            .iter()
+            .find(|fact| fact.condition_facet == Some(facet) && fact.planets == ["Jupiter"])
+            .unwrap()
+            .id]);
+    }
+    let input = json!({"roles":[
+        {"label":"Applicant","house":1,"planet":"Jupiter","reason":"Authored worker role"},
+        {"label":"Job","house":10,"planet":"Mercury","reason":"Authored external job role"}
+    ],"facts":facts});
+    let script = Script::exact(vec![
+        (Stage::Condition, incomplete.clone()),
+        (Stage::Condition, worksheet(Stage::Condition, &facts)),
+    ]);
+    let checked = task(
+        &mut session,
+        &script,
+        Stage::Condition,
+        input.clone(),
+        &facts,
+    )
+    .unwrap()
+    .expect("Repaired coverage must complete");
+    assert_eq!(script.calls.lock().unwrap().len(), 2);
+    assert_eq!(session.method.records[0].worksheet, incomplete);
+    assert!(session.method.records[0]
+        .validation_error
+        .as_ref()
+        .unwrap()
+        .contains("Condition review omits Mercury from own_dignity"));
+    assert!(session.method.records[1].validation_error.is_none());
+    assert_eq!(
+        crate::horary_step::original_input(&script.calls.lock().unwrap()[1].1),
+        &input
+    );
+    assert!(matches!(
+        session.method.flow.jobs.last().unwrap().phase(),
+        step::Phase::Complete { .. }
+    ));
+    assert_eq!(checked.worksheet(), &session.method.records[1].worksheet);
+    assert!(task(&mut session, &script, Stage::Condition, input, &facts)
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        script.calls.lock().unwrap().len(),
+        2,
+        "Completed repaired data must be reused"
+    );
 }
 
 fn brief(intent: &str) -> Value {

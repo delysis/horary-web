@@ -11,7 +11,7 @@
     },
     {
       "path": "crates/horary-ai-core/src/book_method.rs",
-      "sha256": "aca59ef276a5b83090e21e42b26bd25f8210233bf042f826d2ed7150796b194b"
+      "sha256": "03f68a9c5f0dd4a54bc14c317ab63327ec9c8d3f6b7f369d12cee60d24d928d6"
     },
     {
       "path": "crates/horary-ai-core/src/chart_input.rs",
@@ -123,7 +123,7 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "13cceada07748031f7ad0b28901686b543c72ec9924af720e7bbf9d651b529a5"
+      "sha256": "952515a34754e692a8034c891ce586a2f66ff869e59a6de2e9e3bbd86eee944d"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
@@ -139,7 +139,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "01b353722491c33c257192926fbc924a145297fd9f7c61970c6d3681ce5285ef"
+      "sha256": "fc26b9c1d696891fb0e984af980c713eb2ce6229a899ec53606edcc990925121"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -207,19 +207,19 @@
     },
     {
       "path": "src-tauri/src/horary_recovery_tests.rs",
-      "sha256": "b15b90e2d652f6da88cfc0dc7af784d9f994c2256b1c8022b165fcd30587ad8c"
+      "sha256": "fdf3f8ada308427549e7fd7c2bfe09ece0a05eff5afd4cf1635619f4aeef7e34"
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "626fa9acfb61f4cdd56f61031727100eb07e15b08adeb3daa3c948d2ce9d4b20"
+      "sha256": "4817806d99e540a5c6531882ff9f503f9352522aeaf53b1d5fdb40560e26c713"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "756b3fc81e2837861873387d4aaefff5bd2a0d94021a65cf372f671fc9e59fe0"
+      "sha256": "90f6986ddf9cf89564f0a873d467a246ce44f65a81e64e4a4d3ce8355a5cf26e"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
-      "sha256": "d19c229854dbc70c349fc69adb04be7df3707f6d8f40def36d9b9403b9da7c6b"
+      "sha256": "0d9cf52680d7c22f6b708dc4956d96f58b9866fb6fc1ac05ded32e7eb272adab"
     },
     {
       "path": "src-tauri/src/hosted_gemma_eval.rs",
@@ -259,7 +259,7 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "5864c96406ce5a88d079aaa57afee1941c8eb4b2f8e4f91197282d9003a1df71"
+      "sha256": "1e0b2c06694f011ad0a7ea006841506fd14a15f8e0cb7222a545940480c44c56"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
@@ -283,7 +283,7 @@
     },
     {
       "path": "src-tauri/src/reading_method.rs",
-      "sha256": "027a254a8319b52bb78a130b47491cbbe63f1d9c610f47980f75b9b50bbd99bb"
+      "sha256": "d3ff9f8afbad00741058ae650a74be65c2674a29b9e9398157b8b46258683b4a"
     },
     {
       "path": "src-tauri/src/reading_store.rs",
@@ -311,7 +311,7 @@
     },
     {
       "path": "src-tauri/src/worksheet_xml.rs",
-      "sha256": "a6e2c8a15e05d3034edd199c67a2fd9ba97dcf02e2e170aa0796ce39552c9c96"
+      "sha256": "f4a1c6d0c18d1a189601f4c3cc5225a9fc15dd35f5fc371c6a088e285dcad828"
     },
     {
       "path": "src-tauri/test-fixtures/elicitation/core.json",

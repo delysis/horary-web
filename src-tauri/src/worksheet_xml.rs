@@ -287,17 +287,17 @@ mod tests {
             Fact {
                 id: "e1".into(), kind: "reception".into(), label: "Mars → Venus".into(),
                 detail: "Mars regards Venus by domicile (major positive). This is Mars's regard for Venus, not the reverse.".into(),
-                planets: vec!["Mars".into(), "Venus".into()], event: None,
+                planets: vec!["Mars".into(), "Venus".into()], condition_facet: None, event: None,
             },
             Fact {
                 id: "e2".into(), kind: "reception".into(), label: "Venus → Mars".into(),
                 detail: "Venus regards Mars by detriment (major negative). This is Venus's regard for Mars, not the reverse.".into(),
-                planets: vec!["Venus".into(), "Mars".into()], event: None,
+                planets: vec!["Venus".into(), "Mars".into()], condition_facet: None, event: None,
             },
             Fact {
                 id: "e3".into(), kind: "boundary".into(), label: "Calculation boundary".into(),
                 detail: "Hourly contact search covers seven days. No relevant candidate was found. Absence cannot establish a one-year negative forecast.".into(),
-                planets: vec![], event: None,
+                planets: vec![], condition_facet: None, event: None,
             },
         ];
         let cases = vec![

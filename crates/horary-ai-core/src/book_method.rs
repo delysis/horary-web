@@ -1,5 +1,6 @@
 //! Frawley, The Horary Textbook (2005), printed pp. 44–83.
 //! Rules over supplied astronomy: no ephemeris, predictive score, or actor selection.
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 const SIGNS: [&str; 12] = [
@@ -321,11 +322,35 @@ pub fn apply_book_method_json(chart: &str) -> Result<String, wasm_bindgen::JsVal
         .map_err(|e| wasm_bindgen::JsValue::from_str(&e.to_string()))
 }
 
-pub fn evidence(chart: &Value) -> Vec<String> {
+/// Native categories travel with testimony so coverage checks never classify
+/// model prose or guess a fact's purpose from its rendered sentence.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConditionFacet {
+    Essential,
+    HouseCapacity,
+    Solar,
+    CuspAdvance,
+}
+
+pub struct ConditionTestimony {
+    pub planet: String,
+    pub facet: ConditionFacet,
+    pub detail: String,
+}
+
+pub fn condition_evidence(chart: &Value) -> Vec<ConditionTestimony> {
     let mut facts = Vec::new();
     for body in chart["bodies"].as_array().into_iter().flatten() {
         let Some(name) = body["name"].as_str().filter(|name| PLANETS.contains(name)) else {
             continue;
+        };
+        let mut add = |facet, detail| {
+            facts.push(ConditionTestimony {
+                planet: name.into(),
+                facet,
+                detail,
+            });
         };
         let conditions = body["dignity"]
             .as_object()
@@ -335,24 +360,48 @@ pub fn evidence(chart: &Value) -> Vec<String> {
             .map(|(key, _)| key.as_str())
             .collect::<Vec<_>>();
         if !conditions.is_empty() {
-            facts.push(format!(
-                "{name} essential conditions: {}",
-                conditions.join(", ")
-            ));
+            add(
+                ConditionFacet::Essential,
+                format!("{name} essential conditions: {}", conditions.join(", ")),
+            );
         }
         if let Some(capacity) = body["accidentalDignity"]["houseCapacity"].as_str() {
-            facts.push(format!("{name} house capacity {capacity}"));
+            add(
+                ConditionFacet::HouseCapacity,
+                format!("{name} house capacity {capacity}"),
+            );
         }
         if let Some(condition) = body["accidentalDignity"]["solarCondition"].as_str() {
-            facts.push(format!("{name} solar condition {condition}"));
+            add(
+                ConditionFacet::Solar,
+                format!("{name} solar condition {condition}"),
+            );
         }
         if let Some(before) = body["cuspAdvance"]["degreesBeforeCusp"].as_f64() {
-            facts.push(format!(
-                "{name} {before:.2} degrees before next cusp in same sign; judgement house {}",
-                body["house"]
-            ));
+            add(
+                ConditionFacet::CuspAdvance,
+                format!(
+                    "{name} {before:.2} degrees before next cusp in same sign; judgement house {}",
+                    body["house"]
+                ),
+            );
         }
     }
+    facts
+}
+
+pub fn moon_gap_evidence(chart: &Value) -> Option<String> {
+    (chart["derived"]["voidOfCourseMoon"]["longGapNeedsReview"] == true).then(|| {
+        "Moon travels at least 15 degrees before next major contact; review possible stagnation"
+            .into()
+    })
+}
+
+pub fn evidence(chart: &Value) -> Vec<String> {
+    let mut facts: Vec<_> = condition_evidence(chart)
+        .into_iter()
+        .map(|testimony| testimony.detail)
+        .collect();
     for reception in chart["derived"]["receptions"]
         .as_array()
         .into_iter()
@@ -366,8 +415,8 @@ pub fn evidence(chart: &Value) -> Vec<String> {
             facts.push(format!("{guest} in {host}'s {kind}"));
         }
     }
-    if chart["derived"]["voidOfCourseMoon"]["longGapNeedsReview"] == true {
-        facts.push("Moon travels at least 15 degrees before next major contact; review possible stagnation".into());
+    if let Some(detail) = moon_gap_evidence(chart) {
+        facts.push(detail);
     }
     facts
 }
@@ -375,6 +424,36 @@ pub fn evidence(chart: &Value) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn condition_categories_preserve_native_prose_order_and_unknown_boundaries() {
+        let chart = json!({"bodies":[
+            {"name":"Mercury","dignity":{"peregrine":true},
+             "accidentalDignity":{"houseCapacity":"neutral","solarCondition":"clear"},
+             "cuspAdvance":{"degreesBeforeCusp":0.5},"house":11},
+            {"name":"Venus","dignity":{"peregrine":null}},
+            {"name":"Uranus","dignity":{"domicile":true}}
+        ],"derived":{"receptions":[{"guestPlanet":"Mercury","hostPlanet":"Venus","dignity":"termRuler"}],
+            "voidOfCourseMoon":{"longGapNeedsReview":true}}});
+        let typed = condition_evidence(&chart);
+        assert_eq!(
+            typed.iter().map(|fact| fact.facet).collect::<Vec<_>>(),
+            [
+                ConditionFacet::Essential,
+                ConditionFacet::HouseCapacity,
+                ConditionFacet::Solar,
+                ConditionFacet::CuspAdvance
+            ]
+        );
+        assert!(typed.iter().all(|fact| fact.planet == "Mercury"));
+        assert_eq!(evidence(&chart), [
+            "Mercury essential conditions: peregrine",
+            "Mercury house capacity neutral",
+            "Mercury solar condition clear",
+            "Mercury 0.50 degrees before next cusp in same sign; judgement house 11",
+            "Mercury in Venus's termRuler",
+            "Moon travels at least 15 degrees before next major contact; review possible stagnation"
+        ]);
+    }
     #[test]
     fn outer_planets_do_not_inherit_synthetic_traditional_dignities() {
         let result = apply(
