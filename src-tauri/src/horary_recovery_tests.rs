@@ -6,6 +6,7 @@ struct Script {
     dir: tempfile::TempDir,
     outputs: Mutex<VecDeque<(Stage, String)>>,
     calls: Mutex<Vec<(Stage, Value)>>,
+    focused: Mutex<Option<Value>>,
     cancel_after: Option<usize>,
     locations: Mutex<VecDeque<Result<Option<LocationCandidate>, String>>>,
     location_calls: std::sync::atomic::AtomicUsize,
@@ -21,6 +22,7 @@ impl Script {
                     .collect(),
             ),
             calls: Mutex::new(Vec::new()),
+            focused: Mutex::new(None),
             cancel_after: None,
             locations: Mutex::new(VecDeque::new()),
             location_calls: std::sync::atomic::AtomicUsize::new(0),
@@ -47,7 +49,24 @@ impl Runtime for Script {
     ) -> Result<NativeGenerationResult, String> {
         self.calls.lock().unwrap().push((stage, input.clone()));
         let mut outputs = self.outputs.lock().unwrap();
-        let (expected, content) = if stage == Stage::Conversation
+        let (expected, mut content) = if stage == Stage::Intake
+            && crate::horary_step::original_input(input)["recognition_phase"]
+                == "complete_selected_program"
+        {
+            // Authored scripts separate their initial classification from the
+            // same-turn facts. This is fault injection, never model evidence.
+            let mut facts = self
+                .focused
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| turn(crate::reading_contracts::Intent::Clarify));
+            facts["intent"] = json!("clarify");
+            facts["question"] = Value::Null;
+            facts["frame"] = Value::Null;
+            facts["heard"] = json!("");
+            (Stage::Intake, facts.to_string())
+        } else if stage == Stage::Conversation
             && outputs
                 .front()
                 .is_none_or(|(s, _)| *s != Stage::Conversation)
@@ -61,6 +80,18 @@ impl Runtime for Script {
             outputs.pop_front().expect("Unexpected extra model call")
         };
         assert_eq!(stage, expected);
+        if stage == Stage::Intake {
+            let mut proposal: Value = serde_json::from_str(&content).unwrap();
+            if crate::horary_step::original_input(input)["recognition_phase"] == "classify_question"
+                || proposal["intent"] == "new_question"
+            {
+                *self.focused.lock().unwrap() = Some(proposal.clone());
+                proposal["subject"] = Value::Null;
+                proposal["people"] = json!([]);
+                proposal["updates"] = json!([]);
+                content = proposal.to_string();
+            }
+        }
         Ok(NativeGenerationResult {
             content,
             prompt_tokens: 0,
@@ -623,7 +654,11 @@ fn explicit_reader_place_survives_an_empty_neural_patch_in_text_and_audio() {
                 .text(Field::ReaderPlace),
             Some("Woodbridge, Virginia, United States")
         );
-        assert_eq!(session.method.brief.event_place, "Bozeman, Montana");
+        assert_eq!(session.method.brief.event_place, "Bozeman, MT");
+        assert!(session.audit.iter().any(|receipt| receipt["event"]
+            == "native_event_place_resolution"
+            && receipt["before"]["observation"]["value"] == "Bozeman, Montana"
+            && receipt["chart_anchor_changed"] == false));
         assert!(
             session.chart.is_none(),
             "Bob's still-unknown relationship must block roles"
@@ -706,7 +741,7 @@ fn an_explicit_count_cannot_be_accepted_as_a_yes_or_no_sale() {
             .iter()
             .filter(|(s, _)| *s != Stage::Conversation)
             .count(),
-        2
+        3
     );
 }
 
@@ -794,7 +829,7 @@ fn unclear_core_is_refined_before_recording_its_moment() {
         (Stage::Intake, serde_json::to_value(ambiguous).unwrap()),
         (Stage::Intake, serde_json::to_value(clear).unwrap()),
     ]);
-    script.cancel_after = Some(2);
+    script.cancel_after = Some(3);
     let mut session = Session::default();
     session
         .candidates
@@ -1116,6 +1151,355 @@ fn a_clock_overlap_waits_for_the_persons_choice_and_keeps_that_occurrence() {
 }
 
 #[test]
+fn a_moment_actors_question_cannot_be_mislabelled_as_missing_place() {
+    use crate::reading_contracts::{Evidence, Field, Observation, RequirementKey, Slot};
+    let mut session = session();
+    know_bob(&mut session);
+    session.chart = None;
+    session.place = None;
+    session.candidates.clear();
+    session.method.device_attempted = true;
+    session.method.consultation.as_mut().unwrap().facts.insert(
+        Field::ReaderPlace,
+        Slot::Resolved {
+            observation: Observation {
+                value: "London, United Kingdom".into(),
+                evidence: Evidence::Migration {
+                    detail: "Authored explicit place without a device fix".into(),
+                },
+            },
+        },
+    );
+    session.method.consultation.as_mut().unwrap().facts.insert(
+        Field::QuestionTime,
+        Slot::Resolved {
+            observation: Observation {
+                value: "January 14, 2026 in the morning".into(),
+                evidence: Evidence::Migration {
+                    detail: "Authored earlier question date with genuinely unspecified clock time"
+                        .into(),
+                },
+            },
+        },
+    );
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    let script = Script::new(vec![(
+        Stage::Moment,
+        json!({"mode":"ask","local_time":"","occurrence":"",
+        "clarification":"What local time on January 14 did you understand the question?","basis":"The earlier date is supplied but its clock time is not."}),
+    )]);
+    let previous = session.clone();
+    run_elicitation(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        1789387200000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert!(session.chart.is_none());
+    assert_eq!(session.place.as_ref().unwrap().name, "London");
+    assert!(session
+        .method
+        .flow
+        .pending
+        .iter()
+        .any(|pending| pending.stage == Stage::Moment && pending.request.field == "chart_moment"));
+    assert_eq!(
+        session.method.consultation.as_ref().unwrap().requested,
+        Some(RequirementKey::ChartMoment)
+    );
+    assert!(
+        !crate::horary_conversation::clipboard(&session)["reminders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|need| need["key"] == json!({"kind":"chart_place"}))
+    );
+}
+
+#[test]
+fn losing_coordinates_preserves_a_typed_moment_wait_and_the_guru_selects_one_need() {
+    use crate::reading_contracts::{Evidence, Field, Observation, RequirementKey, Slot};
+    let mut session = session();
+    know_bob(&mut session);
+    session.chart = None;
+    session.method.consultation.as_mut().unwrap().facts.insert(
+        Field::QuestionTime,
+        Slot::Resolved {
+            observation: Observation {
+                value: "January 14, 2026 in the morning".into(),
+                evidence: Evidence::Migration {
+                    detail: "Authored incomplete earlier clock time".into(),
+                },
+            },
+        },
+    );
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    let question = "What local time on January 14 did you understand the question?";
+    let script = Script::new(vec![
+        (
+            Stage::Moment,
+            json!({"mode":"ask","local_time":"","occurrence":"","clarification":question,"basis":"The clock time is genuinely missing."}),
+        ),
+        (
+            Stage::Conversation,
+            json!({"reply":question,"ask":"need_0"}),
+        ),
+        (
+            Stage::Conversation,
+            json!({"reply":question,"ask":"need_1"}),
+        ),
+    ]);
+    let previous = session.clone();
+    run_elicitation(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        1789387200000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert_eq!(
+        session.method.consultation.as_ref().unwrap().requested,
+        Some(RequirementKey::ChartMoment)
+    );
+    let previous = session.clone();
+    session.place = None;
+    session.candidates.clear();
+    session.method.device_attempted = true;
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    run_elicitation(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        1789387260000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert!(session.chart.is_none());
+    let pending = &session.method.flow.pending;
+    assert_eq!(pending.len(), 2);
+    let moment = pending
+        .iter()
+        .find(|request| request.stage == Stage::Moment)
+        .unwrap();
+    assert_eq!(moment.request.field, "chart_moment");
+    assert_eq!(moment.request.question, question);
+    let place = pending
+        .iter()
+        .find(|request| request.stage == Stage::Place)
+        .unwrap();
+    assert_eq!(place.request.field, "chart_place");
+    assert!(!place.request.question.is_empty());
+    assert_ne!(place.request.question, question);
+    let reminders = crate::horary_conversation::clipboard(&session)["reminders"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert_eq!(reminders.len(), 2);
+    assert!(reminders
+        .iter()
+        .any(|need| need["key"] == json!({"kind":"chart_place"})));
+    assert!(reminders
+        .iter()
+        .any(|need| need["key"] == json!({"kind":"chart_moment"})
+            && need["example_question"] == question));
+    assert_eq!(
+        session.method.consultation.as_ref().unwrap().requested,
+        Some(RequirementKey::ChartMoment)
+    );
+    assert_eq!(session.messages.last().unwrap().text, question);
+}
+
+#[test]
+fn a_saved_chart_without_place_metadata_recasts_with_acquired_coordinates_without_panicking() {
+    let mut session = session();
+    know_bob(&mut session);
+    let acquired = session.place.take().unwrap();
+    session.candidates.clear();
+    session.method.device_attempted = false;
+    let timestamp = session.chart.as_ref().unwrap()["timestampMs"]
+        .as_f64()
+        .unwrap();
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    let script = Script::new(vec![]);
+    script
+        .locations
+        .lock()
+        .unwrap()
+        .push_back(Ok(Some(acquired.clone())));
+    let previous = session.clone();
+    run_elicitation(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        timestamp + 60_000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    let place = session.place.as_ref().unwrap();
+    assert_eq!(place.latitude, acquired.latitude);
+    assert_eq!(place.longitude, acquired.longitude);
+    assert_eq!(place.timezone, acquired.timezone);
+    assert_eq!(session.chart.as_ref().unwrap()["timestampMs"], timestamp);
+    assert_eq!(session.revisions.len(), 1);
+    assert_eq!(
+        script
+            .location_calls
+            .load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
+    assert!(session.method.flow.pending.is_empty());
+    assert!(session
+        .audit
+        .iter()
+        .any(|receipt| receipt["event"] == "contract_handoff"));
+}
+
+#[test]
+fn device_clock_metadata_does_not_prevent_native_coordinate_acquisition() {
+    let mut session = session();
+    know_bob(&mut session);
+    let supplied = session.place.take().unwrap();
+    session.chart = None;
+    session.candidates.clear();
+    session.device_context = Some(crate::conversation::DeviceContext {
+        timezone: "America/New_York".into(),
+        locale: "en-US".into(),
+        latitude: None,
+        longitude: None,
+        accuracy_meters: None,
+    });
+    session.messages.push(Message {
+        role: "user".into(),
+        text: "Continue".into(),
+    });
+    let mut script = Script::new(Vec::new());
+    script
+        .locations
+        .get_mut()
+        .unwrap()
+        .push_back(Ok(Some(supplied)));
+    let previous = session.clone();
+    run_elicitation(
+        &mut session,
+        &script,
+        &GeocodeState::default(),
+        1789387200000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert_eq!(
+        script
+            .location_calls
+            .load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
+    assert!(session.chart.is_some());
+    assert!(session.place.is_some());
+}
+
+#[test]
+fn a_supplied_baseline_retires_the_prior_request_before_the_guru_replies() {
+    let place = session().place.unwrap();
+    let mut current = Session {
+        candidates: vec![place],
+        ..Session::default()
+    };
+    let question = "Will I get married within the next year?";
+    current.messages.push(Message {
+        role: "user".into(),
+        text: question.into(),
+    });
+    let mut first = turn(crate::reading_contracts::Intent::Read);
+    first["question"] = json!(question);
+    first["frame"] = json!({"method":"relationship","facet":"event"});
+    first["subject"] = json!({"name":"prospective partner","kind":"person","owner_id":"","source_quote":"get married"});
+    let script = Script::new(vec![(Stage::Intake, first)]);
+    let previous = current.clone();
+    run_elicitation(
+        &mut current,
+        &script,
+        &GeocodeState::default(),
+        1791388800000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert!(matches!(
+        current.method.result,
+        Some(crate::reading_contracts::ReadingResult::NeedsInformation { .. })
+    ));
+    assert!(current.chart.is_none());
+
+    let previous = current.clone();
+    current.messages.push(Message {
+        role: "user".into(),
+        text: "I am single and no wedding is arranged.".into(),
+    });
+    let mut supplied = turn(crate::reading_contracts::Intent::Clarify);
+    supplied["updates"] =
+        json!([{"field":"baseline","value":"hoped_for","quote":"I am single","mode":"supply"}]);
+    let script = Script::new(vec![(Stage::Intake, supplied)]);
+    run_elicitation(
+        &mut current,
+        &script,
+        &GeocodeState::default(),
+        1791388860000.,
+        None,
+        &previous,
+    )
+    .unwrap();
+    assert!(current.chart.is_some());
+    assert!(
+        current.method.result.is_none(),
+        "A satisfied request is history, not a live result"
+    );
+    assert!(crate::horary_conversation::clipboard(&current)["reminders"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(current.question, question);
+    assert_eq!(
+        current.chart.as_ref().unwrap()["timestampMs"],
+        1791388800000.
+    );
+}
+
+#[test]
+fn focused_extraction_can_repair_but_cannot_replace_the_selected_question() {
+    let input = json!({"consultation":crate::reading_contracts::Consultation::default(),
+        "latest_words":"Will my own house sell?","spoken_input":false,
+        "recognition_phase":"complete_selected_program"});
+    let valid = turn(crate::reading_contracts::Intent::Clarify);
+    assert!(step::check(Stage::Intake, Matter::Other, &valid, &input, &[]).is_ok());
+    let mut changed = valid.clone();
+    changed["question"] = json!("Will I buy a different house?");
+    assert!(step::check(Stage::Intake, Matter::Other, &changed, &input, &[]).is_err());
+    let mut changed = valid;
+    changed["intent"] = json!("new_question");
+    assert!(step::check(Stage::Intake, Matter::Other, &changed, &input, &[]).is_err());
+}
+
+#[test]
 fn a_reader_cannot_reask_known_ownership_instead_of_using_its_handoff() {
     let mut session = session();
     know_bob(&mut session);
@@ -1327,7 +1711,7 @@ fn unavailable_device_coordinates_use_the_same_pending_fact_and_ignorance_path()
             .iter()
             .filter(|(s, _)| *s != Stage::Conversation)
             .count(),
-        2
+        3 // Classification, same-turn focused extraction, then the factual reply.
     );
 }
 
@@ -1374,7 +1758,7 @@ fn initial_recognition_cannot_treat_a_rejected_question_as_saved_context() {
             .iter()
             .filter(|r| r.stage == Stage::Intake)
             .count(),
-        2
+        3 // Two classification attempts followed by focused extraction.
     );
     assert!(session.method.records[0]
         .validation_error

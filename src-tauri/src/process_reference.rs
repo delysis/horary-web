@@ -22,6 +22,35 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/horary_step.rs",
     "src-tauri/src/horary_role_options.rs",
     "src-tauri/src/reading_contracts.rs",
+    "src-tauri/src/recognition_programs.rs",
+    "src-tauri/src/elicitation_eval.rs",
+    "src-tauri/test-fixtures/elicitation/core.json",
+    "src-tauri/test-fixtures/elicitation/specialist.json",
+    "src-tauri/test-fixtures/elicitation/edge.json",
+    "docs/ELICITATION_EVALUATION.md",
+    "docs/PROMPT_OPTIMIZATION.md",
+    "docs/ELICITATION_FINDINGS.md",
+    "docs/llm-process/discovery-145-union.json",
+    "docs/llm-process/adversarial-fixture-provenance.json",
+    "docs/llm-process/optimization-trial-1.json",
+    "docs/llm-process/production-replays.json",
+    "crates/horary-prompt-program/Cargo.toml",
+    "crates/horary-prompt-program/Cargo.lock",
+    "crates/horary-prompt-program/src/lib.rs",
+    "crates/horary-prompt-program/src/comparison.rs",
+    "tools/horary-loop/Cargo.toml",
+    "tools/horary-loop/Cargo.lock",
+    "tools/horary-loop/README.md",
+    "tools/horary-loop/src/lib.rs",
+    "tools/horary-loop/src/main.rs",
+    "tools/horary-loop/src/types.rs",
+    "tools/horary-loop/src/packet.rs",
+    "tools/horary-loop/src/refs.rs",
+    "tools/horary-loop/src/schema_check.rs",
+    "tools/horary-loop/src/review_events.rs",
+    "tools/horary-loop/src/store.rs",
+    "tools/horary-loop/src/bin/horary-experiment.rs",
+    "tools/horary-loop/src/bin/horary-optimize.rs",
     "src-tauri/src/reading_contract_overview.md",
     "src-tauri/src/reading_contract_tests.rs",
     "src-tauri/src/horary_recovery_tests.rs",
@@ -61,6 +90,7 @@ const SOURCES: &[&str] = &[
 
 fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
     let examples = crate::horary_pipeline::process_examples()?;
+    let case_count = crate::elicitation_eval::catalogue_size(root)?;
     let mut paths: Vec<String> = SOURCES.iter().map(|p| (*p).into()).collect();
     for entry in
         std::fs::read_dir(root.join("src-tauri/src/horary_prompts")).map_err(|e| e.to_string())?
@@ -75,7 +105,25 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
             );
         }
     }
+    for entry in std::fs::read_dir(root.join("src-tauri/test-fixtures/elicitation"))
+        .map_err(|e| e.to_string())?
+    {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.is_file()
+            && path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+        {
+            paths.push(
+                path.strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
+        }
+    }
     paths.sort();
+    paths.dedup();
     let manifest = paths
         .iter()
         .map(|path| {
@@ -128,7 +176,35 @@ fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         ));
     }
     document.push_str("  place --> chart\n  moment --> chart\n  intake --> consultation_clipboard[\"N: accepted facts, missing inputs and boundaries\"]\n  judgment --> consultation_clipboard\n  explanation --> consultation_clipboard\n  consultation_clipboard --> conversation\n  conversation --> document[\"Model reply + unfolding chart and evidence\"]\n  document --> words\n```\n\nThe model conducts the conversation. Rust holds the private clipboard, validates extracted observations and computes remaining prerequisites. A missing fact or method boundary becomes a reminder to the conversational reader, never a canned reply. The reader can select one reminder to pursue, without changing accepted facts or authorizing judgment. Specialized explanation and judgment findings return to that same reader. Its complete prompt and live constrained reminder IDs are exported below.\n\nA new matter is archived into a separate leaf before downstream work. Condition, reception and contact mechanics, plus location when applicable, are submitted as **one native generation batch** with separate prompts and saved prefixes. Contact selection does not need the other worksheets: the final judgment combines those independent findings.\n\n");
-    document.push_str(r#"## Place and moment: independence and genuine dependencies
+    document.push_str(r#"## Elicitation: classify, then complete the selected program
+
+```mermaid
+flowchart TD
+  words["Current words, actual clock and device context"] --> classify["C: recognize intent and tentative question type"]
+  words --> acquire["N: acquire missing device coordinates in parallel"]
+  classify --> checked{"Native patch accepted?"}
+  checked -->|No| repair["Same task with original input and exact rejection"]
+  repair --> classify
+  checked -->|New concrete method| extract["C: focused method lesson, SAME words"]
+  extract --> validate{"Native patch accepted?"}
+  validate -->|No| retry["Same focused task and explicit rejection"]
+  retry --> extract
+  validate -->|Changed method only| extract
+  validate -->|Verified method and accepted facts| facts["Canonical sourced facts"]
+  checked -->|Existing method or unresolved concern| facts
+  acquire --> facts
+  facts --> plan["N: conditional requirements from the executable contract"]
+  plan -->|Genuine gap| guru["W: conversational reader receives a private reminder"]
+  guru --> answer["User supplies, corrects, explains or declines"]
+  answer --> words
+  plan -->|Enough facts| anchor["N: verified reader place and understood moment"]
+  anchor --> permit["Typed reading permit"]
+  permit --> judgment["Question-specific specialist judgment"]
+```
+
+Initial classification cannot establish people, subjects or facts. The focused pass verifies a tentative method and answer type before extracting facts from the same words. Its schema fixes question to null and intent to clarify; the accepted question remains intact. A corrected method is returned alone and runs its own lesson before extracting facts. A same-method facet correction can accompany observations. Subsequent turns already use the selected lesson. All passes share the application's native acceptance, repair and receipt path. An ordinary resolved fact cannot reappear merely because an earlier result requested it. Native time/place validation can retain a more specific unresolved anchor reason. Supplied event cities are independently qualified by the offline geocoder; their provenance retains the original words and they never become the chart's reader place.
+
+## Place and moment: independence and genuine dependencies
 
 ```mermaid
 flowchart TB
@@ -184,6 +260,7 @@ flowchart LR
 The bank contains only fixed teaching messages, not private question inputs or audio. It is bounded to one eighth of physical memory, at most 4 GiB. Eviction, owner restart, changed lesson text, changed model or template can require another prefill; an absolute once-ever guarantee would be false. The ordinary batch API accepts an authenticated saved prefix **per case**. The constrained API has one constraint program for the whole batch and no supplied per-case-prefix field in the current pin. Single text tasks use constrained JSON; independent analysis tasks use ordinary cached batching and native validation. This boundary is visible rather than hidden behind an apparent cache-hit claim.
 
 "#);
+    document.push_str(&format!("\nThe [scenario evaluation guide](ELICITATION_EVALUATION.md) documents the executable {case_count}-case bank, separate first-turn and continuation grades, and full private traces. The case catalogue is never inserted into the model's prompt. The [optimization loop](PROMPT_OPTIMIZATION.md) uses typed teaching candidates, the existing Codex login for review/writing, and paired native trials; [its first measured trial](llm-process/optimization-trial-1.json) was rejected on reserved validation.\n\n"));
     document.push_str("\n## Stage inventory and reviewable outputs\n\n| Task | Kind | Must have first | Public checks |\n|---|---|---|---|\n");
     for stage in Stage::ALL {
         document.push_str(&format!(

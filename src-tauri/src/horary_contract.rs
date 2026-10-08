@@ -182,7 +182,12 @@ pub fn guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String, 
             original["consultation"].clone(),
         )
         .ok();
-        return Ok(crate::reading_contracts::recognition_guide(case.as_ref()));
+        return Ok(crate::reading_contracts::recognition_guide_for(
+            case.as_ref(),
+            original["recognition_phase"]
+                .as_str()
+                .unwrap_or("update_selected_program"),
+        ));
     }
     let mut guide = lessons::guide(stage, matter)?;
     if let Ok(method) = serde_json::from_value::<crate::reading_contracts::Method>(
@@ -419,16 +424,24 @@ pub(crate) fn validate_for(
 }
 
 pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String> {
+    validate_shape_at(value, schema, "$")
+}
+
+/// Preserve the worksheet's strict acceptance rules while giving a repair
+/// worker the field, index and exact constraint that rejected its proposal.
+fn validate_shape_at(value: &Value, schema: &Value, path: &str) -> Result<(), String> {
     if let Some(alternatives) = schema["oneOf"].as_array() {
         let attempts = alternatives
             .iter()
-            .map(|branch| validate_shape(value, branch))
+            .map(|branch| validate_shape_at(value, branch, path))
             .collect::<Vec<_>>();
-        if attempts.iter().filter(|result| result.is_ok()).count() == 1 {
+        let matches = attempts.iter().filter(|result| result.is_ok()).count();
+        if matches == 1 {
             return Ok(());
         }
         return Err(format!(
-            "The value must match exactly one response alternative: {}",
+            "{path}: must match exactly one response alternative; matched {matches} of {}. {}",
+            alternatives.len(),
             attempts
                 .into_iter()
                 .filter_map(Result::err)
@@ -438,7 +451,10 @@ pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String
     }
     if let Some(allowed) = schema["enum"].as_array() {
         if !allowed.contains(value) {
-            return Err(format!("Unexpected worksheet value {value}."));
+            return Err(format!(
+                "{path}: unexpected value {value}; allowed values are {}.",
+                Value::Array(allowed.clone())
+            ));
         }
     }
     let types: Vec<_> = if let Some(t) = schema["type"].as_str() {
@@ -461,14 +477,29 @@ pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String
         "boolean" => value.is_boolean(),
         _ => false,
     }) {
-        return Err("Wrong worksheet value type.".into());
+        let actual = match value {
+            Value::Null => "null",
+            Value::Bool(_) => "boolean",
+            Value::Number(_) => "number",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+        };
+        return Err(format!(
+            "{path}: wrong value type {actual}; expected {}.",
+            types.join(" or ")
+        ));
     }
     if let Some(s) = value.as_str() {
+        let actual = s.chars().count();
         if schema["maxLength"]
             .as_u64()
-            .is_some_and(|n| s.chars().count() > n as usize)
+            .is_some_and(|n| actual > n as usize)
         {
-            return Err("Worksheet string is too long.".into());
+            return Err(format!(
+                "{path}: string has {actual} characters; maximum is {}.",
+                schema["maxLength"]
+            ));
         }
     }
     if let Some(n) = value.as_f64() {
@@ -476,27 +507,127 @@ pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String
             || schema["minimum"].as_f64().is_some_and(|min| n < min)
             || schema["maximum"].as_f64().is_some_and(|max| n > max)
         {
-            return Err("Worksheet number is outside its range.".into());
+            return Err(format!(
+                "{path}: number {value} is outside its range; minimum is {}, maximum is {}.",
+                schema["minimum"], schema["maximum"]
+            ));
         }
     }
     if let Some(a) = value.as_array() {
-        if a.len() > schema["maxItems"].as_u64().unwrap_or(0) as usize {
-            return Err("Too many worksheet entries.".into());
+        let maximum = schema["maxItems"].as_u64().unwrap_or(0) as usize;
+        if a.len() > maximum {
+            return Err(format!(
+                "{path}: array has {} entries; maximum is {maximum}.{}",
+                a.len(),
+                if maximum == 0 {
+                    " This field must be []."
+                } else {
+                    ""
+                }
+            ));
         }
-        for v in a {
-            validate_shape(v, &schema["items"])?;
+        for (index, entry) in a.iter().enumerate() {
+            validate_shape_at(entry, &schema["items"], &format!("{path}[{index}]"))?;
         }
     }
     if let Some(m) = value.as_object() {
         let fields = schema["properties"]
             .as_object()
-            .ok_or("Missing worksheet contract")?;
-        if m.len() != fields.len() {
-            return Err("Missing or additional worksheet fields.".into());
+            .ok_or_else(|| format!("{path}: missing worksheet contract."))?;
+        let missing: Vec<_> = fields.keys().filter(|key| !m.contains_key(*key)).collect();
+        let additional: Vec<_> = m.keys().filter(|key| !fields.contains_key(*key)).collect();
+        if !missing.is_empty() || !additional.is_empty() {
+            return Err(format!(
+                "{path}: missing fields {}; additional fields {}.",
+                json!(missing),
+                json!(additional)
+            ));
         }
-        for (k, s) in fields {
-            validate_shape(m.get(k).ok_or_else(|| format!("Missing {k}."))?, s)?;
+        for (key, field_schema) in fields {
+            validate_shape_at(&m[key], field_schema, &format!("{path}.{key}"))?;
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod shape_feedback_tests {
+    use super::*;
+
+    #[test]
+    fn classifier_people_error_identifies_the_field_and_empty_array_repair() {
+        let input = json!({"recognition_phase":"classify_question"});
+        let schema =
+            crate::horary_step::response_schema_for(Stage::Intake, Matter::Other, &input, &[]);
+        let mut value = serde_json::to_value(crate::reading_contracts::control(
+            crate::reading_contracts::Intent::Read,
+        ))
+        .unwrap();
+        value["people"] = json!([{
+            "id":"alex", "label":"Alex", "relationship":"partner", "source_quote":"my partner Alex"
+        }]);
+        let error = validate_shape(&value, &schema).unwrap_err();
+        assert!(error.contains("$.people"), "{error}");
+        assert!(error.contains("1 entries; maximum is 0"), "{error}");
+        assert!(error.contains("must be []"), "{error}");
+        value["people"] = json!([]);
+        validate_shape(&value, &schema).unwrap();
+    }
+
+    #[test]
+    fn canonical_theft_value_error_identifies_update_index_and_allowed_labels() {
+        // Use the native field vocabulary to exercise a selected value branch.
+        // This test does not change the production Turn's value schema.
+        let schema = json!({"type":"object","properties":{
+            "updates":{"type":"array","maxItems":1,"items":{
+                "type":"object","properties":{
+                    "field":{"type":"string","enum":["theft_raised"]},
+                    "value":{"type":"string","enum":crate::reading_contracts::allowed_values(crate::reading_contracts::Field::TheftRaised)}
+                }
+            }}
+        }});
+        let mut value = json!({"updates":[{"field":"theft_raised","value":"false"}]});
+        let error = validate_shape(&value, &schema).unwrap_err();
+        assert!(error.contains("$.updates[0].value"), "{error}");
+        assert!(error.contains("\"false\""), "{error}");
+        assert!(
+            error.contains("allowed values are [\"yes\",\"no\"]"),
+            "{error}"
+        );
+        value["updates"][0]["value"] = json!("no");
+        validate_shape(&value, &schema).unwrap();
+    }
+
+    #[test]
+    fn missing_and_additional_fields_are_both_reported_even_with_equal_counts() {
+        let schema = json!({"type":"object","properties":{
+            "reply":{"type":"string"},"ask":{"type":"string"}
+        }});
+        let error =
+            validate_shape(&json!({"reply":"Hello","asking":"need_0"}), &schema).unwrap_err();
+        assert!(error.contains("$: missing fields [\"ask\"]"), "{error}");
+        assert!(error.contains("additional fields [\"asking\"]"), "{error}");
+    }
+
+    #[test]
+    fn nested_object_shape_errors_preserve_the_array_index() {
+        let schema = json!({"type":"array","maxItems":1,"items":{
+            "type":"object","properties":{"field":{"type":"string"},"value":{"type":"string"}}
+        }});
+        let error =
+            validate_shape(&json!([{"field":"context","quote":"garden"}]), &schema).unwrap_err();
+        assert!(
+            error.contains("$[0]: missing fields [\"value\"]"),
+            "{error}"
+        );
+        assert!(error.contains("additional fields [\"quote\"]"), "{error}");
+    }
+
+    #[test]
+    fn ambiguous_response_alternatives_still_fail_with_the_match_count() {
+        let schema = json!({"oneOf":[{"type":"string"},{"type":"string"}]});
+        let error = validate_shape(&json!("reply"), &schema).unwrap_err();
+        assert!(error.contains("$: must match exactly one"), "{error}");
+        assert!(error.contains("matched 2 of 2"), "{error}");
+    }
 }

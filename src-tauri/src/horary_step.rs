@@ -356,7 +356,53 @@ pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &
             original_input(input)["consultation"].clone(),
         )
         .ok();
-        return crate::reading_contracts::turn_schema(case.as_ref());
+        let mut schema = crate::reading_contracts::turn_schema(case.as_ref());
+        if original_input(input)["recognition_phase"] == "classify_question" {
+            // Classification selects the next lesson; it cannot establish
+            // facts that lesson has not yet checked.
+            schema["properties"]["subject"] = json!({"type":"null"});
+            schema["properties"]["people"]["maxItems"] = json!(0);
+            // No observations may be emitted, so do not prefill the extractor's
+            // field/value alternatives in this unrelated classification call.
+            schema["properties"]["updates"] = json!({"type":"array","maxItems":0});
+        } else if original_input(input)["recognition_phase"] == "complete_selected_program" {
+            // Verify the tentative classification, then collect that method's
+            // facts. The question and already accepted observations retain
+            // their authority; the provisional frame is refinable.
+            let fields = schema["properties"]
+                .as_object_mut()
+                .expect("Turn schema fields");
+            fields.insert("intent".into(), json!({"type":"string","enum":["clarify"]}));
+            fields.insert("question".into(), json!({"type":"null"}));
+            // The selected lesson may refine a provisional classification.
+            // A different method must be returned alone and receive its own
+            // lesson before it can establish observations.
+            fields.insert("heard".into(), json!({"type":"string","maxLength":0}));
+            fields.insert(
+                "unavailable_quote".into(),
+                json!({"type":"string","maxLength":0}),
+            );
+            fields.insert("restore_revision".into(), json!({"type":"null"}));
+            if let Some(method) = case
+                .as_ref()
+                .and_then(crate::reading_contracts::Consultation::method)
+            {
+                // A changed method can still be returned with subject=null.
+                // Its own program must run before its subject types or other
+                // observations can be accepted. This enum also governs raw
+                // batch outputs and saved worksheets through native checking.
+                let subject = &mut fields.get_mut("subject").expect("Turn subject schema")["oneOf"]
+                    [1]["properties"];
+                subject["kind"]["enum"] =
+                    json!(crate::reading_contracts::contract(method).subject_kinds);
+                if method == crate::reading_contracts::Method::Relationship {
+                    subject["name"]["description"] = json!("An unspecified prospective spouse may be named Prospective partner. Preserve an explicitly identified target's actual name.");
+                    subject["kind"]["description"] = json!("person is either an identified target or the unnamed prospective partner in this Relationship question. No spouse identity is invented.");
+                    subject["owner_id"]["description"] = json!("For an identified target use that person's actual ID. For an unnamed prospective partner use an empty string; querent would identify the wrong person.");
+                }
+            }
+        }
+        return schema;
     }
     if stage != Stage::Significators {
         let data = horary_contract::schema_for(stage, matter, facts);
@@ -436,6 +482,74 @@ pub fn original_input(mut input: &Value) -> &Value {
     input
 }
 
+/// The schema constrains decoding, while this boundary also governs raw batch
+/// outputs and saved worksheets. Returns whether an authorized provisional
+/// frame must be replaced before validating its particular fact patch.
+fn recognition_scope(
+    turn: &crate::reading_contracts::Turn,
+    case: &crate::reading_contracts::Consultation,
+    input: &Value,
+) -> Result<bool, String> {
+    use crate::reading_contracts::{Facet, Intent};
+    let input = original_input(input);
+    if turn.intent == Intent::Resume
+        && case
+            .question
+            .resolved()
+            .is_none_or(|question| question.trim().is_empty())
+    {
+        return Err("There is no understood consultation to resume. An earlier consultation described for the first time is still a new question here: classify the actual latest question with intent=read, then complete its selected program.".into());
+    }
+    if input["recognition_phase"] == "classify_question" || turn.intent == Intent::NewQuestion {
+        if turn.subject.is_some() || !turn.people.is_empty() || !turn.updates.is_empty() {
+            return Err("Classification cannot establish subject, people or observations. Return subject=null, people=[], updates=[]; the selected program will extract them from the same words.".into());
+        }
+        return Ok(false);
+    }
+    if input["recognition_phase"] != "complete_selected_program" {
+        return Ok(false);
+    }
+    if turn.intent != Intent::Clarify
+        || turn.question.is_some()
+        || !turn.heard.is_empty()
+        || !turn.unavailable_quote.is_empty()
+        || turn.restore_revision.is_some()
+    {
+        return Err("Focused completion can confirm or refine the provisional frame and supply sourced facts, never replace the question or issue a control command. Use intent=clarify, question=null, heard='', unavailable_quote='', restore_revision=null.".into());
+    }
+    let prior = case.frame.resolved();
+    let literal_count = case.question.resolved().is_some_and(|question| {
+        let question = question
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_ascii_lowercase();
+        // "How much does he love me?" asks about feeling, not a numerical tally.
+        // Only unambiguous count predicates override a provisional facet here.
+        ["how many ", "what number ", "what is the number of "]
+            .iter()
+            .any(|prefix| question.starts_with(prefix))
+    });
+    if literal_count
+        && turn
+            .frame
+            .as_ref()
+            .or(prior)
+            .is_some_and(|frame| frame.facet != Facet::Quantity)
+    {
+        return Err("Focused completion cannot replace the retained quantity goal with event, profit or another facet. Preserve quantity; a different question needs the person's consent in the conversational intake, before focused completion.".into());
+    }
+    let Some(frame) = &turn.frame else {
+        return Ok(false);
+    };
+    if prior.is_none_or(|prior| prior.method != frame.method)
+        && (turn.subject.is_some() || !turn.people.is_empty() || !turn.updates.is_empty())
+    {
+        return Err("A different selected method is a frame-only refinement. Return its frame with subject=null, people=[], updates=[]; the controller must run that method's lesson before accepting its facts.".into());
+    }
+    Ok(prior.is_none_or(|prior| prior != frame))
+}
+
 pub fn check(
     stage: Stage,
     matter: Matter,
@@ -464,6 +578,35 @@ pub fn check(
             serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
         let mut case: crate::reading_contracts::Consultation =
             serde_json::from_value(input["consultation"].clone()).unwrap_or_default();
+        let scope_refined = recognition_scope(&turn, &case, input)?;
+        let method_only_refinement = turn
+            .frame
+            .as_ref()
+            .is_some_and(|frame| case.method() != Some(frame.method))
+            && turn.subject.is_none()
+            && turn.people.is_empty()
+            && turn.updates.is_empty();
+        if input["recognition_phase"] != "classify_question"
+            && !method_only_refinement
+            && matches!(
+                turn.intent,
+                crate::reading_contracts::Intent::Clarify
+                    | crate::reading_contracts::Intent::Correct
+            )
+        {
+            let source_words = if input["spoken_input"] == true {
+                turn.heard.as_str()
+            } else {
+                input["latest_words"].as_str().unwrap_or("")
+            };
+            crate::reading_contracts::validate_anchor_completion(&case, &turn, source_words)?;
+        }
+        if scope_refined {
+            // Native phase authority allows correcting a provisional frame;
+            // it does not turn clarification into a user-authorized rewrite
+            // of the question, its subject, or previously accepted facts.
+            case.frame = crate::reading_contracts::Slot::Missing;
+        }
         case.apply(
             &turn,
             0,
@@ -490,8 +633,21 @@ pub fn check(
             return Err("The supplied question explicitly asks HOW MANY. Keep facet=quantity and its count goal; do not substitute an event prediction.".into());
         }
         if case.question.resolved().is_none()
-            && case.subject.resolved().is_some()
             && case.method().is_some()
+            && (case.subject.resolved().is_some()
+                || input["recognition_phase"] == "classify_question"
+                    && case.method().is_some_and(|method| {
+                        !matches!(
+                            method,
+                            crate::reading_contracts::Method::Wish
+                                | crate::reading_contracts::Method::Unclassified
+                        )
+                    })
+                || matches!(
+                    turn.intent,
+                    crate::reading_contracts::Intent::Read
+                        | crate::reading_contracts::Intent::NewQuestion
+                ))
         {
             return Err("The original consultation has no question yet. Preserve the actual question from latest_words (or heard for audio); null cannot stand for an unsaved question. A rejected previous_worksheet is not retained context.".into());
         }
@@ -659,3 +815,332 @@ pub fn check(
 #[cfg(test)]
 #[path = "horary_step_tests.rs"]
 mod invariants;
+
+#[cfg(test)]
+mod recognition_boundaries {
+    use super::*;
+    use crate::reading_contracts::{
+        self, Consultation, Evidence, Facet, Frame, Intent, Method, Observation, Slot,
+    };
+
+    fn retained(question: &str, method: Method, facet: Facet) -> Consultation {
+        Consultation {
+            question: Slot::Resolved {
+                observation: Observation {
+                    value: question.into(),
+                    evidence: Evidence::User {
+                        turn: 0,
+                        quote: question.into(),
+                    },
+                },
+            },
+            frame: Slot::Resolved {
+                observation: Observation {
+                    value: Frame { method, facet },
+                    evidence: Evidence::User {
+                        turn: 0,
+                        quote: question.into(),
+                    },
+                },
+            },
+            ..Consultation::default()
+        }
+    }
+
+    fn input(case: &Consultation, phase: &str, words: &str) -> Value {
+        json!({"consultation":case,"recognition_phase":phase,"latest_words":words,"spoken_input":false})
+    }
+
+    fn run(turn: &reading_contracts::Turn, input: &Value) -> Result<Checked, String> {
+        check(
+            Stage::Intake,
+            Matter::Other,
+            &serde_json::to_value(turn).unwrap(),
+            input,
+            &[],
+        )
+    }
+
+    fn subject() -> crate::horary_role_options::Subject {
+        crate::horary_role_options::Subject {
+            name: "myself".into(),
+            kind: "person".into(),
+            owner_id: "querent".into(),
+            source_quote: "myself".into(),
+        }
+    }
+
+    #[test]
+    fn classification_schema_and_native_scope_do_not_establish_facts() {
+        let case = Consultation::default();
+        let source = input(&case, "classify_question", "Can I trust myself?");
+        let repaired = json!({"original_input":{"original_input":source},"previous_worksheet":{"recognition_phase":"complete_selected_program"}});
+        let schema = response_schema_for(Stage::Intake, Matter::Other, &repaired, &[]);
+        assert_eq!(schema["properties"]["subject"], json!({"type":"null"}));
+        assert_eq!(schema["properties"]["people"]["maxItems"], 0);
+        assert_eq!(schema["properties"]["updates"]["maxItems"], 0);
+        let mut turn = reading_contracts::control(Intent::Read);
+        turn.question = Some("Can I trust myself?".into());
+        turn.frame = Some(Frame {
+            method: Method::Trust,
+            facet: Facet::Situation,
+        });
+        assert!(run(&turn, &repaired).is_ok());
+        for intent in [
+            Intent::Read,
+            Intent::NewQuestion,
+            Intent::Clarify,
+            Intent::Correct,
+        ] {
+            let mut missing_question = turn.clone();
+            missing_question.question = None;
+            missing_question.intent = intent;
+            assert!(
+                run(&missing_question, &repaired)
+                    .err()
+                    .unwrap()
+                    .contains("unsaved question"),
+                "A model-selected intent cannot bypass the canonical prerequisite"
+            );
+        }
+        turn.subject = Some(subject());
+        assert!(recognition_scope(&turn, &case, &repaired)
+            .unwrap_err()
+            .contains("Classification cannot establish"));
+        assert!(
+            run(&turn, &repaired).is_err(),
+            "Unconstrained batch output must obey the same boundary"
+        );
+        turn.subject = None;
+        turn.updates.push(reading_contracts::Update {
+            field: reading_contracts::Field::Context,
+            value: "trusting myself".into(),
+            quote: "trust myself".into(),
+            mode: reading_contracts::UpdateMode::Supply,
+        });
+        assert!(recognition_scope(&turn, &case, &repaired).is_err());
+        assert!(run(&turn, &repaired).is_err());
+    }
+
+    #[test]
+    fn a_new_question_inside_an_existing_program_is_also_classification_only() {
+        let case = retained("Can I trust myself?", Method::Trust, Facet::Situation);
+        let source = input(&case, "conversation_intake", "Where is my ring?");
+        let mut turn = reading_contracts::control(Intent::NewQuestion);
+        turn.question = Some("Where is my ring?".into());
+        turn.frame = Some(Frame {
+            method: Method::LostObject,
+            facet: Facet::Location,
+        });
+        assert!(run(&turn, &source).is_ok());
+        turn.subject = Some(crate::horary_role_options::Subject {
+            name: "ring".into(),
+            kind: "movable".into(),
+            owner_id: "querent".into(),
+            source_quote: "my ring".into(),
+        });
+        assert!(run(&turn, &source)
+            .err()
+            .unwrap()
+            .contains("Classification cannot establish"));
+    }
+
+    #[test]
+    fn focused_completion_can_refine_a_facet_without_rewriting_the_question() {
+        let words = "Can I trust myself with the keys?";
+        let case = retained(words, Method::Trust, Facet::Safety);
+        let source = input(&case, "complete_selected_program", words);
+        let mut turn = reading_contracts::control(Intent::Clarify);
+        turn.frame = Some(Frame {
+            method: Method::Trust,
+            facet: Facet::Situation,
+        });
+        turn.subject = Some(subject());
+        assert!(
+            run(&turn, &source).is_ok(),
+            "A supported focused refinement must not create a conflicting frame"
+        );
+        turn.question = Some("A different concern".into());
+        assert!(recognition_scope(&turn, &case, &source).is_err());
+        assert!(run(&turn, &source).is_err());
+        turn.question = None;
+        turn.intent = Intent::NewQuestion;
+        assert!(run(&turn, &source).is_err());
+    }
+
+    #[test]
+    fn focused_decoder_excludes_foreign_subject_kinds_and_preserves_a_real_gap() {
+        let words = "Will I get married within the next year?";
+        let mut case = retained(words, Method::Relationship, Facet::Timing);
+        let source = input(&case, "complete_selected_program", words);
+        let schema = response_schema_for(Stage::Intake, Matter::Other, &source, &[]);
+        let mut turn = reading_contracts::control(Intent::Clarify);
+        turn.frame = Some(Frame {
+            method: Method::Relationship,
+            facet: Facet::Event,
+        });
+        turn.subject = Some(crate::horary_role_options::Subject {
+            name: "prospective partner".into(),
+            kind: "person".into(),
+            owner_id: String::new(),
+            source_quote: "get married".into(),
+        });
+        let value = serde_json::to_value(&turn).unwrap();
+        horary_contract::validate_shape(&value, &schema).unwrap();
+        for kind in ["person_role", "other"] {
+            let mut foreign = value.clone();
+            foreign["subject"]["kind"] = json!(kind);
+            assert!(horary_contract::validate_shape(&foreign, &schema).is_err());
+        }
+        assert!(run(&turn, &source).is_ok());
+        assert!(recognition_scope(&turn, &case, &source).unwrap());
+        case.frame = Slot::Missing;
+        case.apply(&turn, 1, words, false).unwrap();
+        let anchor = reading_contracts::Anchor {
+            timestamp_ms: 1791388800000.,
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+        };
+        let plan = case.plan(Some(&anchor));
+        assert_eq!(
+            plan.needs.iter().map(|need| &need.key).collect::<Vec<_>>(),
+            vec![&reading_contracts::RequirementKey::Field(
+                reading_contracts::Field::Baseline
+            )]
+        );
+        assert!(case.subject.resolved().unwrap().owner_id.is_empty());
+    }
+
+    #[test]
+    fn a_frame_only_refinement_selects_a_new_subject_contract() {
+        let words = "Will I get the librarian job? There is no offer yet.";
+        let mut case = retained(words, Method::Relationship, Facet::Event);
+        let source = input(&case, "complete_selected_program", words);
+        let mut refinement = reading_contracts::control(Intent::Clarify);
+        refinement.frame = Some(Frame {
+            method: Method::NewJob,
+            facet: Facet::Event,
+        });
+        assert!(run(&refinement, &source).is_ok());
+        let before = response_schema_for(Stage::Intake, Matter::Other, &source, &[]);
+        assert_eq!(
+            before["properties"]["subject"]["oneOf"][1]["properties"]["kind"]["enum"],
+            json!(["person"])
+        );
+        case.frame = Slot::Missing;
+        case.apply(&refinement, 1, words, false).unwrap();
+        let next = input(&case, "complete_selected_program", words);
+        let after = response_schema_for(Stage::Intake, Matter::Other, &next, &[]);
+        assert_eq!(
+            after["properties"]["subject"]["oneOf"][1]["properties"]["kind"]["enum"],
+            json!(["job"])
+        );
+        let mut extraction = reading_contracts::control(Intent::Clarify);
+        extraction.subject = Some(crate::horary_role_options::Subject {
+            name: "librarian job".into(),
+            kind: "job".into(),
+            owner_id: "querent".into(),
+            source_quote: "librarian job".into(),
+        });
+        assert!(run(&extraction, &source).is_err());
+        assert!(run(&extraction, &next).is_ok());
+    }
+
+    #[test]
+    fn a_different_method_receives_its_own_lesson_before_facts_are_accepted() {
+        let words = "Will I get the librarian job? There is no offer yet.";
+        let case = retained(words, Method::JobOffer, Facet::Event);
+        let source = input(&case, "complete_selected_program", words);
+        let mut turn = reading_contracts::control(Intent::Clarify);
+        turn.frame = Some(Frame {
+            method: Method::NewJob,
+            facet: Facet::Event,
+        });
+        assert!(run(&turn, &source).is_ok());
+        turn.subject = Some(crate::horary_role_options::Subject {
+            name: "librarian job".into(),
+            kind: "job".into(),
+            owner_id: "querent".into(),
+            source_quote: "librarian job".into(),
+        });
+        assert!(run(&turn, &source).err().unwrap().contains("frame-only"));
+    }
+
+    #[test]
+    fn a_how_much_feeling_question_is_not_forced_into_an_exact_count() {
+        let words = "How much does my husband love me?";
+        let case = retained(words, Method::Relationship, Facet::Situation);
+        let source = input(&case, "complete_selected_program", words);
+        let mut turn = reading_contracts::control(Intent::Clarify);
+        assert!(run(&turn, &source).is_ok());
+
+        let mistaken = retained(words, Method::Relationship, Facet::Quantity);
+        turn.frame = Some(Frame {
+            method: Method::Relationship,
+            facet: Facet::Situation,
+        });
+        assert!(run(&turn, &input(&mistaken, "complete_selected_program", words)).is_ok());
+    }
+
+    #[test]
+    fn literal_count_is_preserved_but_a_mistaken_quantity_classification_is_refinable() {
+        let words = "How many fish will I sell?";
+        let case = retained(words, Method::MovableDeal, Facet::Quantity);
+        let source = input(&case, "complete_selected_program", words);
+        let mut turn = reading_contracts::control(Intent::Clarify);
+        turn.frame = Some(Frame {
+            method: Method::Undertaking,
+            facet: Facet::Profit,
+        });
+        assert!(run(&turn, &source).err().unwrap().contains("quantity goal"));
+        let misclassified = retained(words, Method::MovableDeal, Facet::Event);
+        turn.frame = None;
+        assert!(
+            recognition_scope(
+                &turn,
+                &misclassified,
+                &input(&misclassified, "complete_selected_program", words)
+            )
+            .is_err(),
+            "A null refinement must not retain an already misclassified literal count"
+        );
+        let agreed = "Will I sell the fish?";
+        let case = retained(agreed, Method::MovableDeal, Facet::Quantity);
+        let source = input(&case, "complete_selected_program", agreed);
+        turn.frame = Some(Frame {
+            method: Method::MovableDeal,
+            facet: Facet::Event,
+        });
+        assert!(run(&turn, &source).is_ok(), "A mistaken classifier facet cannot overrule the actual retained predicate or an already agreed reframing");
+    }
+
+    #[test]
+    fn resume_requires_a_previously_established_question_but_not_complete_inputs() {
+        let words = "Use my earlier question in London on January 14 at 2:30 PM. Will I marry within a year?";
+        let empty = Consultation::default();
+        let source = input(&empty, "classify_question", words);
+        let mut turn = reading_contracts::control(Intent::Resume);
+        turn.question = Some(words.into());
+        turn.frame = Some(Frame {
+            method: Method::Relationship,
+            facet: Facet::Event,
+        });
+        assert!(run(&turn, &source).err().unwrap().contains("to resume"));
+        let established = retained(
+            "Will I marry within a year?",
+            Method::Relationship,
+            Facet::Event,
+        );
+        assert!(
+            !established.understood(),
+            "This question still lacks a focused subject and baseline"
+        );
+        turn = reading_contracts::control(Intent::Resume);
+        assert!(run(
+            &turn,
+            &input(&established, "conversation_intake", "Continue.")
+        )
+        .is_ok());
+    }
+}

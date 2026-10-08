@@ -137,7 +137,23 @@ fn chart_context(session: &Session) -> Value {
         "event_context":{"place":session.method.brief.event_place,"time":session.method.brief.event_time,"other":session.method.brief.context}})
 }
 
-fn intake_input(session: &Session, spoken: bool) -> Value {
+fn intake_input(session: &Session, spoken: bool, instant: f64) -> Value {
+    let device = session
+        .candidates
+        .iter()
+        .find(|place| place.provider == "device");
+    let zone = session
+        .place
+        .as_ref()
+        .or(device)
+        .map(|place| place.timezone.as_str())
+        .or_else(|| {
+            session
+                .device_context
+                .as_ref()
+                .map(|context| context.timezone.as_str())
+        });
+    let clock = zone.and_then(|zone| horary_ai_core::chart_input::local_clock(instant, zone).ok());
     let completed: Vec<_> = session
         .sections
         .iter()
@@ -179,12 +195,28 @@ fn intake_input(session: &Session, spoken: bool) -> Value {
     } else {
         Vec::new()
     };
-    json!({"legacy_user_fact_sources":legacy_sources,"canonical_question":session.question,"chart_exists":session.chart.is_some(),
+    let classify = session
+        .method
+        .consultation
+        .as_ref()
+        .and_then(|case| case.method())
+        .is_none_or(|method| {
+            matches!(
+                method,
+                crate::reading_contracts::Method::Wish
+                    | crate::reading_contracts::Method::Unclassified
+            )
+        });
+    json!({"recognition_phase":if classify {"classify_question"} else {"update_selected_program"},
+        "legacy_user_fact_sources":legacy_sources,"canonical_question":session.question,"chart_exists":session.chart.is_some(),
         "consultation":session.method.consultation.as_ref().map(|c|c.recognition_snapshot()),"pending_requirement":session.method.consultation.as_ref().and_then(|c|c.requested.as_ref()),
         "consultation_state":{"chart":chart_context(session),"completed_steps":completed,
             "interpretation_exists":completed.contains(&Stage::Judgment),"unfinished_step":unfinished,
             "pending_user_requests":session.method.flow.pending,"legacy_interruption":legacy_error},
-        "device_place_available":session.candidates.iter().any(|place|place.provider == "device"),"native_clock_available":true,
+        "device_place_available":device.is_some(),"device_place":device,
+        "receipt_instant_ms":instant,"current_local_clock":clock,"current_timezone":zone,
+        "context_authority":"The native clock resolves relative dates; the device place supports nearby-place inference. Neither is evidence of citizenship, an event venue, or a historical chart override.",
+        "native_clock_available":clock.is_some(),
         "available_revisions":session.revisions.iter().map(|revision|json!({"number":revision.number,"question":revision.question})).collect::<Vec<_>>(),
         "latest_words":session.messages.last().map(|message|message.text.as_str()),
         "last_reader_question":session.messages.iter().rev().find(|message|message.role == "assistant").map(|message|message.text.as_str()),
@@ -300,12 +332,100 @@ pub fn native_place(
         geocode,
         GeocodeRequest {
             query: brief.place_request.clone(),
-            limit: Some(5),
+            limit: Some(50),
         },
     )
     .map_err(|e| e.message)?;
-    let chosen = (matches.len() == 1).then(|| matches[0].clone());
+    let chosen = crate::geocode::uniquely_qualified_city(&brief.place_request, &matches)
+        .or_else(|| (matches.len() == 1).then(|| matches[0].clone()))
+        .or_else(|| {
+            let device = candidates.iter().find(|place| place.provider == "device")?;
+            crate::geocode::nearby_unique_city(&matches, device)
+        });
     Ok((chosen, matches))
+}
+
+/// Resolve a supplied event city with the same offline tools as a reader city.
+/// The event stays separate from the chart anchor, and the original quoted
+/// observation remains in the receipt. Ambiguous nearby towns are not guessed.
+fn resolve_event_places(session: &mut Session, geocode: &GeocodeState) -> Result<(), String> {
+    use crate::reading_contracts::{Evidence, Field, Observation, Slot};
+    for field in [Field::TargetPlace, Field::EventPlace] {
+        let observed = session
+            .method
+            .consultation
+            .as_ref()
+            .and_then(|case| case.facts.get(&field))
+            .and_then(|slot| match slot {
+                Slot::Resolved { observation } => Some(observation.clone()),
+                _ => None,
+            });
+        let Some(observed) = observed else {
+            continue;
+        };
+        let brief = Brief {
+            place_request: observed.value.clone(),
+            ..Default::default()
+        };
+        let (chosen, matches) = native_place(&brief, &session.candidates, None, geocode)?;
+        let Some(place) = chosen else {
+            // A venue description with no city match remains contextual text.
+            // A recognized but ambiguous CITY remains a proposed fact.
+            if matches.len() > 1 {
+                let case = session
+                    .method
+                    .consultation
+                    .as_mut()
+                    .expect("Consultation installed");
+                case.facts.insert(
+                    field,
+                    Slot::Proposed {
+                        observation: observed.clone(),
+                    },
+                );
+                case.revision = case
+                    .revision
+                    .checked_add(1)
+                    .ok_or("Case revision exhausted")?;
+                session.audit.push(json!({"event":"native_event_place_ambiguous","field":field,
+                    "before_revision":case.revision-1,"after_revision":case.revision,
+                    "before":{"state":"resolved","observation":observed},
+                    "after":case.facts.get(&field),"candidates":matches,"chart_anchor_changed":false}));
+            }
+            continue;
+        };
+        if observed.value == place.label {
+            continue;
+        }
+        let case = session
+            .method
+            .consultation
+            .as_mut()
+            .expect("Consultation installed");
+        let replacement = Observation { value:place.label.clone(), evidence:Evidence::NativePlace {
+            query:observed.value.clone(), candidate_id:place.id.clone(),
+            context:"Offline candidates; explicitly qualified municipality, unique city or unique nearby municipality from actual device fix. Event place never replaces reader place.".into(),
+            original:Box::new(observed.evidence.clone()),
+        } };
+        case.facts.insert(
+            field,
+            Slot::Resolved {
+                observation: replacement.clone(),
+            },
+        );
+        case.revision = case
+            .revision
+            .checked_add(1)
+            .ok_or("Case revision exhausted")?;
+        session.audit.push(
+            json!({"event":"native_event_place_resolution","field":field,
+            "before_revision":case.revision-1,"after_revision":case.revision,
+            "before":{"state":"resolved","observation":observed},
+            "after":{"state":"resolved","observation":replacement},
+            "candidate":place,"chart_anchor_changed":false}),
+        );
+    }
+    Ok(())
 }
 
 fn resolve_moment(
@@ -555,11 +675,55 @@ fn run_inner(
     audio: Option<&[u8]>,
     previous: &Session,
 ) -> Result<(), String> {
+    if let Some(ready) = prepare_reading(session, runtime, geocode, instant, audio, previous)? {
+        generate_reading(session, runtime, ready)?;
+    }
+    Ok(())
+}
+
+/// The campaign exercises the same input phase and guru as production, without
+/// claiming that collecting sufficient inputs qualifies an interpretation.
+#[cfg(test)]
+pub(crate) fn run_elicitation(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    geocode: &GeocodeState,
+    instant: f64,
+    audio: Option<&[u8]>,
+    previous: &Session,
+) -> Result<(), String> {
+    let result =
+        prepare_reading(session, runtime, geocode, instant, audio, previous).and_then(|_| {
+            if session.method.brief.intent != "pause" {
+                crate::horary_conversation::respond(session, runtime)?;
+            }
+            Ok(())
+        });
+    if let Err(error) = &result {
+        session.method.flow.pause(error.clone());
+        runtime.publish(session)?;
+    }
+    result
+}
+
+fn prepare_reading(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    geocode: &GeocodeState,
+    instant: f64,
+    audio: Option<&[u8]>,
+    previous: &Session,
+) -> Result<Option<crate::reading_contracts::ReadyReading>, String> {
     use crate::reading_contracts::{self as contracts, Intent, RequirementKey};
     if session.method.consultation.is_none() {
         session.method.consultation = Some(contracts::migrate(&session.method.brief));
     }
     let old_case_revision = session.method.consultation.as_ref().map(|c| c.revision);
+    let old_method = session
+        .method
+        .consultation
+        .as_ref()
+        .and_then(|c| c.method());
     if audio.is_none() {
         let words = follow_up_words(session);
         capture_declared_reader_place(session, &words, false)?;
@@ -576,10 +740,9 @@ fn run_inner(
             .as_ref()
             .is_some_and(|c| c.method().is_some());
     let acquire_device = session.place.is_none()
-        && session.device_context.is_none()
         && !session.candidates.iter().any(|p| p.provider == "device")
         && !session.method.device_attempted;
-    let input = intake_input(session, audio.is_some());
+    let input = intake_input(session, audio.is_some(), instant);
     // Acquisition and recognition have independent inputs. The native location
     // worker runs beside the model, and both are joined before planning.
     let (recognition, location) = std::thread::scope(|scope| {
@@ -615,7 +778,7 @@ fn run_inner(
         }
     }
     let Some(mut turn) = recognition? else {
-        return Ok(());
+        return Ok(None);
     };
     let words = if audio.is_some() {
         turn.heard.clone()
@@ -662,6 +825,73 @@ fn run_inner(
     // Direct audio has no text until recognition. Its checked meaning summary
     // can supply the same literal fact even if the model omitted the update.
     capture_declared_reader_place(session, &words, audio.is_some())?;
+    // Classification selects the small program. Give that program the same
+    // words before declaring a fact absent: its focused lesson knows the
+    // situational fields that the general classifier does not teach in detail.
+    // This is private extraction, not a second conversational turn or a new
+    // question. Its output enters the normal acceptance/repair journal.
+    let mut selected = session
+        .method
+        .consultation
+        .as_ref()
+        .and_then(|c| c.method());
+    let focus_selected = selected.is_some_and(|method| {
+        !matches!(
+            method,
+            contracts::Method::Wish | contracts::Method::Unclassified
+        )
+    }) && (selected != old_method || turn.intent == Intent::NewQuestion)
+        && matches!(
+            turn.intent,
+            Intent::Read | Intent::Clarify | Intent::Correct | Intent::NewQuestion
+        );
+    while focus_selected
+        && selected.is_some_and(|method| {
+            !matches!(
+                method,
+                contracts::Method::Wish | contracts::Method::Unclassified
+            )
+        })
+    {
+        runtime.check()?;
+        let mut input = intake_input(session, false, instant);
+        input["canonical_question"] = json!(session
+            .method
+            .consultation
+            .as_ref()
+            .and_then(|c| c.question.resolved()));
+        input["latest_words"] = json!(words);
+        input["recognition_phase"] = json!("complete_selected_program");
+        input["frame_authority"] = json!("The frame in consultation is only the classifier's tentative hypothesis in this phase, even though its stored slot says resolved. Verify both method and facet independently against the actual question. The accepted question and other sourced facts remain authoritative.");
+        input["instruction"] = json!("Complete the selected program from the SAME actual words, not a fresh question and not a conversational reply. Use intent=clarify and question=null. Verify the tentative method and facet first; the stored frame is not an immutable fact. If the method is wrong, return only the corrected frame with subject=null, people=[], updates=[] so its own lesson can run. If only the facet is wrong, correct it and extract this method's facts now. WILL within a period is event plus horizon; WHEN is timing; retain an actual count as quantity. Null subject means unchanged only if the consultation already contains the actual subject: otherwise extract the stated target or role with this method's permitted kind. Preserve existing sourced observations, supply omitted facts with exact quotes from the actual words or retained question, and leave absent information missing. Examples are not user evidence. Explicit earlier consultation place/time overrides must be extracted separately from an event venue/date. Do not speak to the user.");
+        let Some(data) = execute(session, runtime, Stage::Intake, input, &[], None)? else {
+            return Ok(None);
+        };
+        let patch = data
+            .turn()
+            .ok_or("Focused recognition lacks its checked fact patch")?;
+        let case = session
+            .method
+            .consultation
+            .as_mut()
+            .expect("Consultation installed");
+        // The native boundary permits this refinement only in the focused
+        // same-turn program. Its question is fixed; a changed method carries
+        // no facts until the new lesson has verified it. Ordinary user updates
+        // retain the usual conflict/correction semantics.
+        if patch.frame.is_some() {
+            case.frame = contracts::Slot::Missing;
+        }
+        case.apply(patch, session.messages.len(), &words, false)?;
+        let confirmed = case.method();
+        if confirmed == selected {
+            break;
+        }
+        session.audit.push(json!({"event":"recognition_program_refined","from":selected,"to":confirmed,
+            "basis":"Focused verification of the same source words; no new user question or chart moment."}));
+        selected = confirmed;
+    }
+    resolve_event_places(session, geocode)?;
     let case = session
         .method
         .consultation
@@ -721,17 +951,17 @@ fn run_inner(
                 .restore_revision
                 .ok_or("Choose one listed revision to restore.")?,
         )?;
-        return Ok(());
+        return Ok(None);
     }
     if session.method.brief.intent == "explain" && session.chart.is_some() {
         explain(session, runtime, &words)?;
-        return Ok(());
+        return Ok(None);
     }
     if turn.intent == Intent::Explain {
-        return Ok(());
+        return Ok(None);
     }
     if turn.intent == Intent::Pause {
-        return Ok(());
+        return Ok(None);
     }
     if turn.intent == Intent::UseDevice && !acquire_device {
         let location = runtime.device_location();
@@ -760,17 +990,17 @@ fn run_inner(
             session,
             plan.limitation.as_ref().expect("Checked limitation"),
         );
-        return Ok(());
+        return Ok(None);
     }
     if let Some(need) = plan.needs.iter().find(|need| {
         need.key != RequirementKey::ChartPlace || need.state != "native_acquisition_pending"
     }) {
         contract_question(session, need);
-        return Ok(());
+        return Ok(None);
     }
     if let Some(limitation) = &plan.limitation {
         contract_limitation(session, limitation);
-        return Ok(());
+        return Ok(None);
     }
     // Place lookup and moment sufficiency have no dependency on each other.
     // Civil-time resolution waits for the selected place's actual time zone.
@@ -808,7 +1038,7 @@ fn run_inner(
             &[],
         )?
         else {
-            return Ok(());
+            return Ok(None);
         };
         let value = data.worksheet();
         if value["mode"] == "select" {
@@ -827,6 +1057,19 @@ fn run_inner(
                 .map(str::to_string);
         }
     }
+    if let Some(place) = &place {
+        // A verified place is independently complete even when the moment
+        // actor still needs information. Do not mix new place metadata into
+        // an existing rendered chart before its recast is validated.
+        if session.chart.is_none() {
+            session.place = Some(place.clone());
+        }
+        session
+            .method
+            .flow
+            .pending
+            .retain(|pending| pending.stage != Stage::Place);
+    }
     if moment["mode"] == "needs_civil_time" && place.is_some() {
         let zone = place.as_ref().map(|p| p.timezone.as_str());
         let clock = zone
@@ -840,44 +1083,39 @@ fn run_inner(
             &[],
         )?
         else {
-            return Ok(());
+            return Ok(None);
         };
         moment = data.worksheet().clone();
     }
-    let mut inquiries = Vec::new();
-    let default_place_question = session
-        .method
-        .consultation
-        .as_ref()
-        .expect("Consultation installed")
-        .question_for(&RequirementKey::ChartPlace);
     if place.is_none() {
-        inquiries.push(place_inquiry.as_deref().unwrap_or(&default_place_question));
-    }
-    if moment["mode"] == "ask" {
-        inquiries.push(
-            moment["clarification"]
-                .as_str()
-                .unwrap_or("When did the question become clear to you?"),
-        );
-    }
-    if !inquiries.is_empty() {
+        // Actor inquiries already return typed NeedsInput through task().
+        // This branch owns only failed native coordinate acquisition; it
+        // must preserve a separate pending moment request.
+        let need = contracts::Need {
+            key: RequirementKey::ChartPlace,
+            state: "native_acquisition_missing".into(),
+            question: place_inquiry.unwrap_or_else(|| {
+                session.method.consultation.as_ref().expect("Consultation installed")
+                    .question_for(&RequirementKey::ChartPlace)
+            }),
+            reason: "The device did not supply usable coordinates, and no reader location has been resolved.".into(),
+        };
         session
             .method
             .flow
             .pending
             .retain(|pending| pending.stage != Stage::Place);
-        if place.is_none() {
-            session.method.flow.pending.push(step::PendingInput { stage:Stage::Place, request:step::InputRequest { field:"chart_place".into(),question:inquiries[0].into(),reason:"The device did not supply usable coordinates, and no reader location has been resolved.".into() } });
-            session.audit.push(json!({"event":"native_stage_wait","stage":"place","reason":"reader_location_unresolved"}));
-        }
-        contract_question(session, &contracts::Need {
-            key: RequirementKey::ChartPlace,
-            state: "native_acquisition_missing".into(),
-            question: inquiries.join(" "),
-            reason: "The device did not supply usable coordinates, and no reader location has been resolved.".into(),
+        session.method.flow.pending.push(step::PendingInput {
+            stage: Stage::Place,
+            request: step::InputRequest {
+                field: "chart_place".into(),
+                question: need.question.clone(),
+                reason: need.reason.clone(),
+            },
         });
-        return Ok(());
+        session.audit.push(json!({"event":"native_stage_wait","stage":"place","reason":"reader_location_unresolved"}));
+        contract_question(session, &need);
+        return Ok(None);
     }
     let place = place.ok_or("A chart needs its reader's place")?;
     if session.chart.is_none() {
@@ -904,18 +1142,34 @@ fn run_inner(
             session
                 .audit
                 .push(json!({"event":"moment_validation","error":error}));
-            contract_question(
-                session,
-                &contracts::Need {
-                    key: RequirementKey::ChartMoment,
-                    state: "invalid_civil_time".into(),
-                    question: "Which earlier date and local time should this question use?".into(),
-                    reason: error,
+            let need = contracts::Need {
+                key: RequirementKey::ChartMoment,
+                state: "invalid_civil_time".into(),
+                question: "Which earlier date and local time should this question use?".into(),
+                reason: error,
+            };
+            session
+                .method
+                .flow
+                .pending
+                .retain(|pending| pending.stage != Stage::Moment);
+            session.method.flow.pending.push(step::PendingInput {
+                stage: Stage::Moment,
+                request: step::InputRequest {
+                    field: "chart_moment".into(),
+                    question: need.question.clone(),
+                    reason: need.reason.clone(),
                 },
-            );
-            return Ok(());
+            });
+            contract_question(session, &need);
+            return Ok(None);
         }
     };
+    session
+        .method
+        .flow
+        .pending
+        .retain(|pending| pending.stage != Stage::Moment);
     if session.chart.is_none()
         || session
             .chart
@@ -924,7 +1178,7 @@ fn run_inner(
         || session
             .place
             .as_ref()
-            .is_some_and(|old| old.latitude != place.latitude || old.longitude != place.longitude)
+            .is_none_or(|old| old.latitude != place.latitude || old.longitude != place.longitude)
     {
         let chart = horary_ai_core::astronomy::chart(timestamp, place.latitude, place.longitude)?;
         if session.chart.is_some() {
@@ -949,7 +1203,6 @@ fn run_inner(
         session.status = "The sky at this question’s moment…".into();
         runtime.publish(session)?;
     }
-    let chart = session.chart.as_ref().ok_or("A chart is required")?.clone();
     let anchor = contracts::Anchor {
         timestamp_ms: timestamp,
         latitude: session.place.as_ref().expect("Place installed").latitude,
@@ -976,20 +1229,42 @@ fn run_inner(
             } else if let Some(limitation) = &plan.limitation {
                 contract_limitation(session, limitation);
             }
-            return Ok(());
+            return Ok(None);
         }
     };
     let reading_request = ready.input();
-    let reading_brief = reading_brief(&ready.brief());
     session.audit.push(
         json!({"event":"contract_handoff","binding":ready.binding(),"request":reading_request}),
     );
+    // Readiness was checked against current sourced facts and a verified
+    // anchor. A request from the previous turn is history, not a live need.
+    if matches!(
+        session.method.result,
+        Some(
+            contracts::ReadingResult::NeedsInformation { .. }
+                | contracts::ReadingResult::Limited { .. }
+        )
+    ) {
+        session.method.result = None;
+    }
     // A semantic correction invalidates interpretation without replacing the
     // understood question's sky. Archived chart revisions are separate.
     if session.method.result.as_ref().is_some_and(|result|matches!(result,contracts::ReadingResult::Judgment{binding,..} if binding!=ready.binding())) {
         session.sections.clear();
         session.method.result=None;
     }
+    Ok(Some(ready))
+}
+
+fn generate_reading(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    ready: crate::reading_contracts::ReadyReading,
+) -> Result<(), String> {
+    use crate::reading_contracts as contracts;
+    let chart = session.chart.as_ref().ok_or("A chart is required")?.clone();
+    let reading_request = ready.input();
+    let reading_brief = reading_brief(&ready.brief());
     let all = reading_method::facts(Some(&chart));
     let houses: Vec<_> = all
         .iter()
@@ -1140,6 +1415,136 @@ fn run_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn event_city_resolution_keeps_quoted_provenance_and_never_changes_reader_anchor() {
+        use crate::reading_contracts::{Consultation, Evidence, Field, Observation, Slot};
+        let mut case = Consultation::default();
+        case.facts.insert(
+            Field::TargetPlace,
+            Slot::Resolved {
+                observation: Observation {
+                    value: "Springfield".into(),
+                    evidence: Evidence::User {
+                        turn: 1,
+                        quote: "Springfield".into(),
+                    },
+                },
+            },
+        );
+        let device = LocationCandidate {
+            id: "device".into(),
+            label: "Woodbridge, VA".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        };
+        let mut session = Session {
+            candidates: vec![device.clone()],
+            place: Some(device),
+            chart: Some(json!({"timestampMs":1791388800000.})),
+            ..Default::default()
+        };
+        session.method.consultation = Some(case.clone());
+        resolve_event_places(&mut session, &GeocodeState::default()).unwrap();
+        let resolved = session
+            .method
+            .consultation
+            .as_ref()
+            .unwrap()
+            .facts
+            .get(&Field::TargetPlace)
+            .unwrap();
+        assert!(resolved.resolved().unwrap().contains("VA"));
+        assert!(
+            matches!(resolved,Slot::Resolved { observation:Observation { evidence:Evidence::NativePlace { original,.. },.. } }
+            if matches!(original.as_ref(),Evidence::User { quote,.. } if quote=="Springfield"))
+        );
+        assert_eq!(session.place.as_ref().unwrap().label, "Woodbridge, VA");
+        assert_eq!(
+            session.chart.as_ref().unwrap()["timestampMs"],
+            1791388800000.
+        );
+        let mut without_device = Session::default();
+        without_device.method.consultation = Some(case);
+        resolve_event_places(&mut without_device, &GeocodeState::default()).unwrap();
+        assert!(
+            matches!(
+                without_device
+                    .method
+                    .consultation
+                    .as_ref()
+                    .unwrap()
+                    .facts
+                    .get(&Field::TargetPlace),
+                Some(Slot::Proposed { .. })
+            ),
+            "Ambiguous city without proximity context must stay unresolved"
+        );
+    }
+    #[test]
+    fn recognition_sees_actual_native_clock_and_device_position() {
+        let device = LocationCandidate {
+            id: "device".into(),
+            label: "Woodbridge, VA".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        };
+        let session = Session {
+            candidates: vec![device],
+            ..Default::default()
+        };
+        let instant = horary_ai_core::chart_input::resolve_chart_time(
+            "2026-10-07T12:00",
+            "America/New_York",
+            "",
+        )
+        .unwrap();
+        let input = intake_input(&session, false, instant);
+        assert_eq!(input["device_place"]["name"], "Woodbridge");
+        assert_eq!(input["current_local_clock"], "2026-10-07T12:00");
+        assert_eq!(input["current_timezone"], "America/New_York");
+    }
+    #[test]
+    fn nearby_springfield_uses_device_context_but_explicit_region_wins() {
+        let device = LocationCandidate {
+            id: "device".into(),
+            label: "Woodbridge, VA".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        };
+        let geocode = GeocodeState::default();
+        let query = Brief {
+            place_request: "Springfield".into(),
+            ..Default::default()
+        };
+        let (selected, candidates) =
+            native_place(&query, std::slice::from_ref(&device), None, &geocode).unwrap();
+        assert!(candidates.iter().any(|place| place.label.contains("VA")));
+        assert!(selected.unwrap().label.contains("VA"));
+        let explicit = Brief {
+            place_request: "Springfield, Illinois".into(),
+            ..Default::default()
+        };
+        let (selected, candidates) = native_place(&explicit, &[device], None, &geocode).unwrap();
+        assert!(candidates.iter().all(|place| !place.label.contains("VA")));
+        assert!(selected.is_none_or(|place| !place.label.contains("VA")));
+        let (selected, _) = native_place(&query, &[], None, &geocode).unwrap();
+        assert!(
+            selected.is_none(),
+            "No proximity inference without a usable device location"
+        );
+    }
     #[test]
     fn role_assignment_failure_is_a_repairable_validation_error() {
         let chart =
@@ -1973,10 +2378,14 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
                     "ask":input["reminders"].as_array().and_then(|r|r.first()).map_or("",|n|n["id"].as_str().unwrap_or(""))})
                 }
                 Stage::Intake => {
-                    if input["latest_words"] == "Woodbridge, Virginia, United States." {
+                    if crate::horary_step::original_input(input)["recognition_phase"]
+                        == "complete_selected_program"
+                    {
+                        json!({"intent":"clarify","question":null,"frame":null,"people":[],"subject":{"name":"Prospective partner","kind":"person","owner_id":"","source_quote":"Will I get married in the next year?"},"updates":[{"field":"baseline","value":"hoped_for","quote":"Will I get married in the next year?","mode":"supply"},{"field":"horizon","value":"within the next year","quote":"in the next year","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+                    } else if input["latest_words"] == "Woodbridge, Virginia, United States." {
                         json!({"intent":"clarify","question":null,"frame":null,"people":[],"subject":null,"updates":[{"field":"reader_place","value":"Woodbridge, Virginia, United States.","quote":"Woodbridge, Virginia, United States.","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
                     } else {
-                        json!({"intent":"read","question":"Will I get married in the next year?","frame":{"method":"relationship","facet":"event"},"people":[],"subject":{"name":"Prospective partner","kind":"person","owner_id":"","source_quote":"Will I get married in the next year?"},"updates":[{"field":"baseline","value":"hoped_for","quote":"Will I get married in the next year?","mode":"supply"},{"field":"horizon","value":"within the next year","quote":"in the next year","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+                        json!({"intent":"read","question":"Will I get married in the next year?","frame":{"method":"relationship","facet":"event"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
                     }
                 }
                 Stage::Significators => {

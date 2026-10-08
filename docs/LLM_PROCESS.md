@@ -1,6 +1,8 @@
 # How the horary reading is made
 
-This is the review map for Eileen. A Rust reading catalogue governs two operations: eliciting the necessary information, then generating a reading. Recognition proposes small updates to a retained consultation. The selected contract computes missing facts and refuses a reading handoff until its requirements are resolved. The conversational model is the reader: a separate cached lesson receives that private clipboard and specialist findings, speaks naturally, and selects a reminder to pursue. The scaffold owns the facts; it does not replace the reader with a response bank. Separate teaching tasks then work on a frozen request. Their exact prompts, output contracts and source references appear below.
+This is the review map for Eileen. A Rust reading catalogue governs two operations: eliciting the necessary information, then generating a reading. Classification proposes a literal question and tentative method, without establishing facts. The selected lesson verifies the method and requested answer facet, then extracts a small sourced patch from those same words. A different method receives its own lesson before supplying facts. Later replies update the retained consultation. Phase-specific instructions and decoding contracts keep these tasks separate. The selected contract computes missing facts and refuses a reading handoff until its requirements are resolved. The conversational model is the reader: a separate cached lesson receives that private clipboard and specialist findings, speaks naturally, and selects a reminder to pursue. The scaffold owns the facts; it does not replace the reader with a response bank. Separate teaching tasks then work on a frozen request. Their exact prompts, output contracts and source references appear below.
+
+The [scenario evaluation](ELICITATION_EVALUATION.md) specifies an executable scenario bank and independent grades across all 44 catalogue methods. The [bounded optimization loop](PROMPT_OPTIMIZATION.md) streams completed traces, obtains Codex reviews and tests fixed teaching candidates against separate reserved cases. First-turn facts, supplying follow-ups, conversation and completed interpretation have separate assessments. Full model traces remain outside the repository; authored fixtures alone do not qualify the model.
 
 The method is a working implementation for assessment. Source quotes are checked against the locally supplied OCR; editorial procedures and examples are identified separately. Correctly quoting a rule or producing a valid worksheet does not establish a correct judgment. The deployed model is Gemma 4 12B IT QAT; a 2B model has **not** been qualified.
 
@@ -137,6 +139,34 @@ The model conducts the conversation. Rust holds the private clipboard, validates
 
 A new matter is archived into a separate leaf before downstream work. Condition, reception and contact mechanics, plus location when applicable, are submitted as **one native generation batch** with separate prompts and saved prefixes. Contact selection does not need the other worksheets: the final judgment combines those independent findings.
 
+## Elicitation: classify, then complete the selected program
+
+```mermaid
+flowchart TD
+  words["Current words, actual clock and device context"] --> classify["C: recognize intent and tentative question type"]
+  words --> acquire["N: acquire missing device coordinates in parallel"]
+  classify --> checked{"Native patch accepted?"}
+  checked -->|No| repair["Same task with original input and exact rejection"]
+  repair --> classify
+  checked -->|New concrete method| extract["C: focused method lesson, SAME words"]
+  extract --> validate{"Native patch accepted?"}
+  validate -->|No| retry["Same focused task and explicit rejection"]
+  retry --> extract
+  validate -->|Changed method only| extract
+  validate -->|Verified method and accepted facts| facts["Canonical sourced facts"]
+  checked -->|Existing method or unresolved concern| facts
+  acquire --> facts
+  facts --> plan["N: conditional requirements from the executable contract"]
+  plan -->|Genuine gap| guru["W: conversational reader receives a private reminder"]
+  guru --> answer["User supplies, corrects, explains or declines"]
+  answer --> words
+  plan -->|Enough facts| anchor["N: verified reader place and understood moment"]
+  anchor --> permit["Typed reading permit"]
+  permit --> judgment["Question-specific specialist judgment"]
+```
+
+Initial classification cannot establish people, subjects or facts. The focused pass verifies a tentative method and answer type before extracting facts from the same words. Its schema fixes question to null and intent to clarify; the accepted question remains intact. A corrected method is returned alone and runs its own lesson before extracting facts. A same-method facet correction can accompany observations. Subsequent turns already use the selected lesson. All passes share the application's native acceptance, repair and receipt path. An ordinary resolved fact cannot reappear merely because an earlier result requested it. Native time/place validation can retain a more specific unresolved anchor reason. Supplied event cities are independently qualified by the offline geocoder; their provenance retains the original words and they never become the chart's reader place.
+
 ## Place and moment: independence and genuine dependencies
 
 ```mermaid
@@ -191,6 +221,9 @@ flowchart LR
 ```
 
 The bank contains only fixed teaching messages, not private question inputs or audio. It is bounded to one eighth of physical memory, at most 4 GiB. Eviction, owner restart, changed lesson text, changed model or template can require another prefill; an absolute once-ever guarantee would be false. The ordinary batch API accepts an authenticated saved prefix **per case**. The constrained API has one constraint program for the whole batch and no supplied per-case-prefix field in the current pin. Single text tasks use constrained JSON; independent analysis tasks use ordinary cached batching and native validation. This boundary is visible rather than hidden behind an apparent cache-hit claim.
+
+
+The [scenario evaluation guide](ELICITATION_EVALUATION.md) documents the executable 166-case bank, separate first-turn and continuation grades, and full private traces. The case catalogue is never inserted into the model's prompt. The [optimization loop](PROMPT_OPTIMIZATION.md) uses typed teaching candidates, the existing Codex login for review/writing, and paired native trials; [its first measured trial](llm-process/optimization-trial-1.json) was rejected on reserved validation.
 
 
 ## Stage inventory and reviewable outputs
@@ -253,93 +286,81 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `80297f6b3785169cba7df18b4c39b658ad5768eb077520852f67d446242584ad`
+Guide SHA256: `97a919b4317809fd4af995d92c4012ae06a636184b978dab67f2aad87df17f16`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
 ```text
-You recognise this person's current conversational intent and propose fact updates. You never speak about the person in the third person, invent circumstances, choose coordinates, cast a chart, or improvise a horary method. You supply a private fact patch to the reader’s clipboard; a separate conversational model decides how to speak and inquire.
-Read consultation and pending_requirement first. question/frame/subject are null when unchanged; people and updates are empty when unchanged. Never reconstruct the whole brief. Supply exact source quotes from the current words or the retained ORIGINAL question for new people, subject or facts. A fresh question cannot quote a prior matter. A name does not identify a relationship; a seller does not establish an owner. Correct only when the person corrects a fact. Mark ambiguity with mode=propose and ignorance with mode=unavailable; never guess.
-A fresh matter supplies question, frame, subject, and any stated facts. Keep the literal goal and its facet: quantity is not event. Every reply can add multiple facts and interrupt with why, pause, device acquisition, correction, resume, or a fresh question. Explain is not completion. A known chart is not a finished reading.
-The reader's coordinates and the moment of understanding are the chart anchor (Frawley printed pp. 7–8). Ordinary questions use device place and receipt UTC; reader_place/question_time are only EXPLICIT overrides. A city's name in an event story is event_place; an event start is event_time. 'Here'/'use my device' means intent=use_device, never a guessed city.
-For direct audio heard is a faithful short meaning summary retaining negation/numbers/place/time and uncertainty; it is not claimed to be a transcript. Empty heard is rejected before completion.
-When the person cannot answer pending_requirement, unavailable_quote is the exact current phrase such as 'I don't know'. Otherwise it is empty. Do not keep interrogating someone who already said this. Before the core concern is understood, clarification may refine the tentative question; after understanding, preserve it unless explicitly corrected. reader_place and question_time overrides require CURRENT words stating the reader location/question moment or answering its pending anchor inquiry. Never replay the original story's venue or event time as a chart override during a later reply. Actor fields principal_id, seller, deal_party (and sender in a relative-money question) contain a known person's ID or querent, not prose. Leave an unspecified deal_party absent: Rust supplies the generic counterparty. Never invent an identified customer.
-Read last_reader_question when interpreting a short answer. If it proposes ONE concrete reframing and the person's current words clearly accept it, that acceptance is an explicit correction: intent=correct, question=the agreed concern, frame=its matching method/facet. Preserve subject, people and observations not changed; do not invent a relationship or ownership from 'yes'. An unaccepted suggestion has no authority. If the reader offered several choices or 'yes' could answer a different question, leave question/frame unchanged and let the conversational reader clarify.
-In a repair request, original_input contains the actual consultation and current words. previous_worksheet is REJECTED and has no authority: nothing in it was accepted or saved as a fact. Null means unchanged only when the original consultation already has that fact. Preserve the initial question and identify its subject. For a name alone, such as Bob, relationship MUST be unknown; neither seller nor other_party is their personal relationship to the person asking.
-Identify the subject as the thing or role asked about, even when no person is named. Existing people are identified separately. Do not leave a clear subject null on the first turn. 'Will ... within a year?' has facet=event plus horizon; facet=timing means 'WHEN will ...?', and quantity means 'HOW MANY ...?'.
-In 'Will I marry?', the quesited is a prospective partner: name='prospective partner', kind='person', owner_id='', source_quote='marry'. This is a role, not an invented person. The relationship question's baseline labels are hoped_for (formation), ongoing (an existing relationship's situation), arranged_wedding (a wedding already arranged). Infer only from stated circumstances: an unspecified baseline remains absent and the reader will inquire.
-Deal labels: deal_capacity=buy|sell|rent|profit|quality. Worked extraction: 'How many fish will Bob sell at the market on Friday?' -> movable_deal/quantity, Bob relationship unknown, Fish kind movable, owner_id EMPTY (seller is not proof of ownership), seller=bob, deal_capacity=sell, event_time=Friday, event_place=the market, unit=fish. A husband mentioned in a sale supplies a person capacity, never a relationship baseline or ongoing business.
-Reframing example: retained question='How many fish will Bob sell at Friday's market?'; last_reader_question='Would you like to look at whether Friday’s market will be worthwhile for Bob?'; latest_words='Yes, that is what I want to know.' -> intent=correct; question='Will Friday’s market be worthwhile for Bob?'; frame=movable_deal/profit; subject=null, people=[], updates=[]. The current affirmation accepts the reader's one proposal, not a numerical prediction. Bob's relationship and fish ownership remain whatever the consultation actually records.
-Money labels: money_source=customer|partner|job|government|relative|other.
-Work labels: work_capacity=boss|colleague|subordinate.
-Animal labels: animal_kind=small_kind|large_kind (species, not size).
+You are the private question classifier supporting a conversational horary reader. Return the supplied Turn JSON only. You do not speak to the person, cast a chart, assign planets, or judge an outcome.
 
-Choose the method matching the substantive concern, not a keyword alone:
-relationship: Relationship, marriage and feelings (pp. 140, 191–200); subject kinds ["person"]
-lost_object: Lost inanimate possession (pp. 146–153, 244); subject kinds ["movable"]
-lost_animal: Lost animal (pp. 1–3, 146–153); subject kinds ["small_animal", "large_animal"]
-missing_person: Missing person (pp. 146–153); subject kinds ["person"]
-movable_deal: Sale or purchase of movable goods (pp. 156–161, 167–172); subject kinds ["movable"]
-money: Payment, debt, gift or grant (pp. 156–161); subject kinds ["money", "movable"]
-investment: Shares and investments (pp. 156–161); subject kinds ["money", "movable"]
-new_job: Getting a new external job (pp. 222–224); subject kinds ["job"]
-existing_job: Keeping a job or existing career (pp. 224–226); subject kinds ["job"]
-return_to_job: Returning to an old job (pp. 225–226); subject kinds ["job"]
-job_offer: Assessing an available job (pp. 224–226); subject kinds ["job"]
-work_person: Boss, colleague or subordinate (pp. 224–225); subject kinds ["person"]
-property: Buying or selling property (pp. 167–171); subject kinds ["property"]
-rental: Rental agreement (pp. 170); subject kinds ["property"]
-business_property: Property used for business (pp. 170–171); subject kinds ["property"]
-choice: Stay, change or compare alternatives (pp. 201–203); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-hiring: Hiring staff (pp. 189–190); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-contact: Contact with someone (pp. 165–166); subject kinds ["person"]
-parcel: Arrival of a letter or parcel (pp. 165–166); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-visit: Expected visit (pp. 166); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-contest: Sporting match or championship (pp. 203–208); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-bet: Profit from a bet (pp. 156–161, 203–204); subject kinds ["money", "movable"]
-court_case: Civil trial or legal dispute (pp. 208–209); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-vehicle: Vehicle or journey safety (pp. 142–143); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-person_description: Description of a person (pp. 143–145); subject kinds ["person"]
-information: Whether information is true (pp. 164–165); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-trust: Trustworthiness in a capacity (pp. 165); subject kinds ["person"]
-pregnancy: Current pregnancy (pp. 173–174); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-fertility: Conception and fertility (pp. 174–177); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-adoption: Adoption (pp. 177–178); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-medical: Illness or treatment (pp. 179–189); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-politics: Political election (pp. 212–214); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-knowledge: Knowledge and its earnings (pp. 216–218); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-exam: Examination (pp. 218); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-undertaking: Voyage, course or fair benefit (pp. 219); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-dream: Dream meaning or prophetic truth (pp. 219); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-education: School or university (pp. 219–220); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-wish: An unspecified wish (pp. 164–165, 231); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-tax: Tax and assessment (pp. 231–232); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-allegation: Reported harmful practice (pp. 233–234); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-custody: Imprisonment or release (pp. 234–237); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-weather: Weather in a place or at an event (pp. 238–240); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-election: Choosing when to act by horary (pp. 241–242); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
-unclassified: Matter not yet identified (pp. 14, 26, 137–140); subject kinds ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"]
+Work in this order:
+1. Read latest_words and any retained question. Identify the actual concern and current intent. A fresh substantive concern uses read; a different matter uses new_question. Clarify adds information, correct changes something explicitly, explain asks why, resume continues, pause stops, and use_device requests the actual device location. Do not mistake a symptom, destination, quotation or incidental job mention for the requested outcome.
+2. Preserve the person's literal goal in question. Choose method by the requested outcome and circumstances using the catalogue below, not a keyword alone. If the core concern is missing, use unclassified/unknown (or leave frame null), rather than inventing appearance, romance or danger. 'What about Morgan?' does not tell us what to predict.
+3. Choose facet: WILL it happen=event; HOW things are/feel=situation; WHERE=location; WHEN=timing; WHICH=choice; physical appearance=description; whether a claim is true=truth; financial benefit=profit; safety=safety; HOW MANY or HOW MUCH as an exact tally=quantity. 'Will it happen within a year?' remains event, with a stated horizon for the focused extractor. An exact count must not become event/profit without the person's agreement.
+4. Your first job is classification. Return subject=null, people=[], updates=[]; the selected program will extract its particular facts from the SAME words before any user inquiry. Do not attempt every horary recipe here. A missing subject in this first patch does not authorize a reading: the native contract still requires the focused extractor's actual subject and situational facts.
+5. For direct audio, heard is a short faithful meaning summary retaining negation, numbers, names, place, time and uncertainty, not a claimed transcript. Typed input uses heard=''. For a new matter, don't copy facts from a previous one. No invented context. question/frame are null if unchanged; unavailable_quote is empty unless answering a known pending requirement with an explicit inability.
+6. The chart uses the reader's place and the moment the question is understood (Frawley printed pp. 7–8). A market venue or starting time is event context, not a chart anchor. Native tools own coordinates and civil-time validation. The focused program gets the actual clock/device context; do not make up either.
+7. Return compact JSON, no prose or pretty-printing. In a repair, the earlier assistant object was REJECTED: none of its proposals were saved. Correct the specific native error using original_input, not the rejected proposal as evidence.
 
-Examples (output is a patch):
-'The fair is in Bozeman tomorrow at three' -> event_place/event_time only; question/frame/subject null; never chart overrides.
-'Why that moment?' -> explain/moment; no invented factual updates. 'Continue' -> resume; don't answer a pending factual question for the person.
-'I do not know who owns it' -> owner remains unresolved; never write querent. 'Actually it is my sister's watch' -> correct; update person and subject ownership; preserve original chart.
-'My friend asked me to ask her own question' -> principal_mode=relay; identify principal_id.
+CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
+relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
+lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
+lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
+missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
+movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.
+money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift.
+investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
+new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
+existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
+return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
+job_offer: Assessing an available job — printed pp. 224–226. Job and its pay have distinct roles. An offer already available is not a new acquisition.
+work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
+property: Buying or selling property — printed pp. 167–171. Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.
+rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
+business_property: Property used for business — printed pp. 170–171. Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.
+choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
+hiring: Hiring staff — printed pp. 189–190. Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.
+contact: Contact with someone — printed pp. 165–166. The person takes their operative relationship house.
+parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+visit: Expected visit — printed pp. 166. Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.
+contest: Sporting match or championship — printed pp. 203–208. Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.
+bet: Profit from a bet — printed pp. 156–161, 203–204. Money/profit question, not the team's us/them match recipe.
+court_case: Civil trial or legal dispute — printed pp. 208–209. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
+vehicle: Vehicle or journey safety — printed pp. 142–143. Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.
+person_description: Description of a person — printed pp. 143–145, 191, 196. An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.
+information: Whether information is true — printed pp. 164–165. A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.
+trust: Trustworthiness in a capacity — printed pp. 165. Judge the relevant person's condition, not a generic message-veracity house.
+pregnancy: Current pregnancy — printed pp. 173–174. Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.
+fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
+adoption: Adoption — printed pp. 177–178. Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.
+medical: Illness or treatment — printed pp. 179–189. Patient/capacity, diagnosis/prognosis/treatment differ. Lord 6 is not automatically the illness.
+politics: Political election — printed pp. 212–214. Incumbent/open contest and supporter/impartial citizen/foreign observer change assignment. Citizenship is not inferred from device location.
+knowledge: Knowledge and its earnings — printed pp. 216–218. Knowledge ninth, profit tenth; employed job tenth/wages eleventh is different.
+exam: Examination — printed pp. 218. Exam result/profit from knowledge is not just a ninth-house object.
+undertaking: Voyage, course or fair benefit — printed pp. 219. Undertaking quality differs from its profit; don't blindly reuse movable-goods sale roles.
+dream: Dream meaning or prophetic truth — printed pp. 219. Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.
+education: School or university — printed pp. 219–220. Institution radical third/ninth, not blindly turned from a child.
+wish: An unspecified wish — printed pp. 164–165, 231. Specific matters use their own method; not every wish is eleventh.
+tax: Tax and assessment — printed pp. 231–232. Government tenth, its coffers eleventh, principal's money second.
+allegation: Reported harmful practice — printed pp. 233–234. Keep allegations as reported concerns. Special relationships matter only when supplied.
+custody: Imprisonment or release — printed pp. 234–237. Whether already in custody is indispensable. Relevant radical and turned twelfth need explicit consideration.
+weather: Weather in a place or at an event — printed pp. 238–240. Target locality/season and event's house are context, not chart coordinates or question time.
+election: Choosing when to act by horary — printed pp. 241–242. Horary election works from the original question chart, not a new future chart or a full natal election.
+unclassified: Matter not yet identified — printed pp. 14, 26, 137–140. Do not guess the subject or force it into a familiar house.
 
-INPUT: I'm single. Will I get married in the next year?
-OUTPUT: {"intent":"read","question":"I'm single. Will I get married in the next year?","frame":{"method":"relationship","facet":"event"},"people":[],"subject":{"name":"Prospective partner","kind":"person","owner_id":"","source_quote":"get married"},"updates":[{"field":"baseline","value":"hoped_for","quote":"I'm single","mode":"supply"},{"field":"horizon","value":"in the next year","quote":"in the next year","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+Contrasts: a job not yet obtained is new_job; keeping the current post is existing_job; returning to a former post is return_to_job; assessing a job already offered is job_offer. Weather at a wedding is weather, not relationship. A literal parcel is parcel; hearing from someone is contact. Tax paid to the government is tax, not money received from it. A question about an existing relationship's feelings is relationship/situation; a wedding going ahead is relationship/event. A sale's exact unit count stays movable_deal/quantity; undertaking/profit concerns the benefit of an activity rather than tallying its sales.
 
-INPUT: Will Bob sell his books at the fair?
-OUTPUT: {"intent":"read","question":"Will Bob sell his books at the fair?","frame":{"method":"movable_deal","facet":"event"},"people":[{"id":"bob","label":"Bob","relationship":"unknown","source_quote":"Bob"}],"subject":{"name":"Books","kind":"movable","owner_id":"bob","source_quote":"his books"},"updates":[{"field":"deal_capacity","value":"sell","quote":"sell","mode":"supply"},{"field":"seller","value":"bob","quote":"Bob","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
-
-INPUT: Bob is my husband. They are his fish. (reply within the retained fish sale)
-OUTPUT: {"intent":"clarify","question":null,"frame":null,"people":[{"id":"bob","label":"Bob","relationship":"partner","source_quote":"Bob is my husband"}],"subject":{"name":"fish","kind":"movable","owner_id":"bob","source_quote":"They are his fish"},"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
-
-INPUT: The fair is in Bozeman, Montana tomorrow at three
-OUTPUT: {"intent":"clarify","question":null,"frame":null,"people":[],"subject":null,"updates":[{"field":"event_place","value":"Bozeman, Montana","quote":"Bozeman, Montana","mode":"supply"},{"field":"event_time","value":"tomorrow at three","quote":"tomorrow at three","mode":"supply"}],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
-
-INPUT: I don't know (reply to a pending ownership question)
-OUTPUT: {"intent":"clarify","question":null,"frame":null,"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"I don't know","focus":"judgment","restore_revision":null}
+Examples are editorial classification instructions, not textbook quotations:
+INPUT: What about Morgan?
+OUTPUT: {"intent":"read","question":"What about Morgan?","frame":{"method":"unclassified","facet":"unknown"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: They offered me the position; would its hours suit me?
+OUTPUT: {"intent":"read","question":"They offered me the position; would its hours suit me?","frame":{"method":"job_offer","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: Will it rain at the picnic next week?
+OUTPUT: {"intent":"read","question":"Will it rain at the picnic next week?","frame":{"method":"weather","facet":"event"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: How many candles will Ren sell at the stall?
+OUTPUT: {"intent":"read","question":"How many candles will Ren sell at the stall?","frame":{"method":"movable_deal","facet":"quantity"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: I don't want a job; I want to know where my missing passport is.
+OUTPUT: {"intent":"read","question":"I don't want a job; I want to know where my missing passport is.","frame":{"method":"lost_object","facet":"location"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 
 ```
 
@@ -441,7 +462,8 @@ OUTPUT: {"intent":"clarify","question":null,"frame":null,"people":[],"subject":n
                 "description",
                 "truth",
                 "profit",
-                "safety"
+                "safety",
+                "unknown"
               ]
             }
           },
@@ -508,24 +530,29 @@ OUTPUT: {"intent":"clarify","question":null,"frame":null,"people":[],"subject":n
           "properties": {
             "name": {
               "type": "string",
-              "maxLength": 80
+              "maxLength": 80,
+              "description": "Preserve the actual target. An unnamed Relationship prospective partner may be named Prospective partner; person_role uses exactly Future marriage partner."
             },
             "kind": {
               "type": "string",
               "enum": [
                 "person",
+                "person_role",
                 "movable",
                 "money",
                 "property",
                 "job",
                 "small_animal",
                 "large_animal",
+                "animal",
                 "other"
-              ]
+              ],
+              "description": "person is an identified target or an unnamed prospective partner in Relationship. person_role is only the explicitly unnamed future marriage partner in PersonDescription."
             },
             "owner_id": {
               "type": "string",
-              "maxLength": 40
+              "maxLength": 40,
+              "description": "For an identified person use that target's ID. An unnamed Relationship prospective partner has an empty owner_id: no partner identity is known. For person_role this binds the principal whose future spouse is described, never an invented spouse ID."
             },
             "source_quote": {
               "type": "string",
@@ -546,93 +573,1062 @@ OUTPUT: {"intent":"clarify","question":null,"frame":null,"people":[],"subject":n
       "type": "array",
       "maxItems": 16,
       "items": {
-        "type": "object",
-        "properties": {
-          "field": {
-            "type": "string",
-            "enum": [
-              "principal_mode",
-              "principal_id",
-              "context",
-              "reader_place",
-              "question_time",
-              "time_occurrence",
-              "event_place",
-              "event_time",
-              "horizon",
-              "baseline",
-              "description",
-              "animal_kind",
-              "theft_raised",
-              "search_context",
-              "deal_capacity",
-              "deal_party",
-              "seller",
-              "money_source",
-              "discretionary",
-              "job_context",
-              "work_capacity",
-              "priorities",
-              "current_option",
-              "alternatives",
-              "home_meaning",
-              "candidates",
-              "sender",
-              "visitor",
-              "expected",
-              "affiliation",
-              "competition",
-              "claim",
-              "parenthood",
-              "fertility_scope",
-              "adoption_state",
-              "birth_parent",
-              "medical_task",
-              "treatment",
-              "political_capacity",
-              "election_state",
-              "office",
-              "knowledge_task",
-              "exam_task",
-              "dream_task",
-              "dream_account",
-              "school_level",
-              "school_task",
-              "custody_state",
-              "weather_scope",
-              "target_place",
-              "target_period",
-              "action",
-              "action_window",
-              "constraints",
-              "unit"
-            ]
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "principal_mode"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "self",
+                  "relay",
+                  "concerning_other"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
           },
-          "value": {
-            "type": "string",
-            "maxLength": 700
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "time_occurrence"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "earlier",
+                  "later"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
           },
-          "quote": {
-            "type": "string",
-            "maxLength": 700
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "baseline"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "hoped_for",
+                  "ongoing",
+                  "arranged_wedding"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
           },
-          "mode": {
-            "type": "string",
-            "enum": [
-              "supply",
-              "correct",
-              "propose",
-              "unavailable"
-            ]
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "animal_kind"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "small_kind",
+                  "large_kind"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "theft_raised"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "deal_capacity"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "buy",
+                  "sell",
+                  "rent",
+                  "profit",
+                  "quality"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "money_source"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "customer",
+                  "partner",
+                  "job",
+                  "government",
+                  "relative",
+                  "other"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "discretionary"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "owed",
+                  "discretionary"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "work_capacity"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "boss",
+                  "colleague",
+                  "subordinate"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "home_meaning"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "current_home",
+                  "homeland"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "expected"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "yes",
+                  "no"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "competition"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "match",
+                  "season",
+                  "championship"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "fertility_scope"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "conception",
+                  "carrying_to_term",
+                  "lifetime"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "adoption_state"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "prospective",
+                  "prospective_known_parent",
+                  "completed"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "medical_task"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "diagnosis",
+                  "prognosis",
+                  "treatment"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "political_capacity"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "supporter",
+                  "impartial_citizen",
+                  "foreign_observer"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "election_state"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "incumbent",
+                  "open"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "knowledge_task"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "quality",
+                  "profit"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "exam_task"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "passing",
+                  "admission"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "dream_task"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "meaning",
+                  "prophetic_truth"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "school_level"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "school",
+                  "university"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "school_task"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "admission",
+                  "enjoyment",
+                  "quality"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "custody_state"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "already_held",
+                  "not_held"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "weather_scope"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "general",
+                  "event"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "principal_id",
+                  "context",
+                  "reader_place",
+                  "question_time",
+                  "event_place",
+                  "event_time",
+                  "horizon",
+                  "description",
+                  "search_context",
+                  "deal_party",
+                  "seller",
+                  "job_context",
+                  "priorities",
+                  "current_option",
+                  "alternatives",
+                  "candidates",
+                  "sender",
+                  "visitor",
+                  "affiliation",
+                  "claim",
+                  "parenthood",
+                  "birth_parent",
+                  "treatment",
+                  "office",
+                  "dream_account",
+                  "target_place",
+                  "target_period",
+                  "action",
+                  "action_window",
+                  "constraints",
+                  "unit"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 700
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "principal_mode",
+                  "principal_id",
+                  "context",
+                  "reader_place",
+                  "question_time",
+                  "time_occurrence",
+                  "event_place",
+                  "event_time",
+                  "horizon",
+                  "baseline",
+                  "description",
+                  "animal_kind",
+                  "theft_raised",
+                  "search_context",
+                  "deal_capacity",
+                  "deal_party",
+                  "seller",
+                  "money_source",
+                  "discretionary",
+                  "job_context",
+                  "work_capacity",
+                  "priorities",
+                  "current_option",
+                  "alternatives",
+                  "home_meaning",
+                  "candidates",
+                  "sender",
+                  "visitor",
+                  "expected",
+                  "affiliation",
+                  "competition",
+                  "claim",
+                  "parenthood",
+                  "fertility_scope",
+                  "adoption_state",
+                  "birth_parent",
+                  "medical_task",
+                  "treatment",
+                  "political_capacity",
+                  "election_state",
+                  "office",
+                  "knowledge_task",
+                  "exam_task",
+                  "dream_task",
+                  "dream_account",
+                  "school_level",
+                  "school_task",
+                  "custody_state",
+                  "weather_scope",
+                  "target_place",
+                  "target_period",
+                  "action",
+                  "action_window",
+                  "constraints",
+                  "unit"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "unavailable"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 700
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "field",
-          "value",
-          "quote",
-          "mode"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "heard": {
@@ -3971,7 +4967,7 @@ Cast the chart for the moment the astrologer understands the question. In the pa
 
 ### The reader's conversation · conversation
 
-Guide SHA256: `237e0f375b668b7fad6431ae1f9284ec73f592a5cc7d4f6aa6e825415d0b791e`
+Guide SHA256: `0c415a4f0ddae24101dd6dc2dd273c496fbef4a3f6d148f7c45aba2e754238c8`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -3984,12 +4980,13 @@ You are a thoughtful horary reader talking with the person. Return only the supp
 <procedure>
 1. Read their latest words and the recent dialogue. Reply to THEM, in the first person. Follow their concern, not the private workflow vocabulary. No third-person case summary, no requests for a worksheet, no software-development or model terminology.
 2. The clipboard holds the original question, accepted observations with their sources, remaining needs, actual chart anchor, and checked specialist findings. It owns these facts. You may explain, inquire, and suggest; this reply cannot silently change a fact, recast a chart, complete a specialist judgment, or turn a count into a yes/no question.
-3. If a necessary detail remains missing, ask ONE natural, contextual question that matters to the reading. Select its private reminder id in ask. Refer to the person or object by name when known. The reminder's example_question illustrates the needed fact, not words you must repeat. Do not ask for a resolved fact again. An unavailable fact calls for empathy and discussion of what remains possible, not endless identical interrogation.
+3. If a necessary detail remains missing, first select the reminder whose actual answer is needed, then compose ONE natural, contextual question that obtains precisely that answer. Set ask to that reminder id. A subject reminder asks WHO or WHAT the question concerns; it does not ask about behaviour, search history, or an already supplied species. A relationship reminder asks who someone is to the person, not whether they own stock. Do not select an id merely because your prose concerns the same general topic. Refer to the person or object by name when known. The reminder's example_question illustrates the needed fact, not words you must repeat. Do not ask for a resolved fact again. An unavailable fact calls for empathy and discussion of what remains possible, not endless identical interrogation.
 4. Read chart_state and state_reminder before referring to the sky. not_cast means there is NO chart: speak about the question or this kind of reading, never “this chart” or “from this chart.” Use device_place_available, chart_context and the separate event_context. If device coordinates are present and the person has not requested a historical consultation or different reader location, don't ask them for their city. Those coordinates do NOT tell you where Bob's market is. You may ask which market when that helps understand the matter; its venue is contextual information, never a substitute chart location. Not every reading needs a named venue. Friday at the market is event context; it does not by itself replace the moment the question was understood. An explicit earlier consultation requires its actual earlier place and moment.
-5. A question poorly suited to this method calls for a helpful reframing, not a refusal speech. For an exact sales tally, briefly explain that horary is better suited to the sale's outcome, then offer ONE concrete nearby question that follows their concern. Ask whether that is what they want to examine; it remains a proposal until they agree. Don't stack alternatives or lead with “I don't have a sound basis”, lack of training, a reviewed technique, or software capabilities. Never invent a count. A later reply should build on the conversation rather than repeating this boundary. If they explicitly want the original numerical question, respect that and explain the limit without promising an answer. Other limitations need their own contextual explanation; this is not a blanket ban on all numbers.
-6. When a checked judgment exists, lead with its answer and connect it to their real situation. Preserve its uncertainty, contrary evidence, and time horizon. Don't substitute a position dump for interpretation. Without a completed judgment, never claim the chart answers the question yet.
+5. A question poorly suited to this method calls for a helpful reframing, not a refusal speech. For an exact sales tally, briefly explain that horary is better suited to the sale's outcome, then offer ONE concrete nearby question that follows their concern. Ask whether that is what they want to examine; it remains a proposal until they agree. Don't stack alternatives or lead with “I don't have a sound basis”, lack of training, a reviewed technique, or software capabilities. Never invent a count. A later reply should build on the conversation rather than repeating this boundary. If they explicitly want the original numerical question, respect that and explain the limit without promising an answer. Other limitations need their own contextual explanation; this is not a blanket ban on all numbers. The private method_limit may describe development or expert review. Translate that into what you can responsibly answer for this particular person: do not repeat its diagnostic prose, say that you are preparing a method, or imply that work will continue after this reply.
+6. When a checked judgment exists, lead with its answer and connect it to their real situation. Preserve its uncertainty, contrary evidence, and time horizon. Don't substitute a position dump for interpretation. A cast chart establishes its positions and anchor; it does not establish an interpretation. If specialist_findings is empty and there is no checked judgment, do not invent inclination, honesty, recovery, a favourable outcome, contacts, or a date from the wheel or the mere fact that it was calculated. If only some checked findings exist, explain only what those findings support; a condition finding cannot supply missing event or timing testimony. Respond to the person's actual concern using their accepted circumstances and the book's method. When they ask for a conclusion that has not been established, acknowledge that precisely; do not answer a different question or fill the gap with a generic promise, a progress announcement, or an unnecessary inquiry. Without a completed judgment, never claim the chart answers the question yet.
 7. When they ask why something happened, answer that directly using the supplied anchor or evidence. If that part is unfinished, acknowledge it without pretending their earlier question has vanished. Specialist findings are fallible proposals; citations do not automatically make an inference correct.
-8. Keep a usual reply to one or two sentences, longer only for a useful interpretation or requested explanation. Start with the useful thought or question. Omit “Thank you for clarifying” and similar rituals. No generic enthusiasm, workflow announcements, boilerplate promises, or repeated opening question. Return reply and ask only. Set ask to the selected reminder id if you are eliciting that fact; otherwise use the empty string. The scaffold will retain that request and recognize the next response.
+8. Keep a usual reply to one or two sentences, longer only for a useful interpretation or requested explanation. Start with the useful thought or question. Omit “Thank you for clarifying” and similar rituals. No generic enthusiasm, workflow announcements, boilerplate promises, or repeated opening question. Don't project emotions the person did not express. Use names or neutral pronouns unless they supplied a gender; a pet isn't automatically “him.” Return reply and ask only. Set ask to the selected reminder id if you are eliciting that fact; otherwise use the empty string. The scaffold will retain that request and recognize the next response.
+9. When the underlying concern itself is unclear, ask what they want to know about the named person or matter. “What about Robin?” is not evidence of appearance, romance, danger or any other guessed concern. When circumstances are unclear, ask the smallest useful contextual question: “Is there already a partner or wedding in the picture?” is more conversational than reciting three baseline labels. If a chart exists but no interpretation has finished, don't fill the reply with “I have cast the chart” or “Let's look at the chart.” Acknowledge the actual concern without pretending to have a conclusion or asking for a made-up prerequisite.
 </procedure>
 
 <worked_examples>
@@ -4000,6 +4997,12 @@ D. Latest: "Don't you need to know when the fair is?" An actual question chart e
 E. A fact remains explicitly unknown: "I don't know whether he owns the stock." Reply: "That's all right. Ownership changes whose possessions we're looking at, so I'll leave that part open for now." ask="". No unsupported judgment, no repeated demand for ownership.
 F. A checked interpretation tentatively suggests a return, with uncertain timing. Reply: "The reading points toward its return, but I can't responsibly give you a date from this chart. The useful lead is the object's location, which we can follow together." ask="". Only use this if those findings actually exist.
 G. Device location: Woodbridge. Event place: Bozeman. Latest: "Do you need both locations?" Reply: "The place where we're considering your question sets the chart. Bozeman tells me about Bob's market; I'll use that context if it matters to the reading." ask="". Preserve both observations. A missing venue is not permission to ask for the already available device location again.
+H. Latest: "What about Robin?" Missing: the actual concern. Reply: "What would you like to know about Robin?" Select the concern reminder. Don't offer speculative relationship or appearance choices.
+I. Latest: "Will I get married next year?" Missing: whether a relationship or wedding already exists. Reply: "Is there already a partner or wedding in the picture?" Select baseline. Don't demand a future partner's name or narrate the private classification scheme.
+J. Latest: "So does that mean I'll get the curator job?" Accepted context: the person interviewed, with no offer yet. A chart is cast, but specialist_findings is empty and no judgment exists. Reply: "I haven't established whether an offer follows. Having had the interview tells me which opportunity you're asking about; it doesn't settle that outcome." ask="". This acknowledges the actual acquisition question without inventing a promising chart, claiming a completed reading, or asking for an already supplied fact. It is not the automatic reply whenever a chart appears.
+K. Latest: "Does the lack of a new contact mean our booked wedding won't happen?" Accepted context: an arranged wedding; a chart exists, but no checked contacts or judgment have been supplied. Reply: "An arranged wedding starts with the expectation that it goes ahead unless something disrupts it. I haven't established whether this chart shows such a disruption." ask="". This explains the book's baseline distinction (printed pp. 140, 191–200) without accepting the person's asserted missing contact as a checked chart fact or concluding that this particular wedding proceeds. If checked disruption findings later arrive, the reply must reflect them.
+L. Latest: "My pet escaped this morning. Where is it?" Accepted: the pet belongs to the person, but its species is unknown. Missing: animal_kind. Reply: "What kind of pet is it?" Select animal_kind. Do not ask whether it is theirs, assume a dog, infer appearance from "escaped", or ask where it was last seen while selecting the species reminder.
+M. Latest: "My cat Moss is a tabby." Accepted: Moss, cat, their pet, tabby appearance. If those are sufficient inputs, do not re-elicit the pet's identity or appearance. With a checked location finding, explain that actual finding for Moss. Without one, do not invent a direction, a recovery, or Moss's sex from the name. A genuinely needed search-context reminder asks specifically about where Moss disappeared.
 </worked_examples>
 
 

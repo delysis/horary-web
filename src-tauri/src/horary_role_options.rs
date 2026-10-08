@@ -22,16 +22,26 @@ pub struct Person {
 #[serde(deny_unknown_fields)]
 pub struct Subject {
     pub name: String,
+    /// `person` names an identified target. `person_role` is currently only
+    /// the canonical Future marriage partner role used by PersonDescription.
     pub kind: String,
+    /// For `person`, this is the target's ID. For `person_role`, this is the
+    /// principal whose future spouse is described, never an invented spouse ID.
+    /// Other kinds retain their owner or relevant principal semantics.
     pub owner_id: String,
     pub source_quote: String,
 }
+pub const FUTURE_MARRIAGE_PARTNER: &str = "Future marriage partner";
 impl Subject {
     pub fn is_empty(&self) -> bool {
         self.name.is_empty()
             && self.kind.is_empty()
             && self.owner_id.is_empty()
             && self.source_quote.is_empty()
+    }
+
+    pub fn is_future_marriage_partner(&self) -> bool {
+        self.kind == "person_role" && self.name == FUTURE_MARRIAGE_PARTNER
     }
 }
 
@@ -116,6 +126,515 @@ pub fn relation_words(relationship: &str) -> &'static [&'static str] {
     }
 }
 
+fn words(text: &str) -> Vec<(usize, &str)> {
+    let mut result = Vec::new();
+    let mut start = None;
+    for (at, ch) in text.char_indices() {
+        if ch.is_alphanumeric() || matches!(ch, '\'' | '’') {
+            start.get_or_insert(at);
+        } else if let Some(start) = start.take() {
+            result.push((start, &text[start..at]));
+        }
+    }
+    if let Some(start) = start {
+        result.push((start, &text[start..]));
+    }
+    result
+}
+
+fn possessive_stem(word: &str) -> &str {
+    word.strip_suffix("'s")
+        .or_else(|| word.strip_suffix("’s"))
+        .unwrap_or(word)
+}
+
+/// Whole-word matching keeps a name or capacity from matching a substring.
+pub(crate) fn mentions(text: &str, phrase: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    let phrase = phrase.to_ascii_lowercase();
+    let text = words(&text);
+    let phrase = words(&phrase);
+    !phrase.is_empty()
+        && text.windows(phrase.len()).any(|window| {
+            window
+                .iter()
+                .zip(&phrase)
+                .all(|(left, right)| possessive_stem(left.1) == possessive_stem(right.1))
+        })
+}
+
+fn negated_before(source: &str, cue: usize) -> bool {
+    let preceding = &source[..cue];
+    let clause = preceding
+        .rsplit(['.', '!', '?', ';', ','])
+        .next()
+        .unwrap_or(preceding);
+    for (_, word) in words(clause).iter().rev() {
+        if *word == "only" {
+            return false; // "not only my neighbour" affirms the capacity.
+        }
+        if matches!(
+            *word,
+            "not"
+                | "no"
+                | "never"
+                | "isn't"
+                | "isn’t"
+                | "aren't"
+                | "aren’t"
+                | "wasn't"
+                | "wasn’t"
+                | "weren't"
+                | "weren’t"
+                | "don't"
+                | "don’t"
+                | "doesn't"
+                | "doesn’t"
+                | "didn't"
+                | "didn’t"
+        ) {
+            return true;
+        }
+        if !matches!(
+            *word,
+            "my" | "our"
+                | "your"
+                | "his"
+                | "her"
+                | "their"
+                | "a"
+                | "an"
+                | "the"
+                | "really"
+                | "actually"
+                | "even"
+                | "longer"
+                | "next"
+                | "door"
+        ) {
+            return false;
+        }
+    }
+    false
+}
+
+fn positive_phrase(
+    quote: &str,
+    source: &str,
+    phrase: &str,
+    binding: impl Fn(&str, usize) -> bool,
+) -> bool {
+    let quote = quote.to_ascii_lowercase();
+    let source = source.to_ascii_lowercase();
+    let phrase = phrase.to_ascii_lowercase();
+    let quote_words = words(&quote);
+    let source_words = words(&source);
+    let phrase_words = words(&phrase);
+    if phrase_words.is_empty() {
+        return false;
+    }
+    quote_words.windows(phrase_words.len()).any(|window| {
+        window
+            .iter()
+            .zip(&phrase_words)
+            .all(|(left, right)| possessive_stem(left.1) == possessive_stem(right.1))
+            && source.match_indices(&quote).any(|(at, _)| {
+                let cue = at + window[0].0;
+                let Some(index) = source_words.iter().position(|word| word.0 == cue) else {
+                    return false;
+                };
+                let source_match = source_words[index..].get(..phrase_words.len());
+                source_match.is_some_and(|matched| {
+                    matched
+                        .iter()
+                        .zip(&phrase_words)
+                        .all(|(left, right)| possessive_stem(left.1) == possessive_stem(right.1))
+                }) && !negated_before(&source, cue)
+                    && binding(&source, cue)
+            })
+    })
+}
+
+fn capacity_modifier(word: &str) -> bool {
+    matches!(
+        word,
+        "good"
+            | "old"
+            | "close"
+            | "dear"
+            | "adult"
+            | "older"
+            | "younger"
+            | "eldest"
+            | "youngest"
+            | "next"
+            | "door"
+            | "new"
+            | "former"
+            | "prospective"
+            | "potential"
+            | "romantic"
+            | "business"
+            | "direct"
+            | "only"
+            | "biological"
+            | "adopted"
+            | "half"
+            | "step"
+            | "really"
+            | "actually"
+    )
+}
+
+/// A pending participant supplies an antecedent only for a bare capacity or an
+/// anaphoric reply. An explicitly named actor still needs its own binding.
+fn pending_reference(source: &str, cue: usize, predicate_end: usize) -> bool {
+    let before = &source[..cue];
+    let clause_before = before
+        .rsplit(['.', '!', '?', ';', '\n'])
+        .next()
+        .unwrap_or(before);
+    let mut prefix = words(clause_before);
+    while prefix
+        .last()
+        .is_some_and(|(_, word)| capacity_modifier(word))
+    {
+        prefix.pop();
+    }
+    if prefix
+        .last()
+        .is_some_and(|(_, word)| matches!(*word, "my" | "our" | "a" | "an" | "the"))
+    {
+        prefix.pop();
+    }
+    let pronoun = |word: &str| matches!(word, "he" | "she" | "they" | "we");
+    let anaphoric = match prefix.as_slice() {
+        [] => true,
+        [(_, word)] => {
+            pronoun(word)
+                || matches!(
+                    *word,
+                    "he's" | "he’s" | "she's" | "she’s" | "they're" | "they’re" | "we're" | "we’re"
+                )
+        }
+        [(_, actor), (_, copula)] => {
+            pronoun(actor) && matches!(*copula, "is" | "are" | "was" | "were")
+                || *actor == "we" && *copula == "both"
+        }
+        _ => false,
+    };
+    if !anaphoric {
+        return false;
+    }
+    let after = &source[predicate_end..];
+    let clause_after = after
+        .split(['.', '!', '?', ';', '\n'])
+        .next()
+        .unwrap_or(after);
+    let suffix = words(clause_after);
+    matches!(
+        suffix.as_slice(),
+        [] | [(_, "of"), (_, "mine")] | [(_, "to"), (_, "me")]
+    ) || suffix
+        .first()
+        .is_some_and(|(_, word)| matches!(*word, "from" | "at" | "in" | "since"))
+}
+
+fn literal_capacity_binding(
+    source: &str,
+    cue: usize,
+    relationship: &str,
+    label: &str,
+    pending: bool,
+) -> bool {
+    if relationship == "querent" {
+        return true; // The explicit own-question role has a separate relay contract.
+    }
+    let tokens = words(source);
+    let Some(index) = tokens.iter().position(|word| word.0 == cue) else {
+        return false;
+    };
+    let cue_word = tokens[index].1;
+    let before = &source[..cue];
+    let clause_before = before
+        .rsplit(['.', '!', '?', ';', '\n'])
+        .next()
+        .unwrap_or(before);
+    let speaker_possessive = words(clause_before)
+        .iter()
+        .rev()
+        .find(|(_, word)| !capacity_modifier(word))
+        .is_some_and(|(_, word)| matches!(*word, "my" | "our"));
+    let after = &source[cue + cue_word.len()..];
+    let clause_after = after
+        .split(['.', '!', '?', ';', '\n'])
+        .next()
+        .unwrap_or(after);
+    let speaker_complement = clause_after.trim_start().starts_with("of mine")
+        || clause_after.trim_start().starts_with("to me");
+    let other_possessive = words(clause_before)
+        .last()
+        .is_some_and(|(_, word)| possessive_stem(word) != *word);
+    let romantic_self = relationship == "partner"
+        && matches!(possessive_stem(cue_word), "marry" | "married" | "marriage")
+        && !other_possessive
+        && (mentions(clause_before, "i")
+            || mentions(clause_after, "me")
+            || pending && pending_reference(source, cue, cue + cue_word.len()));
+    // 'The buyer Jo' is an operative deal capacity. Another person's buyer
+    // remains unbound when a possessive immediately owns that capacity.
+    let other_party = relationship == "other_party" && !other_possessive;
+    if !(speaker_possessive || speaker_complement || romantic_self || other_party) {
+        return false;
+    }
+    let label = label.to_ascii_lowercase();
+    let label_words = words(&label);
+    let role_label = !label_words.is_empty()
+        && label_words.iter().all(|(_, word)| {
+            matches!(*word, "my" | "our")
+                || relation_words(relationship)
+                    .iter()
+                    .any(|role| *role == possessive_stem(word))
+        });
+    if possessive_stem(cue_word) != cue_word && !role_label {
+        return false; // Pat is my sister's FRIEND, not my sister.
+    }
+    let following = words(after);
+    let label_after = !label_words.is_empty()
+        && following.get(..label_words.len()).is_some_and(|window| {
+            window
+                .iter()
+                .zip(&label_words)
+                .all(|(left, right)| possessive_stem(left.1) == possessive_stem(right.1))
+        });
+    role_label
+        || label_after
+        || mentions(clause_before, &label)
+        || pending && pending_reference(source, cue, cue + cue_word.len())
+}
+
+/// Narrow English evidence checks, not a general semantic proof. Both the exact
+/// quote and its source context matter: trimming "not" must not create evidence.
+pub(crate) fn relationship_evidence(
+    relationship: &str,
+    quote: &str,
+    source: &str,
+    label: &str,
+    pending: bool,
+) -> bool {
+    if relation_words(relationship).iter().any(|cue| {
+        positive_phrase(quote, source, cue, |source, at| {
+            literal_capacity_binding(source, at, relationship, label, pending)
+        })
+    }) {
+        return true;
+    }
+    match relationship {
+        "neighbor" => ["lives next door to me", "lives next door to us"]
+            .iter()
+            .any(|cue| {
+                positive_phrase(quote, source, cue, |source, at| {
+                    pending && pending_reference(source, at, at + cue.len())
+                        || mentions(
+                            source[..at]
+                                .rsplit(['.', '!', '?', ';', '\n'])
+                                .next()
+                                .unwrap_or(""),
+                            label,
+                        )
+                })
+            }),
+        "sibling" => [
+            "share the same parents",
+            "have the same parents",
+            "share both parents",
+            "have the same mother and father",
+            "share the same mother and father",
+        ]
+        .iter()
+        .any(|cue| {
+            positive_phrase(quote, source, cue, |source, at| {
+                let before = &source[..at];
+                let clause_before = before
+                    .rsplit(['.', '!', '?', ';', '\n'])
+                    .next()
+                    .unwrap_or(before);
+                let clause_after = source[at..]
+                    .split(['.', '!', '?', ';', '\n', ','])
+                    .next()
+                    .unwrap_or("");
+                (mentions(clause_before, "we")
+                    || mentions(clause_before, "i")
+                    || mentions(clause_after, "as me"))
+                    && (pending && pending_reference(source, at, at + cue.len())
+                        || mentions(clause_before, label)
+                        || mentions(clause_after, label))
+            })
+        }),
+        _ => false,
+    }
+}
+
+/// Recognises a small set of explicit future-spouse phrases. The role's
+/// principal and the absence of an attached identity are checked in the full
+/// clause, even when the extractor quotes only its role words. This is a
+/// conservative English guard, not a general semantic proof.
+pub(crate) fn future_marriage_partner_evidence(
+    quote: &str,
+    source: &str,
+    principal_id: &str,
+    principal: Option<&Person>,
+) -> bool {
+    let binding = |source: &str, at: usize, cue: &str, marriage_clause: bool| {
+        let tokens = words(source);
+        let Some(index) = tokens.iter().position(|word| word.0 == at) else {
+            return false;
+        };
+        let count = cue.split_whitespace().count();
+        let Some(last) = tokens.get(index + count - 1) else {
+            return false;
+        };
+        let end = last.0 + last.1.len();
+        let after = source[end..]
+            .split(['.', '!', '?', ';', '\n'])
+            .next()
+            .unwrap_or("");
+        if words(after).first().is_some_and(|(_, word)| {
+            !matches!(
+                *word,
+                "look"
+                    | "looks"
+                    | "appearance"
+                    | "appear"
+                    | "appears"
+                    | "be"
+                    | "have"
+                    | "will"
+                    | "would"
+                    | "could"
+                    | "might"
+                    | "physical"
+                    | "general"
+                    | "broad"
+                    | "like"
+            )
+        }) {
+            return false; // 'my future husband Alex' supplies an identity.
+        }
+
+        let owner_start =
+            if marriage_clause {
+                if !matches!(principal_id, "" | "querent") {
+                    return false; // 'I will marry' does not name Sam's future spouse.
+                }
+                if index > 0 && tokens[index - 1].1 == "the" {
+                    index - 1
+                } else {
+                    index
+                }
+            } else {
+                match principal_id {
+                    "" => {
+                        // Retain an unresolved principal, but inspect an attached
+                        // possessive so 'Alex is my future husband' is still named.
+                        if index > 0
+                            && (tokens[index - 1].1 == "my"
+                                || tokens[index - 1].1.ends_with("'s")
+                                || tokens[index - 1].1.ends_with("’s"))
+                        {
+                            index - 1
+                        } else {
+                            index
+                        }
+                    }
+                    "querent" if index > 0 && tokens[index - 1].1 == "my" => index - 1,
+                    "querent" => return false,
+                    _ => {
+                        let Some(person) = principal else {
+                            return false;
+                        };
+                        let label = person.label.to_ascii_lowercase();
+                        let label_words = words(&label);
+                        let Some(start) = index.checked_sub(label_words.len()) else {
+                            return false;
+                        };
+                        if label_words.is_empty()
+                            || !tokens[start..index].iter().zip(&label_words).all(
+                                |(left, right)| possessive_stem(left.1) == possessive_stem(right.1),
+                            )
+                            || !tokens[index - 1].1.ends_with("'s")
+                                && !tokens[index - 1].1.ends_with("’s")
+                        {
+                            return false;
+                        }
+                        start
+                    }
+                }
+            };
+        let before_owner = &source[..tokens[owner_start].0];
+        let clause = before_owner
+            .rsplit(['.', '!', '?', ';', '\n'])
+            .next()
+            .unwrap_or(before_owner);
+        let prefix = clause.trim_end();
+        let prefix_words = words(prefix);
+        let excludes_role = [
+            "don't mean",
+            "don’t mean",
+            "do not mean",
+            "not asking about",
+            "not referring to",
+            "not talking about",
+            "not a description of",
+        ]
+        .iter()
+        .any(|negative| {
+            let negative = words(negative);
+            prefix_words
+                .len()
+                .checked_sub(negative.len())
+                .is_some_and(|start| {
+                    prefix_words[start..]
+                        .iter()
+                        .zip(&negative)
+                        .all(|(left, right)| left.1 == right.1)
+                })
+        });
+        if prefix.ends_with([',', ':'])
+            || excludes_role
+            || words(prefix).last().is_some_and(|(_, word)| {
+                matches!(*word, "is" | "are" | "was" | "were" | "be" | "become")
+            })
+        {
+            return false; // 'Alex, my future husband' / 'Alex is my future husband'.
+        }
+        true
+    };
+    [
+        "future marriage partner",
+        "future spouse",
+        "future husband",
+        "future wife",
+    ]
+    .iter()
+    .any(|cue| {
+        positive_phrase(quote, source, cue, |source, at| {
+            binding(source, at, cue, false)
+        })
+    }) || [
+        "person i will marry",
+        "person who i will marry",
+        "man i will marry",
+        "woman i will marry",
+    ]
+    .iter()
+    .any(|cue| {
+        positive_phrase(quote, source, cue, |source, at| {
+            binding(source, at, cue, true)
+        })
+    })
+}
+
 pub fn build(matter: Matter, people: &[Person], subject: &Subject) -> Options {
     let mut options = Options {
         choices: Vec::new(),
@@ -171,6 +690,24 @@ pub fn build(matter: Matter, people: &[Person], subject: &Subject) -> Options {
             .and_then(|person| relationship_house(&person.relationship))
     };
     match subject.kind.as_str() {
+        "person_role" => {
+            if !subject.is_future_marriage_partner() {
+                options.missing.push(
+                    "The person role is not a supported future marriage partner role.".into(),
+                );
+            } else if let Some(base) = owner {
+                add(
+                    "subject.primary".into(),
+                    subject.name.clone(),
+                    base,
+                    7,
+                    format!("Future marriage partner is seventh from the principal's house {base}; an unnamed spouse is a role, not an invented person. Frawley printed pp. 143, 191, 196."),
+                );
+                options.required_groups.push(vec!["subject.primary".into()]);
+            } else {
+                options.missing.push("The future marriage partner's principal or that principal's operative relationship is unresolved.".into());
+            }
+        }
         "person" => {
             if subject.owner_id != "querent"
                 && !people.iter().any(|person| person.id == subject.owner_id)
@@ -244,6 +781,19 @@ pub fn build_for(
 ) -> Options {
     use crate::reading_contracts::{Field, Method};
     let method = case.method();
+    if subject.kind == "person_role" && method != Some(Method::PersonDescription) {
+        let mut options = build(
+            matter,
+            &[],
+            &Subject {
+                kind: "person".into(),
+                owner_id: "querent".into(),
+                ..Default::default()
+            },
+        );
+        options.missing.push("The future marriage partner role is only available to the person_description contract.".into());
+        return options;
+    }
     let relay = case.text(Field::PrincipalMode) == Some("relay");
     let principal = if relay {
         case.text(Field::PrincipalId).unwrap_or("querent")
@@ -283,10 +833,23 @@ pub fn build_for(
     }
     if matches!(method, Some(Method::LostAnimal)) {
         chosen.owner_id = "querent".into();
-        chosen.kind = if case.text(Field::AnimalKind) == Some("large_kind") {
-            "large_animal"
-        } else {
-            "small_animal"
+        chosen.kind = match case.text(Field::AnimalKind) {
+            Some("large_kind") => "large_animal",
+            Some("small_kind") => "small_animal",
+            _ => {
+                let mut options = build(Matter::Other, &[], &Subject::default());
+                options
+                    .choices
+                    .retain(|choice| !choice.id.starts_with("subject."));
+                options
+                    .required_groups
+                    .retain(|group| !group.iter().any(|id| id.starts_with("subject.")));
+                options.missing.push(
+                    "The animal's actual kind is unresolved; do not assume the sixth or twelfth."
+                        .into(),
+                );
+                return options;
+            }
         }
         .into();
         relevant.clear();
@@ -354,7 +917,18 @@ pub fn build_for(
             },
         );
         options.choices.retain(|c| !c.id.starts_with("subject."));
-        options.choices.push(Choice{id:"subject.primary".into(),label:subject.name.clone(),house:Some(7),natural:None,basis:"Seventh for the prospective partner; no identified person or gender is required (Frawley p. 191).".into()});
+        let basis = if subject.owner_id.is_empty() {
+            "Seventh for an unnamed partner role; no invented identity or gender (Frawley p. 191)."
+        } else {
+            "Seventh for the identified person as a prospective romantic partner; their supplied identity is retained (Frawley p. 191)."
+        };
+        options.choices.push(Choice {
+            id: "subject.primary".into(),
+            label: subject.name.clone(),
+            house: Some(7),
+            natural: None,
+            basis: basis.into(),
+        });
         options
             .required_groups
             .retain(|g| !g.iter().any(|id| id.starts_with("subject.")));

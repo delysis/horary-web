@@ -35,6 +35,8 @@ src-tauri/target/
 src-tauri/.tauri/
 src-tauri/target-*/
 crates/horary-ai-core/target/
+crates/horary-prompt-program/target/
+tools/horary-loop/target/
 
 artifacts/horary-reading-eval.json
 artifacts/horary-reading-eval-live.json

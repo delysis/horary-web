@@ -77,7 +77,8 @@
       "judgment": "Assess recovery and plausible whereabouts from supplied context, without exact GPS promises or automatic void-Moon rejection.",
       "subject_kinds": [
         "small_animal",
-        "large_animal"
+        "large_animal",
+        "animal"
       ]
     },
     {
@@ -642,7 +643,7 @@
     {
       "method": "person_description",
       "title": "Description of a person",
-      "printed_pages": "143–145",
+      "printed_pages": "143–145, 191, 196",
       "owner": "Required",
       "requirements": [],
       "facets": [
@@ -650,10 +651,11 @@
         "situation"
       ],
       "coverage": "ExpertReview",
-      "roles": "Person's operative relationship fixes their ruler.",
-      "judgment": "Broad comparative description, not exact height, ethnicity or invented marks. Dedicated descriptive program needs review.",
+      "roles": "An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.",
+      "judgment": "Broad comparative description, not exact height, ethnicity or invented marks. Use the main significator, not a natural cosignificator. Dedicated descriptive program needs review.",
       "subject_kinds": [
-        "person"
+        "person",
+        "person_role"
       ]
     },
     {

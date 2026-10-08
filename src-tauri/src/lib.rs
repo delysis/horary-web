@@ -41,6 +41,8 @@ use tauri::Manager;
 
 mod ai;
 mod conversation;
+#[cfg(test)]
+mod elicitation_eval;
 mod geocode;
 mod hf_cache;
 mod horary_contract;
@@ -64,6 +66,7 @@ mod process_reference;
 mod reading_contracts;
 mod reading_method;
 mod reading_store;
+mod recognition_programs;
 mod review_progress;
 mod storage;
 #[cfg(test)]

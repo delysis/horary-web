@@ -480,6 +480,32 @@ impl From<ModelManifestError> for LlamaError {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[ignore = "Downloads/verifies the bundled pinned artifacts in the real shared cache; fresh HORARY_ACQUISITION_EVIDENCE required"]
+    fn real_pinned_cache_acquisition() {
+        let evidence = std::path::PathBuf::from(
+            std::env::var_os("HORARY_ACQUISITION_EVIDENCE")
+                .expect("Set a fresh acquisition evidence directory"),
+        );
+        std::fs::create_dir(&evidence).expect("Preserve earlier acquisition evidence");
+        let state = super::Acquisition::default();
+        state.begin().unwrap();
+        let registration = evidence.join("registration");
+        let result = state.run(&registration);
+        std::fs::write(
+            evidence.join("result.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "result":result.as_ref().map_err(|e| &e.message),
+                "status":state.status(&registration),
+                "manifest":crate::model_manifest::bundled_model_manifest().unwrap(),
+                "private_readings_touched":false,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        result.unwrap();
+        assert!(state.status(&registration).unwrap().ready);
+    }
     use super::*;
     use std::net::TcpListener;
     use std::sync::atomic::AtomicU64;

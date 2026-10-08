@@ -38,6 +38,27 @@ pub(crate) fn clipboard(session: &Session) -> Value {
                 || session.place.is_some()
                 || device && need.state == "native_acquisition_pending"))
     });
+    // Native place and moment work can wait independently. Keep both typed
+    // requests selectable; a single prior result must not erase its sibling.
+    // Ordinary fact requests continue to be governed by the current plan.
+    for pending in &session.method.flow.pending {
+        let key = match (pending.stage, pending.request.field.as_str()) {
+            (Stage::Place, "chart_place") => RequirementKey::ChartPlace,
+            (Stage::Moment, "chart_moment") => RequirementKey::ChartMoment,
+            _ => continue,
+        };
+        if let Some(existing) = needs.iter_mut().find(|need| need.key == key) {
+            existing.reason.clone_from(&pending.request.reason);
+            existing.question.clone_from(&pending.request.question);
+        } else {
+            needs.push(Need {
+                key,
+                state: "native_stage_awaiting_input".into(),
+                reason: pending.request.reason.clone(),
+                question: pending.request.question.clone(),
+            });
+        }
+    }
     // A failed native anchor check can be more specific than the catalogue's
     // generic question. Preserve that reason, including DST folds and gaps.
     if let Some(ReadingResult::NeedsInformation { need }) = &session.method.result {
@@ -46,7 +67,14 @@ pub(crate) fn clipboard(session: &Session) -> Value {
             if let Some(question) = &need.question {
                 existing.question = question.clone();
             }
-        } else {
+        } else if matches!(
+            need.key,
+            RequirementKey::ChartPlace | RequirementKey::ChartMoment
+        ) {
+            // These may reflect a more precise native check than the
+            // catalogue, e.g. an invalid explicit time despite an old chart.
+            // Ordinary fact needs must still occur in the current plan. Their
+            // previous-turn result cannot resurrect a resolved field.
             needs.push(Need {
                 key: need.key.clone(),
                 state: "requested_by_reading".into(),
@@ -124,8 +152,8 @@ pub(crate) fn schema(input: &Value) -> Value {
             .cloned(),
     );
     json!({"type":"object","properties":{
-        "reply":{"type":"string","maxLength":1600},
-        "ask":{"type":"string","enum":choices}
+        "ask":{"type":"string","enum":choices,"description":"Choose the exact missing-answer reminder before composing reply. Empty means no fact is being elicited. The spoken question must obtain this reminder's answer, not a different detail."},
+        "reply":{"type":"string","maxLength":1600,"description":"Speak naturally to the person. If ask is nonempty, obtain that exact missing answer in one contextual question, preserving known names and circumstances."}
     },"required":["reply","ask"],"additionalProperties":false})
 }
 

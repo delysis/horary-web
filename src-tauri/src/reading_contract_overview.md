@@ -7,13 +7,17 @@ There are two operations: **elicit information**, then **generate a reading**. C
 ```mermaid
 flowchart TB
   words["Words + retained consultation"] --> literal["N: capture explicit standalone reader-place declaration"]
-  literal --> recognise["C: recognise intent, method and fact updates"]
+  literal --> recognise["C: classify a new concern, or update its selected program"]
   words --> device["N: acquire device place alongside recognition"]
   recognise --> check{{"N: native patch validation"}}
   check -->|Rejected| repair["Same unfinished task + original input + exact rejection"]
   repair --> recognise
   check -->|Accepted| reduce["N: atomic reduction; preserve unmentioned facts"]
-  reduce --> plan{{"N: evaluate selected contract and three-valued guards"}}
+  reduce --> focused{{"N: newly selected method needs verification?"}}
+  focused -->|Yes| extract["C: verify tentative method/facet; extract from the SAME words"]
+  extract --> check
+  focused -->|No; selected program completed| resolve["N: qualify contextual cities from explicit or nearby evidence"]
+  resolve --> plan{{"N: evaluate selected contract and three-valued guards"}}
   device --> plan
   plan -->|Applicable factual gap| remind["N: private reminder; retain missing fact and its state"]
   remind --> ask["W: conversational reader phrases and selects the next inquiry"]
@@ -35,7 +39,9 @@ flowchart TB
   acceptance -->|Checked answer| document["Unfolding document + private receipts"]
 ```
 
-**C** is classification/extraction; **J** is contextual horary judgment; **W** is writing; **N** is native computation or validation. Every reading worker can return a typed factual need instead of pretending to complete its work. Its response is checked before completion. All independent analysis responses are recorded before repair begins. The production batch holds up to four inference sequences sharing one model.
+**C** is classification/extraction; **J** is contextual horary judgment; **W** is writing; **N** is native computation or validation. New-question classification supplies only a literal question and tentative frame. The focused lesson verifies that hypothesis before supplying subject, people and observations. A correction to a different method is frame-only and runs that method's own lesson; a same-method facet refinement may accompany facts. Focused extraction cannot change the retained question or issue conversation controls. Its prompt and permitted subject kinds are specific to that phase. Subsequent replies use the selected update lesson, rather than restarting classification.
+
+Every reading worker can return a typed factual need instead of pretending to complete its work. Its response is checked before completion. Recognition instead leaves genuinely absent facts unresolved; it has no `request_input` output. The contract computes private reminders and the guru chooses how to inquire. All independent analysis responses are recorded before repair begins. The production batch holds up to four inference sequences sharing one model.
 
 Known factual slots provide authored example questions to the conversational model. They never write directly into the conversation. A contextual detail discovered by a reading worker keeps that worker's specific, checked question in the same consultation. Both the question and its reason remain in the receipts. A worker cannot re-ask ownership or capacity already resolved in its handoff.
 

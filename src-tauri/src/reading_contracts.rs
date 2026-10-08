@@ -42,7 +42,7 @@ names!(Method {
 names!(Facet {
     Event => "event", Situation => "situation", Quantity => "quantity", Location => "location",
     Choice => "choice", Timing => "timing", Description => "description", Truth => "truth",
-    Profit => "profit", Safety => "safety"
+    Profit => "profit", Safety => "safety", Unknown => "unknown"
 });
 names!(Field {
     PrincipalMode => "principal_mode", PrincipalId => "principal_id", Context => "context",
@@ -75,10 +75,25 @@ pub struct Frame {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "source", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Evidence {
-    User { turn: usize, quote: String },
-    Convention { rule: String },
-    Migration { detail: String },
-    RetainedQuestion { quote: String },
+    User {
+        turn: usize,
+        quote: String,
+    },
+    Convention {
+        rule: String,
+    },
+    Migration {
+        detail: String,
+    },
+    RetainedQuestion {
+        quote: String,
+    },
+    NativePlace {
+        query: String,
+        candidate_id: String,
+        context: String,
+        original: Box<Evidence>,
+    },
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -198,6 +213,10 @@ pub struct Consultation {
     pub changes: Vec<Change>,
     pub requested: Option<RequirementKey>,
     pub additional: Vec<InformationNeed>,
+    /// Explicit location-only control; survives recognition snapshots.
+    /// Historical question time remains independent.
+    #[serde(default)]
+    pub device_reader_place: bool,
     #[serde(default)]
     pub unavailable: Vec<UnavailableNeed>,
 }
@@ -207,7 +226,7 @@ impl Default for Consultation {
             frame: Slot::Missing, people: BTreeMap::new(), subject: Slot::Missing,
             facts: BTreeMap::from([(Field::PrincipalMode, Slot::Resolved { observation: Observation {
                 value: "self".into(), evidence: Evidence::Convention { rule: "The speaker is the principal unless relay or ambiguity is stated; Frawley pp. 137–138.".into() }
-            }})]), changes: Vec::new(), requested: None, additional: Vec::new(), unavailable:Vec::new() }
+            }})]), changes: Vec::new(), requested: None, additional: Vec::new(), device_reader_place:false, unavailable:Vec::new() }
     }
 }
 #[derive(Clone, Deserialize, Serialize)]
@@ -304,12 +323,12 @@ const fn subject_kinds(method: Method) -> &'static [&'static str] {
         | Method::MissingPerson
         | Method::WorkPerson
         | Method::Contact
-        | Method::Trust
-        | Method::PersonDescription => &["person"],
+        | Method::Trust => &["person"],
+        Method::PersonDescription => &["person", "person_role"],
         Method::LostObject | Method::MovableDeal => &["movable"],
         Method::Money | Method::Investment | Method::Bet => &["money", "movable"],
         Method::Property | Method::Rental | Method::BusinessProperty => &["property"],
-        Method::LostAnimal => &["small_animal", "large_animal"],
+        Method::LostAnimal => &["small_animal", "large_animal", "animal"],
         _ => &[
             "person",
             "movable",
@@ -427,9 +446,9 @@ pub const CATALOGUE: &[Contract] = &[
     card!(Vehicle, "Vehicle or journey safety", "142–143", Required, &[],
         &[Facet::Safety, Facet::Situation, Facet::Event], ExpertReview,
         "Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.", "Dedicated safety judgment requires review; identify the undertaking without replacing the question time with departure time."),
-    card!(PersonDescription, "Description of a person", "143–145", Required, &[],
+    card!(PersonDescription, "Description of a person", "143–145, 191, 196", Required, &[],
         &[Facet::Description, Facet::Situation], ExpertReview,
-        "Person's operative relationship fixes their ruler.", "Broad comparative description, not exact height, ethnicity or invented marks. Dedicated descriptive program needs review."),
+        "An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.", "Broad comparative description, not exact height, ethnicity or invented marks. Use the main significator, not a natural cosignificator. Dedicated descriptive program needs review."),
     card!(Information, "Whether information is true", "164–165", None,
         &[required(Field::Claim)], &[Facet::Truth], ExpertReview,
         "A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.", "Preserve the specific reported claim. Dedicated veracity program awaits review."),
@@ -592,6 +611,33 @@ pub fn allowed_values(field: Field) -> &'static [&'static str] {
     }
 }
 
+/// Validate the canonical syntax before checking the exact source proof.
+/// A supplied second clock occurrence still needs value=later, not second.
+fn validate_update_value(update: &Update) -> Result<(), String> {
+    let allowed = allowed_values(update.field);
+    if update.mode != UpdateMode::Unavailable
+        && !allowed.is_empty()
+        && !allowed.contains(&update.value.as_str())
+    {
+        let occurrence = if update.field == Field::TimeOccurrence {
+            " For a repeated civil clock, first/earlier maps to earlier and second/later maps to later; keep the person's exact words in quote."
+        } else {
+            " Keep the person's exact words in quote."
+        };
+        return Err(format!(
+            "{} value {:?} is not canonical. Use one of: {}.{}",
+            update.field.name(),
+            update.value,
+            allowed.join(", "),
+            occurrence
+        ));
+    }
+    if update.value.trim().is_empty() || update.value.len() > 700 {
+        return Err("A fact update needs a nonempty bounded value.".into());
+    }
+    Ok(())
+}
+
 fn field_prompt_for(method: Option<Method>, field: Field) -> &'static str {
     match (method, field) {
         (Some(Method::Money), Field::Sender) => {
@@ -599,6 +645,225 @@ fn field_prompt_for(method: Option<Method>, field: Field) -> &'static str {
         }
         _ => field_prompt(field),
     }
+}
+
+/// A narrow repair for the observed Investment name=quote false rejection.
+/// This accepts an affirmative speaker-owned holding clause, not arbitrary
+/// ownership prose. Exact quotation and owner-change guards still run later.
+fn explicit_speaker_holding(quote: &str, source: &str) -> bool {
+    let quote = quote.to_ascii_lowercase();
+    let source = source.to_ascii_lowercase();
+    let tokens = |text: &str| {
+        text.split(|ch: char| !ch.is_alphanumeric() && !matches!(ch, '\'' | '’'))
+            .filter(|word| !word.is_empty())
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+    if tokens(&quote).len() < 3 {
+        return false;
+    }
+    source.match_indices(&quote).any(|(start, _)| {
+        quote.match_indices("i own").any(|(relative, _)| {
+            let cue = start + relative;
+            if source[..cue]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_alphanumeric())
+                || source[cue + 5..]
+                    .chars()
+                    .next()
+                    .is_some_and(|ch| ch.is_alphanumeric())
+            {
+                return false;
+            }
+            let before = &source[..cue];
+            // This deliberately narrow exception refuses quoted first-person
+            // text, including a quotation that crossed a sentence boundary.
+            let quoted = before.contains(['"', '“', '”', '‘'])
+                || before.char_indices().any(|(at, ch)| {
+                    if !matches!(ch, '\'' | '’') {
+                        return false;
+                    }
+                    let previous = before[..at].chars().next_back();
+                    let next = before[at + ch.len_utf8()..].chars().next();
+                    !previous.is_some_and(char::is_alphanumeric)
+                        || !next.is_some_and(char::is_alphanumeric)
+                });
+            if quoted {
+                return false;
+            }
+            // A reported/quoted first person belongs to its reported speaker.
+            let sentence = before
+                .rsplit(['.', '!', '?', ';', '\n'])
+                .next()
+                .unwrap_or(before);
+            let sentence_tokens = tokens(sentence);
+            if sentence.contains([':', '"', '“', '”', '‘'])
+                || sentence_tokens.iter().any(|word| {
+                    matches!(
+                        word.as_str(),
+                        "said"
+                            | "say"
+                            | "saying"
+                            | "says"
+                            | "wrote"
+                            | "writes"
+                            | "quoted"
+                            | "claims"
+                            | "claimed"
+                            | "thinks"
+                            | "thought"
+                            | "think"
+                            | "suppose"
+                            | "assume"
+                            | "whether"
+                            | "wonder"
+                            | "unsure"
+                            | "uncertain"
+                            | "false"
+                            | "untrue"
+                    )
+                })
+            {
+                return false;
+            }
+            let clause = sentence.rsplit(',').next().unwrap_or(sentence);
+            let preceding = tokens(clause);
+            if preceding.iter().any(|word| {
+                matches!(
+                    word.as_str(),
+                    "not"
+                        | "no"
+                        | "never"
+                        | "neither"
+                        | "isn't"
+                        | "isn’t"
+                        | "aren't"
+                        | "aren’t"
+                        | "don't"
+                        | "don’t"
+                        | "doesn't"
+                        | "doesn’t"
+                        | "didn't"
+                        | "didn’t"
+                        | "wasn't"
+                        | "wasn’t"
+                        | "weren't"
+                        | "weren’t"
+                        | "if"
+                )
+            }) || preceding.last().is_some_and(|word| {
+                matches!(
+                    word.as_str(),
+                    "will" | "would" | "could" | "might" | "may" | "can" | "do" | "did"
+                )
+            }) {
+                return false;
+            }
+            !tokens(&source[cue + 5..]).first().is_some_and(|word| {
+                matches!(word.as_str(), "not" | "no" | "none" | "nothing" | "neither")
+            })
+        })
+    })
+}
+
+fn bare_subject_quote(name: &str, quote: &str) -> bool {
+    let without_article = |text: &str| {
+        let text = text
+            .trim()
+            .trim_end_matches(['.', '!', '?'])
+            .to_ascii_lowercase();
+        for article in ["the ", "a ", "an ", "this ", "that ", "these ", "those "] {
+            if let Some(noun) = text.strip_prefix(article) {
+                return noun.trim().to_owned();
+            }
+        }
+        text
+    };
+    let name = without_article(name);
+    let quote = quote
+        .trim()
+        .trim_end_matches(['.', '!', '?'])
+        .to_ascii_lowercase();
+    if without_article(&quote) == name {
+        return true;
+    }
+    // A sale supplies an action, not title. Detect the same unsupported
+    // evidence in a longer clause as well as in an extracted bare fragment.
+    // This still does not certify arbitrary English as ownership proof.
+    if ["own", "owns", "owned", "belong", "belongs", "title"]
+        .iter()
+        .any(|cue| crate::horary_role_options::mentions(&quote, cue))
+    {
+        return false;
+    }
+    ["sell ", "sells ", "selling ", "sold ", "to sell "]
+        .iter()
+        .any(|verb| {
+            quote
+                .strip_prefix(verb)
+                .is_some_and(|object| without_article(object) == name)
+                || ["the ", "a ", "an ", "this ", "that ", "these ", "those "]
+                    .iter()
+                    .any(|article| {
+                        crate::horary_role_options::mentions(
+                            &quote,
+                            &format!("{verb}{article}{name}"),
+                        )
+                    })
+        })
+}
+
+fn occurrence_evidence(
+    value: &str,
+    quote: &str,
+    pending: bool,
+    pending_moment: bool,
+    question_moment: bool,
+    words: &str,
+) -> bool {
+    let mentions = crate::horary_role_options::mentions;
+    let choices: &[&str] = match value {
+        "earlier" => &["first", "earlier"],
+        "later" => &["second", "later"],
+        _ => return false,
+    };
+    if !choices.iter().any(|choice| mentions(quote, choice)) {
+        return false;
+    }
+    if pending {
+        return true;
+    }
+    let occurrence = choices
+        .iter()
+        .any(|choice| mentions(quote, &format!("{choice} occurrence")));
+    let explicit_overlap = [
+        "clocks went back",
+        "clocks moved back",
+        "daylight saving",
+        "dst",
+        "clock overlap",
+        "repeated clock time",
+        "clock time happened twice",
+    ]
+    .iter()
+    .any(|context| mentions(words, context));
+    let clock_choice = words
+        .split(|ch: char| !ch.is_ascii_digit() && ch != ':')
+        .any(|clock| {
+            let Some((hour, minute)) = clock.split_once(':') else {
+                return false;
+            };
+            hour.parse::<u8>().is_ok_and(|hour| hour < 24)
+                && minute.parse::<u8>().is_ok_and(|minute| minute < 60)
+                && choices
+                    .iter()
+                    .any(|choice| mentions(words, &format!("{choice} {clock}")))
+        });
+    if pending_moment && question_moment && (explicit_overlap || clock_choice || occurrence) {
+        return true;
+    }
+    occurrence && (question_moment || explicit_overlap)
 }
 
 impl Consultation {
@@ -689,13 +954,17 @@ impl Consultation {
             self.frame,
             self.people,
             self.subject,
-            self.facts
+            self.facts,
+            self.device_reader_place
         ]);
         if turn.intent == Intent::NewQuestion {
             *self = Self::default();
         }
         if turn.intent == Intent::UseDevice {
             self.facts.remove(&Field::ReaderPlace);
+            self.device_reader_place = true;
+            self.additional
+                .retain(|need| need.key != RequirementKey::Field(Field::ReaderPlace));
         }
         if let Some(question) = &turn.question {
             if question.trim().is_empty() || question.len() > 500 {
@@ -747,13 +1016,21 @@ impl Consultation {
                         .into(),
                 );
             }
+            let proof = evidence(&person.source_quote)?;
             if person.relationship != "unknown" {
-                evidence(&person.source_quote)?;
-                let lower = person.source_quote.to_lowercase();
-                if !crate::horary_role_options::relation_words(&person.relationship)
-                    .iter()
-                    .any(|w| lower.contains(w))
-                {
+                let source = if matches!(proof, Evidence::RetainedQuestion { .. }) {
+                    retained_question.as_deref().unwrap_or(words)
+                } else {
+                    words
+                };
+                if !crate::horary_role_options::relationship_evidence(
+                    &person.relationship,
+                    &person.source_quote,
+                    source,
+                    &person.label,
+                    self.requested.as_ref()
+                        == Some(&RequirementKey::PersonRelationship(person.id.clone())),
+                ) {
                     return Err(format!("Person {:?} has relationship {:?}, but quote {:?} does not supply that capacity. A name alone must use relationship=unknown, not other_party. Keep the identified person with an unknown relationship; Rust will ask who they are. Do not drop the original question or subject.",person.label,person.relationship,person.source_quote));
                 }
             }
@@ -772,24 +1049,30 @@ impl Consultation {
             if !subject.owner_id.is_empty()
                 && matches!(
                     subject.kind.as_str(),
-                    "movable" | "property" | "small_animal" | "large_animal"
+                    "movable" | "property" | "small_animal" | "large_animal" | "animal"
                 )
-                && subject.source_quote.split_whitespace().count() == 1
-                && subject
-                    .source_quote
-                    .trim()
-                    .eq_ignore_ascii_case(subject.name.trim())
+                && bare_subject_quote(&subject.name, &subject.source_quote)
+                && !(self.method() == Some(Method::Investment)
+                    && subject.owner_id == "querent"
+                    && explicit_speaker_holding(
+                        &subject.source_quote,
+                        if words.contains(&subject.source_quote) {
+                            words
+                        } else {
+                            retained_question.as_deref().unwrap_or(words)
+                        },
+                    ))
                 && self
                     .subject
                     .resolved()
                     .is_none_or(|old| old.owner_id != subject.owner_id)
             {
-                return Err("The object's name alone does not establish its owner. Leave owner_id empty unless ownership is explicitly stated; being the seller is not ownership.".into());
+                return Err("The object's name alone, or a bare sale phrase, does not establish its owner. Leave owner_id empty unless ownership is explicitly stated; being the seller is not ownership.".into());
             }
             if subject.name.trim().is_empty() {
                 return Err("A subject needs a name.".into());
             }
-            evidence(&subject.source_quote)?;
+            let proof = evidence(&subject.source_quote)?;
             if !subject.owner_id.is_empty()
                 && subject.owner_id != "querent"
                 && !self.people.contains_key(&subject.owner_id)
@@ -798,11 +1081,59 @@ impl Consultation {
                     "Owner must refer to a known participant, never an invented ID.".into(),
                 );
             }
+            if subject.kind == "person_role" {
+                let source = if matches!(proof, Evidence::RetainedQuestion { .. }) {
+                    retained_question.as_deref().unwrap_or(words)
+                } else {
+                    words
+                };
+                if self.method() != Some(Method::PersonDescription)
+                    || !subject.is_future_marriage_partner()
+                    || !crate::horary_role_options::future_marriage_partner_evidence(
+                        &subject.source_quote,
+                        source,
+                        &subject.owner_id,
+                        self.people.get(&subject.owner_id),
+                    )
+                {
+                    return Err("person_role is only the explicit unnamed Future marriage partner in person_description. owner_id is the person whose future spouse is described; it is not the spouse's ID. Preserve identified targets as kind=person. Other future roles, attached names and negated role phrases cannot supply this role.".into());
+                }
+            }
             let old = self.subject.resolved();
             let compatible = old.is_none_or(|old| {
-                old.name.trim().eq_ignore_ascii_case(subject.name.trim())
-                    && old.kind == subject.kind
+                let named_person_refinement = old.kind == "person"
+                    && subject.kind == "person"
+                    && old.owner_id.is_empty()
+                    && matches!(
+                        old.name.to_ascii_lowercase().as_str(),
+                        "relationship"
+                            | "person"
+                            | "partner"
+                            | "prospective partner"
+                            | "future partner"
+                    )
+                    && self.people.get(&subject.owner_id).is_some_and(|person| {
+                        subject
+                            .name
+                            .trim()
+                            .eq_ignore_ascii_case(person.label.trim())
+                    });
+                let animal_identification = self.method() == Some(Method::LostAnimal)
+                    && self.requested == Some(RequirementKey::Field(Field::AnimalKind))
+                    && old.kind == "animal"
+                    && matches!(subject.kind.as_str(), "small_animal" | "large_animal")
                     && (old.owner_id.is_empty() || old.owner_id == subject.owner_id)
+                    && (old.name.trim().eq_ignore_ascii_case(subject.name.trim())
+                        || matches!(
+                            old.name.trim().to_ascii_lowercase().as_str(),
+                            "pet" | "animal"
+                        ))
+                    && crate::horary_role_options::mentions(&subject.source_quote, &subject.name);
+                (old.name.trim().eq_ignore_ascii_case(subject.name.trim())
+                    && old.kind == subject.kind
+                    && (old.owner_id.is_empty() || old.owner_id == subject.owner_id))
+                    || named_person_refinement
+                    || animal_identification
             });
             if !compatible && !correct && understood {
                 return Err(
@@ -834,14 +1165,44 @@ impl Consultation {
             if !updated.insert(update.field) {
                 return Err("A turn must not update the same field twice.".into());
             }
-            let proof = evidence(&update.quote)?;
+            validate_update_value(update)?;
+            let recover_original_anchor =
+                recoverable_original_anchor(self, update.field, &update.quote);
+            let proof = if recover_original_anchor && !words.contains(&update.quote) {
+                Evidence::RetainedQuestion {
+                    quote: update.quote.clone(),
+                }
+            } else {
+                evidence(&update.quote)?
+            };
             if matches!(update.field, Field::ReaderPlace | Field::QuestionTime)
                 && matches!(proof, Evidence::RetainedQuestion { .. })
+                && !recover_original_anchor
             {
                 return Err("A reader_place or question_time override must be stated in the CURRENT words, or answer the pending chart-anchor question. Remove this override: quoting a venue or event time from the retained question cannot change the chart anchor during an unrelated clarification.".into());
             }
-            if update.value.trim().is_empty() || update.value.len() > 700 {
-                return Err("A fact update needs a nonempty bounded value.".into());
+            if update.field == Field::TimeOccurrence && update.mode != UpdateMode::Unavailable {
+                let pending = matches!(
+                    self.requested,
+                    Some(RequirementKey::Field(Field::TimeOccurrence))
+                );
+                let question_moment = self.text(Field::QuestionTime).is_some()
+                    || turn
+                        .updates
+                        .iter()
+                        .any(|entry| entry.field == Field::QuestionTime);
+                let pending_moment = self.requested == Some(RequirementKey::ChartMoment)
+                    && self.text(Field::QuestionTime).is_some();
+                if !occurrence_evidence(
+                    &update.value,
+                    &update.quote,
+                    pending,
+                    pending_moment,
+                    question_moment,
+                    words,
+                ) {
+                    return Err("time_occurrence selects the first/earlier or second/later occurrence of a repeated civil chart time. An event being 'this morning' or 'earlier' is not a clock-overlap choice. Remove this entry unless the person explicitly selects that occurrence or answers the pending overlap question.".into());
+                }
             }
             let slot = self.facts.entry(update.field).or_default();
             if update.mode == UpdateMode::Unavailable {
@@ -850,14 +1211,6 @@ impl Consultation {
                     evidence: proof,
                 };
             } else {
-                let allowed = allowed_values(update.field);
-                if !allowed.is_empty() && !allowed.contains(&update.value.as_str()) {
-                    return Err(format!(
-                        "{} must use one of {}",
-                        update.field.name(),
-                        allowed.join(", ")
-                    ));
-                }
                 let mut value = update.value.clone();
                 if matches!(update.field, Field::Context | Field::SearchContext)
                     && !correct
@@ -889,6 +1242,23 @@ impl Consultation {
                     update.mode == UpdateMode::Propose,
                 );
             }
+        }
+        if turn.updates.iter().any(|update| {
+            update.field == Field::ReaderPlace && update.mode != UpdateMode::Unavailable
+        }) {
+            self.device_reader_place = false;
+        }
+        if let Some(person) = self.unbound_named_subject() {
+            return Err(format!("The identified person {:?} must be bound in subject.owner_id={:?}. An empty person ID is for an unnamed role; do not relabel this known person as a prospective stranger or use 'relationship' as the person. Preserve the question and supplied baseline.", person.label, person.id));
+        }
+        if self.method() == Some(Method::LostAnimal)
+            && self.text(Field::AnimalKind).is_none()
+            && self
+                .subject
+                .resolved()
+                .is_some_and(|subject| subject.kind != "animal")
+        {
+            return Err("The animal's kind is unresolved. Use subject.kind=animal until animal_kind is supplied from an actual species; 'pet' does not establish small_animal or large_animal. Keep the question and known owner, and let the reader inquire about the kind.".into());
         }
         if !turn.unavailable_quote.is_empty() {
             let proof = evidence(&turn.unavailable_quote)?;
@@ -929,13 +1299,15 @@ impl Consultation {
             before_revision: self.revision,
             proposal: turn.clone(),
         });
+        record_anchor_obligation(self, words);
         if before
             != json!([
                 self.question,
                 self.frame,
                 self.people,
                 self.subject,
-                self.facts
+                self.facts,
+                self.device_reader_place
             ])
         {
             self.revision = self
@@ -945,6 +1317,23 @@ impl Consultation {
         }
         self.requested = None;
         Ok(())
+    }
+
+    fn unbound_named_subject(&self) -> Option<&Person> {
+        let subject = self.subject.resolved()?;
+        if subject.kind != "person" || !subject.owner_id.is_empty() {
+            return None;
+        }
+        self.people.values().find(|person| {
+            crate::horary_role_options::mentions(&subject.name, &person.label)
+                || crate::horary_role_options::mentions(&subject.source_quote, &person.label)
+                || (self.method() == Some(Method::Relationship)
+                    && matches!(
+                        self.text(Field::Baseline),
+                        Some("ongoing" | "arranged_wedding")
+                    )
+                    && person.relationship == "partner")
+        })
     }
 }
 
@@ -1097,6 +1486,18 @@ impl Consultation {
             );
             return plan;
         }
+        if original_question_words(self)
+            .and_then(historical_anchor_request)
+            .is_some()
+        {
+            for field in [Field::ReaderPlace, Field::QuestionTime] {
+                if self.text(field).is_none()
+                    && !(field == Field::ReaderPlace && self.device_reader_place)
+                {
+                    need(RequirementKey::Field(field), "explicit_historical_anchor_missing", "The original source explicitly selects an earlier consultation. Resolve its reader place and understood moment before any device/now reading permit; Frawley printed pp. 7–8.");
+                }
+            }
+        }
         let card = contract(frame.method);
         if !card.facets.contains(&frame.facet) {
             plan.limitation = Some(Limitation {
@@ -1184,6 +1585,13 @@ impl Consultation {
                 "The quesited must be identified.",
             ),
             Some(subject) => {
+                if self.unbound_named_subject().is_some() {
+                    need(
+                        RequirementKey::Subject,
+                        "unbound_person",
+                        "The named person is already supplied but not bound to the person subject. Repair that binding before a reading handoff; do not replace them with an unnamed role.",
+                    );
+                }
                 if matches!(card.owner, OwnerRule::Required) && subject.owner_id.is_empty() {
                     need(
                         RequirementKey::Owner,
@@ -1236,7 +1644,10 @@ impl Consultation {
         }
         for extra in &self.additional {
             let satisfied = match &extra.key {
-                RequirementKey::Field(field) => self.text(*field).is_some(),
+                RequirementKey::Field(field) => {
+                    self.text(*field).is_some()
+                        || (*field == Field::ReaderPlace && self.device_reader_place)
+                }
                 RequirementKey::Owner => self
                     .subject
                     .resolved()
@@ -1619,22 +2030,356 @@ pub fn control(intent: Intent) -> Turn {
     }
 }
 
-/// A standalone declaration needs no neural inference. Story venues and
-/// ambiguous multi-clause utterances deliberately remain with recognition.
+/// A standalone first-person declaration may follow the actual question.
+fn unquoted_sentence_starts(words: &str) -> Vec<usize> {
+    let mut starts = vec![0];
+    let mut quoted_until = None;
+    for (at, ch) in words.char_indices() {
+        let previous = words[..at].chars().next_back();
+        let next = words[at + ch.len_utf8()..].chars().next();
+        let apostrophe =
+            previous.is_some_and(char::is_alphanumeric) && next.is_some_and(char::is_alphanumeric);
+        if let Some(end) = quoted_until {
+            if ch == end && !(matches!(ch, '\'' | '’') && apostrophe) {
+                quoted_until = None;
+            }
+            continue;
+        }
+        match ch {
+            '"' => quoted_until = Some('"'),
+            '“' => quoted_until = Some('”'),
+            '‘' => quoted_until = Some('’'),
+            '\'' if !apostrophe && !previous.is_some_and(char::is_alphanumeric) => {
+                quoted_until = Some('\'')
+            }
+            '.' | '?' | '!' | '\n' => starts.push(at + ch.len_utf8()),
+            _ => {}
+        }
+    }
+    starts
+}
+
+/// A narrow source-defined obligation, independent of the model's worksheet.
+/// Direct question-anchor instructions differ from event places and dates.
+struct HistoricalAnchorRequest<'a> {
+    clause: &'a str,
+    supplied_place: bool,
+    supplied_time: bool,
+}
+
+fn historical_anchor_request(words: &str) -> Option<HistoricalAnchorRequest<'_>> {
+    let starts = unquoted_sentence_starts(words);
+    for (index, at) in starts.iter().enumerate() {
+        let before = &words[..*at];
+        let header = before
+            .rsplit("\n\n")
+            .next()
+            .unwrap_or(before)
+            .lines()
+            .rev()
+            .find(|line| !line.trim().is_empty())
+            .unwrap_or("")
+            .trim();
+        if header.ends_with(':')
+            && [
+                "said", "says", "asked", "asks", "wrote", "writes", "told", "reported",
+            ]
+            .iter()
+            .any(|cue| crate::horary_role_options::mentions(header, cue))
+        {
+            continue;
+        }
+        let end = starts.get(index + 1).copied().unwrap_or(words.len());
+        let clause = words[*at..end].trim();
+        let lower = clause.to_ascii_lowercase();
+        let imperative = lower.strip_prefix("please ").unwrap_or(&lower);
+        let prefixes = [
+            "use my earlier consultation",
+            "use the earlier consultation",
+            "use my original consultation",
+            "use the question i understood",
+            "use the question i first understood",
+        ];
+        let Some(prefix) = prefixes.iter().find(|prefix| {
+            imperative.starts_with(**prefix)
+                && imperative[prefix.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|ch| !ch.is_alphanumeric())
+        }) else {
+            continue;
+        };
+        let tail = &imperative[prefix.len()..];
+        let months = [
+            "january",
+            "february",
+            "march",
+            "april",
+            "may",
+            "june",
+            "july",
+            "august",
+            "september",
+            "october",
+            "november",
+            "december",
+        ];
+        let supplied_place = [" in ", " from "].iter().any(|cue| {
+            tail.split_once(*cue).is_some_and(|(_, rest)| {
+                let rest = rest.trim();
+                let period = rest.trim_end_matches(['.', '?', '!']);
+                let date_words = period.split_whitespace().collect::<Vec<_>>();
+                let temporal_tail = date_words.first().is_some_and(|word|
+                    ["yesterday", "today", "tomorrow"].contains(word))
+                    || matches!(date_words.as_slice(), [month, year, ..]
+                        if months.contains(month) && year.trim_matches(|ch: char| !ch.is_ascii_digit()).len() == 4
+                            && year.trim_matches(|ch: char| !ch.is_ascii_digit()).chars().all(|ch| ch.is_ascii_digit()));
+                !temporal_tail
+                    && !rest.is_empty()
+                    && !rest.starts_with(char::is_numeric)
+                    && ![
+                        "the morning",
+                        "the afternoon",
+                        "the evening",
+                        "morning",
+                        "afternoon",
+                        "evening",
+                    ]
+                    .iter()
+                    .any(|period| rest.starts_with(period))
+            })
+        });
+        let has_clock = tail.split_whitespace().any(|word| {
+            let clock = word.trim_matches(|ch: char| !ch.is_ascii_digit() && ch != ':');
+            clock.split_once(':').is_some_and(|(hour, minute)| {
+                !hour.is_empty()
+                    && !minute.is_empty()
+                    && hour.chars().all(|ch| ch.is_ascii_digit())
+                    && minute.chars().all(|ch| ch.is_ascii_digit())
+            })
+        });
+        let tokens: Vec<_> = tail
+            .split(|ch: char| !ch.is_ascii_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        let has_year = tokens
+            .iter()
+            .any(|part| part.len() == 4 && part.chars().all(|ch| ch.is_ascii_digit()));
+
+        let has_month_day = tokens.iter().enumerate().any(|(index, word)| {
+            months.contains(word)
+                && [index.checked_sub(1), index.checked_add(1)]
+                    .into_iter()
+                    .flatten()
+                    .any(|next| {
+                        tokens.get(next).is_some_and(|day| {
+                            day.parse::<u8>().is_ok_and(|day| (1..=31).contains(&day))
+                        })
+                    })
+        });
+        let has_iso_date = tail.split(|ch: char| !ch.is_ascii_digit() && ch != '-').any(|word| {
+            let parts: Vec<_> = word.split('-').collect();
+            matches!(parts.as_slice(), [year, month, day] if year.len() == 4 && month.len() == 2 && day.len() == 2
+                && parts.iter().all(|part| part.chars().all(|ch| ch.is_ascii_digit())))
+        });
+        return Some(HistoricalAnchorRequest {
+            clause,
+            supplied_place,
+            supplied_time: has_clock && ((has_year && has_month_day) || has_iso_date),
+        });
+    }
+    None
+}
+
+fn original_question_words(case: &Consultation) -> Option<&str> {
+    match &case.question {
+        Slot::Resolved { observation } | Slot::Proposed { observation } => {
+            match &observation.evidence {
+                Evidence::User { quote, .. } | Evidence::RetainedQuestion { quote } => Some(quote),
+                _ => Some(&observation.value),
+            }
+        }
+        _ => None,
+    }
+}
+
+fn anchor_source_quote(evidence: &Evidence) -> Option<&str> {
+    match evidence {
+        Evidence::User { quote, .. } | Evidence::RetainedQuestion { quote } => Some(quote),
+        Evidence::NativePlace { original, .. } => anchor_source_quote(original),
+        _ => None,
+    }
+}
+
+fn field_sourced_in(case: &Consultation, field: Field, clause: &str) -> bool {
+    matches!(case.facts.get(&field), Some(Slot::Resolved { observation })
+        if anchor_source_quote(&observation.evidence)
+            .is_some_and(|quote| !quote.trim().is_empty() && clause.contains(quote)))
+}
+
+/// Complete supplied anchor components privately; genuinely absent ones are
+/// retained as blocking requirements for the conversational reader.
+pub fn validate_anchor_completion(
+    case: &Consultation,
+    turn: &Turn,
+    words: &str,
+) -> Result<(), String> {
+    let current = historical_anchor_request(words);
+    let retained = original_question_words(case).and_then(historical_anchor_request);
+    let Some(request) = current.as_ref().or(retained.as_ref()) else {
+        return Ok(());
+    };
+    let mut missing = Vec::new();
+    for (field, supplied) in [
+        (Field::ReaderPlace, request.supplied_place),
+        (Field::QuestionTime, request.supplied_time),
+    ] {
+        let satisfied = if current.is_some() {
+            field_sourced_in(case, field, request.clause)
+        } else {
+            // Retained instructions cannot outvote later validated corrections.
+            case.text(field).is_some() || (field == Field::ReaderPlace && case.device_reader_place)
+        };
+        if supplied
+            && !satisfied
+            && !turn.updates.iter().any(|update| {
+                let answers_pending_anchor = match &case.requested {
+                    Some(RequirementKey::Field(requested)) => *requested == field,
+                    Some(RequirementKey::ChartPlace) => field == Field::ReaderPlace,
+                    Some(RequirementKey::ChartMoment) => field == Field::QuestionTime,
+                    _ => false,
+                };
+                let authorized_current_answer = current.is_none()
+                    && words.contains(&update.quote)
+                    && (turn.intent == Intent::Correct || answers_pending_anchor);
+                update.field == field
+                    && update.mode != UpdateMode::Unavailable
+                    && !update.quote.trim().is_empty()
+                    && (request.clause.contains(&update.quote) || authorized_current_answer)
+            })
+        {
+            missing.push(field.name());
+        }
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(format!("Explicit historical chart-anchor information was omitted: {}. Extract those fields from the actual instruction {:?}, preserving exact source quotes. Do not replace this earlier consultation with device location or now; do not ask for information already present. Keep the unchanged question, subject and other facts. A genuinely unstated component stays missing for the native anchor need.", missing.join(", "), request.clause))
+}
+
+fn recoverable_original_anchor(case: &Consultation, field: Field, quote: &str) -> bool {
+    matches!(field, Field::ReaderPlace | Field::QuestionTime)
+        && !(field == Field::ReaderPlace && case.device_reader_place)
+        && case.text(field).is_none()
+        && !quote.trim().is_empty()
+        && original_question_words(case)
+            .and_then(historical_anchor_request)
+            .is_some_and(|request| request.clause.contains(quote))
+}
+
+fn record_anchor_obligation(case: &mut Consultation, words: &str) {
+    let Some(request) = historical_anchor_request(words) else {
+        return;
+    };
+    case.device_reader_place = false;
+    for field in [Field::ReaderPlace, Field::QuestionTime] {
+        // Do not silently reuse an unrelated old anchor for a new instruction.
+        if !field_sourced_in(case, field, request.clause) {
+            if let Some(slot @ Slot::Resolved { .. }) = case.facts.get_mut(&field) {
+                if let Slot::Resolved { observation } = slot.clone() {
+                    *slot = Slot::Proposed { observation };
+                }
+            }
+        }
+        let key = RequirementKey::Field(field);
+        if case.text(field).is_none() && !case.additional.iter().any(|need| need.key == key) {
+            case.additional.push(InformationNeed {
+                key,
+                reason: format!("The person explicitly selected an earlier consultation: {:?}. Its reader place and understood moment must be resolved; device/now defaults do not establish them. Frawley printed pp. 7–8.", request.clause),
+                question: Some(if field == Field::ReaderPlace { "Where were you when that earlier question became clear?" } else { "When did that earlier question become clear, including its local time?" }.into()),
+            });
+        }
+    }
+}
+
+/// Quoted speech and ambiguous compound declarations remain with recognition.
 pub fn reader_place_statement(words: &str) -> Option<Update> {
     let words = words.trim();
-    let lower = words.to_ascii_lowercase();
-    let prefix = ["i'm asking from ", "i am asking from ", "i’m asking from "]
+    let starts = unquoted_sentence_starts(words);
+    let prefixes = ["i'm asking from ", "i am asking from ", "i’m asking from "];
+    let declarations: Vec<_> = starts
         .iter()
-        .find(|prefix| lower.starts_with(**prefix))?;
-    let place = words[prefix.len()..].trim().trim_end_matches(['.', '!']);
-    if place.is_empty() || place.len() > 700 || place.contains(['?', ';', '\n']) {
+        .filter_map(|at| {
+            let before = &words[..*at];
+            let paragraph = before.rsplit("\n\n").next().unwrap_or(before);
+            let header = paragraph.lines().next().unwrap_or("").trim();
+            if header.ends_with(':')
+                && [
+                    "said", "says", "asked", "asks", "wrote", "writes", "told", "reported",
+                ]
+                .iter()
+                .any(|cue| crate::horary_role_options::mentions(header, cue))
+            {
+                return None; // A colon-led report is somebody's words, not this reader's declaration.
+            }
+            let statement = words[*at..].trim();
+            let lower = statement.to_ascii_lowercase();
+            prefixes
+                .iter()
+                .find(|prefix| lower.starts_with(**prefix))
+                .map(|prefix| (statement, prefix.len()))
+        })
+        .collect();
+    let [(statement, prefix_len)] = declarations.as_slice() else {
+        return None;
+    };
+    let place = statement[*prefix_len..].trim().trim_end_matches(['.', '!']);
+    let lower = place.to_ascii_lowercase();
+    // Complete deictic phrases request the current device anchor, not a city
+    // named "here, now". Keep explicit names such as Hereford or Here, Kansas.
+    let deictic_words: Vec<_> = lower
+        .split(|ch: char| ch.is_whitespace() || ch == ',')
+        .filter(|word| !word.is_empty())
+        .collect();
+    let device = matches!(
+        deictic_words.as_slice(),
+        ["here"]
+            | ["here", "now"]
+            | ["right", "here"]
+            | ["right", "here", "now"]
+            | ["right", "here", "right", "now"]
+            | ["here", "at", "the", "moment"]
+            | ["where", "i", "am"]
+            | ["where", "i", "am", "now"]
+            | ["where", "i", "am", "right", "now"]
+            | ["where", "i", "currently", "am"]
+            | ["my", "present", "location"]
+    ) || crate::horary_role_options::mentions(place, "my device")
+        || crate::horary_role_options::mentions(place, "this device")
+        || crate::horary_role_options::mentions(place, "current location");
+    let extra_sentence = place.match_indices('.').any(|(at, _)| {
+        let suffix = &place[at + 1..];
+        let prefix_word = place[..at].split_whitespace().next_back().unwrap_or("");
+        !suffix.trim().is_empty()
+            && suffix.starts_with(char::is_whitespace)
+            && !matches!(
+                prefix_word.to_ascii_lowercase().as_str(),
+                "st" | "mt" | "ft" | "u" | "s"
+            )
+    });
+    if place.is_empty()
+        || place.len() > 700
+        || place.contains(['?', ';', '\n', '"', '“', '”', '‘'])
+        || place.ends_with(['\'', '’'])
+        || device
+        || extra_sentence
+    {
         return None;
     }
     Some(Update {
         field: Field::ReaderPlace,
         value: place.into(),
-        quote: words.into(),
+        quote: (*statement).into(),
         mode: UpdateMode::Supply,
     })
 }
@@ -1710,12 +2455,142 @@ pub fn documentation() -> String {
         ));
     }
     out.push_str("\n## Actual first-turn recognition prompt\n\n```text\n");
-    out.push_str(&recognition_guide(None));
-    out.push_str("```\n\n## Actual recognition response schema\n\n```json\n");
+    out.push_str(&recognition_guide_for(None, "classify_question"));
+    out.push_str("```\n\n## Actual selected recognition lessons\n\nA newly selected concrete method verifies its tentative classification and completes fact extraction from the same words before a user inquiry. A changed method receives its own lesson before supplying observations. The focused completion lesson and subsequent conversational update lesson have distinct output instructions. Both are exported below from the same functions used by model dispatch. Wish and Unclassified remain with the classifier until a concrete concern is identified; they do not receive a focused extraction lesson.\n\n");
+    for card in CATALOGUE {
+        let selected = Consultation {
+            frame: Slot::Resolved {
+                observation: Observation {
+                    value: Frame {
+                        method: card.method,
+                        facet: card.facets.first().copied().unwrap_or(Facet::Unknown),
+                    },
+                    evidence: Evidence::Migration {
+                        detail: "Documentation selects a method; no user facts supplied".into(),
+                    },
+                },
+            },
+            ..Consultation::default()
+        };
+        let phases: &[&str] = if matches!(card.method, Method::Wish | Method::Unclassified) {
+            &["classify_question"]
+        } else {
+            &["complete_selected_program", "update_selected_program"]
+        };
+        for phase in phases {
+            out.push_str(&format!(
+                "### {}: `{phase}`\n\n```text\n{}\n```\n\n",
+                card.title,
+                recognition_guide_for(Some(&selected), phase)
+            ));
+        }
+    }
+    out.push_str("## Shared recognition patch vocabulary\n\nThis base vocabulary is further constrained by the actual recognition phase. The exact phase schemas follow it. Native acceptance also checks source quotes, bindings and authorized frame changes.\n\n```json\n");
     out.push_str(
         &serde_json::to_string_pretty(&turn_schema(None)).expect("Schema is serializable"),
     );
     out.push_str("\n```\n");
+    let empty = Consultation::default();
+    let selected = Consultation {
+        frame: Slot::Resolved {
+            observation: Observation {
+                value: Frame {
+                    method: Method::NewJob,
+                    facet: Facet::Event,
+                },
+                evidence: Evidence::Migration {
+                    detail: "Documentation selects a provisional job method".into(),
+                },
+            },
+        },
+        ..Consultation::default()
+    };
+    for (phase, case) in [
+        ("classify_question", &empty),
+        ("complete_selected_program", &selected),
+        ("update_selected_program", &selected),
+    ] {
+        let input = json!({"recognition_phase": phase, "consultation": case});
+        let schema = crate::horary_step::response_schema_for(
+            crate::horary_lessons::Stage::Intake,
+            crate::horary_lessons::Matter::Other,
+            &input,
+            &[],
+        );
+        out.push_str(&format!(
+            "\n### Actual `{phase}` schema\n\n```json\n{}\n```\n",
+            serde_json::to_string_pretty(&schema).expect("Phase schema is serializable")
+        ));
+    }
+    out
+}
+
+/// Disjoint alternatives bind each closed field to its canonical labels.
+/// Emit mode before value so the constrained decoder chooses supplied data
+/// versus an unavailable reason before it can emit unconstrained text.
+fn update_item_schema() -> Value {
+    let item = |fields: Vec<&str>, modes: &[&str], value: Value| {
+        json!({"type":"object","properties":{
+            "field":{"type":"string","enum":fields},
+            "mode":{"type":"string","enum":modes},
+            "value":value,
+            "quote":{"type":"string","maxLength":700}
+        },"required":["field","mode","value","quote"],"additionalProperties":false})
+    };
+    let available_modes: Vec<_> = UpdateMode::ALL
+        .iter()
+        .filter(|mode| **mode != UpdateMode::Unavailable)
+        .map(|mode| mode.name())
+        .collect();
+    let text_value = json!({"type":"string","maxLength":700});
+    let mut alternatives = Vec::new();
+    let mut open_fields = Vec::new();
+    for field in Field::ALL {
+        let labels = allowed_values(*field);
+        if labels.is_empty() {
+            open_fields.push(field.name());
+        } else {
+            alternatives.push(item(
+                vec![field.name()],
+                &available_modes,
+                json!({"type":"string","enum":labels}),
+            ));
+        }
+    }
+    alternatives.push(item(open_fields, &available_modes, text_value.clone()));
+    // An explicit inability remains a free-text reason, not a fabricated label.
+    alternatives.push(item(
+        Field::ALL.iter().map(|field| field.name()).collect(),
+        &[UpdateMode::Unavailable.name()],
+        text_value,
+    ));
+    json!({"oneOf":alternatives})
+}
+
+fn canonical_labels_guide(case: Option<&Consultation>) -> String {
+    let mut fields =
+        std::collections::BTreeSet::from([Field::PrincipalMode, Field::TimeOccurrence]);
+    if let Some(method) = case.and_then(Consultation::method) {
+        fields.extend(contract(method).requirements.iter().map(|need| need.field));
+    }
+    if let Some(case) = case {
+        if let Some(RequirementKey::Field(field)) = case.requested.as_ref() {
+            fields.insert(*field);
+        }
+        fields.extend(case.facts.keys().copied());
+        fields.extend(case.additional.iter().filter_map(|need| match &need.key {
+            RequirementKey::Field(field) => Some(*field),
+            _ => None,
+        }));
+    }
+    let mut out = String::from("CANONICAL UPDATE LABELS. Return each update in field, mode, value, quote order. Supplied/corrected/proposed closed fields use exactly these value labels; spoken synonyms belong unchanged in quote. Unavailable is only an explicit inability to answer a known pending need and uses a reason, not a guessed label. Open contextual fields remain text.\n");
+    for field in fields {
+        let labels = allowed_values(field);
+        if !labels.is_empty() {
+            out.push_str(&format!("{}: {}\n", field.name(), labels.join(" | ")));
+        }
+    }
+    out.push_str("For a repeated civil clock only, first or earlier maps to value=earlier; second or later maps to value=later. Preserve the exact utterance in quote. Never discard a genuinely supplied occurrence merely because its spoken word is not the canonical label. An event happening this morning or earlier is not an occurrence choice.\n\n");
     out
 }
 
@@ -1724,208 +2599,106 @@ pub fn documentation() -> String {
 pub fn turn_schema(_case: Option<&Consultation>) -> Value {
     // All first-turn applicable fields are available when a turn reclassifies.
     // The model still has an explicitly selected, much smaller instruction card.
-    let field_names: Vec<_> = Field::ALL.iter().map(|f| f.name()).collect();
     let enum_strings = |names: Vec<&str>| json!({"type":"string","enum":names});
     let person = json!({"type":"object","properties":{"id":{"type":"string","maxLength":40},"label":{"type":"string","maxLength":80},"relationship":{"type":"string","enum":["unknown","partner","child","sibling","friend","mother","father","employer","employee","other_party","neighbor","querent"]},"source_quote":{"type":"string","maxLength":240}},"required":["id","label","relationship","source_quote"],"additionalProperties":false});
-    let subject = json!({"type":"object","properties":{"name":{"type":"string","maxLength":80},"kind":{"type":"string","enum":["person","movable","money","property","job","small_animal","large_animal","other"]},"owner_id":{"type":"string","maxLength":40},"source_quote":{"type":"string","maxLength":240}},"required":["name","kind","owner_id","source_quote"],"additionalProperties":false});
+    let subject = json!({"type":"object","properties":{"name":{"type":"string","maxLength":80,"description":"Preserve the actual target. An unnamed Relationship prospective partner may be named Prospective partner; person_role uses exactly Future marriage partner."},"kind":{"type":"string","enum":["person","person_role","movable","money","property","job","small_animal","large_animal","animal","other"],"description":"person is an identified target or an unnamed prospective partner in Relationship. person_role is only the explicitly unnamed future marriage partner in PersonDescription."},"owner_id":{"type":"string","maxLength":40,"description":"For an identified person use that target's ID. An unnamed Relationship prospective partner has an empty owner_id: no partner identity is known. For person_role this binds the principal whose future spouse is described, never an invented spouse ID."},"source_quote":{"type":"string","maxLength":240}},"required":["name","kind","owner_id","source_quote"],"additionalProperties":false});
     json!({"type":"object","properties":{
         "intent":enum_strings(Intent::ALL.iter().map(|i|i.name()).collect()),
         "question":{"type":["string","null"],"maxLength":500},
         "frame":{"oneOf":[{"type":"null"},{"type":"object","properties":{"method":enum_strings(Method::ALL.iter().map(|m|m.name()).collect()),"facet":enum_strings(Facet::ALL.iter().map(|f|f.name()).collect())},"required":["method","facet"],"additionalProperties":false}]},
         "people":{"type":"array","items":person,"maxItems":3},
         "subject":{"oneOf":[{"type":"null"},subject]},
-        "updates":{"type":"array","maxItems":16,"items":{"type":"object","properties":{"field":enum_strings(field_names),"value":{"type":"string","maxLength":700},"quote":{"type":"string","maxLength":700},"mode":enum_strings(UpdateMode::ALL.iter().map(|m|m.name()).collect())},"required":["field","value","quote","mode"],"additionalProperties":false}},
+        "updates":{"type":"array","maxItems":16,"items":update_item_schema()},
         "heard":{"type":"string","maxLength":1000},"unavailable_quote":{"type":"string","maxLength":240},"focus":{"type":"string","enum":["roles","condition","reception","contacts","location","timing","judgment","place","moment"]},
         "restore_revision":{"type":["integer","null"],"minimum":1}
     },"required":["intent","question","frame","people","subject","updates","heard","unavailable_quote","focus","restore_revision"],"additionalProperties":false})
 }
 
+/// Compatibility entry point for the normal selected-program update lesson.
+/// Actual dispatch supplies its recognition phase explicitly.
 pub fn recognition_guide(case: Option<&Consultation>) -> String {
-    let method = case.and_then(Consultation::method);
-    let teaches = |methods: &[Method]| method.is_none_or(|method| methods.contains(&method));
-    let mut text = String::from("You recognise this person's current conversational intent and propose fact updates. You never speak about the person in the third person, invent circumstances, choose coordinates, cast a chart, or improvise a horary method. You supply a private fact patch to the reader’s clipboard; a separate conversational model decides how to speak and inquire.\nRead consultation and pending_requirement first. question/frame/subject are null when unchanged; people and updates are empty when unchanged. Never reconstruct the whole brief. Supply exact source quotes from the current words or the retained ORIGINAL question for new people, subject or facts. A fresh question cannot quote a prior matter. A name does not identify a relationship; a seller does not establish an owner. Correct only when the person corrects a fact. Mark ambiguity with mode=propose and ignorance with mode=unavailable; never guess.\nA fresh matter supplies question, frame, subject, and any stated facts. Keep the literal goal and its facet: quantity is not event. Every reply can add multiple facts and interrupt with why, pause, device acquisition, correction, resume, or a fresh question. Explain is not completion. A known chart is not a finished reading.\nThe reader's coordinates and the moment of understanding are the chart anchor (Frawley printed pp. 7–8). Ordinary questions use device place and receipt UTC; reader_place/question_time are only EXPLICIT overrides. A city's name in an event story is event_place; an event start is event_time. 'Here'/'use my device' means intent=use_device, never a guessed city.\nFor direct audio heard is a faithful short meaning summary retaining negation/numbers/place/time and uncertainty; it is not claimed to be a transcript. Empty heard is rejected before completion.\n");
-    text.push_str("When the person cannot answer pending_requirement, unavailable_quote is the exact current phrase such as 'I don't know'. Otherwise it is empty. Do not keep interrogating someone who already said this. Before the core concern is understood, clarification may refine the tentative question; after understanding, preserve it unless explicitly corrected. reader_place and question_time overrides require CURRENT words stating the reader location/question moment or answering its pending anchor inquiry. Never replay the original story's venue or event time as a chart override during a later reply. Actor fields principal_id, seller, deal_party (and sender in a relative-money question) contain a known person's ID or querent, not prose. Leave an unspecified deal_party absent: Rust supplies the generic counterparty. Never invent an identified customer.\n");
-    text.push_str("Read last_reader_question when interpreting a short answer. If it proposes ONE concrete reframing and the person's current words clearly accept it, that acceptance is an explicit correction: intent=correct, question=the agreed concern, frame=its matching method/facet. Preserve subject, people and observations not changed; do not invent a relationship or ownership from 'yes'. An unaccepted suggestion has no authority. If the reader offered several choices or 'yes' could answer a different question, leave question/frame unchanged and let the conversational reader clarify.\n");
-    text.push_str("In a repair request, original_input contains the actual consultation and current words. previous_worksheet is REJECTED and has no authority: nothing in it was accepted or saved as a fact. Null means unchanged only when the original consultation already has that fact. Preserve the initial question and identify its subject. For a name alone, such as Bob, relationship MUST be unknown; neither seller nor other_party is their personal relationship to the person asking.\n");
-    text.push_str("Identify the subject as the thing or role asked about, even when no person is named. Existing people are identified separately. Do not leave a clear subject null on the first turn. 'Will ... within a year?' has facet=event plus horizon; facet=timing means 'WHEN will ...?', and quantity means 'HOW MANY ...?'.\n");
-    if teaches(&[Method::Relationship]) {
-        text.push_str("In 'Will I marry?', the quesited is a prospective partner: name='prospective partner', kind='person', owner_id='', source_quote='marry'. This is a role, not an invented person. The relationship question's baseline labels are hoped_for (formation), ongoing (an existing relationship's situation), arranged_wedding (a wedding already arranged). Infer only from stated circumstances: an unspecified baseline remains absent and the reader will inquire.\n");
+    recognition_guide_for(case, "update_selected_program")
+}
+
+pub fn recognition_guide_for(case: Option<&Consultation>, phase: &str) -> String {
+    let focused = phase == "complete_selected_program";
+    let method = case
+        .and_then(Consultation::method)
+        .filter(|method| !matches!(method, Method::Wish | Method::Unclassified));
+    if phase == "classify_question" || !focused && method.is_none() {
+        return classification_guide();
+    }
+    let mut text = String::from("You are a private extraction worker supporting a conversational horary reader. Return only the supplied Turn JSON. You do not speak to the person, ask them questions, choose coordinates, cast a chart, assign planets, or judge an outcome. Rust keeps the fact record; a separate conversational reader speaks naturally about any genuine gap.\n\n");
+    if focused {
+        text.push_str("PHASE: complete_selected_program. Classification has already run. Your task is to VERIFY its tentative frame and extract this selected program's inputs from the SAME actual words.\n1. Return intent=clarify, question=null, heard='', unavailable_quote='', restore_revision=null. Do not return read, correct, new_question or another control command in this phase.\n2. The stored frame is a tentative classification, not an accepted user fact. Check it against the actual requested predicate. If correct, return frame=null. A same-method facet refinement may accompany facts without requiring the person to correct your classification. WILL an event happen within a period is event plus horizon; WHEN it happens is timing. Preserve an exact numerical goal as quantity.\n3. If the METHOD is wrong, return its corrected frame ONLY: subject=null, people=[], updates=[]. The controller must run that method's lesson before you can supply its facts. A changed method is not permission to change the original question.\n4. For the correct selected method, extract the actual subject, people and supplied observations now. Accepted factual slots remain authoritative; the tentative frame does not make missing facts present. subject=null means the accepted subject is unchanged. When the subject slot is missing and the words identify the target, supply it. Do not leave known facts for the conversational reader to ask again.\n5. Leave genuinely absent inputs missing, with no invented quote or default. Examples below are separate hypothetical inputs, never evidence about the actual person. An unstated relationship baseline remains absent. There is no request_input action in this Turn schema; missing facts become native reminders for the conversational reader.\n\n");
     } else {
-        text.push_str("baseline is not an input of this selected question type. Someone's personal capacity (husband, friend, boss) is recorded in people, not baseline.\n");
+        text.push_str("PHASE: update_selected_program. Read the retained consultation, latest_words, pending_requirement and last_reader_question. Return only new observations or explicitly corrected facts. question/frame/subject are null when accepted values are unchanged; people and updates are empty when unchanged. Never reconstruct the whole brief. A missing subject is not an unchanged subject: supply a clear target or newly supplied identity.\nUse clarify for new information on the same concern; correct only for an explicit factual correction or a clearly accepted single reframing; explain for a request to explain; resume to continue; pause to stop; use_device to request actual device location. A different matter uses new_question with only question/frame and subject=null, people=[], updates=[]; its own lesson then gathers its facts. Do not interpret explaining or resuming as a finished reading.\nIf last_reader_question offered ONE concrete reframing and latest_words clearly accept it, return correct with that agreed question/frame. Preserve unchanged people, subject and observations. An unaccepted suggestion has no authority; ambiguous yes or several offered alternatives require conversational clarification. Do not infer personal capacity or ownership from yes.\nAn explicit inability to answer the pending requirement uses unavailable_quote copied exactly from latest_words. Otherwise leave it empty. For direct audio heard is a faithful short meaning summary preserving negation, numbers, names, place/time and uncertainty, not a claimed transcript. Typed input uses heard=''.\n\n");
     }
-    if teaches(&[
-        Method::MovableDeal,
-        Method::Property,
-        Method::Rental,
-        Method::BusinessProperty,
-    ]) {
-        text.push_str("Deal labels: deal_capacity=buy|sell|rent|profit|quality. Worked extraction: 'How many fish will Bob sell at the market on Friday?' -> movable_deal/quantity, Bob relationship unknown, Fish kind movable, owner_id EMPTY (seller is not proof of ownership), seller=bob, deal_capacity=sell, event_time=Friday, event_place=the market, unit=fish. A husband mentioned in a sale supplies a person capacity, never a relationship baseline or ongoing business.\n");
-        text.push_str("Reframing example: retained question='How many fish will Bob sell at Friday's market?'; last_reader_question='Would you like to look at whether Friday’s market will be worthwhile for Bob?'; latest_words='Yes, that is what I want to know.' -> intent=correct; question='Will Friday’s market be worthwhile for Bob?'; frame=movable_deal/profit; subject=null, people=[], updates=[]. The current affirmation accepts the reader's one proposal, not a numerical prediction. Bob's relationship and fish ownership remain whatever the consultation actually records.\n");
-    }
-    if teaches(&[Method::Money]) {
-        text.push_str(
-            "Money labels: money_source=customer|partner|job|government|relative|other.\n",
-        );
-    }
-    if teaches(&[Method::WorkPerson]) {
-        text.push_str("Work labels: work_capacity=boss|colleague|subordinate.\n");
-    }
-    if teaches(&[Method::LostAnimal]) {
-        text.push_str("Animal labels: animal_kind=small_kind|large_kind (species, not size).\n");
-    }
+    text.push_str("SOURCE AUTHORITY. Supply exact quotes from actual current words or the retained ORIGINAL question when an omitted observation is being recovered. Never quote another matter, an editorial example or a rejected worksheet. In repair, original_input holds the accepted consultation and actual words; previous_worksheet was REJECTED and none of its proposed changes were saved. Fix the native error using actual source evidence, not the rejected answer as a fact. A name alone has personal relationship=unknown. Seller is a task role, not ownership or personal relationship. Actor fields principal_id, seller, deal_party and a relative-money sender contain known person IDs or querent, not prose. Leave an unspecified deal_party absent; Rust supplies the generic counterparty.\n\nCHART ANCHOR. The reader's place and the moment of understanding anchor the chart (Frawley printed pp. 7–8). Ordinary questions use supplied device coordinates and receipt UTC. CURRENT explicit reader-location or historical-consultation instructions must be extracted as reader_place/question_time; include both supplied components. A market, destination or appointment belongs in event_place/event_time and must not replace the chart anchor. Here/use my device supplies no guessed city. Preserve exact place/time source phrases; native tools own geocoding, time zones and civil-time validation. Calendar values can normalize a future Friday/tomorrow against current_local_clock/current_timezone, while their quotes remain literal. A natural horizon stays a horizon. TimeOccurrence means an explicit first/second occurrence of an ambiguous civil clock, never this morning or earlier/later event chronology.\n\n");
+    text.push_str(&canonical_labels_guide(case));
     if let Some(method) = method {
-        let card = contract(method);
-        text.push_str(&format!("\nSELECTED PROGRAM: {} ({}) — Frawley printed pp. {}.\nRole distinctions: {}\nJudgment distinctions: {}\nRelevant facts:\n", card.title, method.name(), card.printed_pages, card.roles, card.judgment));
-        for r in card.requirements {
-            text.push_str(&format!(
-                "{}: {:?}; accepted labels {:?}. {}\n",
-                r.field.name(),
-                r.guard,
-                allowed_values(r.field),
-                field_prompt_for(Some(method), r.field)
-            ));
-        }
-        text.push_str("If the person changes the matter, reclassify explicitly with intent=new_question (fresh issue) or correct (same issue). Unmentioned prior facts survive.\n");
+        text.push_str(&crate::recognition_programs::guide(method));
     } else {
-        text.push_str(
-            "\nChoose the method matching the substantive concern, not a keyword alone:\n",
-        );
+        // This is a defensive recovery lesson for a stale or absent selected
+        // method. No method-specific observations may be established here.
+        text.push_str("No concrete selected method exists. Verify the actual concern and return only a tentative frame, with subject=null, people=[], updates=[]. The native controller must select its concrete lesson before collecting facts.\nCLASSIFICATION CATALOGUE:\n");
         for card in CATALOGUE {
             text.push_str(&format!(
-                "{}: {} (pp. {}); subject kinds {:?}\n",
+                "{}: {}. {}\n",
                 card.method.name(),
                 card.title,
-                card.printed_pages,
-                card.subject_kinds
+                card.roles
             ));
         }
     }
-    text.push_str("\nExamples (output is a patch):\n'The fair is in Bozeman tomorrow at three' -> event_place/event_time only; question/frame/subject null; never chart overrides.\n'Why that moment?' -> explain/moment; no invented factual updates. 'Continue' -> resume; don't answer a pending factual question for the person.\n'I do not know who owns it' -> owner remains unresolved; never write querent. 'Actually it is my sister's watch' -> correct; update person and subject ownership; preserve original chart.\n'My friend asked me to ask her own question' -> principal_mode=relay; identify principal_id.\n");
-    for (example_method, words, output) in recognition_examples() {
-        if method.is_some() && example_method.is_some() && method != example_method {
-            continue;
-        }
-        text.push_str(&format!("\nINPUT: {words}\nOUTPUT: {}\n", output));
-    }
+    text.push_str("\nReturn compact JSON only. Editorial examples teach extraction; their words are never source evidence for the actual input.\n");
     text
 }
 
-fn recognition_examples() -> Vec<(Option<Method>, &'static str, Value)> {
-    let mut marriage = control(Intent::Read);
-    marriage.question = Some("I'm single. Will I get married in the next year?".into());
-    marriage.frame = Some(Frame {
-        method: Method::Relationship,
-        facet: Facet::Event,
-    });
-    marriage.subject = Some(Subject {
-        name: "Prospective partner".into(),
-        kind: "person".into(),
-        owner_id: String::new(),
-        source_quote: "get married".into(),
-    });
-    marriage.updates = vec![
-        Update {
-            field: Field::Baseline,
-            value: "hoped_for".into(),
-            quote: "I'm single".into(),
-            mode: UpdateMode::Supply,
-        },
-        Update {
-            field: Field::Horizon,
-            value: "in the next year".into(),
-            quote: "in the next year".into(),
-            mode: UpdateMode::Supply,
-        },
-    ];
-    let mut event = control(Intent::Clarify);
-    event.updates = vec![
-        Update {
-            field: Field::EventPlace,
-            value: "Bozeman, Montana".into(),
-            quote: "Bozeman, Montana".into(),
-            mode: UpdateMode::Supply,
-        },
-        Update {
-            field: Field::EventTime,
-            value: "tomorrow at three".into(),
-            quote: "tomorrow at three".into(),
-            mode: UpdateMode::Supply,
-        },
-    ];
-    let mut unknown = control(Intent::Clarify);
-    unknown.unavailable_quote = "I don't know".into();
-    let mut sale = control(Intent::Read);
-    sale.question = Some("Will Bob sell his books at the fair?".into());
-    sale.frame = Some(Frame {
-        method: Method::MovableDeal,
-        facet: Facet::Event,
-    });
-    sale.people.push(Person {
-        id: "bob".into(),
-        label: "Bob".into(),
-        relationship: "unknown".into(),
-        source_quote: "Bob".into(),
-    });
-    sale.subject = Some(Subject {
-        name: "Books".into(),
-        kind: "movable".into(),
-        owner_id: "bob".into(),
-        source_quote: "his books".into(),
-    });
-    sale.updates = vec![
-        Update {
-            field: Field::DealCapacity,
-            value: "sell".into(),
-            quote: "sell".into(),
-            mode: UpdateMode::Supply,
-        },
-        Update {
-            field: Field::Seller,
-            value: "bob".into(),
-            quote: "Bob".into(),
-            mode: UpdateMode::Supply,
-        },
-    ];
-    let mut husband = control(Intent::Clarify);
-    husband.people = vec![Person {
-        id: "bob".into(),
-        label: "Bob".into(),
-        relationship: "partner".into(),
-        source_quote: "Bob is my husband".into(),
-    }];
-    husband.subject = Some(Subject {
-        name: "fish".into(),
-        kind: "movable".into(),
-        owner_id: "bob".into(),
-        source_quote: "They are his fish".into(),
-    });
-    vec![
+fn classification_guide() -> String {
+    let mut text = String::from("You are the private question classifier supporting a conversational horary reader. Return the supplied Turn JSON only. You do not speak to the person, cast a chart, assign planets, or judge an outcome.\n\nWork in this order:\n1. Read latest_words and any retained question. Identify the actual concern and current intent. A fresh substantive concern uses read; a different matter uses new_question. Clarify adds information, correct changes something explicitly, explain asks why, resume continues, pause stops, and use_device requests the actual device location. Do not mistake a symptom, destination, quotation or incidental job mention for the requested outcome.\n2. Preserve the person's literal goal in question. Choose method by the requested outcome and circumstances using the catalogue below, not a keyword alone. If the core concern is missing, use unclassified/unknown (or leave frame null), rather than inventing appearance, romance or danger. 'What about Morgan?' does not tell us what to predict.\n3. Choose facet: WILL it happen=event; HOW things are/feel=situation; WHERE=location; WHEN=timing; WHICH=choice; physical appearance=description; whether a claim is true=truth; financial benefit=profit; safety=safety; HOW MANY or HOW MUCH as an exact tally=quantity. 'Will it happen within a year?' remains event, with a stated horizon for the focused extractor. An exact count must not become event/profit without the person's agreement.\n4. Your first job is classification. Return subject=null, people=[], updates=[]; the selected program will extract its particular facts from the SAME words before any user inquiry. Do not attempt every horary recipe here. A missing subject in this first patch does not authorize a reading: the native contract still requires the focused extractor's actual subject and situational facts.\n5. For direct audio, heard is a short faithful meaning summary retaining negation, numbers, names, place, time and uncertainty, not a claimed transcript. Typed input uses heard=''. For a new matter, don't copy facts from a previous one. No invented context. question/frame are null if unchanged; unavailable_quote is empty unless answering a known pending requirement with an explicit inability.\n6. The chart uses the reader's place and the moment the question is understood (Frawley printed pp. 7–8). A market venue or starting time is event context, not a chart anchor. Native tools own coordinates and civil-time validation. The focused program gets the actual clock/device context; do not make up either.\n7. Return compact JSON, no prose or pretty-printing. In a repair, the earlier assistant object was REJECTED: none of its proposals were saved. Correct the specific native error using original_input, not the rejected proposal as evidence.\n\nCLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):\n");
+    for card in CATALOGUE {
+        text.push_str(&format!(
+            "{}: {} — printed pp. {}. {}\n",
+            card.method.name(),
+            card.title,
+            card.printed_pages,
+            card.roles
+        ));
+    }
+    text.push_str("\nContrasts: a job not yet obtained is new_job; keeping the current post is existing_job; returning to a former post is return_to_job; assessing a job already offered is job_offer. Weather at a wedding is weather, not relationship. A literal parcel is parcel; hearing from someone is contact. Tax paid to the government is tax, not money received from it. A question about an existing relationship's feelings is relationship/situation; a wedding going ahead is relationship/event. A sale's exact unit count stays movable_deal/quantity; undertaking/profit concerns the benefit of an activity rather than tallying its sales.\n\nExamples are editorial classification instructions, not textbook quotations:\n");
+    for (words, method, facet) in [
+        ("What about Morgan?", Method::Unclassified, Facet::Unknown),
         (
-            Some(Method::Relationship),
-            "I'm single. Will I get married in the next year?",
-            serde_json::to_value(marriage).expect("example"),
+            "They offered me the position; would its hours suit me?",
+            Method::JobOffer,
+            Facet::Situation,
         ),
         (
-            Some(Method::MovableDeal),
-            "Will Bob sell his books at the fair?",
-            serde_json::to_value(sale).expect("example"),
+            "Will it rain at the picnic next week?",
+            Method::Weather,
+            Facet::Event,
         ),
         (
-            Some(Method::MovableDeal),
-            "Bob is my husband. They are his fish. (reply within the retained fish sale)",
-            serde_json::to_value(husband).expect("example"),
+            "How many candles will Ren sell at the stall?",
+            Method::MovableDeal,
+            Facet::Quantity,
         ),
         (
-            None,
-            "The fair is in Bozeman, Montana tomorrow at three",
-            serde_json::to_value(event).expect("example"),
+            "I don't want a job; I want to know where my missing passport is.",
+            Method::LostObject,
+            Facet::Location,
         ),
-        (
-            None,
-            "I don't know (reply to a pending ownership question)",
-            serde_json::to_value(unknown).expect("example"),
-        ),
-    ]
+    ] {
+        let mut patch = control(Intent::Read);
+        patch.question = Some(words.into());
+        patch.frame = Some(Frame { method, facet });
+        text.push_str(&format!(
+            "INPUT: {words}\nOUTPUT: {}\n",
+            serde_json::to_string(&patch).expect("Classifier example serializes")
+        ));
+    }
+    text
 }
 
 pub fn method_guide(method: Method) -> String {
@@ -1936,6 +2709,56 @@ pub fn method_guide(method: Method) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn selected_examples_obey_the_focused_output_contract() {
+        for card in CATALOGUE
+            .iter()
+            .filter(|card| !matches!(card.method, Method::Wish | Method::Unclassified))
+        {
+            let case = Consultation {
+                frame: Slot::Resolved {
+                    observation: Observation {
+                        value: Frame {
+                            method: card.method,
+                            facet: card.facets[0],
+                        },
+                        evidence: Evidence::Migration {
+                            detail: "Prompt regression fixture".into(),
+                        },
+                    },
+                },
+                ..Consultation::default()
+            };
+            let lesson = recognition_guide_for(Some(&case), "complete_selected_program");
+            let input =
+                json!({"recognition_phase":"complete_selected_program","consultation":case});
+            let schema = crate::horary_step::response_schema_for(
+                crate::horary_lessons::Stage::Intake,
+                crate::horary_lessons::Matter::Other,
+                &input,
+                &[],
+            );
+            let mut examples = 0;
+            for output in lesson
+                .lines()
+                .filter_map(|line| line.strip_prefix("OUTPUT: "))
+            {
+                let value: Value = serde_json::from_str(output).expect("Example must parse");
+                crate::horary_contract::validate_shape(&value, &schema).unwrap_or_else(|error| {
+                    panic!(
+                        "{} lesson contradicts its focused contract: {error}",
+                        card.method.name()
+                    )
+                });
+                examples += 1;
+            }
+            assert!(
+                examples > 0,
+                "The selected lesson must include checked examples"
+            );
+            assert_eq!(lesson.matches("SELECTED EXTRACTION PROGRAM:").count(), 1);
+        }
+    }
     fn turn() -> Turn {
         Turn {
             intent: Intent::Read,

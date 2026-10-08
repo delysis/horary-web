@@ -1,0 +1,2607 @@
+[
+  {
+    "id": "court_case-explicit",
+    "method": "court_case",
+    "mode": "explicit",
+    "words": "Will I win my civil claim against my landlord for returning my security deposit? I am the tenant and plaintiff; the hearing is on October 9, 2026. I am asking my own question now from Woodbridge, Virginia.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "deposit"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time"
+      ]
+    },
+    "source_pages": "208–209",
+    "rationale": "The party, civil dispute, and requested verdict are identified. A hearing date is event context and must not replace the question moment. Complete elicitation remains subject to the specialist judgment review boundary."
+  },
+  {
+    "id": "court_case-implicit",
+    "method": "court_case",
+    "mode": "implicit",
+    "words": "My landlord kept my deposit after I moved out, so I filed a small-claims case. I face the judge on Friday. Will the court rule in my favour?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "deposit"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "208–209; 7–8",
+    "rationale": "Filing and facing the judge establish the speaker as the civil litigant without enum words. Friday resolves from the frozen October 7 local clock to October 9. This is a verdict question, not a generic payment-arrival prediction."
+  },
+  {
+    "id": "court_case-missing",
+    "method": "court_case",
+    "mode": "missing",
+    "words": "Will Alex win that lawsuit?",
+    "follow_up": "Alex is my brother. He is the plaintiff suing his landlord for the return of his security deposit in a civil case.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "alex"
+        },
+        {
+          "kind": "field",
+          "id": "claim"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "owner": "alex",
+      "canonical_mentions": [
+        "alex"
+      ],
+      "relationships": {
+        "alex": "unknown"
+      }
+    },
+    "source_pages": "208–209; 137–140",
+    "rationale": "A name supplies neither Alex's operative relationship nor what legal dispute is meant. The follow-up supplies both together; the scaffold must not invent a brother relationship or convert this to a money question.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "deposit"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "court_case"
+      ],
+      "owner": "alex",
+      "relationships": {
+        "alex": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "alex"
+      ]
+    }
+  },
+  {
+    "id": "vehicle-explicit",
+    "method": "vehicle",
+    "mode": "explicit",
+    "words": "Will my ferry journey aboard Seabird from Dover to Calais on October 9, 2026 be safe? I am the passenger asking about my own journey, and I am not yet aboard.",
+    "expected": {
+      "facet": "safety",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_name_any_contains": [
+        "Seabird",
+        "ferry"
+      ]
+    },
+    "source_pages": "142–143",
+    "rationale": "Safety in the ship-I-sail-in capacity differs from the sale of a movable possession. Being aboard and owning the vessel are not prerequisites; no ship purchase, birth data, or departure-time anchor should be solicited."
+  },
+  {
+    "id": "vehicle-implicit",
+    "method": "vehicle",
+    "mode": "implicit",
+    "words": "I have booked the Seabird ferry crossing to Calais for Friday. Will I get across without a mishap?",
+    "expected": {
+      "facet": "safety",
+      "facts": [
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_name_any_contains": [
+        "Seabird",
+        "ferry"
+      ]
+    },
+    "source_pages": "142–143; 7–8",
+    "rationale": "A booked crossing and avoiding mishap imply the person's own journey-safety question. Friday is October 9 in the frozen environment, and must remain event context. No ownership of the ferry is inferred."
+  },
+  {
+    "id": "vehicle-missing",
+    "method": "vehicle",
+    "mode": "missing",
+    "words": "Will Morgan's journey be safe?",
+    "follow_up": "Morgan is my daughter. She is taking the Seabird ferry from Dover to Calais on Friday, and I am asking about her safety on that crossing.",
+    "expected": {
+      "facet": "safety",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "morgan"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "owner": "morgan",
+      "canonical_mentions": [
+        "morgan"
+      ],
+      "relationships": {
+        "morgan": "unknown"
+      }
+    },
+    "source_pages": "142–143; 137–140",
+    "rationale": "Morgan's operative relationship is genuinely missing. The route can enrich the conversation, but the declared blocking requirement is capacity, not a compulsory demand for departure time or coordinates.",
+    "follow_up_expected": {
+      "facet": "safety",
+      "facts": [
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "vehicle"
+      ],
+      "owner": "morgan",
+      "relationships": {
+        "morgan": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "morgan"
+      ],
+      "subject_name_any_contains": [
+        "Seabird",
+        "ferry"
+      ]
+    }
+  },
+  {
+    "id": "person_description-explicit",
+    "method": "person_description",
+    "mode": "explicit",
+    "words": "Please describe my new neighbour Riley's general physical appearance. I have not met Riley yet; I mean a broad description, not an exact height or identifying marks.",
+    "expected": {
+      "facet": "description",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "riley",
+      "relationships": {
+        "riley": "neighbor"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "canonical_mentions": [
+        "riley"
+      ],
+      "subject_name_contains": "riley"
+    },
+    "source_pages": "143–145",
+    "rationale": "An identified neighbour supplies the operative house and the desired broad descriptive facet. Do not manufacture race, tattoos, exact height, or personality from a physical-description request."
+  },
+  {
+    "id": "person_description-implicit",
+    "method": "person_description",
+    "mode": "implicit",
+    "words": "Could the chart give a broad idea of Sam's appearance? Sam and I have the same mother and father, but I have never seen Sam in person or in a photograph.",
+    "expected": {
+      "facet": "description",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "sam",
+      "relationships": {
+        "sam": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "canonical_mentions": [
+        "sam"
+      ],
+      "subject_name_contains": "sam"
+    },
+    "source_pages": "143–145; 26–27",
+    "rationale": "Sharing both parents establishes sibling capacity without the literal word sibling. This intentionally tests semantic relationship inference and its native source check, without supplying ethnicity or demanding precision."
+  },
+  {
+    "id": "person_description-missing",
+    "method": "person_description",
+    "mode": "missing",
+    "words": "Could you describe Riley's general appearance?",
+    "follow_up": "Riley is my new neighbour; I have not met them yet.",
+    "expected": {
+      "facet": "description",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "riley"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "owner": "riley",
+      "canonical_mentions": [
+        "riley"
+      ],
+      "relationships": {
+        "riley": "unknown"
+      },
+      "subject_name_contains": "riley"
+    },
+    "source_pages": "143–145; 137–140",
+    "rationale": "The description request is clear, but Riley's name cannot select a relationship house. Asking who Riley is to the speaker is useful; asking for gender or a birth chart is not the missing prerequisite.",
+    "follow_up_expected": {
+      "facet": "description",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "person_description"
+      ],
+      "owner": "riley",
+      "relationships": {
+        "riley": "neighbor"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "canonical_mentions": [
+        "riley"
+      ],
+      "subject_name_contains": "riley"
+    }
+  },
+  {
+    "id": "information-explicit",
+    "method": "information",
+    "mode": "explicit",
+    "words": "Is the specific rumour that the Lake Alder public footbridge has already been permanently closed true? I am asking whether that reported closure is accurate, not when a future closure will happen.",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "footbridge"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Lake Alder"
+      ]
+    },
+    "source_pages": "164–165",
+    "rationale": "The precise reported claim and veracity facet are supplied. This authored exceptional veracity case avoids superficially rephrasing a relationship or job outcome; specialist review remains explicit."
+  },
+  {
+    "id": "information-implicit",
+    "method": "information",
+    "mode": "implicit",
+    "words": "A message says the public footbridge at Lake Alder was shut for good yesterday, but it sounds like gossip. Has that actually happened?",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "footbridge"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Lake Alder"
+      ]
+    },
+    "source_pages": "164–165",
+    "rationale": "Has-that-actually-happened asks for the truth of an already specified claim. The model must preserve the public-closure report, and avoid shifting to travel safety or predicting a future event."
+  },
+  {
+    "id": "information-missing",
+    "method": "information",
+    "mode": "missing",
+    "words": "Is that rumour true?",
+    "follow_up": "The rumour is that the public footbridge at Lake Alder has already been permanently closed.",
+    "expected": {
+      "facet": "truth",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "claim"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "164–165; 14",
+    "rationale": "There is no antecedent for that rumour. Elicit the actual reported claim rather than inventing gossip, demanding the speaker's location, or judging a universal third-house question blindly.",
+    "follow_up_expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "footbridge"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "information"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Lake Alder"
+      ]
+    }
+  },
+  {
+    "id": "trust-explicit",
+    "method": "trust",
+    "mode": "explicit",
+    "words": "Can I trust my neighbour Pat to look after my house keys while I am away? Pat is acting as my neighbour, not as an employee or a seller.",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "context",
+          "contains": "keys"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "pat",
+      "relationships": {
+        "pat": "neighbor"
+      },
+      "allowed_facets": [
+        "truth",
+        "situation"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "pat",
+      "canonical_mentions": [
+        "pat"
+      ]
+    },
+    "source_pages": "165",
+    "rationale": "The person, operative capacity, and concrete concern are all supplied. Trust is a condition-of-the-person inquiry, not verification of a rumour, and no unprompted accusation is justified."
+  },
+  {
+    "id": "trust-implicit",
+    "method": "trust",
+    "mode": "implicit",
+    "words": "Can I safely leave my house keys with Pat? Pat lives next door to me, and our houses share the same boundary.",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "context",
+          "contains": "keys"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "pat",
+      "relationships": {
+        "pat": "neighbor"
+      },
+      "allowed_facets": [
+        "truth",
+        "situation"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "pat",
+      "canonical_mentions": [
+        "pat"
+      ]
+    },
+    "source_pages": "165; 26–27",
+    "rationale": "The adjoining-home description establishes neighbour capacity without the word neighbour. Safely entrusting keys is a trust question, not vehicle safety; this tests meaningful inference against conservative native validation."
+  },
+  {
+    "id": "trust-missing",
+    "method": "trust",
+    "mode": "missing",
+    "words": "Can I trust Pat with my house keys?",
+    "follow_up": "Pat is my neighbour and will be checking the house while I am away.",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "context",
+          "contains": "keys"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "pat"
+        }
+      ],
+      "ready": false,
+      "allowed_facets": [
+        "truth",
+        "situation"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "pat",
+      "owner": "pat",
+      "canonical_mentions": [
+        "pat"
+      ],
+      "relationships": {
+        "pat": "unknown"
+      }
+    },
+    "source_pages": "165; 137–140",
+    "rationale": "The practical concern is clear but Pat's name does not determine capacity. A short relationship inquiry is warranted; no allegation or biography should be manufactured.",
+    "follow_up_expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "context",
+          "contains": "keys"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "allowed_facets": [
+        "truth",
+        "situation"
+      ],
+      "allowed_methods": [
+        "trust"
+      ],
+      "owner": "pat",
+      "relationships": {
+        "pat": "neighbor"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "pat",
+      "canonical_mentions": [
+        "pat"
+      ]
+    }
+  },
+  {
+    "id": "pregnancy-explicit",
+    "method": "pregnancy",
+    "mode": "explicit",
+    "words": "Am I pregnant right now? I am asking about my own current state, not whether I will conceive later.",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person"
+    },
+    "source_pages": "173–174",
+    "rationale": "Current pregnancy and the affected person are explicit. No conception timing, paternity, or birth data should be fabricated. The specialist boundary prevents presenting chart testimony as a clinical result."
+  },
+  {
+    "id": "pregnancy-implicit",
+    "method": "pregnancy",
+    "mode": "implicit",
+    "words": "My period is late and I wonder whether I am already expecting a baby. I mean now, not a future attempt.",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person"
+    },
+    "source_pages": "173–174",
+    "rationale": "Already-expecting is the present pregnancy state even without the literal word pregnant. It must not be routed to future fertility or treated as sufficient for a clinical diagnosis."
+  },
+  {
+    "id": "pregnancy-missing",
+    "method": "pregnancy",
+    "mode": "missing",
+    "words": "Is Jo pregnant now?",
+    "follow_up": "Jo is my sister; I am asking about her, not relaying her own question. I am not the possible parent.",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "jo"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "owner": "jo",
+      "canonical_mentions": [
+        "jo"
+      ],
+      "relationships": {
+        "jo": "unknown"
+      },
+      "subject_name_contains": "jo"
+    },
+    "source_pages": "173–174",
+    "rationale": "Jo's current-state question is clear, but the operative relationship is not. Do not infer a spouse, sex, paternity, or a second baby significator from a name.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "pregnancy"
+      ],
+      "owner": "jo",
+      "relationships": {
+        "jo": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "canonical_mentions": [
+        "jo"
+      ],
+      "subject_name_contains": "jo"
+    }
+  },
+  {
+    "id": "fertility-explicit",
+    "method": "fertility",
+    "mode": "explicit",
+    "words": "Will I conceive during this fertility-treatment cycle? It is my own conception question, not a question about carrying an existing pregnancy or the number of children I might ever have.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "fertility_scope",
+          "contains": "conception"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person"
+    },
+    "source_pages": "174–177",
+    "rationale": "The person and near-term conception scope are explicit. Treatment does not turn this into the general medical-treatment recipe; all conception judgments remain under the specialist review boundary."
+  },
+  {
+    "id": "fertility-implicit",
+    "method": "fertility",
+    "mode": "implicit",
+    "words": "I have just begun my first IVF cycle and I am not pregnant yet. Will this attempt lead to a pregnancy for me?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "fertility_scope",
+          "contains": "conception"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person"
+    },
+    "source_pages": "174–177",
+    "rationale": "The already-started treatment and not-pregnant context imply conception rather than current pregnancy, lifetime fertility, or carrying to term. No mandatory exact treatment timestamp should delay elicitation."
+  },
+  {
+    "id": "fertility-missing",
+    "method": "fertility",
+    "mode": "missing",
+    "words": "My sister Jo wants children. What does the chart say about her fertility?",
+    "follow_up": "She means whether she will ever conceive, rather than a particular treatment cycle. She is 31 and has not previously had children.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "fertility_scope"
+        }
+      ],
+      "ready": false,
+      "owner": "jo",
+      "relationships": {
+        "jo": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "jo"
+    },
+    "source_pages": "174–177",
+    "rationale": "Capacity is supplied, but generic fertility does not distinguish conception, carrying-to-term, or lifetime potential. This intentionally leaves the facet undecided until scope is understood; known age is context, not routine birthday collection.",
+    "follow_up_expected": {
+      "facts": [
+        {
+          "field": "fertility_scope",
+          "contains": "lifetime"
+        },
+        {
+          "field": "context",
+          "contains": "31"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "jo",
+      "relationships": {
+        "jo": "sibling"
+      },
+      "allowed_methods": [
+        "fertility"
+      ],
+      "facet": "event",
+      "allowed_facets": [
+        "event",
+        "situation"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "jo"
+    }
+  },
+  {
+    "id": "adoption-explicit",
+    "method": "adoption",
+    "mode": "explicit",
+    "words": "Will I be able to adopt my sister Mara's child? It is a prospective adoption, not completed; Mara is the child's birth parent and my sister.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "adoption_state",
+          "contains": "prospective_known_parent"
+        },
+        {
+          "field": "birth_parent",
+          "contains": "mara"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "relationships": {
+        "mara": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "owner": "querent",
+      "subject_kind": "other"
+    },
+    "source_pages": "177–178",
+    "rationale": "Known birth-parent capacity activates the conditional parent field, rather than using the generic someone-else's-child default. Adoption remains prospective; expert qualification is not replaced by complete facts."
+  },
+  {
+    "id": "adoption-implicit",
+    "method": "adoption",
+    "mode": "implicit",
+    "words": "The agency has matched me with a child whose birth parents I do not know, but the placement and legal adoption have not happened yet. Will I get to adopt this child?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "adoption_state",
+          "contains": "prospective"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other"
+    },
+    "source_pages": "177–178",
+    "rationale": "A matched child not yet placed or adopted is prospective without an enum label. Unknown birth-parent details are not a mandatory question for this branch, and the child must not be treated as already adopted."
+  },
+  {
+    "id": "adoption-missing",
+    "method": "adoption",
+    "mode": "missing",
+    "words": "Will this adoption work out for me?",
+    "follow_up": "I am hoping to adopt a child, but nothing has been completed and I do not know the child's birth parents.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "adoption_state"
+        }
+      ],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other"
+    },
+    "source_pages": "177–178",
+    "rationale": "Work-out does not tell us whether the adoption is prospective or already complete; that changes the child role. The follow-up resolves it without unnecessary birth-parent questioning.",
+    "follow_up_expected": {
+      "facts": [
+        {
+          "field": "adoption_state",
+          "contains": "prospective"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "allowed_methods": [
+        "adoption"
+      ],
+      "facet": "event",
+      "allowed_facets": [
+        "event",
+        "situation"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other"
+    }
+  },
+  {
+    "id": "medical-explicit",
+    "method": "medical",
+    "mode": "explicit",
+    "words": "Will physiotherapy help my injured knee recover? I am the patient, and I am asking about the effect of that treatment, not what illness I have.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "medical_task",
+          "contains": "treatment"
+        },
+        {
+          "field": "treatment",
+          "contains": "physiotherapy"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "knee"
+      ]
+    },
+    "source_pages": "179–189",
+    "rationale": "The patient, treatment task, and named treatment are explicit. The treatment field is conditional on that task. This is an intake simulation; complete facts must not bypass the medical judgment boundary."
+  },
+  {
+    "id": "medical-implicit",
+    "method": "medical",
+    "mode": "implicit",
+    "words": "My father Arthur already has a diagnosed chest infection. I am worried about how it will develop over the coming week, rather than asking what it is.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "medical_task",
+          "contains": "prognosis"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "arthur",
+      "relationships": {
+        "arthur": "father"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "chest infection"
+      ]
+    },
+    "source_pages": "179–180",
+    "rationale": "A diagnosed illness and asking how it develops imply prognosis. The father's capacity is given, and no treatment-specific gap should be generated for a prognosis branch."
+  },
+  {
+    "id": "medical-missing",
+    "method": "medical",
+    "mode": "missing",
+    "words": "Will the treatment help my knee recover? I am the patient.",
+    "follow_up": "I mean the physiotherapy that my clinician has recommended.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "medical_task",
+          "contains": "treatment"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "treatment"
+        }
+      ],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "knee"
+      ]
+    },
+    "source_pages": "179–189",
+    "rationale": "The task and patient are known, but the treatment has no antecedent. Elicit that treatment rather than all clinical history or a birth chart; unavailable treatment information must remain a typed gap.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "medical_task",
+          "contains": "treatment"
+        },
+        {
+          "field": "treatment",
+          "contains": "physiotherapy"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "allowed_methods": [
+        "medical"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "knee"
+      ]
+    }
+  },
+  {
+    "id": "politics-explicit",
+    "method": "politics",
+    "mode": "explicit",
+    "words": "In the fictional Riverton, United States mayoral election on November 3, 2026, will Rose beat Ash? The office is vacant, so this is an open contest with no incumbent. I am an impartial US citizen and support neither candidate.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "office",
+          "contains": "mayor"
+        },
+        {
+          "field": "election_state",
+          "contains": "open"
+        },
+        {
+          "field": "political_capacity",
+          "contains": "impartial_citizen"
+        },
+        {
+          "field": "office",
+          "contains": "Riverton"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Riverton",
+        "Rose",
+        "Ash"
+      ]
+    },
+    "source_pages": "212–214",
+    "rationale": "Office, jurisdiction, candidates, open status, and observer capacity are supplied. The fixture is fictional and does not claim facts about a real election; device location cannot supply citizenship."
+  },
+  {
+    "id": "politics-implicit",
+    "method": "politics",
+    "mode": "implicit",
+    "words": "In our fictional Riverton mayoral election, Rose is challenging Mayor Ash, who is seeking a second term. I am an American citizen eligible to vote here, but I favour neither side. Will Rose win?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "office",
+          "contains": "mayor"
+        },
+        {
+          "field": "election_state",
+          "contains": "incumbent"
+        },
+        {
+          "field": "political_capacity",
+          "contains": "impartial_citizen"
+        },
+        {
+          "field": "office",
+          "contains": "Riverton"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Riverton",
+        "Rose",
+        "Ash"
+      ]
+    },
+    "source_pages": "212–214",
+    "rationale": "Seeking a second term implies an incumbent; declared citizenship and lack of allegiance imply impartial-citizen capacity. Neither inference may be sourced from the Woodbridge device coordinates."
+  },
+  {
+    "id": "politics-missing",
+    "method": "politics",
+    "mode": "missing",
+    "words": "Will Rose win the election?",
+    "follow_up": "I mean the fictional Riverton, United States mayoral election. The office is vacant; Rose and Ash are the candidates. I am an impartial American citizen and support neither.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "office"
+        },
+        {
+          "kind": "field",
+          "id": "election_state"
+        },
+        {
+          "kind": "field",
+          "id": "political_capacity"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Rose"
+      ]
+    },
+    "source_pages": "212–214",
+    "rationale": "A named candidate and election word do not identify office, incumbent status, or the observer's capacity. Consolidate related clarification naturally; a phone's location establishes none of these.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "office",
+          "contains": "mayor"
+        },
+        {
+          "field": "office",
+          "contains": "Riverton"
+        },
+        {
+          "field": "election_state",
+          "contains": "open"
+        },
+        {
+          "field": "political_capacity",
+          "contains": "impartial_citizen"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "politics"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Riverton",
+        "Rose",
+        "Ash"
+      ]
+    }
+  },
+  {
+    "id": "knowledge-explicit",
+    "method": "knowledge",
+    "mode": "explicit",
+    "words": "Will I profit from using my knowledge of literary translation as an independent practitioner? I mean earnings from that knowledge, not getting an employed position or waiting for an invoice payment.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "knowledge_task",
+          "contains": "profit"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "translation"
+      ]
+    },
+    "source_pages": "216–218",
+    "rationale": "Knowledge-derived earning power is explicit and differs from tenth-house employment or payment arrival. A reviewed knowledge-profit program is still needed before interpretation."
+  },
+  {
+    "id": "knowledge-implicit",
+    "method": "knowledge",
+    "mode": "implicit",
+    "words": "I want to offer independent astrology consultations using what I have learned. Could that know-how earn me a living? I would not be an employee of anyone.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "knowledge_task",
+          "contains": "profit"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "astrology"
+      ]
+    },
+    "source_pages": "216–218",
+    "rationale": "Earn-a-living from one's know-how implies knowledge-profit even without a technical label. It must not be classified as getting a job, a goods sale, or a specific debtor's payment."
+  },
+  {
+    "id": "knowledge-missing",
+    "method": "knowledge",
+    "mode": "missing",
+    "words": "I want a reading about my knowledge of astrology.",
+    "follow_up": "I mean how sound my knowledge is, not whether I can make money from it.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "knowledge_task"
+        }
+      ],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "astrology"
+      ]
+    },
+    "source_pages": "216–218",
+    "rationale": "A topic alone does not distinguish knowledge quality from its profit. The classifier should preserve both possible facets until the person specifies the actual concern.",
+    "follow_up_expected": {
+      "facts": [
+        {
+          "field": "knowledge_task",
+          "contains": "quality"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "allowed_methods": [
+        "knowledge"
+      ],
+      "facet": "situation",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "astrology"
+      ]
+    }
+  },
+  {
+    "id": "exam-explicit",
+    "method": "exam",
+    "mode": "explicit",
+    "words": "Will my daughter Mia pass the mathematics examination she is sitting on October 9, 2026? I mean passing that exam, not being admitted to the school.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "exam_task",
+          "contains": "passing"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "mia",
+      "relationships": {
+        "mia": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "mathematics",
+        "maths",
+        "math"
+      ]
+    },
+    "source_pages": "218",
+    "rationale": "The examinee, capacity, particular exam, and passing task are clear. Exam-result testimony is separate from the institution's admission or general quality."
+  },
+  {
+    "id": "exam-implicit",
+    "method": "exam",
+    "mode": "implicit",
+    "words": "I sit the final mathematics paper on Friday. Will I get the grade needed to pass that exam?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "exam_task",
+          "contains": "passing"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "mathematics",
+        "maths",
+        "math"
+      ]
+    },
+    "source_pages": "218; 7–8",
+    "rationale": "A final paper and required passing grade imply examination, rather than a school admission. Friday resolves to October 9 and is event context, not the chart moment."
+  },
+  {
+    "id": "exam-missing",
+    "method": "exam",
+    "mode": "missing",
+    "words": "Will Alex pass the mathematics exam on Friday?",
+    "follow_up": "Alex is my son. I am asking my own question about his exam, not passing on a question he asked.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "exam_task",
+          "contains": "passing"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "alex"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "mathematics",
+        "maths",
+        "math"
+      ],
+      "owner": "alex",
+      "canonical_mentions": [
+        "alex"
+      ],
+      "relationships": {
+        "alex": "unknown"
+      }
+    },
+    "source_pages": "218; 137–140",
+    "rationale": "The task and exam are clear but the examinee's capacity is not. Do not infer that a named person is the speaker's child, or silently make that person the relayed principal.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "exam_task",
+          "contains": "passing"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "exam"
+      ],
+      "owner": "alex",
+      "relationships": {
+        "alex": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "mathematics",
+        "maths",
+        "math"
+      ],
+      "canonical_mentions": [
+        "alex"
+      ]
+    }
+  },
+  {
+    "id": "undertaking-explicit",
+    "method": "undertaking",
+    "mode": "explicit",
+    "words": "Will attending the independent translation trade-show in Bozeman on October 9, 2026 boost my future earning power? I am attending to learn and make contacts, not selling goods at a stall or taking an employed job.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "event_place",
+          "contains": "Bozeman"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "trade-show",
+        "trade show",
+        "tradeshow",
+        "translation"
+      ]
+    },
+    "source_pages": "219",
+    "rationale": "Benefit from attending an undertaking is distinct from ordinary goods-sale profit. Its destination is story context; the supplied device place remains the chart anchor."
+  },
+  {
+    "id": "undertaking-implicit",
+    "method": "undertaking",
+    "mode": "implicit",
+    "words": "I am going to a translation trade-show in Springfield on Friday as a visitor. Could the contacts I make there help my independent earnings? I am not selling anything there.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "event_place",
+          "contains": "Springfield",
+          "place_qualifier_any": [
+            "VA",
+            "Virginia"
+          ]
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "trade-show",
+        "trade show",
+        "tradeshow",
+        "translation"
+      ]
+    },
+    "source_pages": "219; 7–8",
+    "rationale": "Contacts benefiting earnings imply undertaking-profit. Friday is October 9. Nearby Springfield may be resolved as event context with device bias, but its coordinates must never replace Woodbridge's reader anchor."
+  },
+  {
+    "id": "undertaking-missing",
+    "method": "undertaking",
+    "mode": "missing",
+    "words": "Will attending the translation trade-show improve Kai's independent earnings?",
+    "follow_up": "Kai is my brother. This is my own question about his business, not a request he relayed to me.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "kai"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "trade-show",
+        "trade show",
+        "tradeshow",
+        "translation"
+      ],
+      "owner": "kai",
+      "canonical_mentions": [
+        "kai"
+      ],
+      "relationships": {
+        "kai": "unknown"
+      }
+    },
+    "source_pages": "219; 14; 137–138",
+    "rationale": "The undertaking and the sought benefit are stated. Kai's operative capacity is genuinely unknown; a name does not assign a turned house. A destination or elaborate trip itinerary is not a universal prerequisite for the book's undertaking-benefit method.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "undertaking"
+      ],
+      "owner": "kai",
+      "relationships": {
+        "kai": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "trade-show",
+        "trade show",
+        "tradeshow",
+        "translation"
+      ],
+      "canonical_mentions": [
+        "kai"
+      ]
+    }
+  },
+  {
+    "id": "dream-explicit",
+    "method": "dream",
+    "mode": "explicit",
+    "words": "I want to understand the meaning of a dream, not whether it predicts the future. I dreamed that my own dog was hiding beneath the stairs in my childhood home and would not come when I called.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "dream_task",
+          "contains": "meaning"
+        },
+        {
+          "field": "dream_account",
+          "contains": "dog"
+        },
+        {
+          "field": "dream_account",
+          "contains": "stairs"
+        },
+        {
+          "field": "dream_account",
+          "contains": "childhood"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    },
+    "source_pages": "219",
+    "rationale": "Both the dream account and requested meaning task are supplied. Characters use contextual ordinary capacities, and the question's moment must not be replaced by a guessed dream time."
+  },
+  {
+    "id": "dream-implicit",
+    "method": "dream",
+    "mode": "implicit",
+    "words": "Last night I dreamed of a river overflowing onto a public footpath. Is it an omen that foretells something real, rather than just a symbolic dream?",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "dream_task",
+          "contains": "prophetic_truth"
+        },
+        {
+          "field": "dream_account",
+          "contains": "river"
+        },
+        {
+          "field": "dream_account",
+          "contains": "footpath"
+        },
+        {
+          "field": "dream_account",
+          "contains": "overflow"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    },
+    "source_pages": "164–165; 219",
+    "rationale": "Omen and foretells distinguish prophetic veracity from dream meaning without enum labels. Last-night supplies dream context only; it is not a historical chart instruction or a general weather forecast."
+  },
+  {
+    "id": "dream-missing",
+    "method": "dream",
+    "mode": "missing",
+    "words": "Could you interpret the meaning of my dream?",
+    "follow_up": "I dreamed that my own dog was hiding under the stairs in my childhood home and would not come when I called.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "dream_task",
+          "contains": "meaning"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "dream_account"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    },
+    "source_pages": "219",
+    "rationale": "Meaning is explicit but no dream has been described. Ask what happened in the dream, not its exact timestamp, and retain the meaning task when the person supplies the account.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "dream_task",
+          "contains": "meaning"
+        },
+        {
+          "field": "dream_account",
+          "contains": "dog"
+        },
+        {
+          "field": "dream_account",
+          "contains": "stairs"
+        },
+        {
+          "field": "dream_account",
+          "contains": "childhood"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "dream"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    }
+  },
+  {
+    "id": "education-explicit",
+    "method": "education",
+    "mode": "explicit",
+    "words": "Will my daughter Mia enjoy attending Lake Alder elementary school, where she is already enrolled? I am asking how she will fare and enjoy it, not whether she will be admitted.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "school_level",
+          "contains": "school"
+        },
+        {
+          "field": "school_task",
+          "contains": "enjoyment"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "mia",
+      "relationships": {
+        "mia": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Lake Alder"
+      ]
+    },
+    "source_pages": "219–220",
+    "rationale": "Child capacity, elementary level, existing enrollment, and enjoyment are supplied. The institution uses the radical school house rather than automatically being turned from the child."
+  },
+  {
+    "id": "education-implicit",
+    "method": "education",
+    "mode": "implicit",
+    "words": "My son Ben has already accepted his undergraduate place at Alder University. Do you think he will be happy studying there?",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "school_level",
+          "contains": "university"
+        },
+        {
+          "field": "school_task",
+          "contains": "enjoyment"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "ben",
+      "relationships": {
+        "ben": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Alder University"
+      ]
+    },
+    "source_pages": "219–220",
+    "rationale": "Undergraduate study implies university level; happy-studying and an already accepted place imply enjoyment rather than admission. Do not re-ask the known child capacity or school level."
+  },
+  {
+    "id": "education-missing",
+    "method": "education",
+    "mode": "missing",
+    "words": "Will my daughter Mia be happy at Alder Academy? She already has a place there.",
+    "follow_up": "It is an elementary school for children, not a university or a higher-education college.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "school_task",
+          "contains": "enjoyment"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "school_level"
+        }
+      ],
+      "ready": false,
+      "owner": "mia",
+      "relationships": {
+        "mia": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Alder Academy"
+      ]
+    },
+    "source_pages": "219–220",
+    "rationale": "Academy is intentionally ambiguous across school levels. The child and enjoyment question are known; elicit only the institution's level, without assuming its level from its name.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "school_task",
+          "contains": "enjoyment"
+        },
+        {
+          "field": "school_level",
+          "contains": "school"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "mia",
+      "relationships": {
+        "mia": "child"
+      },
+      "allowed_methods": [
+        "education"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "canonical_mentions": [
+        "Alder Academy"
+      ]
+    }
+  },
+  {
+    "id": "wish-explicit",
+    "method": "wish",
+    "mode": "explicit",
+    "words": "My wish is to get married within the next year. I am single and there is no wedding arranged; will I form a relationship that leads to marriage?",
+    "expected": {
+      "allowed_methods": [
+        "relationship"
+      ],
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person"
+    },
+    "source_pages": "164–165; 191–200; 231",
+    "rationale": "An explicitly disclosed wish routes to its actual relationship matter, rather than a universal eleventh-house wish program. A prospective partner is a role, not a required named existing person."
+  },
+  {
+    "id": "wish-implicit",
+    "method": "wish",
+    "mode": "implicit",
+    "words": "The thing I have been longing for is the librarian position I interviewed for yesterday. They have not offered it to me yet. Will it finally be mine?",
+    "expected": {
+      "allowed_methods": [
+        "new_job"
+      ],
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "job"
+    },
+    "source_pages": "164–165; 222–224; 231",
+    "rationale": "Longing and finally-mine refer to an identified unoffered external job. Resolve the underlying job event instead of forcing the wish label or treating an interview as an available offer."
+  },
+  {
+    "id": "wish-missing",
+    "method": "wish",
+    "mode": "missing",
+    "words": "Will my wish come true? I would rather not say what it is yet.",
+    "follow_up": "I am ready to tell you now: I hope to get the librarian job I interviewed for, and I have not received an offer.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "frame"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "164–165; 231",
+    "rationale": "There is no disclosed underlying matter. Keep the unresolved concern and do not force disclosure or manufacture an answer; later voluntary disclosure permits routing to new-job acquisition.",
+    "follow_up_expected": {
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "new_job"
+      ],
+      "facet": "event",
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "job"
+    }
+  },
+  {
+    "id": "tax-explicit",
+    "method": "tax",
+    "mode": "explicit",
+    "words": "Will my own savings cope with the tax assessment I expect from the government this year? I am concerned about the burden on my money, not asking you to invent an exact tax amount.",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "231–232",
+    "rationale": "The principal's own tax burden is explicit and separate from a government payment owed to them. Exact currency prediction is not required, and the source-bound specialist boundary still applies."
+  },
+  {
+    "id": "tax-implicit",
+    "method": "tax",
+    "mode": "implicit",
+    "words": "The revenue office is coming after its share of my income. Will I still have enough in my own account to weather that bill?",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "231–232",
+    "rationale": "Revenue office, its share of income, and the bill identify tax and ability to bear the burden without the literal tax word. Do not classify this as receiving money from the government."
+  },
+  {
+    "id": "tax-missing",
+    "method": "tax",
+    "mode": "missing",
+    "words": "Will Carmen be able to pay her tax assessment from her own savings?",
+    "follow_up": "Carmen is my sister. This is my own question about her ability to meet her own tax bill.",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "carmen"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "owner": "carmen",
+      "canonical_mentions": [
+        "carmen"
+      ],
+      "relationships": {
+        "carmen": "unknown"
+      }
+    },
+    "source_pages": "231–232; 137–140",
+    "rationale": "The tax burden and affected holder are clear, but Carmen's operative capacity is not. The book's principal-money default does not license an arbitrary relationship for a named third person. Ask who Carmen is to the speaker rather than asking for a known ownership fact.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "tax"
+      ],
+      "owner": "carmen",
+      "relationships": {
+        "carmen": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "canonical_mentions": [
+        "carmen"
+      ]
+    }
+  },
+  {
+    "id": "allegation-explicit",
+    "method": "allegation",
+    "mode": "explicit",
+    "words": "I am worried by the claim that someone has already put a harmful spell on me. I am asking about that reported claim; I do not know an accused person and am not saying it is established fact.",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "spell"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    },
+    "source_pages": "233–234",
+    "rationale": "Preserve a reported concern rather than establishing harm or inventing an assailant. A future applying contact cannot prove a reported past act; specialist review is required before any interpretation."
+  },
+  {
+    "id": "allegation-implicit",
+    "method": "allegation",
+    "mode": "implicit",
+    "words": "I fear that I have been hexed, though I have no evidence and do not know who could be involved. Can we examine that concern without treating it as a fact?",
+    "expected": {
+      "facet": "truth",
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "hexed"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    },
+    "source_pages": "233–234",
+    "rationale": "Hexed names the reported harmful-practice concern without a catalogue label. The person's fear must stay a report; neither generic trust nor an invented accused neighbour is appropriate."
+  },
+  {
+    "id": "allegation-missing",
+    "method": "allegation",
+    "mode": "missing",
+    "words": "Can you look into a harmful-practice allegation?",
+    "follow_up": "The allegation is that someone has put a harmful spell on me. I do not know who; I am worried, but I am not asserting that it happened.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "claim"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "233–234; 14",
+    "rationale": "The broad class is present but the actual concern is absent. Elicit the allegation neutrally rather than inventing occult harm, a suspect, or an outcome.",
+    "follow_up_expected": {
+      "facts": [
+        {
+          "field": "claim",
+          "contains": "spell"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "allegation"
+      ],
+      "facet": "truth",
+      "allowed_facets": [
+        "truth",
+        "situation"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "owner": "querent"
+    }
+  },
+  {
+    "id": "custody-explicit",
+    "method": "custody",
+    "mode": "explicit",
+    "words": "Will my brother Alex be released from prison? He is already being held in custody, and I am asking my own question about his release, not relaying his question.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "custody_state",
+          "contains": "already_held"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "alex",
+      "relationships": {
+        "alex": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "alex"
+    },
+    "source_pages": "234–237",
+    "rationale": "The brother, current custody, and release direction are explicit. Entry and release have opposite defaults; do not run a civil-verdict program or infer innocence from the requested release."
+  },
+  {
+    "id": "custody-implicit",
+    "method": "custody",
+    "mode": "implicit",
+    "words": "My son Ben was denied bail and is on remand. Will he be coming out soon?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "custody_state",
+          "contains": "already_held"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "ben",
+      "relationships": {
+        "ben": "child"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "ben"
+    },
+    "source_pages": "234–237",
+    "rationale": "Denied-bail plus on-remand establish existing custody; coming-out asks release without the enum label. Son capacity is known and must not be re-elicited."
+  },
+  {
+    "id": "custody-missing",
+    "method": "custody",
+    "mode": "missing",
+    "words": "What will happen about prison for my brother Alex?",
+    "follow_up": "He has not been detained and is awaiting sentencing while at home. I mean whether he will be sent to prison.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "custody_state"
+        }
+      ],
+      "ready": false,
+      "owner": "alex",
+      "relationships": {
+        "alex": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "alex"
+    },
+    "source_pages": "234–237",
+    "rationale": "Capacity is known, but the current custody state and entry-versus-release direction are genuinely ambiguous. No assumption of present imprisonment follows from the word prison.",
+    "follow_up_expected": {
+      "facts": [
+        {
+          "field": "custody_state",
+          "contains": "not_held"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "alex",
+      "relationships": {
+        "alex": "sibling"
+      },
+      "allowed_methods": [
+        "custody"
+      ],
+      "facet": "event",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person",
+      "subject_name_contains": "alex"
+    }
+  },
+  {
+    "id": "weather-explicit",
+    "method": "weather",
+    "mode": "explicit",
+    "words": "Will it rain at my outdoor barbecue in Bozeman, Montana, United States, on October 9, 2026? This is weather at that particular event, not a general local-weather question. I am asking now from Woodbridge, Virginia.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "weather_scope",
+          "contains": "event"
+        },
+        {
+          "field": "target_place",
+          "contains": "Bozeman"
+        },
+        {
+          "field": "target_period",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "barbecue",
+        "bbq",
+        "party"
+      ]
+    },
+    "source_pages": "238–240; 7–8",
+    "rationale": "Event scope, remote target place, and target day are explicit. A remote target must not become chart coordinates, and October 9 is the weather period rather than a historical question moment."
+  },
+  {
+    "id": "weather-implicit",
+    "method": "weather",
+    "mode": "implicit",
+    "words": "Should I expect rain at my barbecue in Springfield on Friday? It is the nearby Springfield, with no travel out of Northern Virginia involved.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "weather_scope",
+          "contains": "event"
+        },
+        {
+          "field": "target_place",
+          "contains": "Springfield",
+          "place_qualifier_any": [
+            "VA",
+            "Virginia"
+          ]
+        },
+        {
+          "field": "target_period",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "barbecue",
+        "bbq",
+        "party"
+      ]
+    },
+    "source_pages": "238–240; 7–8",
+    "rationale": "A barbecue implies event scope; Friday resolves to October 9. Nearby Springfield plus declared Northern Virginia supports Springfield VA instead of an unprompted nationwide city question. Coordinates remain separate from the Woodbridge reader anchor."
+  },
+  {
+    "id": "weather-missing",
+    "method": "weather",
+    "mode": "missing",
+    "words": "Will it rain at the outdoor wedding I am attending?",
+    "follow_up": "The wedding is in Bozeman, Montana, on October 9, 2026.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "weather_scope",
+          "contains": "event"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "target_place"
+        },
+        {
+          "kind": "field",
+          "id": "target_period"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "wedding"
+      ]
+    },
+    "source_pages": "238–240",
+    "rationale": "Weather at a wedding is clear, but the event has neither locality nor day. The device supplies the reader anchor and cannot silently supply these remote-event target facts.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "weather_scope",
+          "contains": "event"
+        },
+        {
+          "field": "target_place",
+          "contains": "Bozeman"
+        },
+        {
+          "field": "target_period",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "weather"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "wedding"
+      ]
+    }
+  },
+  {
+    "id": "election-explicit",
+    "method": "election",
+    "mode": "explicit",
+    "words": "Which day is best for me to submit my finished manuscript to the publisher? I can submit on October 9 or October 12, 2026, before noon; those are the only available dates. I mean choosing an action time from this horary, not predicting whether a publisher accepts it.",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "action",
+          "contains": "manuscript"
+        },
+        {
+          "field": "action_window",
+          "contains": "2026-10-09"
+        },
+        {
+          "field": "constraints",
+          "contains": "noon"
+        },
+        {
+          "field": "action_window",
+          "contains": "2026-10-12"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "manuscript",
+        "submission",
+        "publishing"
+      ]
+    },
+    "source_pages": "241–242",
+    "rationale": "The action, finite allowed dates, and stated constraint are explicit. A horary election uses the original question chart and must not invent a future chart, a natal election, or minute-level precision."
+  },
+  {
+    "id": "election-implicit",
+    "method": "election",
+    "mode": "implicit",
+    "words": "I can send my finished manuscript to the publisher either Friday or Monday, but no later than lunch. Which of those days would be kinder to the launch?",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "action",
+          "contains": "manuscript"
+        },
+        {
+          "field": "action_window",
+          "contains": "2026-10-09"
+        },
+        {
+          "field": "action_window",
+          "contains": "2026-10-12"
+        },
+        {
+          "field": "constraints",
+          "contains": "lunch"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "manuscript",
+        "submission",
+        "publishing"
+      ]
+    },
+    "source_pages": "241–242",
+    "rationale": "Choosing among available days implies horary election; Friday is October 9 and the following Monday is October 12 in the frozen local calendar. Lunch is imprecise but not a demand for a minute-perfect election."
+  },
+  {
+    "id": "election-missing",
+    "method": "election",
+    "mode": "missing",
+    "words": "When would be a good day for me to submit my finished manuscript to the publisher?",
+    "follow_up": "Only October 9 and October 12, 2026 are available, and I must submit before noon on whichever day I choose.",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "action",
+          "contains": "manuscript"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "action_window"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "manuscript",
+        "submission",
+        "publishing"
+      ]
+    },
+    "source_pages": "241–242",
+    "rationale": "The action is known, but no feasible window bounds the election. Ask the real available dates rather than birth information or an invented exhaustive calendar.",
+    "follow_up_expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "action",
+          "contains": "manuscript"
+        },
+        {
+          "field": "action_window",
+          "contains": "2026-10-09"
+        },
+        {
+          "field": "action_window",
+          "contains": "2026-10-12"
+        },
+        {
+          "field": "constraints",
+          "contains": "noon"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "election"
+      ],
+      "allowed_facets": [
+        "timing",
+        "choice"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "other",
+      "subject_name_any_contains": [
+        "manuscript",
+        "submission",
+        "publishing"
+      ]
+    }
+  },
+  {
+    "id": "unclassified-explicit",
+    "method": "unclassified",
+    "mode": "explicit",
+    "words": "The precise question is whether our already-arranged wedding will go ahead on October 17, 2026. We are engaged and the wedding is booked; I am not asking whether I might one day meet a partner.",
+    "expected": {
+      "allowed_methods": [
+        "relationship"
+      ],
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "arranged_wedding"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "person"
+    },
+    "source_pages": "14; 137–140; 191–200",
+    "rationale": "Unclassified is an unresolved state, not an oracle program. An explicitly disclosed arranged-wedding concern must route to relationship with its existing-event baseline, without asking again for a general topic."
+  },
+  {
+    "id": "unclassified-implicit",
+    "method": "unclassified",
+    "mode": "implicit",
+    "words": "Alder Library has put a signed employment offer in front of me, and I could accept it today. Would it be a good place for me to work? A predictable schedule matters most to me, rather than the highest salary.",
+    "expected": {
+      "allowed_methods": [
+        "job_offer"
+      ],
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "priorities",
+          "contains": "schedule"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "job",
+      "canonical_mentions": [
+        "Alder Library"
+      ]
+    },
+    "source_pages": "14; 137–140; 224–226",
+    "rationale": "A signed available employment offer plus expressed schedule priority resolves the program without a generic topic questionnaire. It is an available-offer quality question, not obtaining a new job or already holding one."
+  },
+  {
+    "id": "unclassified-missing",
+    "method": "unclassified",
+    "mode": "missing",
+    "words": "What about Alex?",
+    "follow_up": "Alex is my brother. I want to know whether he will get the librarian job for which he has interviewed, with no offer yet.",
+    "expected": {
+      "facts": [],
+      "needs": [
+        {
+          "kind": "frame"
+        }
+      ],
+      "ready": false,
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "14; 26; 137–140",
+    "rationale": "A bare name supplies no actual concern. Classification and the question must stay unresolved; do not infer love, missing-person status, employment, or an other-party house before disclosure.",
+    "follow_up_expected": {
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "new_job"
+      ],
+      "facet": "event",
+      "owner": "alex",
+      "relationships": {
+        "alex": "sibling"
+      },
+      "forbidden_facts": [
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "job"
+    }
+  }
+]

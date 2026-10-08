@@ -1615,6 +1615,7 @@ dependencies = [
  "dirs",
  "fs2",
  "horary-ai-core",
+ "horary-prompt-program",
  "llama-native-engine",
  "llama-native-host",
  "llama-native-types",
@@ -1644,6 +1645,15 @@ dependencies = [
  "chrono-tz",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "horary-prompt-program"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

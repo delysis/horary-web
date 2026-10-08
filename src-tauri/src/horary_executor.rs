@@ -248,15 +248,20 @@ pub(crate) fn execute(
                 return Ok(None);
             }
             Received::Rejected { proposal, error } => {
-                input = repair_input(&original, proposal, error)
+                input = repair_input(stage, &original, proposal, error)
             }
         }
     }
 }
 
-fn repair_input(original: &Value, previous: Value, error: String) -> Value {
+fn repair_input(stage: Stage, original: &Value, previous: Value, error: String) -> Value {
+    let instruction = match stage {
+        Stage::Intake => "This extraction has not completed. Only original_input has accepted authority; previous_worksheet was rejected and none of its proposed facts were saved. Return a corrected Turn using the actual source words and this phase's output contract. Fix the specific native error. Leave genuinely absent facts missing for the conversational reader; do not invent a quote, repeat provided questions, or ask the person to correct your worksheet.",
+        Stage::Conversation => "This conversational reply has not completed. Only original_input has accepted authority; previous_worksheet was rejected. Return a corrected reply and ask binding using the supplied reminders and output contract. A rejected reply is not evidence of a chart finding or a new user fact.",
+        _ => "This step has not completed. Only original_input has accepted authority; previous_worksheet was rejected and none of its proposed facts were saved. Correct against the original data and the specific native error. Supply required data, or use the output contract's genuine missing-input path. Do not ask the user to repeat provided words or supply chart calculations. Earlier attempts remain in the receipts.",
+    };
     json!({"original_input":original,"previous_worksheet":previous,"native_validation_error":error,
-        "instruction":"This step has not completed. Only original_input has accepted authority; previous_worksheet was rejected and none of its proposed facts were saved. Correct against the original data and the specific native error. Supply required data, or use request_input for genuinely missing user context. Do not ask the user to repeat provided words or supply chart calculations. Earlier attempts remain in the receipts."})
+        "instruction":instruction})
 }
 
 fn work_input(session: &Session, stage: Stage, mut input: Value) -> Value {
@@ -403,7 +408,7 @@ pub(crate) fn execute_batch(
             session,
             runtime,
             stage,
-            repair_input(&input, proposal, error),
+            repair_input(stage, &input, proposal, error),
             facts,
         )?;
     }
@@ -421,5 +426,35 @@ pub(crate) fn ask_pending(session: &mut Session) {
                     crate::reading_contracts::need_key(&pending.request.field, case).ok();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod repair_tests {
+    use super::*;
+
+    #[test]
+    fn intake_repair_retains_the_original_phase_and_never_offers_a_foreign_action() {
+        let original = json!({
+            "recognition_phase":"complete_selected_program",
+            "consultation":crate::reading_contracts::Consultation::default(),
+            "latest_words":"Will I marry within a year?"
+        });
+        let rejected = json!({"recognition_phase":"classify_question","question":"I'm single"});
+        let repair = repair_input(
+            Stage::Intake,
+            &original,
+            rejected.clone(),
+            "The subject kind is not allowed.".into(),
+        );
+        assert_eq!(step::original_input(&repair), &original);
+        assert_eq!(repair["previous_worksheet"], rejected);
+        assert!(!repair["instruction"]
+            .as_str()
+            .unwrap()
+            .contains("request_input"));
+        let schema = step::response_schema_for(Stage::Intake, Matter::Other, &repair, &[]);
+        assert_eq!(schema["properties"]["intent"]["enum"], json!(["clarify"]));
+        assert_eq!(schema["properties"]["question"], json!({"type":"null"}));
     }
 }

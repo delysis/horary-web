@@ -32,6 +32,26 @@ jobs:
           name: horary-web-review
           path: dist
 
+  prompt-loop:
+    name: Prompt program and experiment loop
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+          components: rustfmt, clippy
+      - name: Check the typed program and bounded loop without model credentials
+        run: |
+          set -euo pipefail
+          for manifest in crates/horary-prompt-program/Cargo.toml tools/horary-loop/Cargo.toml; do
+            cargo fmt --manifest-path "$manifest" -- --check
+            cargo test --manifest-path "$manifest" --locked
+            cargo clippy --manifest-path "$manifest" --locked --all-targets -- -D warnings
+          done
+
   tauri:
     name: Tauri (${{ matrix.os }})
     # Fork PRs cannot receive the private native dependency's read-only key.

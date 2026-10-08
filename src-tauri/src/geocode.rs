@@ -15,6 +15,64 @@ const CACHE_SIZE: usize = 50;
 const DEFAULT_REVERSE_MAX_DISTANCE_KM: f64 = 50.0;
 const EARTH_RADIUS_KM: f64 = 6371.0088;
 
+/// A unique nearby municipality is a contextual inference, never permission to
+/// ignore a stated region/country. Lookup has already enforced those qualifiers.
+pub(crate) fn nearby_unique_city(
+    matches: &[LocationCandidate],
+    device: &LocationCandidate,
+) -> Option<LocationCandidate> {
+    let mut distances: Vec<_> = matches
+        .iter()
+        .map(|place| {
+            (
+                distance_km(
+                    device.latitude,
+                    device.longitude,
+                    place.latitude,
+                    place.longitude,
+                ),
+                place,
+            )
+        })
+        .collect();
+    distances.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let (distance_to_nearest, nearest) = *distances.first()?;
+    if distance_to_nearest > 50. || !distance_to_nearest.is_finite() {
+        return None;
+    }
+    // Duplicate gazetteer records within one town do not create a second town.
+    if distances.iter().skip(1).any(|(distance, place)| {
+        *distance < (distance_to_nearest * 4.).max(75.)
+            && distance_km(
+                nearest.latitude,
+                nearest.longitude,
+                place.latitude,
+                place.longitude,
+            ) > 5.
+    }) {
+        return None;
+    }
+    Some(nearest.clone())
+}
+
+/// A stated US city and state identifies its municipality even when lookup
+/// also returns several postal-area centroids. Bare names remain ambiguous.
+pub(crate) fn uniquely_qualified_city(
+    query: &str,
+    matches: &[LocationCandidate],
+) -> Option<LocationCandidate> {
+    let parsed = parse_us_query(query);
+    if parsed.state.is_none() || parsed.zip.is_some() {
+        return None;
+    }
+    let mut cities = matches.iter().filter(|place| {
+        place.id.starts_with("us-place-")
+            && normalize_location_text(&place.name) == parsed.city_query
+    });
+    let city = cities.next()?;
+    cities.next().is_none().then(|| city.clone())
+}
+
 #[derive(Debug, Serialize)]
 pub struct GeocodeError {
     pub message: String,
@@ -229,9 +287,7 @@ fn search_location_records(query: &str, limit: usize) -> GeocodeResult<Vec<Locat
 
 fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate)>> {
     let parsed = parse_us_query(query);
-    if parsed.state.is_none() && parsed.zip.is_none() {
-        return Ok(Vec::new());
-    }
+    let unqualified = parsed.state.is_none() && parsed.zip.is_none();
     let records = us_location_records()?;
     let mut scored = Vec::new();
 
@@ -260,6 +316,10 @@ fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate
             let city = normalize_location_text(&place.city);
             let rank = if city == city_query {
                 20
+            } else if unqualified {
+                // A bare city must include all exact municipalities, including
+                // smaller places absent from the worldwide city list.
+                continue;
             } else if city.starts_with(city_query) {
                 30
             } else if city.contains(city_query) {
@@ -275,7 +335,7 @@ fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate
             ));
         }
 
-        for zip_record in &records.zips {
+        for zip_record in records.zips.iter().filter(|_| !unqualified) {
             if let Some(state) = parsed.state.as_deref() {
                 if zip_record.state != state {
                     continue;
@@ -392,27 +452,47 @@ fn parse_us_query(query: &str) -> ParsedUsQuery {
         normalized = normalized.replace(zip, " ");
     }
 
-    let mut state = None;
-    for (abbr, name) in US_STATES {
-        let normalized_name = normalize_location_text(name);
-        let padded = format!(" {normalized} ");
-        if padded.contains(&format!(" {} ", abbr.to_lowercase()))
-            || padded.contains(&format!(" {normalized_name} "))
-        {
-            state = Some((*abbr).to_string());
-            normalized = remove_word(&normalized, &abbr.to_lowercase());
-            normalized = normalized.replace(&normalized_name, " ");
-            break;
-        }
+    let normalized = normalize_location_text(&normalized);
+    // A region qualifier is a complete trailing token/phrase, never words
+    // removed from inside the municipality name. Prefer the longest suffix
+    // so West Virginia cannot be reduced to Virginia.
+    let qualifier = US_STATES
+        .iter()
+        .flat_map(|(abbr, name)| {
+            [
+                (*abbr, abbr.to_lowercase()),
+                (*abbr, normalize_location_text(name)),
+            ]
+        })
+        .filter_map(|(abbr, region)| {
+            let city = if normalized == region {
+                Some("")
+            } else {
+                normalized.strip_suffix(&format!(" {region}"))
+            }?;
+            Some((region.len(), abbr, city))
+        })
+        .max_by_key(|(length, _, _)| *length);
+    let (mut city_query, mut state) = match qualifier {
+        Some((_, abbr, city)) => (city.to_string(), Some(abbr.to_string())),
+        None => (normalized, None),
+    };
+    // Exact NYC municipality aliases are canonical New York only without a
+    // contradictory explicit state. State-only New York remains state-only.
+    if (state.is_none() && matches!(city_query.as_str(), "new york city" | "nyc"))
+        || (state.as_deref() == Some("NY")
+            && matches!(city_query.as_str(), "new york" | "new york city" | "nyc"))
+    {
+        city_query = "new york".into();
+        state = Some("NY".into());
     }
 
     ParsedUsQuery {
-        city_query: normalize_location_text(&normalized),
+        city_query,
         state,
         zip,
     }
 }
-
 fn city_match_rank(name: &str, query: &str) -> u8 {
     let normalized_name = name.to_lowercase();
     if normalized_name.starts_with(query) {
@@ -435,14 +515,6 @@ fn normalize_location_text(value: &str) -> String {
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { ' ' })
         .collect::<String>()
         .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn remove_word(value: &str, word: &str) -> String {
-    value
-        .split_whitespace()
-        .filter(|part| *part != word)
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -608,6 +680,27 @@ impl GeocodeCache {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn qualified_municipality_is_not_ambiguous_with_its_postal_areas() {
+        let state = super::GeocodeState::default();
+        let matches = super::geocode_with_cache(
+            &state,
+            super::GeocodeRequest {
+                query: "Bozeman, Montana".into(),
+                limit: Some(50),
+            },
+        )
+        .unwrap();
+        assert!(matches.len() > 1, "Exercise the postal-area ambiguity");
+        assert_eq!(
+            super::uniquely_qualified_city("Bozeman, Montana", &matches)
+                .unwrap()
+                .label,
+            "Bozeman, MT"
+        );
+        assert!(super::uniquely_qualified_city("Bozeman", &matches).is_none());
+        assert!(super::uniquely_qualified_city("Bozeman MT 59715", &matches).is_none());
+    }
     #[test]
     fn conversational_city_state_country_resolves_without_repeated_search() {
         let state = super::GeocodeState::default();
@@ -799,5 +892,211 @@ mod tests {
         .unwrap();
 
         assert!(result.is_none());
+    }
+}
+
+#[cfg(test)]
+mod nyc_normalization_regressions {
+    use super::*;
+
+    #[test]
+    fn explicit_nyc_municipality_aliases_preserve_the_city_and_state() {
+        for query in [
+            "New York City",
+            "New York City, United States",
+            "New York City, NY, US",
+            "New York, NY",
+            "New York, New York, United States",
+        ] {
+            let parsed = parse_us_query(query);
+            assert_eq!(parsed.city_query, "new york", "{query}");
+            assert_eq!(parsed.state.as_deref(), Some("NY"), "{query}");
+            assert_eq!(parsed.zip, None);
+            let matches = geocode_with_cache(
+                &GeocodeState::default(),
+                GeocodeRequest {
+                    query: query.into(),
+                    limit: Some(8),
+                },
+            )
+            .unwrap();
+            let city = uniquely_qualified_city(query, &matches)
+                .unwrap_or_else(|| panic!("No unique NYC municipality for {query}: {matches:?}"));
+            assert_eq!(city.name, "New York");
+            assert_eq!(city.country, "US");
+            assert_eq!(city.timezone, "America/New_York");
+            assert!(city.latitude > 40. && city.latitude < 41.);
+        }
+    }
+
+    #[test]
+    fn nyc_alias_does_not_replace_new_city_or_springfield_qualifiers() {
+        for (query, expected_city, expected_state) in [
+            ("New City, NY", "new city", "NY"),
+            ("Springfield, Illinois, United States", "springfield", "IL"),
+            ("Springfield, Virginia", "springfield", "VA"),
+            ("New York City, Illinois", "new york city", "IL"),
+        ] {
+            let parsed = parse_us_query(query);
+            assert_eq!(parsed.city_query, expected_city, "{query}");
+            assert_eq!(parsed.state.as_deref(), Some(expected_state), "{query}");
+        }
+        let state = GeocodeState::default();
+        let matches = geocode_with_cache(
+            &state,
+            GeocodeRequest {
+                query: "New City, NY".into(),
+                limit: Some(8),
+            },
+        )
+        .unwrap();
+        let city = uniquely_qualified_city("New City, NY", &matches).unwrap();
+        assert_eq!(city.name, "New City");
+        assert!(city.latitude > 41.);
+        for (query, expected_label) in [
+            ("Springfield, Illinois", "Springfield, IL"),
+            ("Springfield, Virginia", "Springfield, VA"),
+        ] {
+            let matches = geocode_with_cache(
+                &state,
+                GeocodeRequest {
+                    query: query.into(),
+                    limit: Some(8),
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                uniquely_qualified_city(query, &matches).unwrap().label,
+                expected_label
+            );
+        }
+    }
+
+    #[test]
+    fn nyc_normalization_keeps_an_explicit_postal_code() {
+        let parsed = parse_us_query("New York City, NY 10001, United States");
+        assert_eq!(parsed.city_query, "new york");
+        assert_eq!(parsed.state.as_deref(), Some("NY"));
+        assert_eq!(parsed.zip.as_deref(), Some("10001"));
+        let matches = geocode_with_cache(
+            &GeocodeState::default(),
+            GeocodeRequest {
+                query: "New York City, NY 10001, United States".into(),
+                limit: Some(8),
+            },
+        )
+        .unwrap();
+        assert_eq!(matches[0].label, "New York, NY 10001");
+    }
+
+    #[test]
+    fn a_foreign_country_does_not_silently_gain_the_nyc_alias() {
+        let matches = geocode_with_cache(
+            &GeocodeState::default(),
+            GeocodeRequest {
+                query: "New York City, Canada".into(),
+                limit: Some(8),
+            },
+        )
+        .unwrap();
+        assert!(matches.iter().all(|place| place.country != "US"));
+    }
+}
+
+#[cfg(test)]
+mod city_name_region_scope_regressions {
+    use super::*;
+
+    #[test]
+    fn state_words_inside_a_city_do_not_become_a_region_qualifier() {
+        for (query, expected_city, expected_state) in [
+            ("Kansas City, Missouri", "kansas city", Some("MO")),
+            ("Kansas City, Kansas", "kansas city", Some("KS")),
+            ("Texas City, Texas", "texas city", Some("TX")),
+            ("California City, California", "california city", Some("CA")),
+            ("New York City, Virginia", "new york city", Some("VA")),
+            ("New York, Virginia", "new york", Some("VA")),
+            ("Kansas City", "kansas city", None),
+            ("Texas City", "texas city", None),
+            ("California City", "california city", None),
+        ] {
+            let parsed = parse_us_query(query);
+            assert_eq!(parsed.city_query, expected_city, "{query}");
+            assert_eq!(parsed.state.as_deref(), expected_state, "{query}");
+        }
+        let state = GeocodeState::default();
+        for (query, city_name, label) in [
+            ("Kansas City, Missouri", "Kansas City", "Kansas City, MO"),
+            ("Kansas City, Kansas", "Kansas City", "Kansas City, KS"),
+            ("Texas City, Texas", "Texas City", "Texas City, TX"),
+            (
+                "California City, California",
+                "California City",
+                "California City, CA",
+            ),
+        ] {
+            let matches = geocode_with_cache(
+                &state,
+                GeocodeRequest {
+                    query: query.into(),
+                    limit: Some(8),
+                },
+            )
+            .unwrap();
+            let city = uniquely_qualified_city(query, &matches)
+                .unwrap_or_else(|| panic!("Lost exact city in {query}: {matches:?}"));
+            assert_eq!(city.name, city_name);
+            assert_eq!(city.label, label);
+        }
+    }
+
+    #[test]
+    fn longest_trailing_qualifier_and_state_only_queries_preserve_scope() {
+        for (query, expected_city, expected_state) in [
+            ("Huntington West Virginia", "huntington", "WV"),
+            ("Huntington WV", "huntington", "WV"),
+            ("West Virginia", "", "WV"),
+            ("New York", "", "NY"),
+            ("NY", "", "NY"),
+            ("California", "", "CA"),
+        ] {
+            let parsed = parse_us_query(query);
+            assert_eq!(parsed.city_query, expected_city, "{query}");
+            assert_eq!(parsed.state.as_deref(), Some(expected_state), "{query}");
+        }
+    }
+
+    #[test]
+    fn literal_nyc_uses_its_municipality_without_ignoring_contrary_states() {
+        for query in ["NYC", "NYC, NY", "NYC, United States"] {
+            let parsed = parse_us_query(query);
+            assert_eq!(parsed.city_query, "new york");
+            assert_eq!(parsed.state.as_deref(), Some("NY"));
+            let matches = geocode_with_cache(
+                &GeocodeState::default(),
+                GeocodeRequest {
+                    query: query.into(),
+                    limit: Some(8),
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                uniquely_qualified_city(query, &matches).unwrap().name,
+                "New York"
+            );
+        }
+        let parsed = parse_us_query("NYC, Virginia");
+        assert_eq!(parsed.city_query, "nyc");
+        assert_eq!(parsed.state.as_deref(), Some("VA"));
+        assert!(geocode_with_cache(
+            &GeocodeState::default(),
+            GeocodeRequest {
+                query: "NYC, Virginia".into(),
+                limit: Some(8)
+            }
+        )
+        .unwrap()
+        .iter()
+        .all(|place| !place.id.starts_with("us-place-ny-")));
     }
 }

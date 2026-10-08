@@ -48,6 +48,7 @@ llama-native-types = { git = "https://github.com/delysis/native-platform.git", r
 
 [dev-dependencies]
 quick-xml = "=0.39.4"
+horary-prompt-program = { path = "../crates/horary-prompt-program" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 speech = { version = "=0.8.7", default-features = false, features = ["async"] }
