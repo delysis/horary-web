@@ -4,6 +4,7 @@ pub mod journal;
 pub mod metric;
 pub mod native;
 pub mod review;
+pub mod status;
 pub mod teacher;
 
 use gepa::{Candidate, EvalBatch, GepaAdapter, GepaEngine};
@@ -768,7 +769,7 @@ pub async fn run(plan: Plan, state: PathBuf) -> Result<Value> {
     match result {
         Ok(result) => {
             let program = plan.program(&result.best)?;
-            let value = json!({"engine":"dsrust-gepa","revision":ENGINE_REV,"best_index":result.best_idx,"candidates":result.candidates,
+            let value = json!({"engine":"dsrust-gepa","revision":ENGINE_REV,"plan_sha256":digest(read(&state.join("plan.json"))?),"best_index":result.best_idx,"candidates":result.candidates,
                 "parents":result.parents,"development_scores":result.val_aggregate_scores,"logical_metric_evaluations":result.total_num_evals,
                 "iterations":result.iterations,"selected_program":program,"function":plan.function,"target_method":plan.target_method,
                 "qualification":plan.qualification});

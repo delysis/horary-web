@@ -86,6 +86,8 @@ Fresh native children use a fixed 14,000-input-token/minute client budget. The c
 
 `operations/` retains exact teacher prompts, schemas, JSONL events, answers, actual native calls, checkpoints, rejection feedback, final frames and individual gates. `interruptions/` preserves each stop. `search-result.json` retains candidates, parents and development scores; `selected-program.json` is a reviewable overlay, never an automatic application change. A selected overlay still needs fresh complete-journey regression, independent source review and the fixed reserved comparison. Previously paid judge/writer jobs in other rounds stay intact and are not resubmitted by this tool.
 
+`status` is a read-only snapshot of those receipts. It verifies completed operation artifacts and reports unsettled or unverified operations, hard reservations and remaining bounds, unique settled native physical attempts, separate native/reviewer cache reuse, native hurdle status, and independent review scores. Unknown reservations or missing native witnesses remain unknown; cache hits never count old paid attempts twice. Reservations and unfinished operations do not prove submission, failure or permission to retry. Final scores require the immutable plan's digest. Results from older copied controllers lack that binding and remain explicitly unverified in this view; their original files are preserved. The view includes evidence paths and case IDs, without copying questions, gold, prompts or reviewer reasons. It neither acquires the run lock nor opens credentials or invokes a model. The owner can still be publishing files while the snapshot is read.
+
 ## Offline checks
 
 ```sh

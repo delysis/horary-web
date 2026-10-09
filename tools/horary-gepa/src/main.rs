@@ -138,11 +138,7 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             println!("{}", run(plan, state).await?);
         }
         Action::Status { state } => {
-            println!(
-                "{}",
-                serde_json::json!({"state":state,"completed":state.join("search-result.json").exists(),"interruption_record":state.join("interruptions").exists(),
-                "operations":if state.join("operations").exists(){std::fs::read_dir(state.join("operations")).map_err(|error|error.to_string())?.count()}else{0},"qualification":"Search/component status only"})
-            );
+            println!("{}", horary_gepa::status::inspect(&state)?);
         }
     }
     Ok(())
