@@ -203,6 +203,8 @@ pub struct Plan {
     pub native_executable_sha256: String,
     pub codex: PathBuf,
     pub codex_executable_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_snapshot: Option<executable::Support>,
     pub guide: String,
     pub guide_sha256: String,
     pub seed: Candidate,
@@ -406,7 +408,11 @@ impl Plan {
             &self.controller_executable,
             &self.controller_executable_sha256,
         )?;
-        verify(&self.codex, &self.codex_executable_sha256)?;
+        if let Some(support) = &self.codex_snapshot {
+            executable::verify_snapshot(&self.codex, &self.codex_executable_sha256, support)?;
+        } else {
+            verify(&self.codex, &self.codex_executable_sha256)?;
+        }
         for example in self.training.iter().chain(&self.development) {
             verify(&example.inspection_file, &example.inspection_sha256)?;
             verify(
@@ -626,7 +632,9 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
     plan.split_sha256 = digest(read(&plan.split_file)?);
     plan.native_executable_sha256 = digest(read(&plan.native_executable)?);
     plan.controller_executable_sha256 = digest(read(&plan.controller_executable)?);
-    plan.codex = executable::snapshot_codex(&plan.codex, state)?;
+    let snapshot = executable::snapshot_codex(&plan.codex, state)?;
+    plan.codex = snapshot.executable;
+    plan.codex_snapshot = Some(snapshot.support);
     plan.codex_executable_sha256 = digest(read(&plan.codex)?);
     plan.verify_sources()?;
     fs::create_dir_all(state).map_err(|error| error.to_string())?;
@@ -869,6 +877,7 @@ mod tests {
             native_executable_sha256: digest("native"),
             codex: "codex".into(),
             codex_executable_sha256: digest("codex"),
+            codex_snapshot: None,
             guide_sha256: digest(&guide),
             guide,
             seed,
@@ -939,6 +948,14 @@ mod tests {
             "<book_extracts>Changed text</book_extracts>".into(),
         );
         assert!(plan.program(&candidate).is_err());
+    }
+    #[test]
+    fn legacy_plans_deserialize_and_serialize_without_snapshot_fields() {
+        let original = serde_json::to_value(plan()).unwrap();
+        assert!(original.get("codex_snapshot").is_none());
+        let restored: Plan = serde_json::from_value(original.clone()).unwrap();
+        assert!(restored.codex_snapshot.is_none());
+        assert_eq!(serde_json::to_value(restored).unwrap(), original);
     }
     #[test]
     fn final_cases_and_invalid_seed_cannot_enter_search() {
