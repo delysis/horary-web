@@ -28,6 +28,37 @@ The `horary-loop` tool invokes the user's existing Codex login through an epheme
 
 The Rust `horary-optimize` driver chains one bounded round: discovery training review, reuse of completed reviews and a saved writer proposal, then the fixed paired experiment. Its immutable plan preserves the review-job budget across resumes and limits the number of distinct affected native cases. Defaults are one training review job, six cases per review batch and at most nine affected native cases. No writer runs without a completed review, and no native trial runs after abstention, a native-repair request or excessive scope. This is automated evidence collection and comparison; it does not promote application defaults.
 
+## Iterative GEPA search over neural functions
+
+[`horary-gepa`](../tools/horary-gepa/README.md) adds a conventional iterative optimizer before that final comparison. It uses the LLM-independent engine from the alpha Rust `dsrust-gepa` port at exact revision `f24adde08c1d8850e4d7079d019643bb40f905cb`; upstream numerical conformance and local adapter checks are separate from model quality. This initial path uses reflective mutation and development selection, with merge disabled. It neither reformats the application's model requests into DSPy prompts nor replaces native acceptance with an optimizer-specific schema.
+
+The executable initial target is **classification only**: the native executor validates the returned method/facet frame with same-step repair, then authored labels grade it. This shorter target removes unrelated specialist, chart and prose calls from classification iterations. The score is useful search feedback, not a semantic interpretation qualification. Generic metrics for elicitation, extraction, reading and complete journeys also exist, but their stage execution adapters and independent review ingestion are further work. In particular, a blocked method cannot become a supported reading by optimizing its prompt.
+
+Each search splits the frozen training pool again: reflection training supplies failures to the writer; separate development cases rank candidates. Original reserved cases stay outside search. GEPA selects a parent and minibatch, Codex revises one actual editable teaching region from native failure feedback, and fresh hosted Gemma evaluates the changed region. Actual protected book quotations and all native/tool contracts remain exact. Completed sealed baseline captures may serve as checked controls only when every classifier and repair prompt/input/schema matches and the native executor consumes the original prefix exactly.
+
+~~~mermaid
+flowchart TD
+  A["Pin native function, original prompt, authored labels and split"] --> B["Separate reflection training and development within training pool"]
+  B --> C["Current native prompt inspection; checked archive or explicit fresh control"]
+  C --> D["GEPA parent and training-minibatch selection"]
+  D --> E["Actual native function and same-step repair"]
+  E --> F{"Completed measurement?"}
+  F -->|no| X["Preserve interruption; no fabricated fitness or automatic replay"]
+  F -->|yes| G["Authored function fitness and explicit failure feedback"]
+  G --> H["Codex login: reflect on one editable teaching component"]
+  H --> I["Protect book blocks; validate actual Program signature"]
+  I --> J["Fresh unconstrained hosted Gemma; same training minibatch"]
+  J --> K{"Improves training fitness?"}
+  K -->|no| D
+  K -->|yes| L["Separate development scores; candidate frontier"]
+  L --> D
+  D -->|bounded search closes| M["Selected overlay and candidate ancestry; no promotion"]
+  M --> N["Fresh full journeys, independent source review and fixed reserved comparison"]
+  N --> O["Review and integrate only a validated improvement"]
+~~~
+
+Immutable operation receipts reconstruct engine state from the same seed on resume. Controller/executable/guide/capture/fixture fingerprints, exclusive ownership and pre-submission teacher/student reservations guard this replay. A changed prompt always needs new student generation; completed-prefix calls and uncertain requests are never silently resubmitted. GEPA's iteration-boundary metric budget is reported separately from the hard paid-call reservation. The command and receipt layout are documented in the tool's README.
+
 ## Traced corpus and observation boundary
 
 The frozen bank has 145 synthetic cases across all 44 contracts plus additional edge cases. `full-suite-1` retains 90 completed outcomes and its disk-exhaustion interruption. Its native report records 46 first-turn passes, 30 completed semantic failures, 76 delivered first replies, 12 supplying turns executed and five supplying-turn passes. The remaining native execution interruptions and withheld journeys stay visible; these counts do not imply 90 usable readings.
@@ -74,7 +105,7 @@ flowchart TD
 
 The tool is in [`tools/horary-loop`](../tools/horary-loop/README.md), with the typed candidate and comparison crate in [`crates/horary-prompt-program`](../crates/horary-prompt-program/src/lib.rs). Authoritative implementations are their `src/{lib,comparison}.rs`, `src/{lib,packet,types}.rs` and the `horary-optimize` / `horary-experiment` binaries. Results and diagnostic indexes can be regenerated from receipts without altering the original trials.
 
-The dedicated CI job checks both Rust crates' formatting, ordinary regressions and all-target Clippy without model credentials. Paid Codex reviews and local Gemma campaigns remain explicitly invoked experiments with separate receipts.
+The dedicated CI job checks the typed program, bounded loop and GEPA adapter for formatting, ordinary regressions and all-target Clippy without model credentials. Paid Codex reviews and hosted or local Gemma campaigns remain explicitly invoked experiments with separate receipts.
 
 ## First measured trial
 

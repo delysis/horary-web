@@ -3740,3 +3740,1030 @@ fn optional_fixture_banks_reject_symlinks_instead_of_loading_nonlocal_sources() 
         .unwrap_err()
         .contains("ordinary file"));
 }
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ClassificationTask {
+    case_id: String,
+    source_case_directory: PathBuf,
+    source_request_file: PathBuf,
+    source_request_sha256: String,
+    source_initial_sha256: String,
+    baseline_manifest_sha256: String,
+    #[serde(default)]
+    program_file: Option<PathBuf>,
+    #[serde(default)]
+    replay_completed_capture: bool,
+    #[serde(default)]
+    inspect_prompt_only: bool,
+}
+
+fn classification_source_bytes(path: &Path, expected: &str) -> Result<Vec<u8>, String> {
+    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("Classification source needs a SHA256 digest".into());
+    }
+    let bytes = fs::read(path).map_err(|error| error.to_string())?;
+    if !horary_prompt_program::digest(&bytes).eq_ignore_ascii_case(expected) {
+        return Err(format!(
+            "Classification source hash changed: {}",
+            path.display()
+        ));
+    }
+    Ok(bytes)
+}
+
+/// This is a fresh classifier invocation, never a reset of a specialist session.
+fn classification_scope(
+    case: &Case,
+    request: &Value,
+    initial: &Value,
+) -> Result<(Session, Value), String> {
+    let stage: Stage = serde_json::from_value(request["stage"].clone())
+        .map_err(|error| format!("Captured classification stage: {error}"))?;
+    let input = crate::horary_step::original_input(&request["input"]);
+    if stage != Stage::Intake || input["recognition_phase"] != "classify_question" {
+        return Err("Only Intake/classify_question captures can replay classification".into());
+    }
+    let mut session: Session = serde_json::from_value(initial["session"].clone())
+        .map_err(|error| format!("Captured classification session: {error}"))?;
+    session.candidates = serde_json::from_value(initial["candidates"].clone())
+        .map_err(|error| format!("Captured classification candidates: {error}"))?;
+    let default_brief = serde_json::to_value(crate::horary_pipeline::Brief::default())
+        .map_err(|error| error.to_string())?;
+    if session.chart.is_some()
+        || !session.sections.is_empty()
+        || !session.facts.is_empty()
+        || !session.revisions.is_empty()
+        || !session.question.is_empty()
+        || session.method.consultation.is_some()
+        || session.method.result.is_some()
+        || !session.method.records.is_empty()
+        || !session.method.flow.is_empty()
+        || !session.method.replies.is_empty()
+        || serde_json::to_value(&session.method.brief).map_err(|error| error.to_string())?
+            != default_brief
+    {
+        return Err("First-classification replay rejects accepted chart, analysis or specialist state; nothing is cleared".into());
+    }
+    let state = &input["consultation_state"];
+    if input["chart_exists"] != false
+        || !state.is_object()
+        || !state["chart"].is_null()
+        || state["interpretation_exists"] != false
+        || state["completed_steps"]
+            .as_array()
+            .is_none_or(|steps| !steps.is_empty())
+        || !state["unfinished_step"].is_null()
+        || state["pending_user_requests"]
+            .as_array()
+            .is_none_or(|needs| !needs.is_empty())
+        || !input["pending_requirement"].is_null()
+        || input["consultation"]["frame"]["state"] != "missing"
+        || input.get("reading_request").is_some()
+    {
+        return Err(
+            "Captured classification input already contains accepted or pending work".into(),
+        );
+    }
+    if session.messages.len() != 1
+        || session.messages[0].role != "user"
+        || session.messages[0].text != case.words
+        || input["latest_words"].as_str() != Some(case.words.as_str())
+        || input["canonical_question"].as_str() != Some(session.question.as_str())
+        || request["matter"]
+            != serde_json::to_value(session.method.brief.matter)
+                .map_err(|error| error.to_string())?
+    {
+        return Err("Captured request, initial session and authored case do not bind the same first question".into());
+    }
+    Ok((session, input.clone()))
+}
+
+fn classification_grade(
+    case: &Case,
+    frame: Option<&reading_contracts::Frame>,
+    error: Option<&str>,
+) -> crate::reading_eval::Gate {
+    use crate::reading_eval::{Gate, Status};
+    if let Some(error) = error {
+        return Gate {
+            status: Status::NotRun,
+            failures: vec![error.into()],
+            basis: "Classification unobserved: executor or infrastructure interrupted".into(),
+        };
+    }
+    let mut failures = Vec::new();
+    let allowed = case
+        .expected
+        .allowed_methods
+        .as_deref()
+        .unwrap_or(std::slice::from_ref(&case.method));
+    if !frame.is_some_and(|frame| allowed.contains(&frame.method)) {
+        failures.push(format!(
+            "Method must be one of {allowed:?}; actual {:?}",
+            frame.map(|frame| frame.method)
+        ));
+    }
+    let mut facets = case.expected.allowed_facets.clone();
+    facets.extend(case.expected.facet);
+    if !facets.is_empty() && frame.is_none_or(|frame| !facets.contains(&frame.facet)) {
+        failures.push(format!(
+            "Facet must be one of {facets:?}; actual {:?}",
+            frame.map(|frame| frame.facet)
+        ));
+    }
+    Gate::checked(failures, "Authored method/facet gold for the returned native-checked Turn only; a completed result without a frame fails classification")
+}
+
+fn classification_call_limits(max_calls: u64) -> Result<Value, String> {
+    if max_calls == 0 {
+        return Err("Classification logical model call cap must be positive".into());
+    }
+    // The existing hosted client permits three completed-HTTP service attempts
+    // per logical generate call. The controller reserves this entire bound
+    // before launching the function; it is not a three-physical-call promise.
+    let reservation = max_calls
+        .checked_mul(3)
+        .ok_or("Classification generation-attempt reservation overflow")?;
+    Ok(json!({"logical_model_call_cap":max_calls,
+        "physical_generation_attempt_reservation":reservation}))
+}
+
+fn classification_generation_attempts(calls: &[Value]) -> usize {
+    calls
+        .iter()
+        .map(|call| {
+            let receipt = &call["provider_receipt"];
+            receipt["generation_attempts"]
+                .as_array()
+                .map(|attempts| {
+                    attempts
+                        .iter()
+                        .filter(|attempt| attempt["submitted"] == true)
+                        .count()
+                })
+                .unwrap_or_else(|| usize::from(receipt["submitted"] == true))
+        })
+        .sum()
+}
+
+struct ClassificationCapturedCall {
+    request: Value,
+    generation: NativeGenerationResult,
+    request_sha256: String,
+    result_sha256: String,
+    provider_receipt: Value,
+}
+
+struct ClassificationCapture {
+    calls: Vec<ClassificationCapturedCall>,
+    provenance: Value,
+}
+
+fn classification_capture(
+    task: &ClassificationTask,
+    case: &Case,
+    source_dir: &Path,
+    baseline: &Value,
+    initial: &Value,
+) -> Result<ClassificationCapture, String> {
+    if task.program_file.is_some() {
+        return Err("Recorded source replay cannot apply a prompt program".into());
+    }
+    let campaign = source_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("Replay source campaign unavailable")?;
+    let origin_bytes = fs::read(
+        campaign
+            .join("case-origins")
+            .join(format!("{}.json", case.id)),
+    )
+    .map_err(|error| format!("Replay needs a closed case origin: {error}"))?;
+    let origin: Value = serde_json::from_slice(&origin_bytes).map_err(|error| error.to_string())?;
+    if origin["case_id"] != case.id || !origin["files"].is_object() {
+        return Err("Replay origin does not seal this case".into());
+    }
+    let sealed = |relative: &str| -> Result<Vec<u8>, String> {
+        let digest = origin["files"][relative]
+            .as_str()
+            .ok_or_else(|| format!("Replay file is not sealed: {relative}"))?;
+        classification_source_bytes(&source_dir.join(relative), digest)
+    };
+    if origin["files"]["initial.json"].as_str() != Some(task.source_initial_sha256.as_str()) {
+        return Err("Replay origin initial session differs from the task binding".into());
+    }
+    sealed("initial.json")?;
+    let outcome: Value =
+        serde_json::from_slice(&sealed("outcome.json")?).map_err(|error| error.to_string())?;
+    if outcome["id"] != case.id
+        || !matches!(
+            outcome["execution_status"].as_str(),
+            Some(
+                "completed"
+                    | "execution_error"
+                    | "call_budget_exhausted"
+                    | "deadline_cancelled"
+                    | "evidence_io_interrupted"
+                    | "exploration_group_interrupted"
+            )
+        )
+        || !outcome["first_turn_execution_completed"].is_boolean()
+    {
+        return Err("Replay needs a sealed closed-case outcome, not a partial live capture".into());
+    }
+    // Recovered whole cases can come from a different attempt manifest. Bind
+    // that manifest separately while retaining the task's original baseline.
+    let origin_dir = PathBuf::from(
+        origin["source_directory"]
+            .as_str()
+            .ok_or("Replay origin has no source directory")?,
+    );
+    let origin_manifest_path = origin_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("Replay origin manifest unavailable")?
+        .join("manifest.json");
+    let origin_manifest_sha = origin["source_manifest_sha256"]
+        .as_str()
+        .ok_or("Replay origin manifest is not sealed")?;
+    let origin_manifest_bytes =
+        classification_source_bytes(&origin_manifest_path, origin_manifest_sha)?;
+    let source: Value =
+        serde_json::from_slice(&origin_manifest_bytes).map_err(|error| error.to_string())?;
+    if !source["sources"].is_object()
+        || !source["repository_sha"].is_string()
+        || !source["prompt_program"].is_null()
+        || !baseline["prompt_program"].is_null()
+        || [
+            "sources",
+            "repository_sha",
+            "working_diff_sha256",
+            "catalogue_version",
+            "book_ocr_sha256",
+        ]
+        .iter()
+        .any(|key| source[*key] != baseline[*key])
+        || source["model"]["id"] != "gemma-4-26b-a4b-it"
+        || source["model"]["local_inference"] != false
+        || [
+            "id",
+            "provider",
+            "temperature",
+            "seed",
+            "thinking_level",
+            "local_inference",
+        ]
+        .iter()
+        .any(|key| source["model"][*key] != baseline["model"][*key])
+    {
+        return Err(
+            "Replay source native/model fingerprint differs from the pinned baseline".into(),
+        );
+    }
+    let mut calls = Vec::new();
+    // Only the contiguous initial classifier/repair prefix can be replayed.
+    // A later focused extraction or reading is never substituted for a repair.
+    for sequence in 1u64.. {
+        let request_name = format!("calls/{sequence:04}-request.json");
+        if origin["files"].get(&request_name).is_none() {
+            break;
+        }
+        let request_bytes = sealed(&request_name)?;
+        let request: Value =
+            serde_json::from_slice(&request_bytes).map_err(|error| error.to_string())?;
+        if request["stage"] != "intake"
+            || crate::horary_step::original_input(&request["input"])["recognition_phase"]
+                != "classify_question"
+        {
+            break;
+        }
+        classification_scope(case, &request, initial)?;
+        if request["sequence"].as_u64() != Some(sequence) || !request["prompt_program"].is_null() {
+            return Err("Replay classifier sequence or original teaching changed".into());
+        }
+        if sequence == 1
+            && !horary_prompt_program::digest(&request_bytes)
+                .eq_ignore_ascii_case(&task.source_request_sha256)
+        {
+            return Err("Replay must begin with the task-bound first classifier request".into());
+        }
+        let result_name = format!("calls/{sequence:04}-result.json");
+        let result_bytes = sealed(&result_name)?;
+        let result: Value =
+            serde_json::from_slice(&result_bytes).map_err(|error| error.to_string())?;
+        if result["request"] != request {
+            return Err("Replay result belongs to a different captured request".into());
+        }
+        let generation: NativeGenerationResult =
+            serde_json::from_value(result["result"]["Ok"].clone()).map_err(|error| {
+                format!("Replay requires a completed generation result: {error}")
+            })?;
+        calls.push(ClassificationCapturedCall {
+            request,
+            generation,
+            request_sha256: horary_prompt_program::digest(&request_bytes),
+            result_sha256: horary_prompt_program::digest(&result_bytes),
+            provider_receipt: result["provider_receipt"].clone(),
+        });
+    }
+    if calls.is_empty() {
+        return Err("Replay origin has no completed initial classifier capture".into());
+    }
+    Ok(ClassificationCapture {
+        calls,
+        provenance: json!({
+        "mode":"recorded_source_replay","origin_sha256":horary_prompt_program::digest(&origin_bytes),
+        "baseline_manifest_sha256":task.baseline_manifest_sha256,"source_manifest_sha256":origin_manifest_sha,
+        "source_native_fingerprint":{"repository_sha":source["repository_sha"],
+            "working_diff_sha256":source["working_diff_sha256"],"sources_sha256":horary_prompt_program::digest(source["sources"].to_string()),
+            "catalogue_version":source["catalogue_version"],"book_ocr_sha256":source["book_ocr_sha256"]},
+        "sealed_source_outcome_sha256":origin["files"]["outcome.json"],
+        "source_outcome_used_for":"closed-capture provenance only; its grades are not used",
+        "new_generation_attempts":0}),
+    })
+}
+
+fn classification_replay_matches(
+    capture: &ClassificationCapturedCall,
+    stage: Stage,
+    matter: Matter,
+    input: &Value,
+    schema: &Value,
+) -> Result<(), String> {
+    let (prompt, _) = trial_prompt(stage, matter, input, schema, None)?;
+    let prompt_sha = horary_prompt_program::digest(&prompt);
+    let schema_sha = horary_prompt_program::digest(schema.to_string());
+    let request = &capture.request;
+    if stage != Stage::Intake
+        || crate::horary_step::original_input(input)["recognition_phase"] != "classify_question"
+        || request["stage"] != "intake"
+        || request["matter"] != serde_json::to_value(matter).map_err(|error| error.to_string())?
+        || request["prompt_sha256"] != prompt_sha
+        || horary_prompt_program::digest(request["prompt"].to_string()) != prompt_sha
+        || request["schema_sha256"] != schema_sha
+        || horary_prompt_program::digest(request["schema"].to_string()) != schema_sha
+        || horary_prompt_program::digest(request["input"].to_string())
+            != horary_prompt_program::digest(input.to_string())
+    {
+        return Err("Recorded classifier prompt/schema/input does not exactly match this native invocation; no fallback or repair substitution".into());
+    }
+    Ok(())
+}
+
+struct ClassificationReplayRuntime<'a, 'b> {
+    reader: &'a Reader<'b>,
+    capture: &'a ClassificationCapture,
+}
+
+impl Runtime for ClassificationReplayRuntime<'_, '_> {
+    fn generate(
+        &self,
+        stage: Stage,
+        matter: Matter,
+        input: &Value,
+        schema: &Value,
+        audio: Option<&[u8]>,
+    ) -> Result<NativeGenerationResult, String> {
+        self.reader.check()?;
+        let sequence = self.reader.sequence.fetch_add(1, Ordering::AcqRel) + 1;
+        let captured = usize::try_from(sequence - 1)
+            .ok()
+            .and_then(|index| self.capture.calls.get(index));
+        let result = if audio.is_some() {
+            Err("Recorded classification replay accepts text only".into())
+        } else if let Some(captured) = captured {
+            classification_replay_matches(captured, stage, matter, input, schema)
+                .map(|()| captured.generation.clone())
+        } else {
+            Err(
+                "Recorded classifier prefix ended before native completion; no live fallback"
+                    .into(),
+            )
+        };
+        let (prompt, _) = trial_prompt(stage, matter, input, schema, None)?;
+        let request = json!({"sequence":sequence,"stage":stage,"matter":matter,"input":input,"schema":schema,
+            "prompt":serde_json::from_str::<Value>(&prompt).map_err(|error| error.to_string())?,
+            "prompt_sha256":horary_prompt_program::digest(&prompt),"schema_sha256":horary_prompt_program::digest(schema.to_string()),
+            "input_sha256":horary_prompt_program::digest(input.to_string()),"provider":"recorded_source_replay"});
+        write_new(
+            &self
+                .reader
+                .dir
+                .join("calls")
+                .join(format!("{sequence:04}-request.json")),
+            &request,
+        )?;
+        self.reader.keep_call(sequence, json!({"request":request,"result":result.as_ref().map_err(String::as_str),
+            "provider_receipt":{"submitted":false,"generation_attempts":[],"provenance":self.capture.provenance,
+                "captured_request_sha256":captured.map(|call| &call.request_sha256),
+                "captured_result_sha256":captured.map(|call| &call.result_sha256)},
+            "recorded_source_provider_receipt":captured.map(|call| &call.provider_receipt)}))?;
+        result
+    }
+    fn generate_batch(
+        &self,
+        _tasks: &[(Stage, Matter, Value, Value)],
+    ) -> Result<Vec<NativeGenerationResult>, String> {
+        Err("Recorded classification replay cannot execute another stage or batch".into())
+    }
+    fn publish(&self, session: &mut Session) -> Result<(), String> {
+        self.reader.publish(session)
+    }
+    fn check(&self) -> Result<(), String> {
+        self.reader.check()
+    }
+    fn directory(&self) -> &Path {
+        self.reader.directory()
+    }
+}
+
+#[test]
+#[ignore = "Hosted classification function: hash-bound HORARY_NEURAL_TASK, fresh HORARY_EVAL_EVIDENCE and Google credential locator required"]
+fn real_model_classification_function() -> Result<(), String> {
+    let task_bytes = fs::read(PathBuf::from(
+        std::env::var_os("HORARY_NEURAL_TASK").ok_or("Set HORARY_NEURAL_TASK")?,
+    ))
+    .map_err(|error| error.to_string())?;
+    let task: ClassificationTask =
+        serde_json::from_slice(&task_bytes).map_err(|error| error.to_string())?;
+    if task.replay_completed_capture && task.program_file.is_some() {
+        return Err("Recorded source replay cannot apply a prompt program".into());
+    }
+    let case = catalogue()?
+        .into_iter()
+        .find(|case| case.id == task.case_id)
+        .ok_or("Classification task names no authored catalogue case")?;
+    let source_dir = task
+        .source_case_directory
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if source_dir.file_name().and_then(|name| name.to_str()) != Some(case.id.as_str()) {
+        return Err("Classification source directory must name its authored case".into());
+    }
+    let request_path = if task.source_request_file.is_absolute() {
+        task.source_request_file.clone()
+    } else {
+        source_dir.join(&task.source_request_file)
+    }
+    .canonicalize()
+    .map_err(|error| error.to_string())?;
+    if !request_path.starts_with(&source_dir) {
+        return Err("Captured classification request must belong to its source case".into());
+    }
+    let request_bytes = classification_source_bytes(&request_path, &task.source_request_sha256)?;
+    let initial_bytes = classification_source_bytes(
+        &source_dir.join("initial.json"),
+        &task.source_initial_sha256,
+    )?;
+    let baseline_path = source_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("Classification source campaign unavailable")?
+        .join("manifest.json");
+    let baseline_bytes =
+        classification_source_bytes(&baseline_path, &task.baseline_manifest_sha256)?;
+    let baseline: Value =
+        serde_json::from_slice(&baseline_bytes).map_err(|error| error.to_string())?;
+    let request: Value =
+        serde_json::from_slice(&request_bytes).map_err(|error| error.to_string())?;
+    let initial: Value =
+        serde_json::from_slice(&initial_bytes).map_err(|error| error.to_string())?;
+    let (mut session, input) = classification_scope(&case, &request, &initial)?;
+    let max_calls = std::env::var("HORARY_EVAL_MAX_CALLS")
+        .ok()
+        .map(|value| value.parse::<u64>())
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or(3);
+    let mut limits = classification_call_limits(max_calls)?;
+    let capture = task
+        .replay_completed_capture
+        .then(|| classification_capture(&task, &case, &source_dir, &baseline, &initial))
+        .transpose()?;
+    if capture.is_some() {
+        limits["physical_generation_attempt_reservation"] = json!(0);
+    }
+    let seconds = std::env::var("HORARY_EVAL_CASE_SECONDS")
+        .ok()
+        .map(|value| value.parse::<u64>())
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or(90);
+    if seconds == 0 {
+        return Err("Classification case deadline must be positive".into());
+    }
+    let program_bytes = task
+        .program_file
+        .as_ref()
+        .map(fs::read)
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let program = program_bytes
+        .as_deref()
+        .map(horary_prompt_program::Program::parse)
+        .transpose()?;
+    if program.as_ref().is_some_and(|program| {
+        !program
+            .baseline_manifest_sha256
+            .eq_ignore_ascii_case(&task.baseline_manifest_sha256)
+    }) {
+        return Err(
+            "Classification prompt program belongs to a different baseline manifest".into(),
+        );
+    }
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Repository root unavailable")?
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if task.inspect_prompt_only {
+        if task.program_file.is_some() || task.replay_completed_capture {
+            return Err("Prompt inspection cannot replay or apply a program".into());
+        }
+        let matter = session.method.brief.matter;
+        let schema = crate::horary_step::response_schema_for(Stage::Intake, matter, &input, &[]);
+        let (prompt, _) = trial_prompt(Stage::Intake, matter, &input, &schema, None)?;
+        let messages: Value = serde_json::from_str(&prompt).map_err(|error| error.to_string())?;
+        let dir = PathBuf::from(
+            std::env::var_os("HORARY_EVAL_EVIDENCE")
+                .ok_or("Set a fresh prompt inspection directory")?,
+        );
+        fs::create_dir(&dir).map_err(|error| error.to_string())?;
+        write_new(
+            &dir.join("inspection.json"),
+            &json!({"scope":"classification_prompt_inspection_only",
+            "case_id":case.id,"task_sha256":horary_prompt_program::digest(&task_bytes),"prompt":messages,
+            "guide_sha256":horary_prompt_program::digest(messages[0]["content"].as_str().ok_or("No native classifier guide")?),
+            "prompt_sha256":horary_prompt_program::digest(&prompt),"schema":schema,"input":input,
+            "repository_sha":git(&root,&["rev-parse","HEAD"])?.trim(),"sources":source_hashes(&root)?,
+            "model_constructed":false,"new_generation_attempts":0}),
+        )?;
+        return Ok(());
+    }
+    let hosted = if capture.is_some() {
+        // Replay never reads the credential locator or constructs a client.
+        None
+    } else {
+        let keyfile = PathBuf::from(
+            std::env::var_os("HORARY_GOOGLE_KEY_FILE")
+                .ok_or("Hosted Google is mandatory: set HORARY_GOOGLE_KEY_FILE")?,
+        );
+        if keyfile
+            .canonicalize()
+            .map_err(|_| "Hosted credential unavailable")?
+            .starts_with(&root)
+        {
+            return Err("Keep the hosted credential outside the repository".into());
+        }
+        Some(Arc::new(crate::hosted_gemma_eval::Client::from_file(
+            &keyfile, 1,
+        )?))
+    };
+    // Live mode has a mandatory hosted client; replay uses only its opaque
+    // Runtime below. Neither path can reach Reader's native generate fallback.
+    let model = hosted
+        .as_ref()
+        .map(|client| client.metadata())
+        .unwrap_or_else(
+            || json!({"provider":"recorded_source_replay","new_generation_attempts":0}),
+        );
+    let dir = PathBuf::from(
+        std::env::var_os("HORARY_EVAL_EVIDENCE")
+            .ok_or("Set a fresh HORARY_EVAL_EVIDENCE directory")?,
+    );
+    fs::create_dir(&dir)
+        .map_err(|error| format!("Classification evidence must be fresh: {error}"))?;
+    fs::create_dir(dir.join("calls")).map_err(|error| error.to_string())?;
+    fs::create_dir(dir.join("checkpoints")).map_err(|error| error.to_string())?;
+    for (name, bytes) in [
+        ("task.json", &task_bytes),
+        ("source-request.json", &request_bytes),
+        ("source-initial.json", &initial_bytes),
+    ] {
+        atomic_evidence_file(&dir.join(name), true, |file| {
+            file.write_all(bytes).map_err(|error| error.to_string())
+        })?;
+    }
+    if let Some(bytes) = &program_bytes {
+        atomic_evidence_file(&dir.join("prompt-program.json"), true, |file| {
+            file.write_all(bytes).map_err(|error| error.to_string())
+        })?;
+    }
+    write_new(
+        &dir.join("manifest.json"),
+        &json!({"version":EVALUATOR_VERSION,
+        "scope":"classification_function_only","case_id":case.id,"task":task,
+        "repository_sha":git(&root, &["rev-parse", "HEAD"])?.trim(),
+        "working_diff_sha256":horary_lessons::digest(&git(&root, &["diff", "--binary", "HEAD"])?),
+        "sources":source_hashes(&root)?,
+        "task_sha256":horary_prompt_program::digest(&task_bytes),"limits":limits,
+        "logical_model_call_cap":max_calls,"physical_generation_attempt_reservation":limits["physical_generation_attempt_reservation"],
+        "program_sha256":program_bytes.as_ref().map(horary_prompt_program::digest),
+        "model":model,"replay_provenance":capture.as_ref().map(|capture| &capture.provenance),
+        "entry_point":"horary_executor::execute(Stage::Intake)",
+        "case_seconds":seconds,"full_reading":false}),
+    )?;
+    let state = NativeLlamaState::default();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let deadline = Deadline::start(seconds, cancelled.clone());
+    let reader = Reader {
+        state: &state,
+        hosted,
+        dir: dir.clone(),
+        cancelled,
+        calls: Mutex::new(Vec::new()),
+        sequence: AtomicU64::new(0),
+        checkpoints: AtomicU64::new(0),
+        max_calls,
+        device_available: case.device_available,
+        device_calls: AtomicU64::new(0),
+        dispatcher: None,
+        group: None,
+        program: program.map(Arc::new),
+    };
+    write_new(
+        &dir.join("initial.json"),
+        &json!({"session":session,"candidates":session.candidates}),
+    )?;
+    let started = Instant::now();
+    let mut result = if let Some(capture) = &capture {
+        let replay = ClassificationReplayRuntime {
+            reader: &reader,
+            capture,
+        };
+        crate::horary_executor::execute(&mut session, &replay, Stage::Intake, input, &[], None)
+    } else {
+        crate::horary_executor::execute(&mut session, &reader, Stage::Intake, input, &[], None)
+    };
+    if result.is_ok()
+        && capture.as_ref().is_some_and(|capture| {
+            u64::try_from(capture.calls.len()).ok() != Some(reader.sequence.load(Ordering::Acquire))
+        })
+    {
+        result = Err("Native completion did not consume the sealed classifier/repair prefix; replay cannot substitute a changed acceptance path".into());
+    }
+    drop(deadline);
+    let error = result.as_ref().err().cloned();
+    if let Some(error) = &error {
+        session.method.flow.pause(error.clone());
+    }
+    let turn = result
+        .as_ref()
+        .ok()
+        .and_then(Option::as_ref)
+        .and_then(|data| data.turn());
+    let classification = classification_grade(
+        &case,
+        turn.and_then(|turn| turn.frame.as_ref()),
+        error.as_deref(),
+    );
+    let not_run = || crate::reading_eval::Gate {
+        status: crate::reading_eval::Status::NotRun,
+        failures: Vec::new(),
+        basis: "Classification function only: this hurdle was not executed".into(),
+    };
+    let hurdles = crate::reading_eval::Hurdles {
+        classification,
+        elicitation: not_run(),
+        extraction: not_run(),
+        reading: not_run(),
+    };
+    let calls = reader
+        .calls
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone();
+    let attempts = classification_generation_attempts(&calls);
+    let execution_status = if error.is_none() {
+        "completed"
+    } else if reader.cancelled.load(Ordering::Acquire) {
+        "deadline_cancelled"
+    } else if error
+        .as_deref()
+        .is_some_and(|error| error.contains("call budget exhausted"))
+    {
+        "logical_call_budget_exhausted"
+    } else if capture.is_some() {
+        "recorded_source_replay_interrupted"
+    } else if calls.iter().any(|call| call["result"]["Err"].is_string()) {
+        "hosted_transport_or_provider_error"
+    } else {
+        "executor_or_evidence_error"
+    };
+    let observed = error.is_none();
+    let pass =
+        observed.then_some(hurdles.classification.status == crate::reading_eval::Status::Pass);
+    write_new(&dir.join("calls.json"), &calls)
+        .map_err(|recording| retain_execution_error(recording, error.as_deref()))?;
+    write_new(&dir.join("final.json"), &json!({"session":session,"candidates":session.candidates,"returned_turn":turn,"hurdles":hurdles}))
+        .map_err(|recording| retain_execution_error(recording, error.as_deref()))?;
+    let outcome = json!({"id":case.id,"scope":"classification_function_only","full_reading":false,
+        "hurdles":hurdles,"classification_observed":observed,"classification_pass":pass,
+        "classification_score":pass.map(u8::from),"classification_execution_completed":observed,
+        "execution_status":execution_status,"infrastructure_error":error,"returned_turn":turn,
+        "model_calls":if capture.is_some(){0}else{calls.len()},"logical_calls":calls.len(),"logical_model_call_cap":max_calls,
+        "physical_generation_attempt_reservation":limits["physical_generation_attempt_reservation"],
+        "physical_generation_attempts":attempts,"hosted_http_requests":attempts,
+        "rejected_attempts":session.method.records.iter().filter(|record| record.validation_error.is_some()).count(),
+        "elapsed_ms":started.elapsed().as_millis(),"deadline_cancelled":reader.cancelled.load(Ordering::Acquire),
+        "decoder_mode":if capture.is_some(){"recorded_source_replay"}else{"hosted_unconstrained_text"},
+        "replay_provenance":capture.as_ref().map(|capture| &capture.provenance),
+        "new_generation_attempts":attempts,"source_request_sha256":task.source_request_sha256,
+        "source_initial_sha256":task.source_initial_sha256,"baseline_manifest_sha256":task.baseline_manifest_sha256});
+    write_new(&dir.join("outcome.json"), &outcome)
+        .map_err(|recording| retain_execution_error(recording, error.as_deref()))?;
+    println!("{}", outcome);
+    error.map_or(Ok(()), Err)
+}
+
+#[test]
+fn classification_capture_rejects_specialist_scope_without_resetting_it() {
+    let case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "contact-explicit")
+        .unwrap();
+    let mut session = Session::default();
+    session.messages.push(Message {
+        role: "user".into(),
+        text: case.words.clone(),
+    });
+    let initial = json!({"session":session,"candidates":[]});
+    let request = json!({"stage":"intake","matter":"other","input":{
+        "recognition_phase":"classify_question","latest_words":case.words,"canonical_question":"",
+        "chart_exists":false,"consultation":{"frame":{"state":"missing"}},
+        "pending_requirement":null,"consultation_state":{"chart":null,"interpretation_exists":false,
+            "completed_steps":[],"unfinished_step":null,"pending_user_requests":[]}}});
+    assert!(classification_scope(&case, &request, &initial).is_ok());
+    let mut repaired = request.clone();
+    repaired["input"] = json!({"original_input":request["input"],"previous_worksheet":{"frame":{"method":"parcel","facet":"timing"}}});
+    assert_eq!(
+        classification_scope(&case, &repaired, &initial).unwrap().1,
+        request["input"]
+    );
+    for altered in [
+        json!({"stage":"conversation"}),
+        json!({"recognition_phase":"complete_selected_program"}),
+        json!({"chart_exists":true}),
+    ] {
+        let mut wrong = request.clone();
+        for (key, value) in altered.as_object().unwrap() {
+            if key == "stage" {
+                wrong[key] = value.clone();
+            } else {
+                wrong["input"][key] = value.clone();
+            }
+        }
+        assert!(classification_scope(&case, &wrong, &initial).is_err());
+    }
+    let mut specialist = initial.clone();
+    specialist["session"]["method"]["brief"]["matter"] = json!("money");
+    assert!(classification_scope(&case, &request, &specialist)
+        .err()
+        .unwrap()
+        .contains("nothing is cleared"));
+    let mut chart = initial.clone();
+    chart["session"]["chart"] = json!({"accepted":true});
+    assert!(classification_scope(&case, &request, &chart).is_err());
+    let mut wrong_question = request;
+    wrong_question["input"]["latest_words"] = json!("A different question");
+    assert!(classification_scope(&case, &wrong_question, &initial).is_err());
+}
+
+#[test]
+fn classification_grade_observes_only_authored_method_and_facet() {
+    use crate::reading_eval::Status;
+    let mut case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "contact-explicit")
+        .unwrap();
+    let correct = reading_contracts::Frame {
+        method: case.method,
+        facet: case.expected.facet.unwrap(),
+    };
+    assert_eq!(
+        classification_grade(&case, Some(&correct), None).status,
+        Status::Pass
+    );
+    let wrong_facet = reading_contracts::Frame {
+        facet: Facet::Timing,
+        ..correct.clone()
+    };
+    assert_eq!(
+        classification_grade(&case, Some(&wrong_facet), None).status,
+        Status::Fail
+    );
+    let wrong_method = reading_contracts::Frame {
+        method: Method::Parcel,
+        ..correct.clone()
+    };
+    assert_eq!(
+        classification_grade(&case, Some(&wrong_method), None).status,
+        Status::Fail
+    );
+    assert_eq!(classification_grade(&case, None, None).status, Status::Fail);
+    assert_eq!(
+        classification_grade(&case, Some(&correct), Some("Hosted transport interrupted")).status,
+        Status::NotRun
+    );
+    // Exercise both authored allow-list fields independently of the fallback.
+    case.expected.allowed_methods = Some(vec![Method::Contact, Method::Parcel]);
+    case.expected.allowed_facets = vec![Facet::Timing];
+    assert_eq!(
+        classification_grade(&case, Some(&wrong_method), None).status,
+        Status::Pass
+    );
+    assert_eq!(
+        classification_grade(&case, Some(&wrong_facet), None).status,
+        Status::Pass
+    );
+    case.expected.allowed_methods = None;
+    case.expected.allowed_facets.clear();
+    case.expected.facet = None;
+    assert_eq!(classification_grade(&case, None, None).status, Status::Fail);
+    case.expected.allowed_methods = Some(vec![Method::Unclassified]);
+    case.expected.needs = vec![RequirementKey::Frame];
+    assert_eq!(classification_grade(&case, None, None).status, Status::Fail);
+}
+
+#[test]
+fn classification_budget_reserves_service_retries_and_counts_physical_attempts() {
+    let limits = classification_call_limits(3).unwrap();
+    assert_eq!(limits["logical_model_call_cap"], 3);
+    assert_eq!(limits["physical_generation_attempt_reservation"], 9);
+    assert!(classification_call_limits(0).is_err());
+    assert!(classification_call_limits(u64::MAX).is_err());
+    let calls = vec![
+        json!({"provider_receipt":{"submitted":true,"generation_attempts":[{"submitted":true,"http_status":503},{"submitted":true,"http_status":200}]}}),
+        json!({"provider_receipt":{"submitted":false,"generation_attempts":[{"submitted":false}]}}),
+        json!({"provider_receipt":{"submitted":true,"generation_attempts":[{"submitted":true,"transport_error":"uncertain"}]}}),
+    ];
+    assert_eq!(classification_generation_attempts(&calls), 3);
+}
+
+#[test]
+fn classification_sources_reject_hash_changes_before_execution() {
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("request.json");
+    fs::write(&file, b"{\"stage\":\"intake\"}").unwrap();
+    let bytes = fs::read(&file).unwrap();
+    let digest = horary_prompt_program::digest(&bytes);
+    assert_eq!(classification_source_bytes(&file, &digest).unwrap(), bytes);
+    fs::write(&file, b"{\"stage\":\"conversation\"}").unwrap();
+    assert!(classification_source_bytes(&file, &digest)
+        .unwrap_err()
+        .contains("hash changed"));
+}
+
+#[test]
+fn classification_replay_rejects_response_prompt_schema_and_input_tampering() {
+    let input = json!({"recognition_phase":"classify_question","latest_words":"Will she call?",
+        "consultation":{"frame":{"state":"missing"}}});
+    let schema = crate::horary_step::response_schema_for(Stage::Intake, Matter::Other, &input, &[]);
+    let (prompt, _) = trial_prompt(Stage::Intake, Matter::Other, &input, &schema, None).unwrap();
+    let generation: NativeGenerationResult = serde_json::from_value(json!({
+        "content":"{}","promptTokens":0,"generatedTokens":0,"elapsedMs":0,"tokensPerSecond":0.,
+        "promptCacheHit":false,"cachedPromptTokens":0,"prefilledPromptTokens":0}))
+    .unwrap();
+    let mut captured = ClassificationCapturedCall {
+        request: json!({"sequence":1,"stage":"intake","matter":"other","input":input,"schema":schema,
+            "prompt":serde_json::from_str::<Value>(&prompt).unwrap(),
+            "prompt_sha256":horary_prompt_program::digest(&prompt),"schema_sha256":horary_prompt_program::digest(schema.to_string())}),
+        generation,
+        request_sha256: "source-request".into(),
+        result_sha256: "source-result".into(),
+        provider_receipt: Value::Null,
+    };
+    assert!(classification_replay_matches(
+        &captured,
+        Stage::Intake,
+        Matter::Other,
+        &input,
+        &schema
+    )
+    .is_ok());
+    let original_request = captured.request.clone();
+    captured.request["prompt"][0]["content"] = json!("Tampered teaching");
+    assert!(classification_replay_matches(
+        &captured,
+        Stage::Intake,
+        Matter::Other,
+        &input,
+        &schema
+    )
+    .is_err());
+    captured.request = original_request.clone();
+    captured.request["schema"]["properties"]["frame"] = json!({"type":"null"});
+    assert!(classification_replay_matches(
+        &captured,
+        Stage::Intake,
+        Matter::Other,
+        &input,
+        &schema
+    )
+    .is_err());
+    captured.request = original_request;
+    captured.request["input"]["latest_words"] = json!("Another question");
+    assert!(classification_replay_matches(
+        &captured,
+        Stage::Intake,
+        Matter::Other,
+        &input,
+        &schema
+    )
+    .is_err());
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("0001-result.json");
+    let result = json!({"result":{"Ok":captured.generation}});
+    let bytes = serde_json::to_vec(&result).unwrap();
+    let seal = horary_prompt_program::digest(&bytes);
+    fs::write(&file, &bytes).unwrap();
+    assert!(classification_source_bytes(&file, &seal).is_ok());
+    let mut altered = result;
+    altered["result"]["Ok"]["content"] = json!("A substituted answer");
+    fs::write(&file, serde_json::to_vec(&altered).unwrap()).unwrap();
+    assert!(classification_source_bytes(&file, &seal).is_err());
+}
+
+#[test]
+fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
+    let case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "contact-explicit")
+        .unwrap();
+    let input = json!({"recognition_phase":"classify_question","latest_words":case.words,
+        "spoken_input":false,"consultation":reading_contracts::Consultation::default()});
+    let schema = crate::horary_step::response_schema_for(Stage::Intake, Matter::Other, &input, &[]);
+    let (prompt, _) = trial_prompt(Stage::Intake, Matter::Other, &input, &schema, None).unwrap();
+    // The captured frame is deliberately contrary to this question's gold.
+    // Native acceptance and authored grading must run again on that raw result.
+    let content =
+        json!({"intent":"read","question":case.words,"frame":{"method":"parcel","facet":"event"},
+        "people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"",
+        "focus":"judgment","restore_revision":null})
+        .to_string();
+    let generation = serde_json::from_value(json!({"content":content,
+        "promptTokens":0,"generatedTokens":0,"elapsedMs":0,"tokensPerSecond":0.,
+        "promptCacheHit":false,"cachedPromptTokens":0,"prefilledPromptTokens":0}))
+    .unwrap();
+    let capture = ClassificationCapture {
+        calls: vec![ClassificationCapturedCall {
+            request: json!({"sequence":1,"stage":"intake","matter":"other","input":input,"schema":schema,
+            "prompt":serde_json::from_str::<Value>(&prompt).unwrap(),
+            "prompt_sha256":horary_prompt_program::digest(&prompt),"schema_sha256":horary_prompt_program::digest(schema.to_string())}),
+            generation,
+            request_sha256: "source-request".into(),
+            result_sha256: "source-result".into(),
+            provider_receipt: json!({"submitted":true}),
+        }],
+        provenance: json!({"mode":"recorded_source_replay","new_generation_attempts":0}),
+    };
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir(directory.path().join("calls")).unwrap();
+    fs::create_dir(directory.path().join("checkpoints")).unwrap();
+    let state = NativeLlamaState::default();
+    let reader = Reader {
+        state: &state,
+        hosted: None,
+        dir: directory.path().into(),
+        cancelled: Arc::new(AtomicBool::new(false)),
+        calls: Mutex::new(Vec::new()),
+        sequence: AtomicU64::new(0),
+        checkpoints: AtomicU64::new(0),
+        max_calls: 1,
+        device_available: false,
+        device_calls: AtomicU64::new(0),
+        dispatcher: None,
+        group: None,
+        program: None,
+    };
+    let runtime = ClassificationReplayRuntime {
+        reader: &reader,
+        capture: &capture,
+    };
+    let mut session = Session::default();
+    let result =
+        crate::horary_executor::execute(&mut session, &runtime, Stage::Intake, input, &[], None)
+            .unwrap()
+            .unwrap();
+    let frame = result.turn().unwrap().frame.as_ref();
+    assert_eq!(
+        classification_grade(&case, frame, None).status,
+        crate::reading_eval::Status::Fail
+    );
+    assert_eq!(session.method.records.len(), 1);
+    assert!(session.method.records[0].validation_error.is_none());
+    let calls = reader.calls.lock().unwrap();
+    assert_eq!(classification_generation_attempts(&calls), 0);
+    assert_eq!(
+        calls[0]["provider_receipt"]["captured_result_sha256"],
+        "source-result"
+    );
+    assert!(runtime
+        .check()
+        .unwrap_err()
+        .contains("call budget exhausted"));
+}

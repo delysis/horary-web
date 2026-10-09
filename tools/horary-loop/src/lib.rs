@@ -5,7 +5,7 @@ pub mod catalogue;
 pub mod comparison;
 mod packet;
 mod refs;
-mod review_events;
+pub mod review_events;
 mod schema_check;
 mod store;
 mod types;
@@ -1257,6 +1257,53 @@ fn reconcile(state: &Path, ledger: &mut Ledger) -> Result<()> {
     Ok(())
 }
 
+/// Shared tool-free Codex invocation for synthetic reviewers and optimizer reflection.
+/// Reuses saved login; only the reviewer output is schema-constrained.
+pub fn self_contained_codex_arguments(schema: &Path, answer: &Path) -> Vec<String> {
+    let mut args = vec![
+        "exec".to_owned(),
+        "--sandbox".into(),
+        "read-only".into(),
+        "--ephemeral".into(),
+        "--json".into(),
+        "--skip-git-repo-check".into(),
+        "--color".into(),
+        "never".into(),
+        "--output-schema".into(),
+        schema.display().to_string(),
+        "-o".into(),
+        answer.display().to_string(),
+        "-".into(),
+    ];
+    for feature in [
+        "shell_tool",
+        "unified_exec",
+        "apps",
+        "plugins",
+        "code_mode_host",
+        "code_mode",
+        "browser_use",
+        "computer_use",
+        "view_image",
+        "image_generation",
+        "hooks",
+    ] {
+        args.splice(1..1, ["--disable".into(), feature.into()]);
+    }
+    args.splice(
+        1..1,
+        [
+            "--enable".into(),
+            "skip_host_skill_discovery".into(),
+            "-c".into(),
+            "web_search=\"disabled\"".into(),
+            "-c".into(),
+            "suppress_unstable_features_warning=true".into(),
+        ],
+    );
+    args
+}
+
 fn execute(options: &Options, split: &Split, ledger: &mut Ledger, id: &str) -> Result<()> {
     let job = ledger.jobs.get(id).ok_or("Missing prepared job")?.clone();
     if job.status == Status::Complete {
@@ -1309,47 +1356,7 @@ fn execute(options: &Options, split: &Split, ledger: &mut Ledger, id: &str) -> R
         .create_new(true)
         .open(attempt_dir.join("stderr.txt"))
         .map_err(|e| e.to_string())?;
-    let mut args = vec![
-        "exec".to_owned(),
-        "--sandbox".into(),
-        "read-only".into(),
-        "--ephemeral".into(),
-        "--json".into(),
-        "--skip-git-repo-check".into(),
-        "--color".into(),
-        "never".into(),
-        "--output-schema".into(),
-        dir.join("schema.json").display().to_string(),
-        "-o".into(),
-        answer.display().to_string(),
-        "-".into(),
-    ];
-    for feature in [
-        "shell_tool",
-        "unified_exec",
-        "apps",
-        "plugins",
-        "code_mode_host",
-        "code_mode",
-        "browser_use",
-        "computer_use",
-        "view_image",
-        "image_generation",
-        "hooks",
-    ] {
-        args.splice(1..1, ["--disable".into(), feature.into()]);
-    }
-    args.splice(
-        1..1,
-        [
-            "--enable".into(),
-            "skip_host_skill_discovery".into(),
-            "-c".into(),
-            "web_search=\"disabled\"".into(),
-            "-c".into(),
-            "suppress_unstable_features_warning=true".into(),
-        ],
-    );
+    let args = self_contained_codex_arguments(&dir.join("schema.json"), &answer);
     store::atomic_json(
         &attempt_dir.join("invocation.json"),
         &json!({"executable":options.codex,"arguments":args,
@@ -1533,7 +1540,7 @@ fn run_process(
 }
 /// Saved Codex login is the only reviewer authority. Do not inspect or inherit
 /// inference credentials (including their private file locator).
-fn remove_provider_credentials(command: &mut Command) {
+pub fn remove_provider_credentials(command: &mut Command) {
     for name in [
         "OPENAI_API_KEY",
         "CODEX_API_KEY",
