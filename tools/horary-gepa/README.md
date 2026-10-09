@@ -57,6 +57,8 @@ Ordered immutable operation receipts reconstruct the engine's deterministic RNG,
 
 GEPA's metric-call setting is an iteration-boundary budget and may overshoot by one iteration. Separate hard pre-submission reservations bound teacher calls and physical student generation attempts, including the native client's maximum three completed-service-error attempts per logical call. Uncertain operations retain their reservations. Report metric evaluations, logical calls, physical attempts and cache reuse separately.
 
+Fresh native children use a fixed 14,000-input-token/minute client budget. The controller leaves 65 seconds before each fresh function, including the first one after a prior owner exits; per-function client restarts cannot bypass token pacing. Completed-operation replay, cache hits, inspection and Codex reflection do not consume this wait. This conservative pilot pacing is separate from model inference latency.
+
 `operations/` retains exact teacher prompts, schemas, JSONL events, answers, actual native calls, checkpoints, rejection feedback, final frames and individual gates. `interruptions/` preserves each stop. `search-result.json` retains candidates, parents and development scores; `selected-program.json` is a reviewable overlay, never an automatic application change. A selected overlay still needs fresh complete-journey regression, independent source review and the fixed reserved comparison. Previously paid judge/writer jobs in other rounds stay intact and are not resubmitted by this tool.
 
 ## Offline checks

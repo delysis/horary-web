@@ -106,6 +106,16 @@ pub fn evaluate(
                 return Err(format!("Existing evaluation owner PID {pid} still runs; fresh Gemma calls are withheld. Completed archival controls and reflection may be reused when resumed."));
             }
         }
+        // Each native function has its own hosted client/token window. Leave
+        // one full quota window between children, including after the previous
+        // owner exits, so restarting clients cannot bypass token pacing.
+        println!(
+            "{}",
+            json!({"event":"provider_quota_spacing","case":example.id,"milliseconds":65_000})
+        );
+        for _ in 0..65 {
+            thread::sleep(Duration::from_secs(1));
+        }
     }
     let reservation = if archival {
         0
@@ -147,6 +157,7 @@ pub fn evaluate(
             "HORARY_EVAL_CASE_SECONDS",
             plan.function_seconds.to_string(),
         )
+        .env("HORARY_GOOGLE_INPUT_TPM", "14000")
         .env_remove("HORARY_NATIVE_LLAMA_TEST_MODEL")
         .env_remove("HORARY_EVAL_PROGRAM")
         .env_remove("OPENAI_API_KEY")
