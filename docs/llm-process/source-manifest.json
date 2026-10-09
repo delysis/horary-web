@@ -263,7 +263,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "88d14299f0308684607c955bfc98fb7d819d44e2a78ab20856719c076dbd73b1"
+      "sha256": "6ed1a2db7fc86668f11bfdc1e47aedde0cf7f142335423c82787ab23eee3308b"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -363,7 +363,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "081556d00d040060a0831ba3b898bff00a96401a1a68bf95bce5ddb88abb3004"
+      "sha256": "d049437343fbf7b9bb60054cdca0bcf2bee67201afb440ddc973f79a4e7759dd"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",
@@ -375,11 +375,11 @@
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "e3d93fdad5c109dab389b922d868444b6e7d0ab1e67ee6d3b25a1a914d96730f"
+      "sha256": "908063413469b1f423019f820d1125549036486110d950f6f1380fb9ccd9021c"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "e3c65be2100cfd763f7bb9a72781994a754b651ab21f1a416c7fb04443cba1ad"
+      "sha256": "8f28a71b60bb7374e4ceb204bd2e94555a74f26f8409e54422fe43cabfb6353c"
     },
     {
       "path": "tools/horary-gepa/src/metric.rs",
@@ -387,15 +387,19 @@
     },
     {
       "path": "tools/horary-gepa/src/native.rs",
-      "sha256": "6a966de4910bcd8c572ea27f2effa2a0004525752ff31c8729497fe66fbc4ade"
+      "sha256": "b3baf5cd1368d5c8610fb0995a3703b6db778b34a733a3102b51e9e3fef00a5d"
+    },
+    {
+      "path": "tools/horary-gepa/src/recovery.rs",
+      "sha256": "8027ebc31cea975c6cf31ee83d563a23ded93ff71b32540c864619a6fab9e8d2"
     },
     {
       "path": "tools/horary-gepa/src/review.rs",
-      "sha256": "f6d30262adce67f622ed2a9c59af28a3bd3fe9c5324cfa24059fb9aa09039997"
+      "sha256": "3a7665410a81bb222c979db972a465391395bda599350252494a9ee0969bbfd2"
     },
     {
       "path": "tools/horary-gepa/src/status.rs",
-      "sha256": "802b680167b3eeb5bb165300c1bb86a22b008e5057fbb8788e764098f212c432"
+      "sha256": "6e06e5fd2ee40d964907391b563a331771994db22961cb1cba4ce3574bab960d"
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",

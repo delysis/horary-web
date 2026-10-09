@@ -136,6 +136,22 @@ pub fn inspect(root: &Path) -> Result<Value> {
     let plan = load(&plan_file)?;
     let plan_sha = digest(read(&plan_file)?);
     let mut issues = Vec::new();
+    let recovery = plan.get("recovery").map(|value| {
+        let recovery: crate::recovery::Recovery =
+            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        let materialized: crate::Plan =
+            serde_json::from_value(plan.clone()).map_err(|e| e.to_string())?;
+        recovery.verify_plan(&materialized)?;
+        Ok::<_, String>(recovery)
+    });
+    let recovery = match recovery {
+        Some(Ok(value)) => Some(value),
+        Some(Err(error)) => {
+            issues.push(format!("Recovery ancestry is unverified: {error}"));
+            None
+        }
+        None => None,
+    };
     let mut operations = Vec::new();
     let mut measurements = Vec::new();
     let mut reviews = Vec::new();
@@ -245,6 +261,22 @@ pub fn inspect(root: &Path) -> Result<Value> {
         } else {
             None
         };
+        if let Some(settled) = &response {
+            if settled.artifacts.contains("cache-source.json") {
+                let source = load(&ordinary_path(&directory, "cache-source.json")?)?;
+                if source["type"] == "predecessor_import" {
+                    match recovery
+                        .as_ref()
+                        .ok_or("Missing verified recovery ancestry".to_string())
+                        .and_then(|r| {
+                            crate::recovery::verify_import(r, &source).map_err(|e| e.to_string())
+                        }) {
+                        Ok(()) => {}
+                        Err(error) => errors.push(error.to_string()),
+                    }
+                }
+            }
+        }
         let state = if !errors.is_empty() {
             "unverified"
         } else if response.is_some() {
@@ -384,6 +416,7 @@ pub fn inspect(root: &Path) -> Result<Value> {
         "operation_counts":{"settled":operations.iter().filter(|o|o["state"]=="settled").count(),"unsettled":operations.iter().filter(|o|o["state"]=="unsettled").count(),"unverified":operations.iter().filter(|o|o["state"]=="unverified").count()},
         "budgets":budgets,"observed_native_attempts":{"settled_unique_functions":unique_native,"physical_attempts":actual_attempts,"cache_reuses":native_cache_reuse,"excludes_unsettled_calls":true},"review_cache_reuses":review_cache_reuse,
         "operations":operations,"measurements":measurements,"independent_reviews":reviews,
+        "recovery":recovery.map(|r|json!({"predecessor_state":r.predecessor_state,"inherited_reservations":r.inherited_reservations,"source_verified":true,"imports_are_cache_reuse":true})),
         "search_result_present":result_path.exists(),"search_result":result,"owner_exit":owner_exit,"interruption_records":interruptions,"integrity_issues":issues,
         "qualification":"Read-only receipt snapshot; unfinished work may still be running. Reservations are not submitted calls. No retry, promotion or interpretation qualification is authorized by this report."}),
     )

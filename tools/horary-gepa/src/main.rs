@@ -14,6 +14,14 @@ struct Cli {
 #[derive(Subcommand)]
 enum Action {
     Prepare(Box<Preparation>),
+    PrepareRecovery {
+        #[arg(long)]
+        predecessor: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+        #[arg(long)]
+        audit: PathBuf,
+    },
     Run {
         #[arg(long)]
         state: PathBuf,
@@ -117,7 +125,7 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             let plan=Plan {version:if function == Function::Classification {1} else {2},engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
                 manifest_sha256:String::new(),split_file:std::fs::canonicalize(split).map_err(|error|error.to_string())?,split_sha256:String::new(),
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
-                codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
+                codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
                 function,target_method,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
                 qualification:if function == Function::Classification {
@@ -130,6 +138,19 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 "{}",
                 serde_json::json!({"prepared":state,"engine_rev":ENGINE_REV,"training":plan.training.iter().map(|example|&example.id).collect::<Vec<_>>(),
                 "development":plan.development.iter().map(|example|&example.id).collect::<Vec<_>>(),"reserved_case_count":plan.reserved_ids.len(),"components":plan.seed.keys().collect::<Vec<_>>()})
+            );
+        }
+        Action::PrepareRecovery {
+            predecessor,
+            state,
+            audit,
+        } => {
+            let controller = std::env::current_exe().map_err(|e| e.to_string())?;
+            let plan = horary_gepa::recovery::prepare(&predecessor, &state, &audit, &controller)?;
+            println!(
+                "{}",
+                serde_json::json!({"prepared":state,"predecessor":predecessor,"new_model_calls":0,
+                "remaining_hard_budgets":{"physical":plan.max_physical_generation_attempts,"review":plan.max_review_calls,"teacher":plan.max_teacher_calls}})
             );
         }
         Action::Run { state } => {

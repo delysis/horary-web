@@ -4,6 +4,7 @@ pub mod executable;
 pub mod journal;
 pub mod metric;
 pub mod native;
+pub mod recovery;
 pub mod review;
 pub mod status;
 pub mod teacher;
@@ -205,6 +206,8 @@ pub struct Plan {
     pub codex_executable_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub codex_snapshot: Option<executable::Support>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery: Option<recovery::Recovery>,
     pub guide: String,
     pub guide_sha256: String,
     pub seed: Candidate,
@@ -412,6 +415,9 @@ impl Plan {
             executable::verify_snapshot(&self.codex, &self.codex_executable_sha256, support)?;
         } else {
             verify(&self.codex, &self.codex_executable_sha256)?;
+        }
+        if let Some(recovery) = &self.recovery {
+            recovery.verify_plan(self)?;
         }
         for example in self.training.iter().chain(&self.development) {
             verify(&example.inspection_file, &example.inspection_sha256)?;
@@ -838,7 +844,7 @@ mod tests {
         fs::write(file, "altered source").unwrap();
         assert!(book.excerpts().unwrap_err().contains("Source changed"));
     }
-    fn plan() -> Plan {
+    pub(crate) fn plan() -> Plan {
         let guide = format!(
             "{}\n<book_extracts>Original immutable source passage.</book_extracts>\n{}",
             "Original teaching and decision examples. ".repeat(4),
@@ -878,6 +884,7 @@ mod tests {
             codex: "codex".into(),
             codex_executable_sha256: digest("codex"),
             codex_snapshot: None,
+            recovery: None,
             guide_sha256: digest(&guide),
             guide,
             seed,

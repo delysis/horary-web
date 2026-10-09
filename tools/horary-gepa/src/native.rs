@@ -92,6 +92,29 @@ pub fn evaluate(
             }
         }
     }
+    if let Some(previous) = crate::recovery::native_source(plan, &request)? {
+        let response = load(&previous.join("response.json"))?;
+        if response["cache_identity"] != cache_key {
+            return Err("Imported native response differs from its exact request identity".into());
+        }
+        let directory = match journal.begin(plan.function.metric(), &request, 0, 0)? {
+            Operation::Reused(value) => return Ok(value),
+            Operation::Fresh(directory) => directory,
+        };
+        keep(
+            &directory.join("cache-source.json"),
+            &crate::recovery::import_receipt(plan, &previous)?,
+        )?;
+        journal.finish(&directory, &response)?;
+        fs::create_dir_all(cache.parent().ok_or("No cache directory")?)
+            .map_err(|e| e.to_string())?;
+        keep(
+            &cache,
+            &json!({"operation":directory.strip_prefix(&journal.root).map_err(|e|e.to_string())?,
+            "completed_sha256":digest(read(&directory.join("completed.json"))?)}),
+        )?;
+        return Ok(response);
+    }
     if !archival {
         if std::env::var_os("HORARY_GOOGLE_KEY_FILE").is_none() {
             return Err(
