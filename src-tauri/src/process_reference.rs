@@ -64,6 +64,7 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/README.md",
     "tools/horary-gepa/src/lib.rs",
     "tools/horary-gepa/src/main.rs",
+    "tools/horary-gepa/src/executable.rs",
     "tools/horary-gepa/src/journal.rs",
     "tools/horary-gepa/src/native.rs",
     "tools/horary-gepa/src/teacher.rs",

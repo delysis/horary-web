@@ -472,12 +472,9 @@ pub fn run(mut options: Options) -> Result<()> {
                 (judge_prompt(&view)?, refs::schema(types::judge_schema()))
             };
             let submitted_bytes = prompt.len() + schema.to_string().len();
-            if submitted_bytes > 60_000 && ids.len() > 1 {
+            if !review_packet_fits(submitted_bytes, ids.len())? {
                 ids.pop();
                 continue;
-            }
-            if submitted_bytes > 120_000 {
-                return Err(format!("Single-case review still exceeds 120KB cap ({submitted_bytes} bytes); no Codex submission occurred"));
             }
             println!(
                 "Bounded {kind} packet: {} cases, {submitted_bytes} bytes including output schema",
@@ -502,6 +499,18 @@ pub fn run(mut options: Options) -> Result<()> {
     }
     FileExt::unlock(&lock).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Preserve complete single-case reading evidence under a separate hard
+/// bound; larger batches shrink without truncating facts, replies or citations.
+fn review_packet_fits(submitted_bytes: usize, cases: usize) -> store::Result<bool> {
+    if submitted_bytes > 60_000 && cases > 1 {
+        return Ok(false);
+    }
+    if submitted_bytes > 160_000 {
+        return Err(format!("Single-case review exceeds 160KB cap ({submitted_bytes} bytes); no Codex submission occurred"));
+    }
+    Ok(true)
 }
 
 fn validate_candidate_origin(
@@ -1584,6 +1593,20 @@ mod tests {
     use super::*;
     use crate::packet::{CasePacket, Guide};
     use horary_prompt_program::{Edit, Evidence, Override};
+
+    #[test]
+    fn complete_reading_review_keeps_evidence_under_bounded_single_case_cap() {
+        // Actual stopped training review: it was 2,252 bytes above the old
+        // transport bound, before any job or Codex submission was prepared.
+        assert!(review_packet_fits(122_252, 1).unwrap());
+        assert!(review_packet_fits(160_000, 1).unwrap());
+        assert!(!review_packet_fits(122_252, 3).unwrap());
+        assert!(review_packet_fits(60_000, 3).unwrap());
+        assert!(!review_packet_fits(60_001, 2).unwrap());
+        assert!(review_packet_fits(160_001, 1)
+            .unwrap_err()
+            .contains("no Codex submission occurred"));
+    }
 
     fn sample(state: &Path) -> Packet {
         let record = json!({"grade":{"semantic_pass":false,"actual":{"reply":"Whose ring is it?"}},"follow_up":{"status":"not scripted"}});

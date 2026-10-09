@@ -1,5 +1,6 @@
 //! GEPA owns the search. Horary owns prompts, truth, validation and receipts.
 #![forbid(unsafe_code)]
+pub mod executable;
 pub mod journal;
 pub mod metric;
 pub mod native;
@@ -625,6 +626,7 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
     plan.split_sha256 = digest(read(&plan.split_file)?);
     plan.native_executable_sha256 = digest(read(&plan.native_executable)?);
     plan.controller_executable_sha256 = digest(read(&plan.controller_executable)?);
+    plan.codex = executable::snapshot_codex(&plan.codex, state)?;
     plan.codex_executable_sha256 = digest(read(&plan.codex)?);
     plan.verify_sources()?;
     fs::create_dir_all(state).map_err(|error| error.to_string())?;

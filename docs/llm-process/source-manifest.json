@@ -263,7 +263,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "66a3aa5410eb6010daa8d810922ff0207d6b695783f525e7679f6f95f780e85e"
+      "sha256": "88d14299f0308684607c955bfc98fb7d819d44e2a78ab20856719c076dbd73b1"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -363,7 +363,11 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "7ded0a218246654767dd35a5b9e15dee289faf2dc915d71ec4ea118200e5e946"
+      "sha256": "b764fb991b573425fe1472252dc4990477dd7c57195d9c848b2614b9e358e1ae"
+    },
+    {
+      "path": "tools/horary-gepa/src/executable.rs",
+      "sha256": "ee5a87d01303928d3ab363ff00b0466c246d740bcdc7cf7d159f893cda7ef0c5"
     },
     {
       "path": "tools/horary-gepa/src/journal.rs",
@@ -371,7 +375,7 @@
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "4b94ecd18fa2ed2cdc7842d4ed940778c0b872dc803e43e13333d7013439dfc4"
+      "sha256": "3735aa5532bbd1cc0e8db3e9cdaaedde551ad68fa759c43b13f409dc75da3b14"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
@@ -407,7 +411,7 @@
     },
     {
       "path": "tools/horary-loop/README.md",
-      "sha256": "c8528d46993af7aa9ee9241e2f2fc246669a54e24376bb7812479f396e254f44"
+      "sha256": "e4227d210e7934a3f88631ca1e19303a871b3f0a13d6d7f18855bd7a7029d85b"
     },
     {
       "path": "tools/horary-loop/src/bin/horary-catalogue.rs",
@@ -435,7 +439,7 @@
     },
     {
       "path": "tools/horary-loop/src/lib.rs",
-      "sha256": "2e3b631284ddb1659bdc69f6845062623c8b9c90e9cf1937e842a35f25e28f4e"
+      "sha256": "b7aaf2fa6900dda97752d5b1b3cc62aee16cca4cfcebff5fb1ada57eb9f2635d"
     },
     {
       "path": "tools/horary-loop/src/main.rs",
