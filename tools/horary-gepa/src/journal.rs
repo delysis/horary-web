@@ -18,6 +18,7 @@ pub struct Journal {
     next: usize,
     plan_sha256: String,
     max_teacher: u64,
+    max_review: u64,
     max_physical: u64,
     _lock: fs::File,
 }
@@ -42,6 +43,7 @@ impl Journal {
             next: 0,
             plan_sha256: digest(read(&root.join("plan.json"))?),
             max_teacher: plan.max_teacher_calls,
+            max_review: plan.max_review_calls,
             max_physical: plan.max_physical_generation_attempts,
             _lock: lock,
         })
@@ -51,6 +53,25 @@ impl Journal {
         kind: &str,
         request: &Value,
         teacher: u64,
+        physical: u64,
+    ) -> Result<Operation> {
+        self.begin_cost(kind, request, teacher, 0, physical)
+    }
+    pub fn begin_review(&mut self, request: &Value, new_submission: bool) -> Result<Operation> {
+        self.begin_cost(
+            "codex_input_review",
+            request,
+            0,
+            u64::from(new_submission),
+            0,
+        )
+    }
+    fn begin_cost(
+        &mut self,
+        kind: &str,
+        request: &Value,
+        teacher: u64,
+        review: u64,
         physical: u64,
     ) -> Result<Operation> {
         let sequence = self.next;
@@ -98,6 +119,7 @@ impl Journal {
             return Ok(Operation::Reused(load(&directory.join("response.json"))?));
         }
         let mut used_teacher = 0u64;
+        let mut used_review = 0u64;
         let mut used_physical = 0u64;
         for entry in
             fs::read_dir(self.root.join("operations")).map_err(|error| error.to_string())?
@@ -120,18 +142,25 @@ impl Journal {
                             .ok_or("Bad student reservation")?,
                     )
                     .ok_or("Student budget overflow")?;
+                used_review = used_review
+                    .checked_add(match value.get("review_calls") {
+                        None => 0,
+                        Some(value) => value.as_u64().ok_or("Bad reviewer reservation")?,
+                    })
+                    .ok_or("Reviewer budget overflow")?;
             }
         }
         if used_teacher.saturating_add(teacher) > self.max_teacher
+            || used_review.saturating_add(review) > self.max_review
             || used_physical.saturating_add(physical) > self.max_physical
         {
-            return Err(format!("Hard paid-call reservation would exceed budget: teacher {used_teacher}+{teacher}/{}, student {used_physical}+{physical}/{}; no request submitted", self.max_teacher,self.max_physical));
+            return Err(format!("Hard paid-call reservation would exceed budget: teacher {used_teacher}+{teacher}/{}, reviewer {used_review}+{review}/{}, student {used_physical}+{physical}/{}; no request submitted", self.max_teacher,self.max_review,self.max_physical));
         }
         fs::create_dir(&directory).map_err(|error| error.to_string())?;
         keep(&directory.join("request.json"), &identity)?;
         keep(
             &directory.join("reservation.json"),
-            &json!({"teacher_calls":teacher,"physical_generation_attempts":physical,"reservation_before_submission":true}),
+            &json!({"teacher_calls":teacher,"review_calls":review,"physical_generation_attempts":physical,"reservation_before_submission":true}),
         )?;
         println!(
             "{}",
@@ -170,6 +199,55 @@ impl Journal {
 mod tests {
     use super::*;
     #[test]
+    fn independent_reviewer_reservations_are_hard_and_reuse_costs_nothing() {
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("operations")).unwrap();
+        let mut j = Journal {
+            root: root.path().into(),
+            next: 0,
+            plan_sha256: digest("plan"),
+            max_teacher: 2,
+            max_review: 1,
+            max_physical: 9,
+            _lock: fs::File::create(root.path().join("run.lock")).unwrap(),
+        };
+        let request = json!({"native_trace_sha":"case-a"});
+        let Operation::Fresh(d) = j.begin_review(&request, true).unwrap() else {
+            panic!()
+        };
+        assert!(j
+            .begin_review(&json!({"native_trace_sha":"case-b"}), true)
+            .err()
+            .unwrap()
+            .contains("budget"));
+        j.next = 0;
+        assert!(j
+            .begin_review(&request, true)
+            .err()
+            .unwrap()
+            .contains("Unsettled"));
+        j.finish(&d, &json!({"native_trace_sha":"case-a","score":1}))
+            .unwrap();
+        j.next = 0;
+        assert!(matches!(
+            j.begin_review(&request, false).unwrap(),
+            Operation::Reused(_)
+        ));
+        let Operation::Fresh(cache) = j.begin_review(&request, false).unwrap() else {
+            panic!()
+        };
+        j.finish(&cache, &json!({"score":1})).unwrap();
+        assert_eq!(
+            load(&cache.join("reservation.json")).unwrap()["review_calls"],
+            0
+        );
+        assert!(j
+            .begin_review(&json!({"native_trace_sha":"case-c"}), true)
+            .err()
+            .unwrap()
+            .contains("budget"));
+    }
+    #[test]
     fn interrupted_operations_cannot_be_replayed_as_paid_requests() {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir(root.path().join("operations")).unwrap();
@@ -179,6 +257,7 @@ mod tests {
             next: 0,
             plan_sha256: digest("p"),
             max_teacher: 1,
+            max_review: 1,
             max_physical: 9,
             _lock: lock,
         };
@@ -227,6 +306,7 @@ mod tests {
             next: 0,
             plan_sha256: digest("p"),
             max_teacher: 1,
+            max_review: 1,
             max_physical: 9,
             _lock: fs::File::create(root.path().join("run.lock")).unwrap(),
         };

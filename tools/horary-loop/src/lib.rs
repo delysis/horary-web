@@ -8,7 +8,13 @@ mod refs;
 pub mod review_events;
 mod schema_check;
 mod store;
-mod types;
+pub mod types;
+
+/// Compact citation IDs are expanded and verified by the caller before the
+/// typed artifact enters any optimizer metric. This never constrains students.
+pub fn compact_judge_schema() -> serde_json::Value {
+    refs::schema(types::judge_schema())
+}
 
 use fs2::FileExt;
 use horary_prompt_program::{digest, Program};

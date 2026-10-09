@@ -1,7 +1,7 @@
-//! Fresh classification runs and checked archival controls; no local inference.
+//! Actual native neural functions; no local inference or downstream capture transplant.
 use crate::{
     journal::{Journal, Operation},
-    keep, load, read, verify, ControlMode, Example, Plan, Result,
+    keep, load, read, verify, ControlMode, Example, Function, Plan, Result,
 };
 use gepa::Candidate;
 use horary_prompt_program::digest;
@@ -27,7 +27,8 @@ pub fn evaluate(
     let program = plan.program(candidate)?;
     let archival = program.is_none() && plan.control_mode == ControlMode::ArchivedCapture;
     let request = json!({"case":example,"candidate":candidate,"native_executable_sha256":plan.native_executable_sha256,
-        "manifest_sha256":plan.manifest_sha256,"scope":"first-classification-executor","archival_control":archival});
+        "manifest_sha256":plan.manifest_sha256,"function":plan.function,"target_method":plan.target_method,
+        "scope":plan.function.metric(),"archival_control":archival});
     let cache_key = digest(request.to_string());
     let cache = journal
         .root
@@ -78,7 +79,7 @@ pub fn evaluate(
         }
         // The logical operation identity stays identical on deterministic replay.
         // Cache availability changes after the first run; it is execution detail.
-        match journal.begin("classification", &request, 0, 0)? {
+        match journal.begin(plan.function.metric(), &request, 0, 0)? {
             Operation::Reused(value) => return Ok(value),
             Operation::Fresh(directory) => {
                 keep(
@@ -121,10 +122,10 @@ pub fn evaluate(
         0
     } else {
         plan.logical_calls_per_function
-            .checked_mul(3)
+            .checked_mul(plan.function.generation_factor())
             .ok_or("Generation budget overflow")?
     };
-    let directory = match journal.begin("classification", &request, 0, reservation)? {
+    let directory = match journal.begin(plan.function.metric(), &request, 0, reservation)? {
         Operation::Reused(value) => return Ok(value),
         Operation::Fresh(path) => path,
     };
@@ -132,21 +133,24 @@ pub fn evaluate(
     if let Some(program) = &program {
         keep(program_file.as_ref().ok_or("No program path")?, program)?;
     }
-    let task = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
+    let mut task = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
         "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
         "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":plan.manifest_sha256,
         "program_file":program_file,"replay_completed_capture":archival});
+    if plan.function == Function::InputJourney {
+        task.as_object_mut()
+            .ok_or("Task is not an object")?
+            .remove("replay_completed_capture");
+        task["target_method"] = json!(plan.target_method);
+        task["source_origin_sha256"] = json!(example.source_origin_sha256);
+        task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+    }
     let task_file = directory.join("task.json");
     keep(&task_file, &task)?;
     let evidence = directory.join("native");
     let mut command = Command::new(&plan.native_executable);
     command
-        .args([
-            "elicitation_eval::real_model_classification_function",
-            "--exact",
-            "--ignored",
-            "--nocapture",
-        ])
+        .args([plan.function.entry(), "--exact", "--ignored", "--nocapture"])
         .env("HORARY_NEURAL_TASK", &task_file)
         .env("HORARY_EVAL_EVIDENCE", &evidence)
         .env(
@@ -172,31 +176,63 @@ pub fn evaluate(
         &directory,
         plan.function_seconds.saturating_add(30),
     )?;
-    let outcome = load(&evidence.join("outcome.json"))?;
+    let mut outcome = load(&evidence.join("outcome.json"))?;
+    let native_directory = if plan.function == Function::InputJourney {
+        evidence.join("cases").join(&example.id)
+    } else {
+        evidence.clone()
+    };
     let actual_attempts = outcome["physical_generation_attempts"]
         .as_u64()
         .ok_or("Native physical attempt count is missing or unknown")?;
     if actual_attempts > reservation {
         return Err("Native physical attempt reservation exceeded".into());
     }
-    if program.is_some() {
+    let focused = focused_calls(plan, &native_directory)?;
+    if plan.function == Function::InputJourney {
+        let first = load(&native_directory.join("first-turn.json"))?;
+        let invoked = input_invocation(
+            plan.target_method
+                .as_deref()
+                .ok_or("Missing input target method")?,
+            &outcome,
+            &first,
+            focused.len(),
+        )?;
+        outcome["target_function_invoked"] = json!(invoked);
+        if !invoked {
+            outcome["target_function_not_invoked_reason"] = json!("The observed upstream route did not select the optimized function; native grades are retained, but this target earns no fitness");
+        }
+    }
+    if let Some(program) = &program {
         let mut applied = 0;
-        for entry in fs::read_dir(evidence.join("calls")).map_err(|error| error.to_string())? {
+        for entry in
+            fs::read_dir(native_directory.join("calls")).map_err(|error| error.to_string())?
+        {
             let path = entry.map_err(|error| error.to_string())?.path();
             if path.to_string_lossy().ends_with("-request.json") {
                 let call = load(&path)?;
-                if call["prompt_program"]["candidate_id"]
-                    == program.as_ref().ok_or("No program")?.id
-                {
+                if call["prompt_program"]["candidate_id"] == program.id {
                     applied += 1;
                 }
             }
         }
         if applied == 0 {
-            return Err("Changed classifier was not actually invoked".into());
+            // An observed upstream misclassification cannot be fixed by
+            // injecting gold to force the requested extraction method.
+            if plan.function == Function::Classification
+                || outcome["target_function_invoked"] == true
+            {
+                return Err(
+                    "Changed teaching was not applied to the actually invoked target function"
+                        .into(),
+                );
+            }
         }
     }
-    let response = json!({"outcome":outcome,"final":load(&evidence.join("final.json"))?,"source":"actual native classifier executor",
+    let response = json!({"outcome":outcome,"final":load(&evidence.join("final.json"))?,"source":"actual native application executor",
+        "native_evidence_directory":native_directory,
+        "actual_function_calls":focused,
         "archival_control":archival,"cache_identity":cache_key});
     journal.finish(&directory, &response)?;
     fs::create_dir_all(cache.parent().ok_or("No cache directory")?)
@@ -208,6 +244,57 @@ pub fn evaluate(
     Ok(response)
 }
 
+fn input_invocation(target: &str, outcome: &Value, first: &Value, count: usize) -> Result<bool> {
+    if outcome["target_signature_calls"].as_u64() != Some(count as u64) {
+        return Err("Native target invocation count differs from the actual trace".into());
+    }
+    if count > 0 {
+        return Ok(true);
+    }
+    if first
+        .pointer("/session/method/consultation/frame/observation/value/method")
+        .and_then(Value::as_str)
+        == Some(target)
+    {
+        return Err("The selected target method never invoked its required extractor; preserve this native orchestration failure".into());
+    }
+    // A valid alternative method or unresolved classification is an observed
+    // upstream route, not permission to inject the target/gold into the oracle.
+    Ok(false)
+}
+
+fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
+    let mut files = fs::read_dir(directory.join("calls"))
+        .map_err(|e| e.to_string())?
+        .map(|e| e.map(|e| e.path()).map_err(|e| e.to_string()))
+        .collect::<Result<Vec<_>>>()?;
+    files.sort();
+    let mut calls = Vec::new();
+    for file in files {
+        let name = file
+            .file_name()
+            .and_then(|f| f.to_str())
+            .ok_or("Invalid call filename")?;
+        if !name.ends_with("-request.json") {
+            continue;
+        }
+        let call = load(&file)?;
+        let input = horary_prompt_program::original_input(&call["input"]);
+        let scope = horary_prompt_program::signature("intake", input);
+        let desired = plan.signature();
+        if call["stage"] == "intake"
+            && scope.recognition_phase == desired.recognition_phase
+            && scope.method == desired.method
+        {
+            let result_name = name.replace("-request.json", "-result.json");
+            let result = load(&directory.join("calls").join(result_name))?;
+            calls.push(json!({"input":call["input"],"schema":call["schema"],"guide_sha256":call["guide_sha256"],
+                "prompt_program":call["prompt_program"],"result":result["result"],"source_request_sha256":digest(read(&file)?)}));
+        }
+    }
+    Ok(calls)
+}
+
 pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path::PathBuf> {
     let parent = state.join("inspections");
     fs::create_dir_all(&parent).map_err(|error| error.to_string())?;
@@ -216,21 +303,19 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
         .map_err(|error| format!("Native inspection must be fresh: {error}"))?;
     let evidence = directory.join("native");
     let task_file = directory.join("task.json");
-    keep(
-        &task_file,
-        &json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
+    let mut task = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
         "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
         "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":digest(read(&plan.campaign.join("manifest.json"))?),
-        "inspect_prompt_only":true}),
-    )?;
+        "inspect_prompt_only":true});
+    if plan.function == Function::InputJourney {
+        task["target_method"] = json!(plan.target_method);
+        task["source_origin_sha256"] = json!(example.source_origin_sha256);
+        task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+    }
+    keep(&task_file, &task)?;
     let mut command = Command::new(&plan.native_executable);
     command
-        .args([
-            "elicitation_eval::real_model_classification_function",
-            "--exact",
-            "--ignored",
-            "--nocapture",
-        ])
+        .args([plan.function.entry(), "--exact", "--ignored", "--nocapture"])
         .env("HORARY_NEURAL_TASK", &task_file)
         .env("HORARY_EVAL_EVIDENCE", &evidence);
     horary_loop::remove_provider_credentials(&mut command);
@@ -238,7 +323,12 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
     execute(&mut command, &directory, 60)?;
     let file = evidence.join("inspection.json");
     let inspection = load(&file)?;
-    if inspection["scope"] != "classification_prompt_inspection_only"
+    let scope = if plan.function == Function::Classification {
+        "classification_prompt_inspection_only"
+    } else {
+        "input_journey_prompt_inspection_only"
+    };
+    if inspection["scope"] != scope
         || inspection["case_id"] != example.id
         || inspection["model_constructed"] != false
         || inspection["new_generation_attempts"] != 0
@@ -384,6 +474,24 @@ fn abort_owned_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn alternate_routes_are_observed_but_missing_target_dispatch_is_an_error() {
+        let outcome =
+            json!({"target_signature_calls":0,"hurdles":{"classification":{"status":"pass"}}});
+        let mut first = json!({"session":{"method":{"consultation":{"frame":{"state":"resolved",
+            "observation":{"value":{"method":"investment"}}}}}}});
+        assert!(!input_invocation("movable_deal", &outcome, &first, 0).unwrap());
+        first["session"]["method"]["consultation"]["frame"]["observation"]["value"]["method"] =
+            json!("movable_deal");
+        assert!(input_invocation("movable_deal", &outcome, &first, 0)
+            .unwrap_err()
+            .contains("orchestration"));
+        assert!(input_invocation("movable_deal", &outcome, &first, 1)
+            .unwrap_err()
+            .contains("actual trace"));
+        let invoked = json!({"target_signature_calls":1});
+        assert!(input_invocation("movable_deal", &invoked, &first, 1).unwrap());
+    }
     #[test]
     fn failed_submission_receipt_terminates_and_reaps_its_owned_child() {
         let directory = tempfile::tempdir().unwrap();

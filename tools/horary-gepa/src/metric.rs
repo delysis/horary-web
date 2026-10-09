@@ -70,6 +70,10 @@ fn completed(outcome: &Value, target: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn require_completed(outcome: &Value, target: &str) -> Result<(), String> {
+    completed(outcome, target)
+}
+
 fn native_gate<'a>(outcome: &'a Value, target: &str) -> Result<&'a str, String> {
     let gates = outcome
         .get("hurdles")
@@ -287,15 +291,24 @@ pub fn grade(
 ) -> Result<Feedback, String> {
     if !matches!(
         target,
-        "classification" | "elicitation" | "extraction" | "reading" | "journey"
+        "classification" | "elicitation" | "extraction" | "reading" | "journey" | "input_journey"
     ) {
         return Err(format!("Unknown frozen optimization target: {target}"));
     }
     completed(outcome, target)?;
+    if target == "input_journey"
+        && (outcome["scope"] != "input_journey_function_only" || outcome["full_reading"] != false)
+    {
+        return Err("Input journey metric requires actual input-only execution; a reading or component cannot substitute".into());
+    }
     if let Some(review) = independent_review {
         review_identity(outcome, review)?;
     }
-    if target == "journey"
+    if target == "input_journey" && outcome["target_function_invoked"] == false {
+        return Ok(zero("The observed upstream route did not reach the optimized extractor; native grades are unchanged, but this target has no fitness"));
+    }
+    let journey = matches!(target, "journey" | "input_journey");
+    if journey
         && !outcome["grade"]["semantic_pass"]
             .as_bool()
             .ok_or("Unknown first-turn semantic grade")?
@@ -304,7 +317,7 @@ pub fn grade(
             "The first-turn authored input grade failed; a later answer cannot erase it",
         ));
     }
-    let gates: &[&str] = if target == "reading" || target == "journey" {
+    let gates: &[&str] = if target == "reading" || journey {
         &["classification", "extraction", "elicitation"]
     } else {
         &[target]
@@ -317,7 +330,7 @@ pub fn grade(
             )));
         }
     }
-    if (target == "reading" || target == "journey") && !supplying_complete(outcome)? {
+    if (target == "reading" || journey) && !supplying_complete(outcome)? {
         return Ok(zero(format!(
             "{target}: supplying journey is withheld, incomplete or loses continuity"
         )));
@@ -342,14 +355,36 @@ pub fn grade(
     if !honest(
         outcome,
         review,
-        matches!(target, "elicitation" | "reading" | "journey"),
+        matches!(
+            target,
+            "elicitation" | "reading" | "journey" | "input_journey"
+        ),
     )? {
         return Ok(zero(
             "Independent honesty is partial, failed or unobserved; other merits cannot compensate",
         ));
     }
     let mut minimum = 2;
-    let semantic_gates: Vec<&str> = if target == "journey" {
+    if target == "input_journey" {
+        for turn in std::iter::once("first_turn")
+            .chain((outcome["follow_up_execution_completed"] == true).then_some("follow_up"))
+        {
+            for key in ["concern_actor", "evidence_honesty", "continuity"] {
+                if dimension(&review[turn][key], false)? != Some(2) {
+                    return Ok(zero(format!("{turn}/{key}: incomplete independent safeguard; pipeline merits cannot compensate")));
+                }
+            }
+            for (key, inquiry) in [("natural_phrasing", false), ("useful_inquiry", true)] {
+                let Some(score) = dimension(&review[turn][key], inquiry)? else {
+                    return Ok(zero(format!(
+                        "{turn}/{key}: unobserved conversation cannot qualify an input journey"
+                    )));
+                };
+                minimum = minimum.min(score);
+            }
+        }
+    }
+    let semantic_gates: Vec<&str> = if journey {
         gates
             .iter()
             .copied()
@@ -420,6 +455,74 @@ mod tests {
         json!({"case_id":"synthetic","partition":"training","native_semantic_pass":true,
             "native_journey_pass":null,"first_turn":{"evidence_honesty":dimension(2)},"follow_up":null,
             "pipeline":{"classification":dimension(2),"extraction":dimension(2),"elicitation":dimension(2),"reading":dimension(2)}})
+    }
+    fn input_journey_fixture() -> (Value, Value) {
+        let mut o = outcome();
+        o["full_reading"] = json!(false);
+        o["scope"] = json!("input_journey_function_only");
+        o["hurdles"]["reading"]["status"] = json!("not_run");
+        let mut r = review();
+        r["pipeline"]["reading"] = json!({"state":"unobserved","score":null,"reason":"Input journey only","evidence":dimension(2)["evidence"]});
+        for key in [
+            "concern_actor",
+            "continuity",
+            "natural_phrasing",
+            "useful_inquiry",
+        ] {
+            r["first_turn"][key] = dimension(2);
+        }
+        (o, r)
+    }
+    #[test]
+    fn an_alternate_observed_route_cannot_earn_extractor_fitness() {
+        let (mut o, r) = input_journey_fixture();
+        o["target_function_invoked"] = serde_json::json!(false);
+        let result = grade(&o, Some(&r), "input_journey").unwrap();
+        assert_eq!(result.score, 0.0);
+        assert!(!result.qualified);
+        assert!(result.feedback.contains("did not reach"));
+        assert_eq!(o["hurdles"]["classification"]["status"], "pass");
+    }
+    #[test]
+    fn input_data_passes_cannot_compensate_for_actor_or_honesty_or_continuity() {
+        let (o, r) = input_journey_fixture();
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 1.0);
+        for key in ["concern_actor", "evidence_honesty", "continuity"] {
+            let mut wrong = r.clone();
+            wrong["first_turn"][key] = dimension(1);
+            let g = grade(&o, Some(&wrong), "input_journey").unwrap();
+            assert_eq!(g.score, 0.0);
+            assert!(!g.qualified);
+        }
+        let mut partial = r;
+        partial["first_turn"]["natural_phrasing"] = dimension(1);
+        assert_eq!(
+            grade(&o, Some(&partial), "input_journey").unwrap().score,
+            0.5
+        );
+        assert!(
+            !grade(&o, Some(&partial), "input_journey")
+                .unwrap()
+                .qualified
+        );
+    }
+    #[test]
+    fn an_input_journey_requires_the_real_supplying_exchange_and_both_turns() {
+        let (mut o, mut r) = input_journey_fixture();
+        o["follow_up_scripted"] = json!(true);
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 0.0);
+        supplying(&mut o, &mut r);
+        r["follow_up"] = r["first_turn"].clone();
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 1.0);
+        r["follow_up"]["concern_actor"] = dimension(0);
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 0.0);
+    }
+    #[test]
+    fn the_input_adapter_cannot_be_upgraded_to_an_interpretation() {
+        let (mut o, r) = input_journey_fixture();
+        assert!(grade(&o, Some(&r), "reading").unwrap().score == 0.0);
+        o["full_reading"] = json!(true);
+        assert!(grade(&o, Some(&r), "input_journey").is_err());
     }
     fn supplying(outcome: &mut Value, review: &mut Value) {
         outcome["follow_up_scripted"] = json!(true);

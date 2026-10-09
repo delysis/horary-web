@@ -4767,3 +4767,1091 @@ fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
         .unwrap_err()
         .contains("call budget exhausted"));
 }
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct InputJourneyTask {
+    case_id: String,
+    source_case_directory: PathBuf,
+    source_request_file: PathBuf,
+    source_request_sha256: String,
+    source_initial_sha256: String,
+    source_fixture_sha256: String,
+    source_origin_sha256: String,
+    baseline_manifest_sha256: String,
+    target_method: Method,
+    #[serde(default)]
+    program_file: Option<PathBuf>,
+    #[serde(default)]
+    inspect_prompt_only: bool,
+}
+
+/// Predict only the authored starting state for a pre-network identity check.
+/// evaluate_case still creates its own fresh Session; this value is never
+/// transplanted into the pipeline and contains no captured specialist state.
+fn input_journey_initial(case: &Case) -> Value {
+    let mut session = Session::default();
+    if case.device_available {
+        session.candidates.push(device());
+    }
+    session.device_context = Some(crate::conversation::DeviceContext {
+        timezone: "America/New_York".into(),
+        locale: "en-US".into(),
+        latitude: case.device_available.then_some(38.657),
+        longitude: case.device_available.then_some(-77.249),
+        accuracy_meters: case.device_available.then_some(30.),
+    });
+    session.messages.push(Message {
+        role: "user".into(),
+        text: case.words.clone(),
+    });
+    json!({"session":session,"candidates":session.candidates})
+}
+
+fn input_journey_source_scope(
+    task: &InputJourneyTask,
+    case: &Case,
+    request: &Value,
+    initial: &Value,
+    fixture: &Value,
+    origin: &Value,
+    request_name: &str,
+) -> Result<(Matter, Value), String> {
+    if case.id != task.case_id
+        || *fixture != serde_json::to_value(case).map_err(|error| error.to_string())?
+        || *initial != input_journey_initial(case)
+    {
+        return Err("Input journey source differs from the immutable authored fixture or fresh initial state; nothing is reset".into());
+    }
+    let sequence = request["sequence"]
+        .as_u64()
+        .filter(|sequence| *sequence > 0)
+        .ok_or("Focused source request has no logical call sequence")?;
+    if origin["case_id"] != case.id
+        || !origin["files"].is_object()
+        || request_name != format!("calls/{sequence:04}-request.json")
+        || [
+            ("initial.json", &task.source_initial_sha256),
+            ("fixture.json", &task.source_fixture_sha256),
+            (request_name, &task.source_request_sha256),
+        ]
+        .iter()
+        .any(|(name, expected)| {
+            origin["files"][*name]
+                .as_str()
+                .is_none_or(|actual| !actual.eq_ignore_ascii_case(expected))
+        })
+    {
+        return Err(
+            "Input journey origin does not bind its fixture, initial session and focused request"
+                .into(),
+        );
+    }
+    let signature = horary_prompt_program::signature("intake", &request["input"]);
+    let input = crate::horary_step::original_input(&request["input"]);
+    let state = &input["consultation_state"];
+    if request["stage"] != "intake"
+        || signature.recognition_phase != Some("complete_selected_program")
+        || signature.method != Some(task.target_method.name())
+        || !request["prompt_program"].is_null()
+        || input["latest_words"].as_str() != Some(case.words.as_str())
+        || input["legacy_user_fact_sources"] != json!([case.words])
+        || input["chart_exists"] != false
+        || !state.is_object()
+        || !state["chart"].is_null()
+        || state["interpretation_exists"] != false
+        || state["completed_steps"]
+            .as_array()
+            .is_none_or(|steps| !steps.is_empty())
+        || !state["unfinished_step"].is_null()
+        || state["pending_user_requests"]
+            .as_array()
+            .is_none_or(|needs| !needs.is_empty())
+        || !input["pending_requirement"].is_null()
+        || !input["consultation"]["requested"].is_null()
+        || input.get("reading_request").is_some()
+        || input.get("stage_user_replies").is_some()
+    {
+        return Err("Input journey inspection needs one first-turn Intake/complete_selected_program capture for the selected target method; downstream or supplying state is forbidden".into());
+    }
+    if !request["schema"].is_object()
+        || request["schema_sha256"] != horary_prompt_program::digest(request["schema"].to_string())
+        || !request["prompt"].is_array()
+        || request["prompt_sha256"] != horary_prompt_program::digest(request["prompt"].to_string())
+    {
+        return Err("Focused source request has inconsistent prompt or schema hashes".into());
+    }
+    let matter = serde_json::from_value(request["matter"].clone())
+        .map_err(|error| format!("Focused source matter: {error}"))?;
+    // Inspection retains the actual repair wrapper, if present. Live execution
+    // uses neither this input nor its tentative frame, only the authored Case.
+    Ok((matter, request["input"].clone()))
+}
+
+fn input_journey_source_fingerprint(origin: &Value, baseline: &Value) -> Result<Value, String> {
+    let source_dir = PathBuf::from(
+        origin["source_directory"]
+            .as_str()
+            .ok_or("Input journey origin has no source directory")?,
+    );
+    let manifest_path = source_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("Input journey origin manifest unavailable")?
+        .join("manifest.json");
+    let manifest_sha = origin["source_manifest_sha256"]
+        .as_str()
+        .ok_or("Input journey origin has no sealed manifest")?;
+    let bytes = classification_source_bytes(&manifest_path, manifest_sha)?;
+    let source: Value = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    if !source["sources"].is_object()
+        || !source["repository_sha"].is_string()
+        || !source["prompt_program"].is_null()
+        || !baseline["prompt_program"].is_null()
+        || [
+            "sources",
+            "repository_sha",
+            "working_diff_sha256",
+            "catalogue_version",
+            "book_ocr_sha256",
+        ]
+        .iter()
+        .any(|key| source[*key] != baseline[*key])
+        || source["model"]["provider"] != "google_gemini_api"
+        || source["model"]["id"] != "gemma-4-26b-a4b-it"
+        || source["model"]["local_inference"] != false
+        || [
+            "id",
+            "provider",
+            "temperature",
+            "seed",
+            "thinking_level",
+            "local_inference",
+        ]
+        .iter()
+        .any(|key| source["model"][*key] != baseline["model"][*key])
+    {
+        return Err(
+            "Input journey source native/model fingerprint differs from its pinned campaign".into(),
+        );
+    }
+    Ok(json!({"source_manifest_sha256":manifest_sha,
+        "source_native_fingerprint":{"repository_sha":source["repository_sha"],
+            "working_diff_sha256":source["working_diff_sha256"],
+            "sources_sha256":horary_prompt_program::digest(source["sources"].to_string()),
+            "catalogue_version":source["catalogue_version"],"book_ocr_sha256":source["book_ocr_sha256"]},
+        "source_state_used_for":"Hash-bound identity and focused prompt inspection only; no checkpoint or response reuse"}))
+}
+
+fn input_journey_program(
+    task: &InputJourneyTask,
+    bytes: Option<&[u8]>,
+) -> Result<Option<horary_prompt_program::Program>, String> {
+    let program = bytes
+        .map(horary_prompt_program::Program::parse)
+        .transpose()?;
+    if program.as_ref().is_some_and(|program| {
+        !program
+            .baseline_manifest_sha256
+            .eq_ignore_ascii_case(&task.baseline_manifest_sha256)
+            || program.overrides.len() != 1
+            || program.overrides[0].stage != "intake"
+            || program.overrides[0].recognition_phase.as_deref()
+                != Some("complete_selected_program")
+            || program.overrides[0].method.as_deref() != Some(task.target_method.name())
+    }) {
+        return Err("Input journey program must have exactly one Intake/complete_selected_program override for its target method and pinned baseline".into());
+    }
+    Ok(program)
+}
+
+fn input_journey_calls(case_dir: &Path) -> Result<(Vec<Value>, bool), String> {
+    let mut requests = BTreeSet::new();
+    let mut results = BTreeMap::new();
+    if !case_dir.join("calls").exists() {
+        return Ok((Vec::new(), false));
+    }
+    for entry in fs::read_dir(case_dir.join("calls")).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let name = entry.file_name();
+        let name = name.to_str().ok_or("Non-UTF8 native call receipt")?;
+        if let Some(sequence) = name.strip_suffix("-request.json") {
+            requests.insert(sequence.to_string());
+        } else if let Some(sequence) = name.strip_suffix("-result.json") {
+            let value =
+                serde_json::from_slice(&fs::read(entry.path()).map_err(|error| error.to_string())?)
+                    .map_err(|error| format!("Native call receipt {name}: {error}"))?;
+            results.insert(sequence.to_string(), value);
+        }
+    }
+    let complete = requests == results.keys().cloned().collect();
+    Ok((results.into_values().collect(), complete))
+}
+
+fn input_journey_generation_attempts(calls: &[Value]) -> u64 {
+    calls
+        .iter()
+        .flat_map(|call| {
+            if call["provider_receipt"].is_object() {
+                vec![&call["provider_receipt"]]
+            } else {
+                call["provider_receipts"]
+                    .as_array()
+                    .map(|items| items.iter().collect())
+                    .unwrap_or_default()
+            }
+        })
+        .map(|receipt| {
+            receipt["generation_attempts"]
+                .as_array()
+                .map(|attempts| {
+                    attempts
+                        .iter()
+                        .filter(|attempt| attempt["submitted"] == true)
+                        .count() as u64
+                })
+                .unwrap_or_else(|| u64::from(receipt["submitted"] == true))
+        })
+        .sum()
+}
+
+fn input_journey_call_limits(max_groups: u64) -> Result<Value, String> {
+    if max_groups == 0 {
+        return Err("Input journey logical call group cap must be positive".into());
+    }
+    // Reader's sequence cap counts generate_batch once. Reserve two possible
+    // independent Place/Moment providers, each with the client's three service
+    // attempts, even though current prepare_reading dispatches them separately.
+    let provider_cap = max_groups
+        .checked_mul(2)
+        .ok_or("Input journey provider call cap overflow")?;
+    let reservation = provider_cap
+        .checked_mul(3)
+        .ok_or("Input journey generation-attempt reservation overflow")?;
+    Ok(
+        json!({"logical_model_call_cap":max_groups,"logical_model_call_cap_units":"native_generation_groups",
+        "logical_call_group_cap":max_groups,"logical_provider_call_cap":provider_cap,
+        "max_provider_calls_per_group":2,"physical_generation_attempt_reservation":reservation}),
+    )
+}
+
+fn input_journey_call_counts(calls: &[Value]) -> Result<(u64, u64), String> {
+    let mut providers = 0u64;
+    for call in calls {
+        let request = &call["request"];
+        let count = if let Some(tasks) = request["tasks"].as_array() {
+            let mut stages = BTreeSet::new();
+            if tasks.is_empty()
+                || tasks.len() > 2
+                || tasks.iter().any(|task| {
+                    task.as_array().is_none_or(|tuple| tuple.len() != 4)
+                        || !matches!(task[0].as_str(), Some("place" | "moment"))
+                        || !stages.insert(task[0].as_str().unwrap_or_default())
+                })
+            {
+                return Err("Input journey encountered an unsupported batch; only at most two independent Place/Moment branches fit its reserved bound".into());
+            }
+            tasks.len() as u64
+        } else if matches!(
+            request["stage"].as_str(),
+            Some("intake" | "place" | "moment" | "conversation")
+        ) {
+            1
+        } else {
+            return Err("Input journey encountered an unsupported call stage".into());
+        };
+        providers = providers
+            .checked_add(count)
+            .ok_or("Input journey provider call count overflow")?;
+    }
+    Ok((calls.len() as u64, providers))
+}
+
+fn input_journey_after_grade(
+    case: &Case,
+    first: &Value,
+    final_state: &Value,
+) -> Result<Option<Grade>, String> {
+    let Some(expected) = &case.follow_up_expected else {
+        return Ok(None);
+    };
+    if !final_state["follow_up"]["result"].is_object() {
+        return Ok(None);
+    }
+    let mut session: Session = serde_json::from_value(final_state["session"].clone())
+        .map_err(|error| error.to_string())?;
+    session.candidates = serde_json::from_value(final_state["candidates"].clone())
+        .map_err(|error| error.to_string())?;
+    let previous: Session =
+        serde_json::from_value(first["session"].clone()).map_err(|error| error.to_string())?;
+    let mut after_case = case.clone();
+    after_case.expected = expected.clone();
+    let error = final_state["follow_up"]["result"]["Err"].as_str();
+    Ok(Some(with_reading_grade(
+        grade_at_moment(
+            &after_case,
+            &session,
+            error,
+            previous
+                .candidate_moment_ms
+                .unwrap_or_else(|| frozen_moment() + 60_000.),
+        ),
+        &session,
+        false,
+        error,
+    )))
+}
+
+fn input_journey_measurement(
+    case: &Case,
+    raw: &Value,
+    first: &Value,
+    final_state: &Value,
+    calls: &[Value],
+    calls_complete: bool,
+    run_error: Option<&str>,
+) -> Result<Value, String> {
+    if raw["full_reading"] != false
+        || [
+            raw.get("hurdles"),
+            first.get("hurdles"),
+            final_state.get("hurdles"),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|hurdles| hurdles["reading"]["status"] != "not_run")
+    {
+        return Err(
+            "Input journey cannot qualify or reuse a reading stage; full_reading must remain false"
+                .into(),
+        );
+    }
+    let after = input_journey_after_grade(case, first, final_state)?;
+    let mut errors = Vec::new();
+    let counts = input_journey_call_counts(calls);
+    let unsupported = counts.is_err();
+    let (logical_groups, logical_providers) = counts.unwrap_or_else(|error| {
+        errors.push(error);
+        (
+            calls.len() as u64,
+            calls
+                .iter()
+                .map(|call| {
+                    call["request"]["tasks"].as_array().map_or_else(
+                        || u64::from(call["request"]["stage"].is_string()),
+                        |tasks| tasks.len() as u64,
+                    )
+                })
+                .sum(),
+        )
+    });
+    for error in [
+        run_error,
+        first["result"]["Err"].as_str(),
+        final_state["follow_up"]["result"]["Err"].as_str(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !errors.iter().any(|previous: &String| previous == error) {
+            errors.push(error.to_string());
+        }
+    }
+    let transport = calls.iter().any(|call| call["result"]["Err"].is_string());
+    let observed = errors.is_empty()
+        && calls_complete
+        && raw["first_turn_execution_completed"] == true
+        && raw["follow_up_execution_completed"] != false;
+    let first_pass = raw["grade"]["semantic_pass"].as_bool().unwrap_or(false);
+    // A withheld script is a measured elicitation failure, not a supplied turn.
+    // Neither a later good grade nor a cached source answer can erase it.
+    let supply_pass = case.follow_up.is_none()
+        || raw["follow_up_execution_completed"] == true
+            && raw["follow_up_pass"] == true
+            && after.as_ref().is_none_or(|grade| grade.semantic_pass);
+    let pass = observed.then_some(first_pass && supply_pass);
+    let status = if observed {
+        "completed"
+    } else if unsupported {
+        "unsupported_input_call_or_batch"
+    } else if raw["deadline_cancelled"] == true {
+        "deadline_cancelled"
+    } else if raw["infrastructure_error"].is_string() || !calls_complete {
+        "evidence_io_interrupted"
+    } else if errors
+        .iter()
+        .any(|error| error.contains("call budget exhausted"))
+    {
+        "logical_call_budget_exhausted"
+    } else if transport {
+        "hosted_transport_or_provider_error"
+    } else {
+        "executor_interrupted"
+    };
+    Ok(
+        json!({"id":case.id,"scope":"input_journey_function_only","full_reading":false,
+        "input_journey_observed":observed,"input_journey_pass":pass,"input_journey_score":pass.map(u8::from),
+        "execution_status":status,"execution_error":(!errors.is_empty()).then(|| errors.join("; ")),
+        "first_turn_execution_error":first["result"]["Err"],
+        "supplying_turn_execution_error":final_state["follow_up"]["result"]["Err"],
+        "infrastructure_error":if observed {Value::Null} else {json!({"kind":status,"errors":errors,"native":raw["infrastructure_error"]})},
+        "grade":raw["grade"],"first_turn_grade":raw["grade"],"after_turn_grade":after,
+        "supplying_turn_grade":final_state["follow_up"]["grade"],
+        "first_turn_hurdles":first["hurdles"],"hurdles":raw["hurdles"],
+        "follow_up":raw["follow_up"],"follow_up_pass":raw["follow_up_pass"],
+        "follow_up_scripted":case.follow_up.is_some(),
+        "first_turn_execution_completed":raw["first_turn_execution_completed"],
+        "follow_up_execution_completed":raw["follow_up_execution_completed"],
+        "physical_generation_attempts":input_journey_generation_attempts(calls),
+        "physical_generation_attempts_complete":calls_complete,
+        "logical_call_groups":logical_groups,"logical_calls":logical_providers,"logical_provider_calls":logical_providers,
+        "model_calls":logical_providers,"native_model_calls":raw["model_calls"],
+        "hosted_http_requests":input_journey_generation_attempts(calls),"new_generation_attempts":input_journey_generation_attempts(calls),
+        "prompt_program_applied_calls":raw["prompt_program_applied_calls"],
+        "rejected_attempts":raw["rejected_attempts"],"elapsed_ms":raw["elapsed_ms"],
+        "deadline_cancelled":raw["deadline_cancelled"],"provider_stop":raw["provider_stop"],
+        "decoder_mode":"hosted_unconstrained_text","reading_semantic_review":"not attempted; input journey only"}),
+    )
+}
+
+#[test]
+#[ignore = "Fresh hosted input journey: hash-bound HORARY_NEURAL_TASK and HORARY_EVAL_EVIDENCE; Google credential required only for measurement"]
+fn real_model_input_journey_function() -> Result<(), String> {
+    let task_bytes = fs::read(PathBuf::from(
+        std::env::var_os("HORARY_NEURAL_TASK").ok_or("Set HORARY_NEURAL_TASK")?,
+    ))
+    .map_err(|error| error.to_string())?;
+    let task: InputJourneyTask =
+        serde_json::from_slice(&task_bytes).map_err(|error| error.to_string())?;
+    let case = catalogue()?
+        .into_iter()
+        .find(|case| case.id == task.case_id)
+        .ok_or("Input journey task names no authored catalogue case")?;
+    let source_dir = task
+        .source_case_directory
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if source_dir.file_name().and_then(|name| name.to_str()) != Some(case.id.as_str()) {
+        return Err("Input journey source directory must name its authored case".into());
+    }
+    let request_path = if task.source_request_file.is_absolute() {
+        task.source_request_file.clone()
+    } else {
+        source_dir.join(&task.source_request_file)
+    }
+    .canonicalize()
+    .map_err(|error| error.to_string())?;
+    let request_name = request_path
+        .strip_prefix(&source_dir)
+        .map_err(|_| "Focused source request must belong to its source case")?
+        .to_str()
+        .ok_or("Non-UTF8 source request path")?;
+    let campaign = source_dir
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("Input journey source campaign unavailable")?;
+    let request_bytes = classification_source_bytes(&request_path, &task.source_request_sha256)?;
+    let initial_bytes = classification_source_bytes(
+        &source_dir.join("initial.json"),
+        &task.source_initial_sha256,
+    )?;
+    let fixture_bytes = classification_source_bytes(
+        &source_dir.join("fixture.json"),
+        &task.source_fixture_sha256,
+    )?;
+    let origin_bytes = classification_source_bytes(
+        &campaign
+            .join("case-origins")
+            .join(format!("{}.json", case.id)),
+        &task.source_origin_sha256,
+    )?;
+    let baseline_bytes = classification_source_bytes(
+        &campaign.join("manifest.json"),
+        &task.baseline_manifest_sha256,
+    )?;
+    let request: Value =
+        serde_json::from_slice(&request_bytes).map_err(|error| error.to_string())?;
+    let initial: Value =
+        serde_json::from_slice(&initial_bytes).map_err(|error| error.to_string())?;
+    let fixture: Value =
+        serde_json::from_slice(&fixture_bytes).map_err(|error| error.to_string())?;
+    let origin: Value = serde_json::from_slice(&origin_bytes).map_err(|error| error.to_string())?;
+    let baseline: Value =
+        serde_json::from_slice(&baseline_bytes).map_err(|error| error.to_string())?;
+    let (matter, input) = input_journey_source_scope(
+        &task,
+        &case,
+        &request,
+        &initial,
+        &fixture,
+        &origin,
+        request_name,
+    )?;
+    // The emitted starting bytes must match too, not merely an equivalent
+    // decoded Session. This check happens before any client or paid request.
+    let fresh_bytes = serde_json::to_vec_pretty(&input_journey_initial(&case))
+        .map_err(|error| error.to_string())?;
+    if fresh_bytes != initial_bytes {
+        return Err("Current authored fresh initial serialization differs from the sealed source initial; no hosted call made".into());
+    }
+    let provenance = input_journey_source_fingerprint(&origin, &baseline)?;
+    let program_bytes = task
+        .program_file
+        .as_ref()
+        .map(fs::read)
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    let program = input_journey_program(&task, program_bytes.as_deref())?;
+    let schema = crate::horary_step::response_schema_for(Stage::Intake, matter, &input, &[]);
+    let (prompt, applied) = trial_prompt(Stage::Intake, matter, &input, &schema, program.as_ref())?;
+    let messages: Value = serde_json::from_str(&prompt).map_err(|error| error.to_string())?;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .ok_or("Repository root unavailable")?
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let dir = PathBuf::from(
+        std::env::var_os("HORARY_EVAL_EVIDENCE")
+            .ok_or("Set a fresh HORARY_EVAL_EVIDENCE directory")?,
+    );
+    fs::create_dir(&dir)
+        .map_err(|error| format!("Input journey evidence must be fresh: {error}"))?;
+    for (name, bytes) in [
+        ("task.json", &task_bytes),
+        ("source-request.json", &request_bytes),
+        ("source-initial.json", &initial_bytes),
+        ("source-fixture.json", &fixture_bytes),
+        ("source-origin.json", &origin_bytes),
+        ("source-manifest.json", &baseline_bytes),
+    ] {
+        atomic_evidence_file(&dir.join(name), true, |file| {
+            file.write_all(bytes).map_err(|error| error.to_string())
+        })?;
+    }
+    if task.inspect_prompt_only {
+        if task.program_file.is_some() {
+            return Err("Input journey prompt inspection cannot apply a program".into());
+        }
+        write_new(
+            &dir.join("inspection.json"),
+            &json!({"scope":"input_journey_prompt_inspection_only",
+            "case_id":case.id,"target_method":task.target_method,"stage":"intake","recognition_phase":"complete_selected_program",
+            "task_sha256":horary_prompt_program::digest(&task_bytes),"prompt":messages,"schema":schema,"input":input,
+            "guide_sha256":horary_prompt_program::digest(messages[0]["content"].as_str().ok_or("No focused native guide")?),
+            "prompt_sha256":horary_prompt_program::digest(&prompt),"schema_sha256":horary_prompt_program::digest(schema.to_string()),
+            "input_sha256":horary_prompt_program::digest(input.to_string()),
+            "source_request_sha256":task.source_request_sha256,"source_initial_sha256":task.source_initial_sha256,
+            "source_fixture_sha256":task.source_fixture_sha256,"source_origin_sha256":task.source_origin_sha256,
+            "baseline_manifest_sha256":task.baseline_manifest_sha256,"source_provenance":provenance,
+            "repository_sha":git(&root,&["rev-parse","HEAD"])?.trim(),"sources":source_hashes(&root)?,
+            "working_diff_sha256":horary_prompt_program::digest(git(&root,&["diff","--binary","HEAD"])?),
+            "model_constructed":false,"new_generation_attempts":0,"full_reading":false,
+            "end_to_end_qualified":false,"captured_input_used_for":"Focused prompt inspection data only"}),
+        )?;
+        return Ok(());
+    }
+    let max_calls = std::env::var("HORARY_EVAL_MAX_CALLS")
+        .ok()
+        .map(|value| value.parse::<u64>())
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or(24);
+    // The cap is native generation groups. Reserve two providers per group and
+    // every completed-HTTP retry: 24 groups reserve 144 generation attempts.
+    let limits = input_journey_call_limits(max_calls)?;
+    let seconds = std::env::var("HORARY_EVAL_CASE_SECONDS")
+        .ok()
+        .map(|value| value.parse::<u64>())
+        .transpose()
+        .map_err(|error| error.to_string())?
+        .unwrap_or(900);
+    if seconds == 0 {
+        return Err("Input journey deadline must be positive".into());
+    }
+    let keyfile = PathBuf::from(
+        std::env::var_os("HORARY_GOOGLE_KEY_FILE")
+            .ok_or("Fresh hosted Google is mandatory: set HORARY_GOOGLE_KEY_FILE")?,
+    );
+    if keyfile
+        .canonicalize()
+        .map_err(|_| "Hosted credential unavailable")?
+        .starts_with(&root)
+    {
+        return Err("Keep the hosted credential outside the repository".into());
+    }
+    let hosted = Arc::new(crate::hosted_gemma_eval::Client::from_file(&keyfile, 1)?);
+    if let Some(bytes) = &program_bytes {
+        atomic_evidence_file(&dir.join("prompt-program.json"), true, |file| {
+            file.write_all(bytes).map_err(|error| error.to_string())
+        })?;
+    }
+    write_new(
+        &dir.join("manifest.json"),
+        &json!({"version":EVALUATOR_VERSION,
+        "scope":"input_journey_function_only","case_id":case.id,"task":task,
+        "task_sha256":horary_prompt_program::digest(&task_bytes),"source_provenance":provenance,
+        "repository_sha":git(&root,&["rev-parse","HEAD"])?.trim(),
+        "working_diff_sha256":horary_prompt_program::digest(git(&root,&["diff","--binary","HEAD"])?),
+        "sources":source_hashes(&root)?,"model":hosted.metadata(),"limits":limits,
+        "logical_model_call_cap":max_calls,"logical_model_call_cap_units":"native_generation_groups",
+        "logical_call_group_cap":max_calls,"logical_provider_call_cap":limits["logical_provider_call_cap"],
+        "physical_generation_attempt_reservation":limits["physical_generation_attempt_reservation"],
+        "case_seconds":seconds,"program_sha256":program_bytes.as_ref().map(horary_prompt_program::digest),
+        "target_signature":{"stage":"intake","recognition_phase":"complete_selected_program","method":task.target_method},
+        "inspected_current_target_program":applied,"entry_point":"evaluate_case -> horary_pipeline::run_elicitation",
+        "fresh_initial_verified_before_network":true,"captured_checkpoint_reused":false,
+        "fresh_upstream_and_supplying_calls":true,"full_reading":false}),
+    )?;
+    fs::create_dir(dir.join("cases")).map_err(|error| error.to_string())?;
+    let state = NativeLlamaState::default();
+    let case_dir = dir.join("cases").join(&case.id);
+    let run = evaluate_case(
+        &state,
+        &dir,
+        case.clone(),
+        CaseRun {
+            full_reading: false,
+            seconds,
+            max_calls,
+            dispatcher: None,
+            shared_cancelled: None,
+            group: None,
+            program: program.map(Arc::new),
+            rubrics: None,
+            hosted: Some(hosted),
+        },
+    );
+    let read = |name: &str| -> Result<Value, String> {
+        let path = case_dir.join(name);
+        if !path.exists() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_slice(&fs::read(path).map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())
+    };
+    let raw = run
+        .as_ref()
+        .ok()
+        .cloned()
+        .unwrap_or(json!({"full_reading":false}));
+    let first = read("first-turn.json")?;
+    let final_state = read("final.json")?;
+    let (calls, calls_complete) = input_journey_calls(&case_dir)?;
+    let initial_check =
+        classification_source_bytes(&case_dir.join("initial.json"), &task.source_initial_sha256);
+    let run_error = run
+        .as_ref()
+        .err()
+        .cloned()
+        .or_else(|| initial_check.as_ref().err().cloned());
+    let mut outcome = input_journey_measurement(
+        &case,
+        &raw,
+        &first,
+        &final_state,
+        &calls,
+        calls_complete,
+        run_error.as_deref(),
+    )?;
+    outcome["native_evidence_directory"] = json!(case_dir);
+    outcome["trace"] = json!(format!("cases/{}/trace.html", case.id));
+    outcome["logical_model_call_cap"] = json!(max_calls);
+    outcome["logical_model_call_cap_units"] = json!("native_generation_groups");
+    outcome["logical_call_group_cap"] = json!(max_calls);
+    outcome["logical_provider_call_cap"] = limits["logical_provider_call_cap"].clone();
+    outcome["physical_generation_attempt_reservation"] =
+        limits["physical_generation_attempt_reservation"].clone();
+    outcome["target_method"] = json!(task.target_method);
+    outcome["source_provenance"] = provenance;
+    outcome["source_request_sha256"] = json!(task.source_request_sha256);
+    outcome["source_initial_sha256"] = json!(task.source_initial_sha256);
+    outcome["source_fixture_sha256"] = json!(task.source_fixture_sha256);
+    outcome["source_origin_sha256"] = json!(task.source_origin_sha256);
+    outcome["baseline_manifest_sha256"] = json!(task.baseline_manifest_sha256);
+    outcome["fresh_initial_sha256_verified"] = json!(initial_check.is_ok());
+    outcome["target_signature_calls"] = json!(calls
+        .iter()
+        .filter(|call| {
+            let signature = horary_prompt_program::signature("intake", &call["request"]["input"]);
+            call["request"]["stage"] == "intake"
+                && signature.recognition_phase == Some("complete_selected_program")
+                && signature.method == Some(task.target_method.name())
+        })
+        .count());
+    write_new(&dir.join("calls.json"), &calls)
+        .map_err(|error| retain_execution_error(error, run_error.as_deref()))?;
+    let mut final_copy = final_state;
+    if !final_copy.is_object() {
+        final_copy = json!({"session":null});
+    }
+    final_copy["scope"] = json!("input_journey_function_only");
+    final_copy["full_reading"] = json!(false);
+    final_copy["native_evidence_directory"] = json!(case_dir);
+    final_copy["execution_error"] = outcome["execution_error"].clone();
+    write_new(&dir.join("final.json"), &final_copy)
+        .map_err(|error| retain_execution_error(error, run_error.as_deref()))?;
+    write_new(&dir.join("outcome.json"), &outcome)
+        .map_err(|error| retain_execution_error(error, run_error.as_deref()))?;
+    println!("{}", outcome);
+    run_error.map_or(Ok(()), Err)
+}
+
+fn input_journey_source_test_fixture() -> (Case, InputJourneyTask, Value, Value, Value, Value) {
+    let case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "contact-explicit")
+        .unwrap();
+    let initial = input_journey_initial(&case);
+    let fixture = serde_json::to_value(&case).unwrap();
+    let mut consultation =
+        serde_json::to_value(reading_contracts::Consultation::default()).unwrap();
+    consultation["frame"] = json!({"state":"resolved","observation":{"value":{"method":"contact","facet":"event"},
+        "evidence":{"source":"user","turn":1,"quote":case.words}}});
+    let input = json!({"recognition_phase":"complete_selected_program","consultation":consultation,
+        "latest_words":case.words,"legacy_user_fact_sources":[case.words],"chart_exists":false,
+        "pending_requirement":null,"consultation_state":{"chart":null,"interpretation_exists":false,
+            "completed_steps":[],"unfinished_step":null,"pending_user_requests":[]}});
+    let schema = crate::horary_step::response_schema_for(Stage::Intake, Matter::Other, &input, &[]);
+    let (prompt, _) = trial_prompt(Stage::Intake, Matter::Other, &input, &schema, None).unwrap();
+    let request = json!({"sequence":2,"stage":"intake","matter":"other","input":input,"schema":schema,
+        "prompt":serde_json::from_str::<Value>(&prompt).unwrap(),"prompt_program":null,
+        "schema_sha256":horary_prompt_program::digest(schema.to_string()),"prompt_sha256":horary_prompt_program::digest(&prompt)});
+    let task = InputJourneyTask {
+        case_id: case.id.clone(),
+        source_case_directory: PathBuf::from("cases/contact-explicit"),
+        source_request_file: PathBuf::from("calls/0002-request.json"),
+        source_request_sha256: horary_prompt_program::digest(
+            serde_json::to_vec_pretty(&request).unwrap(),
+        ),
+        source_initial_sha256: horary_prompt_program::digest(
+            serde_json::to_vec_pretty(&initial).unwrap(),
+        ),
+        source_fixture_sha256: horary_prompt_program::digest(
+            serde_json::to_vec_pretty(&fixture).unwrap(),
+        ),
+        source_origin_sha256: "0".repeat(64),
+        baseline_manifest_sha256: "1".repeat(64),
+        target_method: Method::Contact,
+        program_file: None,
+        inspect_prompt_only: false,
+    };
+    let origin = json!({"case_id":case.id,"files":{"initial.json":task.source_initial_sha256,
+        "fixture.json":task.source_fixture_sha256,"calls/0002-request.json":task.source_request_sha256}});
+    (case, task, request, initial, fixture, origin)
+}
+
+#[test]
+fn input_journey_scope_rejects_downstream_or_wrong_method_without_resetting() {
+    let (case, task, request, initial, fixture, origin) = input_journey_source_test_fixture();
+    let check = |request: &Value| {
+        input_journey_source_scope(
+            &task,
+            &case,
+            request,
+            &initial,
+            &fixture,
+            &origin,
+            "calls/0002-request.json",
+        )
+    };
+    assert!(check(&request).is_ok());
+    let mut repair = request.clone();
+    repair["input"] = json!({"original_input":request["input"],"previous_worksheet":{"intent":"clarify"},"native_validation_error":"Retain a supplied actor"});
+    assert_eq!(check(&repair).unwrap().1, repair["input"], "Inspection uses the actual current repair prompt, never an invented plain extraction input");
+    for (pointer, value) in [
+        ("/stage", json!("conversation")),
+        ("/input/recognition_phase", json!("classify_question")),
+        (
+            "/input/consultation/frame/observation/value/method",
+            json!("parcel"),
+        ),
+        ("/input/chart_exists", json!(true)),
+        ("/input/latest_words", json!("She is my neighbour.")),
+        (
+            "/input/legacy_user_fact_sources",
+            json!([case.words, "She is my neighbour."]),
+        ),
+    ] {
+        let mut wrong = request.clone();
+        *wrong.pointer_mut(pointer).unwrap() = value;
+        assert!(check(&wrong).is_err(), "Must reject {pointer}");
+    }
+    let mut downstream = request.clone();
+    downstream["input"]["reading_request"] = json!({"binding":{"frame":{"method":"contact"}}});
+    assert!(check(&downstream).is_err());
+}
+
+#[test]
+fn input_journey_source_identity_rejects_gold_initial_and_seal_tampering() {
+    let (case, task, request, initial, fixture, origin) = input_journey_source_test_fixture();
+    let mut wrong_fixture = fixture.clone();
+    wrong_fixture["expected"]["facet"] = json!("timing");
+    assert!(input_journey_source_scope(
+        &task,
+        &case,
+        &request,
+        &initial,
+        &wrong_fixture,
+        &origin,
+        "calls/0002-request.json"
+    )
+    .is_err());
+    let mut specialist = initial.clone();
+    specialist["session"]["method"]["consultation"] = request["input"]["consultation"].clone();
+    assert!(input_journey_source_scope(
+        &task,
+        &case,
+        &request,
+        &specialist,
+        &fixture,
+        &origin,
+        "calls/0002-request.json"
+    )
+    .err()
+    .unwrap()
+    .contains("nothing is reset"));
+    let mut wrong_origin = origin.clone();
+    wrong_origin["files"]["fixture.json"] = json!("2".repeat(64));
+    assert!(input_journey_source_scope(
+        &task,
+        &case,
+        &request,
+        &initial,
+        &fixture,
+        &wrong_origin,
+        "calls/0002-request.json"
+    )
+    .is_err());
+    let mut wrong_prompt = request.clone();
+    wrong_prompt["prompt"][0]["content"] = json!("Changed source teaching");
+    assert!(input_journey_source_scope(
+        &task,
+        &case,
+        &wrong_prompt,
+        &initial,
+        &fixture,
+        &origin,
+        "calls/0002-request.json"
+    )
+    .is_err());
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("initial.json");
+    write_new(&path, &initial).unwrap();
+    classification_source_bytes(&path, &task.source_initial_sha256).unwrap();
+    fs::write(&path, serde_json::to_vec_pretty(&specialist).unwrap()).unwrap();
+    assert!(classification_source_bytes(&path, &task.source_initial_sha256).is_err());
+    let mut replay_task = serde_json::to_value(task).unwrap();
+    replay_task["replay_completed_capture"] = json!(true);
+    assert!(
+        serde_json::from_value::<InputJourneyTask>(replay_task).is_err(),
+        "Whole input journeys have no archived replay mode"
+    );
+}
+
+#[test]
+fn input_journey_requires_correct_supplying_binding_and_preserves_first_failure() {
+    let case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "contact-missing")
+        .unwrap();
+    assert!(case.follow_up.is_some());
+    let mut session = Session::default();
+    session.method.consultation = Some(reading_contracts::Consultation::default());
+    session.method.consultation.as_mut().unwrap().requested = Some(RequirementKey::Owner);
+    assert!(
+        !scripted_need_is_eligible(&case, &session),
+        "An Owner ask cannot authorize a relationship supplying script"
+    );
+    let hurdles = json!({"classification":{"status":"pass"},"elicitation":{"status":"pass"},
+        "extraction":{"status":"pass"},"reading":{"status":"not_run"}});
+    let mut raw = json!({"full_reading":false,"grade":{"semantic_pass":true},"hurdles":hurdles,
+        "first_turn_execution_completed":true,"follow_up_execution_completed":null,
+        "follow_up_pass":true,"follow_up":{"status":"withheld because binding was wrong"},"model_calls":0});
+    let first = json!({"result":{"Ok":null},"hurdles":hurdles});
+    let final_state = json!({"follow_up":raw["follow_up"],"hurdles":hurdles});
+    let withheld =
+        input_journey_measurement(&case, &raw, &first, &final_state, &[], true, None).unwrap();
+    assert_eq!(withheld["input_journey_observed"], true);
+    assert_eq!(
+        withheld["input_journey_score"], 0,
+        "No supplying execution means no supplying pass, even if a stale pass flag was offered"
+    );
+    raw["grade"]["semantic_pass"] = json!(false);
+    let mut explicit = case.clone();
+    explicit.follow_up = None;
+    explicit.follow_up_expected = None;
+    assert_eq!(
+        input_journey_measurement(&explicit, &raw, &first, &final_state, &[], true, None).unwrap()
+            ["input_journey_score"],
+        0,
+        "The first-turn grade cannot be erased by later state"
+    );
+}
+
+#[test]
+fn input_journey_transport_and_supply_errors_are_unobserved_and_reading_is_forbidden() {
+    let (case, _, _, _, _, _) = input_journey_source_test_fixture();
+    let hurdles = json!({"classification":{"status":"pass"},"elicitation":{"status":"pass"},
+        "extraction":{"status":"pass"},"reading":{"status":"not_run"}});
+    let raw = json!({"full_reading":false,"grade":{"semantic_pass":true},"hurdles":hurdles,
+        "first_turn_execution_completed":true,"follow_up_execution_completed":false,"model_calls":1});
+    let first = json!({"result":{"Ok":null},"hurdles":hurdles});
+    let final_state = json!({"follow_up":{"result":{"Err":"Unknown transport completion on supplying call"}},"hurdles":hurdles});
+    let calls = vec![
+        json!({"request":{"stage":"intake"},"result":{"Err":"Unknown transport completion"},
+        "provider_receipt":{"generation_attempts":[{"submitted":true}]}}),
+    ];
+    let measured =
+        input_journey_measurement(&case, &raw, &first, &final_state, &calls, true, None).unwrap();
+    assert_eq!(measured["input_journey_score"], Value::Null);
+    assert_eq!(
+        measured["execution_status"],
+        "hosted_transport_or_provider_error"
+    );
+    assert!(measured["execution_error"]
+        .as_str()
+        .unwrap()
+        .contains("supplying"));
+    assert_eq!(measured["physical_generation_attempts"], 1);
+    assert_eq!(measured["full_reading"], false);
+    assert_eq!(
+        input_journey_call_limits(24).unwrap()["physical_generation_attempt_reservation"],
+        144
+    );
+    let mut reading = raw.clone();
+    reading["full_reading"] = json!(true);
+    assert!(
+        input_journey_measurement(&case, &reading, &first, &final_state, &calls, true, None)
+            .is_err()
+    );
+    let reading_calls = vec![json!({"request":{"stage":"judgment"}})];
+    let prohibited = input_journey_measurement(
+        &case,
+        &raw,
+        &first,
+        &final_state,
+        &reading_calls,
+        true,
+        None,
+    )
+    .unwrap();
+    assert_eq!(prohibited["input_journey_score"], Value::Null);
+    assert_eq!(
+        prohibited["execution_status"],
+        "unsupported_input_call_or_batch"
+    );
+    let first_error = json!({"result":{"Err":"call budget exhausted"},"hurdles":hurdles});
+    let capped =
+        input_journey_measurement(&case, &raw, &first_error, &final_state, &[], true, None)
+            .unwrap();
+    assert_eq!(capped["input_journey_score"], Value::Null);
+    assert_eq!(capped["execution_status"], "logical_call_budget_exhausted");
+    assert!(capped["execution_error"]
+        .as_str()
+        .unwrap()
+        .contains("call budget exhausted"));
+    assert!(capped["execution_error"]
+        .as_str()
+        .unwrap()
+        .contains("supplying"));
+}
+
+#[test]
+fn input_journey_reserves_groups_branches_and_retries_separately() {
+    let pair = json!({"request":{"tasks":[["place","other",{},{}],["moment","other",{},{}]]},
+        "provider_receipts":[{"generation_attempts":[{"submitted":true},{"submitted":true},{"submitted":true}]},
+            {"generation_attempts":[{"submitted":true},{"submitted":true},{"submitted":true}]}]});
+    let calls = vec![
+        json!({"request":{"stage":"intake"},"provider_receipt":{"generation_attempts":[{"submitted":true}]}}),
+        pair,
+    ];
+    assert_eq!(input_journey_call_counts(&calls).unwrap(), (2, 3));
+    assert_eq!(input_journey_generation_attempts(&calls), 7);
+    let limits = input_journey_call_limits(24).unwrap();
+    assert_eq!(limits["logical_call_group_cap"], 24);
+    assert_eq!(limits["logical_provider_call_cap"], 48);
+    assert_eq!(limits["physical_generation_attempt_reservation"], 144);
+    assert_eq!(
+        classification_call_limits(3).unwrap()["physical_generation_attempt_reservation"],
+        9,
+        "The independent classifier's bound must not change"
+    );
+    assert!(input_journey_call_limits(0).is_err());
+    assert!(input_journey_call_limits(u64::MAX).is_err());
+    let (case, _, _, _, _, _) = input_journey_source_test_fixture();
+    let raw = json!({"full_reading":false,"grade":{"semantic_pass":true},"first_turn_execution_completed":true});
+    let first = json!({"result":{"Ok":null}});
+    for tasks in [
+        json!([
+            ["place", "other", {}, {}],
+            ["moment", "other", {}, {}],
+            ["moment", "other", {}, {}]
+        ]),
+        json!([["place", "other", {}, {}], ["judgment", "other", {}, {}]]),
+        json!([["place", "other", {}, {}], ["place", "other", {}, {}]]),
+    ] {
+        let calls = vec![json!({"request":{"tasks":tasks}})];
+        let interrupted =
+            input_journey_measurement(&case, &raw, &first, &Value::Null, &calls, true, None)
+                .unwrap();
+        assert_eq!(interrupted["input_journey_score"], Value::Null);
+        assert_eq!(
+            interrupted["execution_status"],
+            "unsupported_input_call_or_batch"
+        );
+    }
+}
+
+#[test]
+fn input_journey_program_cannot_change_upstream_or_another_methods_teaching() {
+    use horary_prompt_program::{digest, Evidence, Override, Program};
+    let (case, task, request, _, _, _) = input_journey_source_test_fixture();
+    let guide =
+        crate::horary_contract::guide_for(Stage::Intake, Matter::Other, &request["input"]).unwrap();
+    let program = Program {
+        version: 1,
+        id: "input-journey-selector-test".into(),
+        baseline_manifest_sha256: task.baseline_manifest_sha256.clone(),
+        overrides: vec![Override {
+            stage: "intake".into(),
+            recognition_phase: Some("complete_selected_program".into()),
+            method: Some("contact".into()),
+            expected_guide_sha256: digest(&guide),
+            replacement_text: guide,
+            edits: vec![],
+        }],
+        rationale: "Check only the typed override scope".into(),
+        evidence: vec![Evidence {
+            case_id: case.id.clone(),
+            file: "trace.json".into(),
+            json_pointer: "".into(),
+            sha256: digest("trace"),
+        }],
+        training_case_ids: vec![case.id],
+        holdout_case_ids: vec!["unused-validation-placeholder".into()],
+    };
+    let parse = |program: &Program| {
+        input_journey_program(&task, Some(&serde_json::to_vec(program).unwrap()))
+    };
+    assert!(parse(&program).is_ok());
+    let mut broad = program.clone();
+    broad.overrides[0].method = None;
+    assert!(parse(&broad).is_err());
+    let mut upstream = program.clone();
+    upstream.overrides[0].recognition_phase = Some("classify_question".into());
+    assert!(parse(&upstream).is_err());
+    let mut other = program.clone();
+    other.overrides[0].method = Some("parcel".into());
+    assert!(parse(&other).is_err());
+    let mut two = program.clone();
+    let mut conversation = two.overrides[0].clone();
+    conversation.stage = "conversation".into();
+    conversation.recognition_phase = None;
+    two.overrides.push(conversation);
+    assert!(parse(&two).is_err());
+    let mut unbound = program;
+    unbound.baseline_manifest_sha256 = "2".repeat(64);
+    assert!(parse(&unbound).is_err());
+}

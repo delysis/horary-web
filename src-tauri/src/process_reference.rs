@@ -68,6 +68,7 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/src/native.rs",
     "tools/horary-gepa/src/teacher.rs",
     "tools/horary-gepa/src/metric.rs",
+    "tools/horary-gepa/src/review.rs",
     "src-tauri/src/reading_contract_overview.md",
     "src-tauri/src/reading_contract_tests.rs",
     "src-tauri/src/horary_recovery_tests.rs",

@@ -32,7 +32,11 @@ The Rust `horary-optimize` driver chains one bounded round: discovery training r
 
 [`horary-gepa`](../tools/horary-gepa/README.md) adds a conventional iterative optimizer before that final comparison. It uses the LLM-independent engine from the alpha Rust `dsrust-gepa` port at exact revision `f24adde08c1d8850e4d7079d019643bb40f905cb`; upstream numerical conformance and local adapter checks are separate from model quality. This initial path uses reflective mutation and development selection, with merge disabled. It neither reformats the application's model requests into DSPy prompts nor replaces native acceptance with an optimizer-specific schema.
 
-The executable initial target is **classification only**: the native executor validates the returned method/facet frame with same-step repair, then authored labels grade it. This shorter target removes unrelated specialist, chart and prose calls from classification iterations. The score is useful search feedback, not a semantic interpretation qualification. Generic metrics for elicitation, extraction, reading and complete journeys also exist, but their stage execution adapters and independent review ingestion are further work. In particular, a blocked method cannot become a supported reading by optimizing its prompt.
+Two execution targets are available. **Classification** validates a method/facet frame with the actual native executor and same-step repair; authored labels grade it without unrelated chart or prose calls. **Input journey** starts with the original synthetic question, runs the actual information pipeline and conversational reader, and supplies a scripted follow-up only after the matching inquiry or single agreed proposal. It optimizes one method's `intake / complete_selected_program` teaching while every upstream classifier and downstream clarification executes afresh. Its current inspected capture selects a guide, never supplies an accepted fact record to the measurement. An upstream failure remains a failure; gold is not inserted to reach the extractor.
+
+Input journeys use independently validated Codex reviews as well as authored native gates. The reviewer sees one fresh trace, its synthetic rubric and an explicitly bounded selection of exact, hash-bound OCR pages. Classification, elicitation and extraction are scored separately. Scored conversation must cite its observed reply, and pipeline scores must cite actual native state/results; classification and elicitation additionally cite the book. Expected-answer-only scores are rejected. Actor identity, evidence honesty and continuity must each pass in every observed conversational turn; fluent prose cannot compensate for wrong facts. Required-inquiry checks include authored alternative requirements. Withheld or absent supplying replies remain unobserved, and reading must remain unobserved because this adapter generates no interpretation. Reviews have a separate hard reservation budget and exact trace/source/prompt/schema bindings; completed paid answers are reused. Development reviews select candidates but never reach reflection.
+
+Full-reading stage optimization still needs its own execution adapter and validated independent interpretation reviews. None of these component/input checks qualifies interpretation, the local model, voice or a packaged application. A blocked method cannot become a supported reading by optimizing its prompt.
 
 Each search splits the frozen training pool again: reflection training supplies failures to the writer; separate development cases rank candidates. Original reserved cases stay outside search. GEPA selects a parent and minibatch, Codex revises one actual editable teaching region from native failure feedback, and fresh hosted Gemma evaluates the changed region. Actual protected book quotations and all native/tool contracts remain exact. Completed sealed baseline captures may serve as checked controls only when every classifier and repair prompt/input/schema matches and the native executor consumes the original prefix exactly.
 
@@ -44,7 +48,11 @@ flowchart TD
   D --> E["Actual native function and same-step repair"]
   E --> F{"Completed measurement?"}
   F -->|no| X["Preserve interruption; no fabricated fitness or automatic replay"]
-  F -->|yes| G["Authored function fitness and explicit failure feedback"]
+  F -->|yes| R{"Input journey?"}
+  R -->|yes| S["Independent Codex review: exact synthetic rubric, native trace and book pages"]
+  S --> T["Verify citations, native grades and actual first/supplying observations"]
+  T --> G["Separate native and semantic gates; actor/honesty/continuity cannot compensate"]
+  R -->|classification| G
   G --> H["Codex login: reflect on one editable teaching component"]
   H --> I["Protect book blocks; validate actual Program signature"]
   I --> J["Fresh unconstrained hosted Gemma; same training minibatch"]
@@ -57,7 +65,7 @@ flowchart TD
   N --> O["Review and integrate only a validated improvement"]
 ~~~
 
-Immutable operation receipts reconstruct engine state from the same seed on resume. Controller/executable/guide/capture/fixture fingerprints, exclusive ownership and pre-submission teacher/student reservations guard this replay. A changed prompt always needs new student generation; completed-prefix calls and uncertain requests are never silently resubmitted. GEPA's iteration-boundary metric budget is reported separately from the hard paid-call reservation. The command and receipt layout are documented in the tool's README.
+Immutable operation receipts reconstruct engine state from the same seed on resume. Controller/executable/guide/capture/fixture/book fingerprints, exclusive ownership and pre-submission teacher/reviewer/student reservations guard this replay. A changed prompt always needs new student generation; completed-prefix calls and uncertain requests are never silently resubmitted. Input journeys require explicit fresh controls; no downstream capture reuse is permitted. GEPA's iteration-boundary metric budget is reported separately from the hard paid-call reservations. The command and receipt layout are documented in the tool's README.
 
 ## Traced corpus and observation boundary
 

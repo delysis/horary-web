@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use clap::{Parser, Subcommand};
-use horary_gepa::{load, prepare, run, ControlMode, Plan, ENGINE_REV};
+use horary_gepa::{load, prepare, read, run, BookContext, ControlMode, Function, Plan, ENGINE_REV};
 use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Parser)]
@@ -57,6 +57,18 @@ struct Preparation {
     wait_owner_pid: Option<u32>,
     #[arg(long, value_enum, default_value_t=ControlMode::ArchivedCapture)]
     control_mode: ControlMode,
+    #[arg(long, value_enum, default_value_t=Function::Classification)]
+    function: Function,
+    #[arg(long)]
+    target_method: Option<String>,
+    #[arg(long, default_value_t = 0)]
+    max_review_calls: u64,
+    #[arg(long, default_value_t = 600)]
+    review_seconds: u64,
+    #[arg(long)]
+    book_source: Option<PathBuf>,
+    #[arg(long, value_delimiter = ',')]
+    book_ocr_pages: Vec<usize>,
 }
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -85,13 +97,34 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 seed,
                 wait_owner_pid,
                 control_mode,
+                function,
+                target_method,
+                max_review_calls,
+                review_seconds,
+                book_source,
+                book_ocr_pages,
             } = *options;
-            let plan=Plan {version:1,engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
+            let review_book = book_source
+                .map(|p| {
+                    let file = std::fs::canonicalize(p).map_err(|error| error.to_string())?;
+                    Ok::<BookContext, String>(BookContext {
+                        sha256: horary_prompt_program::digest(read(&file)?),
+                        file,
+                        ocr_pages: book_ocr_pages,
+                    })
+                })
+                .transpose()?;
+            let plan=Plan {version:if function == Function::Classification {1} else {2},engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
                 manifest_sha256:String::new(),split_file:std::fs::canonicalize(split).map_err(|error|error.to_string())?,split_sha256:String::new(),
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
                 codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
-                qualification:"Training-only search; separate development selects candidates. Original reserved cases are never sent to reflection. First-classification executor only; full journey/source gates required before promotion.".into()};
+                function,target_method,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
+                qualification:if function == Function::Classification {
+                    "Training-only classification search; separate development selects candidates. No reading, reserved, on-device or deployment qualification. Fresh whole-journey/source/reserved gates required before promotion."
+                } else {
+                    "Training-only method-scoped input-journey search, with independently reviewed classification/elicitation/extraction and actual bound supplying turns. No reading generated or interpretation, reserved, on-device or deployment qualification. Complete reading/source/reserved gates required before promotion."
+                }.into()};
             let plan = prepare(plan, &state, &training, &development)?;
             println!(
                 "{}",
