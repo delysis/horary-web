@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 use clap::{Parser, Subcommand};
-use horary_gepa::{load, prepare, read, run, BookContext, ControlMode, Function, Plan, ENGINE_REV};
+use horary_gepa::{
+    load, prepare, read, run, BookContext, ControlMode, Function, Objective, Plan, ENGINE_REV,
+};
 use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Parser)]
@@ -13,6 +15,8 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Action {
+    /// Offline sensitivity and safety probes, no credentials or models.
+    Calibrate,
     Prepare(Box<Preparation>),
     PrepareRecovery {
         #[arg(long)]
@@ -33,6 +37,8 @@ enum Action {
 }
 #[derive(clap::Args)]
 struct Preparation {
+    #[arg(long, value_enum, default_value_t=Objective::WholeFunction)]
+    objective: Objective,
     #[arg(long)]
     campaign: PathBuf,
     #[arg(long)]
@@ -87,8 +93,12 @@ async fn main() {
 }
 async fn execute(cli: Cli) -> horary_gepa::Result<()> {
     match cli.action {
+        Action::Calibrate => {
+            println!("{}", horary_gepa::metric::calibration()?);
+        }
         Action::Prepare(options) => {
             let Preparation {
+                objective,
                 campaign,
                 split,
                 native_executable,
@@ -127,11 +137,11 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
                 codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
-                function,target_method,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
+                function,objective,target_method,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
                 qualification:if function == Function::Classification {
                     "Training-only classification search; separate development selects candidates. No reading, reserved, on-device or deployment qualification. Fresh whole-journey/source/reserved gates required before promotion."
                 } else {
-                    "Training-only method-scoped input-journey search, with independently reviewed classification/elicitation/extraction and actual bound supplying turns. No reading generated or interpretation, reserved, on-device or deployment qualification. Complete reading/source/reserved gates required before promotion."
+                    "Training-only initial-extractor correctness and repair-reliability search. Fixed conversation and supplying stages are measured separately, not locally optimized. No reading generated or whole-journey, interpretation, reserved, on-device or deployment qualification. Fresh production reading/source/reserved gates required before promotion."
                 }.into()};
             let plan = prepare(plan, &state, &training, &development)?;
             println!(

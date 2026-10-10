@@ -280,6 +280,106 @@ fn judgment_observed(outcome: &Value) -> Result<bool, String> {
     }
 }
 
+fn extractor_reliability(outcome: &Value, review: Option<&Value>) -> Result<Feedback, String> {
+    if outcome["scope"] != "input_journey_function_only" || outcome["full_reading"] != false {
+        return Err("Extractor reliability needs observed input-only execution".into());
+    }
+    let invoked = outcome["target_function_invoked"]
+        .as_bool()
+        .ok_or("Unknown target invocation; do not manufacture optimizer merit")?;
+    if !invoked {
+        return Ok(zero("The initial extractor was not invoked"));
+    }
+    // A later clarification cannot rescue an incorrect initially accepted record.
+    // The aggregate also includes the fixed guru's elicitation/reply. The
+    // top-level hurdles describe the final supplying state. Neither is the
+    // mutable initial extractor's contract; use its own first-state gates.
+    let initial = &outcome["grade"];
+    if !native_pass(initial, "classification")? || !native_pass(initial, "extraction")? {
+        return Ok(zero(
+            "The initially accepted inputs failed their authored native contract",
+        ));
+    }
+    let attempts = outcome["target_signature_calls"]
+        .as_u64()
+        .filter(|n| *n > 0)
+        .ok_or("Extractor reliability lacks actual focused-call witnesses")?;
+    let Some(review) = review else {
+        return Ok(zero(
+            "Accepted-state source correctness is independently unobserved",
+        ));
+    };
+    let assessment = review.get("extractor")
+        .ok_or("Extractor reliability requires its own accepted-state assessment, not a conversation or legacy pipeline score")?;
+    let Some(semantic) = dimension(assessment, false)? else {
+        return Ok(zero(
+            "Accepted-state extraction is independently unobserved",
+        ));
+    };
+    if semantic == 0 {
+        return Ok(zero(
+            "Independent accepted-state extraction failed; fewer attempts cannot compensate",
+        ));
+    }
+    // Disjoint bands: partial correctness <= .6, complete correctness > .8.
+    // Repair efficiency differentiates otherwise correct observations; it can
+    // never outrank more correct sourced facts. No wall-time or provider pacing.
+    let score = (2.0 * f64::from(semantic) + 1.0 / attempts as f64) / 5.0;
+    Ok(measured(score, false, format!(
+        "Initial accepted-state score {semantic}/2, {attempts} observed extractor attempts. {}. Component search merit only; conversation, supply, reading and reserved acceptance remain separate.",
+        assessment["reason"].as_str().unwrap_or("")
+    )))
+}
+
+/// Authored counterfactuals exercise the actual fitness before any paid search.
+/// These are instrumentation checks, never reviews of model-generated answers.
+pub fn calibration() -> Result<Value, String> {
+    let d = serde_json::json!({"state":"scored","score":2,"reason":"Authored offline counterfactual, not a model review",
+        "evidence":[{"case_id":"calibration","file":"authored-offline-probe","json_pointer":"","sha256":"0".repeat(64)}]});
+    let mut o = serde_json::json!({"id":"calibration","scope":"input_journey_function_only","execution_status":"completed",
+        "first_turn_execution_completed":true,"follow_up_execution_completed":null,"full_reading":false,
+        "grade":{"semantic_pass":true,"hurdles":{"classification":{"status":"pass"},"extraction":{"status":"pass"}}},"target_function_invoked":true,"target_signature_calls":3,
+        "hurdles":{"classification":{"status":"pass"},"extraction":{"status":"pass"}}});
+    let mut r = serde_json::json!({"case_id":"calibration","partition":"training","extractor":d,
+        "first_turn":{"evidence_honesty":d}});
+    let baseline = grade(&o, Some(&r), "extractor_reliability")?;
+    r["first_turn"]["evidence_honesty"]["score"] = serde_json::json!(0);
+    let changed_dialogue = grade(&o, Some(&r), "extractor_reliability")?;
+    o["hurdles"]["extraction"]["status"] = serde_json::json!("fail");
+    o["grade"]["semantic_pass"] = serde_json::json!(false);
+    let changed_fixed_stages = grade(&o, Some(&r), "extractor_reliability")?;
+    o["target_signature_calls"] = serde_json::json!(1);
+    let fewer_repairs = grade(&o, Some(&r), "extractor_reliability")?;
+    r["extractor"]["score"] = serde_json::json!(0);
+    let wrong_facts = grade(&o, Some(&r), "extractor_reliability")?;
+    r["extractor"]["score"] = serde_json::json!(1);
+    let partial = grade(&o, Some(&r), "extractor_reliability")?;
+    o["target_function_invoked"] = serde_json::json!(false);
+    let uninvoked = grade(&o, Some(&r), "extractor_reliability")?;
+    o["execution_status"] = serde_json::json!("interrupted");
+    let interruption_rejected = grade(&o, Some(&r), "extractor_reliability").is_err();
+    if baseline.score != changed_dialogue.score
+        || baseline.score != changed_fixed_stages.score
+        || fewer_repairs.score <= baseline.score
+        || wrong_facts.score != 0.
+        || partial.score >= baseline.score
+        || uninvoked.score != 0.
+        || !interruption_rejected
+        || baseline.qualified
+        || fewer_repairs.qualified
+    {
+        return Err("Optimizer objective failed offline sensitivity/safety calibration; no paid search allowed".into());
+    }
+    Ok(
+        serde_json::json!({"version":1,"objective":"extractor_reliability","passed":true,
+        "baseline_three_attempts":baseline,"fixed_dialogue_change":changed_dialogue,
+        "fixed_native_stages_change":changed_fixed_stages,
+        "one_attempt_correct":fewer_repairs,"one_attempt_wrong":wrong_facts,
+        "one_attempt_partial":partial,"uninvoked":uninvoked,"interruption_rejected":interruption_rejected,
+        "model_calls":0,"qualification":"Authored offline metric calibration only; no model improvement, source review or application acceptance"}),
+    )
+}
+
 /// Fitness is for one frozen target. `qualified` certifies only that target's
 /// supplied evidence, not another method, model, programme or release. A missing
 /// review permits a deterministic classification pilot; other semantic merit
@@ -291,7 +391,13 @@ pub fn grade(
 ) -> Result<Feedback, String> {
     if !matches!(
         target,
-        "classification" | "elicitation" | "extraction" | "reading" | "journey" | "input_journey"
+        "classification"
+            | "elicitation"
+            | "extraction"
+            | "reading"
+            | "journey"
+            | "input_journey"
+            | "extractor_reliability"
     ) {
         return Err(format!("Unknown frozen optimization target: {target}"));
     }
@@ -303,6 +409,9 @@ pub fn grade(
     }
     if let Some(review) = independent_review {
         review_identity(outcome, review)?;
+    }
+    if target == "extractor_reliability" {
+        return extractor_reliability(outcome, independent_review);
     }
     if target == "input_journey" && outcome["target_function_invoked"] == false {
         return Ok(zero("The observed upstream route did not reach the optimized extractor; native grades are unchanged, but this target has no fitness"));
@@ -436,6 +545,96 @@ mod tests {
             "grade":{"semantic_pass":true,"actual":{"needs":[],"requested":null,"native_result":{"result":"judgment","answer":"Authored offline answer","worksheet":{"answer":"Authored offline answer"}}}},
             "hurdles":{"classification":{"status":"pass"},"extraction":{"status":"pass"},
                 "elicitation":{"status":"pass"},"reading":{"status":"structure_pass_review_pending"}}})
+    }
+    fn extractor_fixture() -> (Value, Value) {
+        let (mut o, mut r) = input_journey_fixture();
+        o["target_function_invoked"] = json!(true);
+        o["target_signature_calls"] = json!(3);
+        o["grade"]["hurdles"] = o["hurdles"].clone();
+        r["extractor"] = dimension(2);
+        (o, r)
+    }
+    #[test]
+    fn fixed_dialogue_cannot_erase_extractor_signal_or_qualify_a_journey() {
+        let (mut o, mut r) = extractor_fixture();
+        r["first_turn"]["evidence_honesty"] = dimension(1);
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 0.);
+        let baseline = grade(&o, Some(&r), "extractor_reliability").unwrap();
+        o["target_signature_calls"] = json!(1);
+        let improved = grade(&o, Some(&r), "extractor_reliability").unwrap();
+        assert!(improved.score > baseline.score);
+        assert_eq!(improved.score, 1.);
+        assert!(!improved.qualified);
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 0.);
+    }
+    #[test]
+    fn faster_wrong_extraction_never_outweighs_sourced_state() {
+        let (mut o, mut r) = extractor_fixture();
+        o["target_signature_calls"] = json!(24);
+        let correct = grade(&o, Some(&r), "extractor_reliability").unwrap().score;
+        o["target_signature_calls"] = json!(1);
+        r["extractor"] = dimension(1);
+        let partial = grade(&o, Some(&r), "extractor_reliability").unwrap().score;
+        assert!(correct > partial);
+        r["extractor"] = dimension(0);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap().score,
+            0.
+        );
+    }
+    #[test]
+    fn later_supply_cannot_rescue_initially_wrong_accepted_inputs() {
+        let (mut o, mut r) = extractor_fixture();
+        supplying(&mut o, &mut r);
+        o["grade"]["semantic_pass"] = json!(false);
+        o["grade"]["hurdles"]["extraction"]["status"] = json!("fail");
+        r["native_semantic_pass"] = json!(false);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap().score,
+            0.
+        );
+    }
+    #[test]
+    fn fixed_native_stages_cannot_veto_initial_extractor_merit() {
+        let (mut o, mut r) = extractor_fixture();
+        let baseline = grade(&o, Some(&r), "extractor_reliability").unwrap();
+        supplying(&mut o, &mut r);
+        o["hurdles"]["extraction"]["status"] = json!("fail");
+        o["grade"]["semantic_pass"] = json!(false);
+        o["grade"]["hurdles"]["elicitation"]["status"] = json!("fail");
+        r["native_semantic_pass"] = json!(false);
+        let component = grade(&o, Some(&r), "extractor_reliability").unwrap();
+        assert_eq!(component.score, baseline.score);
+        assert!(!component.qualified);
+        assert_eq!(grade(&o, Some(&r), "input_journey").unwrap().score, 0.);
+        o["grade"].as_object_mut().unwrap().remove("hurdles");
+        assert!(grade(&o, Some(&r), "extractor_reliability").is_err());
+    }
+    #[test]
+    fn unknown_ownership_and_real_native_need_are_successful_extraction() {
+        let (o, r) = extractor_fixture();
+        let mut unresolved = o;
+        unresolved["grade"]["actual"]["needs"] = json!([{"kind":"subject_owner"}]);
+        unresolved["grade"]["actual"]["requested"] = json!({"kind":"subject_owner"});
+        assert!(
+            grade(&unresolved, Some(&r), "extractor_reliability")
+                .unwrap()
+                .score
+                > 0.8
+        );
+    }
+    #[test]
+    fn missing_invocation_or_accepted_state_assessment_is_not_a_score() {
+        let (mut o, mut r) = extractor_fixture();
+        r.as_object_mut().unwrap().remove("extractor");
+        assert!(grade(&o, Some(&r), "extractor_reliability").is_err());
+        o["target_function_invoked"] = json!(false);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap().score,
+            0.
+        );
+        o["target_function_invoked"] = Value::Null;
+        assert!(grade(&o, Some(&r), "extractor_reliability").is_err());
     }
     #[test]
     fn single_function_observation_does_not_claim_a_complete_conversation() {

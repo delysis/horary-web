@@ -1,7 +1,7 @@
 //! Actual native neural functions; no local inference or downstream capture transplant.
 use crate::{
     journal::{Journal, Operation},
-    keep, load, read, verify, ControlMode, Example, Function, Plan, Result,
+    keep, load, read, verify, ControlMode, Example, Function, Objective, Plan, Result,
 };
 use gepa::Candidate;
 use horary_prompt_program::digest;
@@ -26,9 +26,12 @@ pub fn evaluate(
 ) -> Result<Value> {
     let program = plan.program(candidate)?;
     let archival = program.is_none() && plan.control_mode == ControlMode::ArchivedCapture;
-    let request = json!({"case":example,"candidate":candidate,"native_executable_sha256":plan.native_executable_sha256,
+    let mut request = json!({"case":example,"candidate":candidate,"native_executable_sha256":plan.native_executable_sha256,
         "manifest_sha256":plan.manifest_sha256,"function":plan.function,"target_method":plan.target_method,
         "scope":plan.function.metric(),"archival_control":archival});
+    if plan.objective == Objective::ExtractorReliability {
+        request["objective"] = json!(plan.objective);
+    }
     let cache_key = digest(request.to_string());
     let cache = journal
         .root
@@ -253,10 +256,20 @@ pub fn evaluate(
             }
         }
     }
-    let response = json!({"outcome":outcome,"final":load(&evidence.join("final.json"))?,"source":"actual native application executor",
+    let mut response = json!({"outcome":outcome,"final":load(&evidence.join("final.json"))?,"source":"actual native application executor",
         "native_evidence_directory":native_directory,
         "actual_function_calls":focused,
         "archival_control":archival,"cache_identity":cache_key});
+    if plan.objective == Objective::ExtractorReliability {
+        response["objective"] = json!(plan.objective);
+        let first = load(&native_directory.join("first-turn.json"))?;
+        response["initial_accepted_inputs"] = json!({
+            "consultation":first["session"]["method"]["consultation"],
+            "canonical_question":first["session"]["question"],
+            "candidate_moment":first["session"]["candidateMomentMs"],
+            "source_sha256":digest(read(&native_directory.join("first-turn.json"))?),
+            "scope":"Initially accepted state; no supplying-turn checkpoint transplanted"});
+    }
     journal.finish(&directory, &response)?;
     fs::create_dir_all(cache.parent().ok_or("No cache directory")?)
         .map_err(|error| error.to_string())?;

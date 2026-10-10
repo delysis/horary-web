@@ -36,6 +36,21 @@ pub enum Function {
     Classification,
     InputJourney,
 }
+
+/// Search merit and application acceptance are deliberately different contracts.
+/// The default preserves historical plans; new extractor rounds opt in explicitly.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, clap::ValueEnum, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Objective {
+    #[default]
+    WholeFunction,
+    ExtractorReliability,
+}
+impl Objective {
+    fn is_default(&self) -> bool {
+        *self == Self::WholeFunction
+    }
+}
 impl Function {
     fn is_classification(&self) -> bool {
         *self == Self::Classification
@@ -225,6 +240,8 @@ pub struct Plan {
     pub control_mode: ControlMode,
     #[serde(default, skip_serializing_if = "Function::is_classification")]
     pub function: Function,
+    #[serde(default, skip_serializing_if = "Objective::is_default")]
+    pub objective: Objective,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_method: Option<String>,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -237,6 +254,12 @@ pub struct Plan {
 }
 
 impl Plan {
+    pub fn metric(&self) -> &'static str {
+        match self.objective {
+            Objective::WholeFunction => self.function.metric(),
+            Objective::ExtractorReliability => "extractor_reliability",
+        }
+    }
     pub fn signature(&self) -> horary_prompt_program::Signature<'_> {
         horary_prompt_program::Signature {
             stage: "intake",
@@ -262,6 +285,13 @@ impl Plan {
             .collect())
     }
     pub fn validate(&self) -> Result<()> {
+        if self.objective == Objective::ExtractorReliability
+            && self.function != Function::InputJourney
+        {
+            return Err(
+                "Extractor reliability requires an actual method-scoped input execution".into(),
+            );
+        }
         if self.version
             != if self.function == Function::Classification {
                 1
@@ -487,6 +517,14 @@ impl Plan {
 }
 
 pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -> Result<Plan> {
+    if plan.function == Function::InputJourney && plan.objective == Objective::WholeFunction {
+        return Err("The editable initial extractor cannot optimize a whole input conversation. Prepare an explicit extractor-reliability objective; keep whole-journey qualification separate.".into());
+    }
+    if plan.objective == Objective::ExtractorReliability {
+        let calibration = metric::calibration()?;
+        fs::create_dir_all(state).map_err(|e| e.to_string())?;
+        keep(&state.join("objective-calibration.json"), &calibration)?;
+    }
     if plan.function == Function::InputJourney
         && (plan.control_mode != ControlMode::FreshHosted
             || plan.target_method.is_none()
@@ -680,7 +718,7 @@ impl Adapter {
             let feedback = metric::grade(
                 &evaluation["outcome"],
                 independent.as_ref(),
-                self.plan.function.metric(),
+                self.plan.metric(),
             )?;
             if !feedback.score.is_finite() || !(0.0..=1.0).contains(&feedback.score) {
                 return Err("Invalid or misaligned fitness".into());
@@ -788,7 +826,7 @@ pub async fn run(plan: Plan, state: PathBuf) -> Result<Value> {
             let value = json!({"engine":"dsrust-gepa","revision":ENGINE_REV,"plan_sha256":digest(read(&state.join("plan.json"))?),"best_index":result.best_idx,"candidates":result.candidates,
                 "parents":result.parents,"development_scores":result.val_aggregate_scores,"logical_metric_evaluations":result.total_num_evals,
                 "iterations":result.iterations,"selected_program":program,"function":plan.function,"target_method":plan.target_method,
-                "qualification":plan.qualification});
+                "objective":plan.objective,"qualification":plan.qualification});
             keep(&state.join("search-result.json"), &value)?;
             if let Some(program) = program {
                 keep(&state.join("selected-program.json"), &program)?;
@@ -901,6 +939,7 @@ mod tests {
             wait_owner_pid: None,
             control_mode: ControlMode::ArchivedCapture,
             function: Function::Classification,
+            objective: Objective::WholeFunction,
             target_method: None,
             max_review_calls: 0,
             review_seconds: 0,

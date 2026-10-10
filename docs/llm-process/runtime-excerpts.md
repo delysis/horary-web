@@ -688,8 +688,9 @@ fn run_inner(
     Ok(())
 }
 
-/// The campaign exercises the same input phase and guru as production, without
-/// claiming that collecting sufficient inputs qualifies an interpretation.
+/// Exercise production input preparation and actual inquiries. At ReadyReading,
+/// stop explicitly: production continues into interpretation before the guru.
+/// A skipped interpretation must not elicit a fabricated closing conversation.
 #[cfg(test)]
 pub(crate) fn run_elicitation(
     session: &mut Session,
@@ -700,8 +701,16 @@ pub(crate) fn run_elicitation(
     previous: &Session,
 ) -> Result<(), String> {
     let result =
-        prepare_reading(session, runtime, geocode, instant, audio, previous).and_then(|_| {
-            if session.method.brief.intent != "pause" {
+        prepare_reading(session, runtime, geocode, instant, audio, previous).and_then(|ready| {
+            if let Some(ready) = ready {
+                session
+                    .audit
+                    .push(json!({"event":"input_evaluation_boundary",
+                    "boundary":"ready_reading","binding":ready.binding(),
+                    "after_message":session.messages.len(),
+                    "reading_executed":false,"conversation_executed":false}));
+                runtime.publish(session)?;
+            } else if session.method.brief.intent != "pause" {
                 crate::horary_conversation::respond(session, runtime)?;
             }
             Ok(())
@@ -1878,6 +1887,43 @@ mod tests {
             .unwrap()
             .contains("main document"));
     }
+    #[test]
+    fn input_evaluation_stops_at_real_handoff_without_inventing_a_closing_reply() {
+        for device_available in [true, false] {
+            let fixture = process_examples_at_boundary(device_available, true).unwrap();
+            let calls = fixture["examples"].as_array().unwrap();
+            assert!(!calls
+                .iter()
+                .any(|c| matches!(c["stage"].as_str(), Some("judgment" | "significators"))));
+            let conversations = calls
+                .iter()
+                .filter(|c| c["stage"] == "conversation")
+                .count();
+            assert_eq!(
+                conversations,
+                usize::from(!device_available),
+                "Only a genuinely missing place needs an inquiry"
+            );
+            assert_eq!(
+                fixture["inputEvaluationBoundary"]["boundary"],
+                "ready_reading"
+            );
+            assert_eq!(
+                fixture["inputEvaluationBoundary"]["conversation_executed"],
+                false
+            );
+            assert_eq!(
+                fixture["inputEvaluationBoundary"]["reading_executed"],
+                false
+            );
+            assert!(fixture["inputEvaluationBoundary"]["binding"].is_object());
+            assert_eq!(
+                fixture["canonicalQuestion"],
+                "Will I get married in the next year?"
+            );
+            assert_eq!(fixture["chartMomentMs"], 1789387200000.);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2505,6 +2551,14 @@ pub(crate) fn process_examples() -> Result<Value, String> {
 
 #[cfg(test)]
 fn process_examples_with_place(device_available: bool) -> Result<Value, String> {
+    process_examples_at_boundary(device_available, false)
+}
+
+#[cfg(test)]
+pub(crate) fn process_examples_at_boundary(
+    device_available: bool,
+    input_only: bool,
+) -> Result<Value, String> {
     use std::sync::Mutex;
     struct Fixture {
         dir: tempfile::TempDir,
@@ -2669,7 +2723,8 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
         });
     }
     let previous = session.clone();
-    run(
+    let execute = if input_only { run_elicitation } else { run };
+    execute(
         &mut session,
         &runtime,
         &GeocodeState::default(),
@@ -2677,13 +2732,14 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
         None,
         &previous,
     )?;
+    let first_session = input_only.then(|| session.clone());
     if !device_available {
         let previous = session.clone();
         session.messages.push(Message {
             role: "user".into(),
             text: "Woodbridge, Virginia, United States.".into(),
         });
-        run(
+        execute(
             &mut session,
             &runtime,
             &GeocodeState::default(),
@@ -2698,9 +2754,12 @@ fn process_examples_with_place(device_available: bool) -> Result<Value, String> 
             .iter()
             .position(|s| serde_json::to_value(s).unwrap() == r["stage"])
     });
-    Ok(
-        json!({"authorship":"Synthetic inputs and authored worksheet outputs, captured from the actual runtime scheduler; no model invoked.","examples":requests,"visibleProposedAnswer":session.sections.last().map(|s|&s.body),"chartMomentMs":session.chart.as_ref().map(|c|&c["timestampMs"]),"canonicalQuestion":session.question,"horizon":session.method.brief.horizon,"nativeDefaults":{"place":if device_available{"device coordinates"}else{"geocoded stated city"},"moment":"1789387200000, understood question receipt instant","noPlaceOrMomentModelCall":true}}),
-    )
+    let mut fixture = json!({"authorship":"Synthetic inputs and authored worksheet outputs, captured from the actual runtime scheduler; no model invoked.","examples":requests,"visibleProposedAnswer":session.sections.last().map(|s|&s.body),"chartMomentMs":session.chart.as_ref().map(|c|&c["timestampMs"]),"canonicalQuestion":session.question,"horizon":session.method.brief.horizon,"inputEvaluationBoundary":session.audit.iter().rev().find(|e|e["event"]=="input_evaluation_boundary"),"nativeDefaults":{"place":if device_available{"device coordinates"}else{"geocoded stated city"},"moment":"1789387200000, understood question receipt instant","noPlaceOrMomentModelCall":true}});
+    if input_only {
+        fixture["first_session"] = json!(first_session);
+        fixture["accepted_session"] = json!(session);
+    }
+    Ok(fixture)
 }
 
 ```

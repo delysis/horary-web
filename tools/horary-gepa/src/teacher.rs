@@ -1,7 +1,7 @@
 //! Strong reflection via the user's saved Codex login, with no model override.
 use crate::{
     journal::{Journal, Operation},
-    keep, load, native, read, Example, Plan, Result,
+    keep, load, native, read, Example, Objective, Plan, Result,
 };
 use gepa::{Candidate, Reflective};
 use horary_prompt_program::{digest, guide_parts};
@@ -35,14 +35,25 @@ pub fn reflect(
         let inputs = json!({"case_id":example.id,"source_request_sha256":example.source_request_sha256,
             "actual_application_input":horary_prompt_program::original_input(&call["input"]),
             "output_contract":call["schema"]});
+        let generated = if plan.objective == Objective::ExtractorReliability {
+            &evaluation["evaluation"]["initial_accepted_inputs"]
+        } else {
+            &evaluation["evaluation"]["final"]
+        };
+        if generated.is_null() {
+            return Err(
+                "Reflection lacks actual observed output for its editable component".into(),
+            );
+        }
         samples.push(vec![("Inputs".into(),Reflective::Text(inputs.to_string())),
-            ("Generated Outputs".into(),Reflective::Text(evaluation["evaluation"]["final"].to_string())),
+            ("Generated Outputs".into(),Reflective::Text(generated.to_string())),
             ("Feedback".into(),Reflective::Text(json!({"fitness":evaluation["fitness"],"authored_target_expectations":example.expected,
+                "objective":plan.objective,"editable_signature":{"stage":"intake","recognition_phase":plan.function.phase(),"method":plan.target_method},
                 "actual_native_gates":evaluation["evaluation"]["outcome"]["hurdles"],
                 "validated_independent_input_review":evaluation["independent_review"],
                 "actual_focused_calls":evaluation["evaluation"]["actual_function_calls"]}).to_string()))]);
     }
-    let reflection = gepa::render_prompt(current, &samples, None);
+    let reflection = gepa::render_prompt(current, &samples, Some("Change only the named component. For extractor reliability, improve the initial accepted sourced facts and reduce actual focused repairs; downstream conversation or supplying-program defects are separately observed and cannot be repaired by this component. Do not invent missing ownership or skip source guards."));
     let fixed_source = guide_parts(&plan.guide)?.quoted_source.join("\n");
     let book = plan
         .review_book

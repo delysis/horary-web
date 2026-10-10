@@ -501,10 +501,14 @@ fn a_scope_only_repair_keeps_its_proposed_frame_then_runs_the_new_extractor() {
     let calls = script.calls.lock().unwrap();
     assert_eq!(
         calls.len(),
-        5,
-        "Four intake calls and one private conversation fixture"
+        4,
+        "Four intake calls; input-only execution stops at ReadyReading"
     );
     assert!(calls[..4].iter().all(|(stage, _)| *stage == Stage::Intake));
+    assert!(session
+        .audit
+        .iter()
+        .any(|e| e["event"] == "input_evaluation_boundary" && e["boundary"] == "ready_reading"));
     let repair = &calls[2].1;
     assert_eq!(
         repair["previous_worksheet"],

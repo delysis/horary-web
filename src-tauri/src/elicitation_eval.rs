@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-08.2";
+const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-10.3";
 const CORE: &str = include_str!("../test-fixtures/elicitation/core.json");
 const SPECIALIST: &str = include_str!("../test-fixtures/elicitation/specialist.json");
 
@@ -239,6 +239,44 @@ fn current_anchor(session: &Session) -> Option<Anchor> {
         longitude: place.longitude,
         timezone: place.timezone.clone(),
     })
+}
+
+fn input_handoff_binding(session: &Session) -> Option<Value> {
+    let case = session.method.consultation.as_ref()?;
+    session.chart.as_ref()?;
+    session.place.as_ref()?;
+    let anchor = current_anchor(session)?;
+    if session.chart.as_ref()?["timestampMs"].as_f64() != Some(anchor.timestamp_ms) {
+        return None;
+    }
+    let ready = reading_contracts::ReadyReading::prepare(case, anchor).ok()?;
+    let binding = serde_json::to_value(ready.binding()).expect("Reading bindings serialize");
+    let (index, boundary) = session
+        .audit
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, e)| e["event"] == "input_evaluation_boundary")?;
+    if boundary["boundary"] != "ready_reading"
+        || boundary["binding"] != binding
+        || boundary["after_message"].as_u64() != Some(session.messages.len() as u64)
+        || boundary["reading_executed"] != false
+        || boundary["conversation_executed"] != false
+    {
+        return None;
+    }
+    session.audit[..index]
+        .iter()
+        .any(|e| {
+            e["event"] == "contract_handoff"
+                && e["binding"] == binding
+                && e["request"]["binding"] == binding
+        })
+        .then_some(binding)
+}
+
+fn input_handoff_boundary(session: &Session) -> bool {
+    input_handoff_binding(session).is_some()
 }
 
 #[derive(Debug, Serialize)]
@@ -604,14 +642,10 @@ fn grade_at_moment(
             "The reader requested unnecessary information {requested:?}"
         ));
     }
-    let reply = session
-        .messages
-        .iter()
-        .rev()
-        .find(|message| message.role == "assistant")
-        .map(|message| message.text.as_str())
-        .unwrap_or_default();
-    if reply.trim().is_empty() {
+    let reply = latest_reply_after_user(session).unwrap_or_default();
+    let input_binding = input_handoff_binding(session);
+    let input_handoff = input_binding.is_some();
+    if reply.trim().is_empty() && !input_handoff {
         mismatches.push("No conversational reply was delivered".into());
     }
     let flags = fluidity_flags(session, reply, &needs);
@@ -632,7 +666,9 @@ fn grade_at_moment(
         actual: json!({"frame":frame,"question":session.question,"needs":needs,
             "requested":requested,"ready":ready,"plan":plan,"chart":session.chart,
             "reader_place":session.place,"anchor":anchor,"consultation":consultation,
-            "reply":reply,"native_result":session.method.result}),
+            "reply":reply,"conversation_reply_observed":!reply.trim().is_empty(),
+            "input_handoff_boundary":input_handoff,"input_handoff_binding":input_binding,
+            "native_result":session.method.result}),
         fluidity_review_flags: flags,
         human_fluidity_review:
             "Not reviewed; flags are heuristics, not certification of conversational quality",
@@ -975,7 +1011,8 @@ fn follow_up_grade(
         );
     }
     let fresh_reply = latest_reply_after_user(session);
-    if fresh_reply.is_none() {
+    let input_handoff = input_handoff_boundary(session);
+    if fresh_reply.is_none() && !input_handoff {
         failures.push("No new conversational reply followed the supplied follow-up; an earlier reply cannot qualify this turn".into());
     }
     let reply = fresh_reply.unwrap_or_default();
@@ -1072,6 +1109,7 @@ fn follow_up_grade(
     json!({"pass":failures.is_empty(),"failures":failures,"unresolved_original_needs":unresolved,
         "current_needs":needs,"native_needs":native_needs,"input_complete":input_complete,
         "after_state_grade":after_grade,"fresh_assistant_reply":fresh_reply.is_some(),
+        "input_handoff_boundary":input_handoff,"conversation_complete":fresh_reply.is_some(),
         "ready_binding":ready_binding,"native_handoff_recorded":native_handoff_recorded,
         "question_preserved":previous.question==session.question,
         "candidate_moment_preserved":previous.candidate_moment_ms==session.candidate_moment_ms,
@@ -2221,6 +2259,78 @@ fn resolved_fixture<T>(value: T) -> reading_contracts::Slot<T> {
             },
         },
     }
+}
+
+fn scheduler_handoff_case(missing_place: bool) -> Case {
+    serde_json::from_value(json!({"id":"scheduler-handoff-regression","method":"relationship",
+        "mode":if missing_place {"missing"} else {"explicit"},
+        "words":"Will I get married in the next year?","device_available":!missing_place,
+        "follow_up":if missing_place {Some("Woodbridge, Virginia, United States.")} else {None},
+        "expected":{"facet":"event","ready":!missing_place,
+            "needs":if missing_place {json!([RequirementKey::ChartPlace])} else {json!([])},
+            "chart_moment_ms":if missing_place {None} else {Some(1789387200000.)}},
+        "follow_up_expected":if missing_place {Some(json!({"facet":"event","ready":true,"chart_moment_ms":1789387200000.}))} else {None},
+        "source_pages":"Authored offline native-handoff integration probe",
+        "rationale":"Actual scheduler and grader must agree on input completion without inventing a conversation or interpretation."})).unwrap()
+}
+
+#[test]
+fn explicit_input_handoff_passes_native_grade_without_claiming_a_reply() {
+    let fixture = crate::horary_pipeline::process_examples_at_boundary(true, true).unwrap();
+    let session: Session = serde_json::from_value(fixture["accepted_session"].clone()).unwrap();
+    let case = scheduler_handoff_case(false);
+    let graded = grade_at_moment(&case, &session, None, 1789387200000.);
+    assert!(graded.semantic_pass, "{:?}", graded.mismatches);
+    assert_eq!(graded.actual["conversation_reply_observed"], false);
+    assert_eq!(graded.actual["input_handoff_boundary"], true);
+    assert_eq!(
+        graded.hurdles.extraction.status,
+        crate::reading_eval::Status::Pass
+    );
+    let mut stale = session.clone();
+    stale.audit.last_mut().unwrap()["after_message"] = json!(0);
+    assert!(!grade_at_moment(&case, &stale, None, 1789387200000.).semantic_pass);
+    let mut mismatched = session;
+    mismatched.audit.last_mut().unwrap()["binding"]["input_sha256"] = json!("0".repeat(64));
+    assert!(!input_handoff_boundary(&mismatched));
+}
+
+#[test]
+fn supplying_input_handoff_passes_native_grade_but_leaves_conversation_unobserved() {
+    let fixture = crate::horary_pipeline::process_examples_at_boundary(false, true).unwrap();
+    let previous: Session = serde_json::from_value(fixture["first_session"].clone()).unwrap();
+    let after: Session = serde_json::from_value(fixture["accepted_session"].clone()).unwrap();
+    let case = scheduler_handoff_case(true);
+    let first_grade = grade_at_moment(&case, &previous, None, 1789387200000.);
+    assert!(first_grade.semantic_pass, "{:?}", first_grade.mismatches);
+    let result = follow_up_grade(
+        &case,
+        case.follow_up.as_deref().unwrap(),
+        &previous,
+        &after,
+        &Ok(()),
+    );
+    assert_eq!(result["pass"], true, "{}", result["failures"]);
+    assert_eq!(result["input_complete"], true);
+    assert_eq!(result["native_handoff_recorded"], true);
+    assert_eq!(result["input_handoff_boundary"], true);
+    assert_eq!(result["fresh_assistant_reply"], false);
+    assert_eq!(result["conversation_complete"], false);
+    assert_eq!(result["candidate_moment_preserved"], true);
+    let mut absent = after;
+    absent
+        .audit
+        .retain(|event| event["event"] != "input_evaluation_boundary");
+    assert_eq!(
+        follow_up_grade(
+            &case,
+            case.follow_up.as_deref().unwrap(),
+            &previous,
+            &absent,
+            &Ok(())
+        )["pass"],
+        false
+    );
 }
 
 fn follow_up_fixture() -> (Case, Session, Session) {

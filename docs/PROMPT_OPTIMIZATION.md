@@ -51,7 +51,7 @@ flowchart TD
   F -->|yes| R{"Input journey?"}
   R -->|yes| S["Independent Codex review: exact synthetic rubric, native trace and book pages"]
   S --> T["Verify citations, native grades and actual first/supplying observations"]
-  T --> G["Separate native and semantic gates; actor/honesty/continuity cannot compensate"]
+  T --> G["Chosen component objective; report whole-journey guards separately"]
   R -->|classification| G
   G --> H["Codex login: reflect on one editable teaching component"]
   H --> I["Protect book blocks; validate actual Program signature"]
@@ -122,3 +122,28 @@ The [recorded trial](llm-process/optimization-trial-1.json) retains the exact sc
 This result demonstrates the rejection path, not a successful prompt improvement or a complete horary reading. The machine grades, conversational reasons, applied prompt hashes and unchanged source boundary remain separate. Failed local validation of paid reviews was repaired by revalidating the original answers; no model review was purchased again.
 
 The live trial exercised the Codex reviewer/writer and paired native experiment through their component entry points. The complete `horary-optimize` coordinator has mechanical regression coverage; it has not yet completed a fresh live round from discovery review to final comparison. Those are separate qualification claims. A replay must retain the existing paid-job ledger and native receipts rather than purchase another demonstration.
+
+## Component merit and complete-reading acceptance
+
+New method-scoped input GEPA plans name the `extractor-reliability` objective. Only initial `complete_selected_program` teaching is mutable. A separate independently cited assessment grades its initially accepted facts, known actors, question/frame and honest unknowns against the frozen fixture. Later supplied information cannot retrospectively rescue an incorrect initial record. Fewer focused attempts improve reliability within disjoint semantic score bands; incorrect facts score zero, and no component merit qualifies a reading.
+
+```mermaid
+flowchart TD
+  P[Immutable plan and explicit editable signature] --> C[Offline sensitivity and safety calibration]
+  C --> I[Fresh original question and native input execution]
+  I --> E[Initially accepted extractor state and actual repair count]
+  E --> J[Independent accepted-state source assessment]
+  J --> M[Component reliability merit]
+  M --> G[GEPA strict improvement and separate development selection]
+  I --> N{Native inputs complete?}
+  N -->|No| Q[Actual guru inquiry and bound user clarification]
+  Q --> I
+  N -->|Yes| H[ReadyReading permit]
+  H --> S[Input evaluation stops; closing reply unobserved]
+  H --> R[Production interpretation then conversational reply]
+  G --> A[Fresh whole journey, source and reserved acceptance]
+  R --> A
+  A --> D[Reviewed promotion]
+```
+
+The diagram separates optimizer fitness from deployment acceptance. Conversation actor, continuity and honesty guards remain noncompensating at acceptance. The input-only adapter no longer invents a final guru exchange after skipping interpretation. Every proposed overlay still needs the actual production handoff, complete reading/source review and untouched reserved checks. No new hosted semantic improvement is established by calibration or by Rust tests.

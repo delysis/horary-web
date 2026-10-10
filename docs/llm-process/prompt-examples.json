@@ -3110,6 +3110,7 @@
     "chartMomentMs": 1789387200000.0,
     "canonicalQuestion": "Will I get married in the next year?",
     "horizon": "within the next year",
+    "inputEvaluationBoundary": null,
     "nativeDefaults": {
       "place": "device coordinates",
       "moment": "1789387200000, understood question receipt instant",
