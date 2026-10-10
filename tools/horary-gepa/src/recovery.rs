@@ -124,6 +124,69 @@ fn pid_absent(pid: u32) -> Result<()> {
     Ok(())
 }
 
+fn recorded_owner_pids(root: &Path) -> Result<Vec<u32>> {
+    let owner = load(&ordinary(root, "owner-observed.json")?)?;
+    fn pid(value: &Value) -> Result<u32> {
+        value
+            .as_u64()
+            .and_then(|p| u32::try_from(p).ok())
+            .filter(|p| *p > 0)
+            .ok_or("Missing or invalid predecessor owner/child PID".into())
+    }
+    let mut pids = if owner.get("owner_pid").is_some() {
+        if owner.get("pid").is_some() {
+            return Err("Ambiguous predecessor owner PID aliases".into());
+        }
+        let children = owner["children"]
+            .as_array()
+            .filter(|children| !children.is_empty() && children.len() <= 8)
+            .ok_or("Predecessor controller PID receipt is missing or unbounded")?;
+        let mut pids = vec![pid(&owner["owner_pid"])?];
+        for child in children {
+            pids.push(pid(child)?);
+        }
+        pids
+    } else {
+        if owner.get("children").is_some() {
+            return Err("Predecessor children lack an unambiguous owner PID".into());
+        }
+        vec![pid(&owner["pid"])?]
+    };
+    for operation in [NATIVE, REVIEW] {
+        pids.push(pid(&load(&ordinary(
+            root,
+            &format!("{operation}/submitted.json"),
+        )?)?["pid"])?);
+    }
+    let unique = pids.iter().collect::<std::collections::BTreeSet<_>>();
+    if unique.len() != pids.len() {
+        return Err("Predecessor owner/child PID receipt contains duplicates".into());
+    }
+    Ok(pids)
+}
+
+fn audit_protocol(audit: &Value) -> Result<&'static str> {
+    match audit["kind"].as_str() {
+        Some("input-review-metadata-boundary-audit")
+            if audit["metadata_only_recovery_supported"] == true
+                && audit["only_native_metadata_mismatch"] == true
+                && audit["changed_field"] == "native_journey_pass"
+                && audit["original_value"] == false
+                && audit.get("bound_value").is_some_and(Value::is_null) =>
+        {
+            Ok(crate::review::LEGACY_IMPORT_VERSION)
+        }
+        Some("input-review-valid-answer-audit")
+            if audit["validation_only_recovery_supported"] == true
+                && audit["no_judgment_changes"] == true
+                && audit["review_protocol"] == crate::review::VERSION =>
+        {
+            Ok(crate::review::VERSION)
+        }
+        _ => Err("Independent audit does not authorize this exact review recovery".into()),
+    }
+}
+
 fn reservations(root: &Path) -> Result<Reservations> {
     let native = load(&ordinary(root, &format!("{NATIVE}/reservation.json"))?)?;
     let judge = load(&ordinary(root, &format!("{REVIEW}/reservation.json"))?)?;
@@ -155,24 +218,21 @@ impl Recovery {
         }
         verify(&self.audit_file, &self.audit_sha256)?;
         let audit = load(&self.audit_file)?;
-        if audit["kind"] != "input-review-metadata-boundary-audit"
-            || audit["round"] != json!(self.predecessor_state)
+        let protocol = audit_protocol(&audit)?;
+        if audit["round"] != json!(self.predecessor_state)
             || audit["plan_sha256"] != self.source_hashes["plan.json"]
             || audit["native_operation"] != NATIVE
             || audit["judge_operation"] != REVIEW
-            || [
-                "metadata_only_recovery_supported",
-                "all_source_hashes_verified",
-                "tool_free_completed_judge",
-                "only_native_metadata_mismatch",
-            ]
-            .iter()
-            .any(|key| audit[*key] != true)
-            || audit["changed_field"] != "native_journey_pass"
-            || audit["original_value"] != false
-            || !audit.get("bound_value").is_some_and(Value::is_null)
+            || ["all_source_hashes_verified", "tool_free_completed_judge"]
+                .iter()
+                .any(|key| audit[*key] != true)
+            || load(&ordinary(
+                &self.predecessor_state,
+                &format!("{REVIEW}/request.json"),
+            )?)?["request"]["version"]
+                != protocol
         {
-            return Err("Independent audit does not authorize this metadata-only recovery".into());
+            return Err("Independent audit does not authorize this exact review recovery".into());
         }
         let hashes = audit["source_hashes"]
             .as_object()
@@ -211,17 +271,7 @@ impl Recovery {
         if exit["exit_code"].as_i64().is_none() || exit["automatic_resubmission"] != false {
             return Err("Predecessor lacks a terminal no-resubmission owner receipt".into());
         }
-        let expected_pids = [
-            load(&ordinary(root, "owner-observed.json")?)?["pid"].as_u64(),
-            load(&ordinary(root, &format!("{NATIVE}/submitted.json"))?)?["pid"].as_u64(),
-            load(&ordinary(root, &format!("{REVIEW}/submitted.json"))?)?["pid"].as_u64(),
-        ]
-        .into_iter()
-        .map(|p| {
-            p.and_then(|p| u32::try_from(p).ok())
-                .ok_or("Missing predecessor owner/child PID".into())
-        })
-        .collect::<Result<Vec<_>>>()?;
+        let expected_pids = recorded_owner_pids(root)?;
         if expected_pids != self.owner_pids {
             return Err("Predecessor PID ancestry changed".into());
         }
@@ -413,19 +463,7 @@ pub fn prepare(predecessor: &Path, state: &Path, audit: &Path, controller: &Path
         .map_err(|e| e.to_string())?;
     plan.verify_sources()?;
     let source_hashes = pin_sources(&predecessor_state)?;
-    let owner_pids = [
-        "owner-observed.json",
-        "operations/00000/submitted.json",
-        "operations/00001/submitted.json",
-    ]
-    .into_iter()
-    .map(|p| {
-        load(&ordinary(&predecessor_state, p)?)?["pid"]
-            .as_u64()
-            .and_then(|p| u32::try_from(p).ok())
-            .ok_or("Missing predecessor PID".into())
-    })
-    .collect::<Result<Vec<_>>>()?;
+    let owner_pids = recorded_owner_pids(&predecessor_state)?;
     let recovery = Recovery {
         version: 1,
         inherited_reservations: reservations(&predecessor_state)?,
@@ -436,6 +474,35 @@ pub fn prepare(predecessor: &Path, state: &Path, audit: &Path, controller: &Path
         owner_pids,
     };
     recovery.verify_sources()?;
+    let evaluation = load(
+        &recovery
+            .predecessor_state
+            .join(NATIVE)
+            .join("response.json"),
+    )?;
+    let case_id = evaluation["outcome"]["id"]
+        .as_str()
+        .ok_or("Missing predecessor case identity")?;
+    let example = plan
+        .training
+        .iter()
+        .chain(&plan.development)
+        .find(|example| example.id == case_id)
+        .ok_or("Imported judge case is outside the frozen optimizer pools")?;
+    // Compile-time checks alone do not license a paid continuation. Validate
+    // the actual saved answer and exact packet before creating any new state.
+    let validated = crate::review::validate_import(
+        &plan,
+        example,
+        &evaluation,
+        &recovery.predecessor_state.join(REVIEW),
+    )?;
+    let validation = json!({"predecessor_state":recovery.predecessor_state,
+        "review_protocol":load(&recovery.predecessor_state.join(REVIEW).join("request.json"))?["request"]["version"],
+        "raw_answer_sha256":recovery.source_hashes[&format!("{REVIEW}/answer.json")],
+        "native_response_sha256":recovery.source_hashes[&format!("{NATIVE}/response.json")],
+        "validated_review_sha256":digest(validated.to_string()),"judgments_unchanged":true,
+        "new_paid_submissions":0,"qualification":"Validation and source binding only; failed native grades and raw paid judgments remain unchanged."});
     deduct(&mut plan, &recovery.inherited_reservations)?;
     let controller_sha256 = digest(read(controller)?);
     fs::create_dir(state).map_err(|e| e.to_string())?;
@@ -475,6 +542,7 @@ pub fn prepare(predecessor: &Path, state: &Path, audit: &Path, controller: &Path
     plan.recovery = Some(recovery);
     plan.verify_sources()?;
     keep(&state.join("plan.json"), &plan)?;
+    keep(&state.join("recovery-validation.json"), &validation)?;
     Ok(plan)
 }
 
@@ -590,7 +658,7 @@ mod tests {
             &old_root,
             &format!("{REVIEW}/request.json"),
             json!({"sequence":1,"plan_sha256":plan_sha,"kind":"codex_input_review",
-            "request":{"native_evaluation_sha256":digest(response.to_string())}}),
+            "request":{"version":crate::review::LEGACY_IMPORT_VERSION,"native_evaluation_sha256":digest(response.to_string())}}),
         );
         write(
             &old_root,
@@ -832,5 +900,101 @@ mod tests {
             .verify_sources()
             .unwrap_err()
             .contains("bounded to one"));
+    }
+
+    #[test]
+    fn validation_only_audit_requires_the_exact_judged_only_protocol_and_no_judgment_change() {
+        let audit = json!({"kind":"input-review-valid-answer-audit",
+            "validation_only_recovery_supported":true,"no_judgment_changes":true,
+            "review_protocol":crate::review::VERSION});
+        assert_eq!(audit_protocol(&audit).unwrap(), crate::review::VERSION);
+        for (field, value) in [
+            ("no_judgment_changes", json!(false)),
+            ("validation_only_recovery_supported", json!(false)),
+            (
+                "review_protocol",
+                json!(crate::review::LEGACY_IMPORT_VERSION),
+            ),
+            ("kind", json!("unsupported-recovery")),
+        ] {
+            let mut changed = audit.clone();
+            changed[field] = value;
+            assert!(audit_protocol(&changed).is_err());
+        }
+    }
+
+    #[test]
+    fn current_owner_receipt_binds_controller_pid_and_refuses_ambiguous_or_duplicate_pids() {
+        let (_root, plan, _, _) = fixture();
+        let recovery = plan.recovery.as_ref().unwrap();
+        let mut controller = Command::new("true").spawn().unwrap();
+        let controller_pid = controller.id();
+        controller.wait().unwrap();
+        let root = &recovery.predecessor_state;
+        write(
+            root,
+            "owner-observed.json",
+            json!({"owner_pid":recovery.owner_pids[0],"children":[controller_pid]}),
+        );
+        assert_eq!(
+            recorded_owner_pids(root).unwrap(),
+            [
+                recovery.owner_pids[0],
+                controller_pid,
+                recovery.owner_pids[1],
+                recovery.owner_pids[2]
+            ]
+        );
+        for receipt in [
+            json!({"owner_pid":recovery.owner_pids[0],"pid":recovery.owner_pids[0],"children":[controller_pid]}),
+            json!({"owner_pid":recovery.owner_pids[0],"children":[]}),
+            json!({"owner_pid":recovery.owner_pids[0],"children":[recovery.owner_pids[0]]}),
+            json!({"pid":recovery.owner_pids[0],"children":[controller_pid]}),
+        ] {
+            write(root, "owner-observed.json", receipt);
+            assert!(recorded_owner_pids(root).is_err());
+        }
+    }
+
+    #[test]
+    fn current_review_audit_is_bound_to_the_original_packet_protocol_and_live_controller_guard() {
+        let (_root, mut plan, _, _) = fixture();
+        let recovery = plan.recovery.as_mut().unwrap();
+        let root = recovery.predecessor_state.clone();
+        let request_path = root.join(REVIEW).join("request.json");
+        let mut request = load(&request_path).unwrap();
+        request["request"]["version"] = json!(crate::review::VERSION);
+        write(&root, &format!("{REVIEW}/request.json"), request);
+        write(
+            &root,
+            "owner-observed.json",
+            json!({"owner_pid":recovery.owner_pids[0],"children":[std::process::id()]}),
+        );
+        recovery.owner_pids.insert(1, std::process::id());
+        refresh_audit(recovery);
+        let mut audit = load(&recovery.audit_file).unwrap();
+        for key in [
+            "metadata_only_recovery_supported",
+            "only_native_metadata_mismatch",
+            "changed_field",
+            "original_value",
+            "bound_value",
+        ] {
+            audit.as_object_mut().unwrap().remove(key);
+        }
+        audit["kind"] = json!("input-review-valid-answer-audit");
+        audit["validation_only_recovery_supported"] = json!(true);
+        audit["no_judgment_changes"] = json!(true);
+        audit["review_protocol"] = json!(crate::review::VERSION);
+        fs::write(
+            &recovery.audit_file,
+            serde_json::to_vec_pretty(&audit).unwrap(),
+        )
+        .unwrap();
+        recovery.audit_sha256 = digest(read(&recovery.audit_file).unwrap());
+        assert!(recovery
+            .verify_sources()
+            .unwrap_err()
+            .contains("still runs"));
     }
 }

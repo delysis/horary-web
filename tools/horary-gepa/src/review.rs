@@ -13,7 +13,8 @@ use std::{
     process::Command,
 };
 
-const VERSION: &str = "horary-independent-input-review-2026-10-10.4";
+pub(crate) const VERSION: &str = "horary-independent-input-review-2026-10-10.4";
+pub(crate) const LEGACY_IMPORT_VERSION: &str = "horary-independent-input-review-2026-10-09.2";
 struct Source {
     file: String,
     bytes: Vec<u8>,
@@ -446,7 +447,9 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, mut answer: Value) -> 
             && messages
                 .and_then(|m| m.last())
                 .is_none_or(|m| m["role"] != "assistant")
-            && (d.state != ScoreState::Unobserved || d.score.is_some())
+            && (d.score.is_some()
+                || !(d.state == ScoreState::Unobserved
+                    || q && d.state == ScoreState::NotApplicable))
         {
             return Err(
                 "No first conversational reply was observed before the input-only handoff".into(),
@@ -522,8 +525,9 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, mut answer: Value) -> 
     Ok(canonical)
 }
 
-/// Reuse one completed paid legacy judgment after explicit, source-bound
-/// recovery. Only the documented absent-follow-up metadata alias can change.
+/// Reuse one completed paid judgment after explicit, source-bound recovery.
+/// Current judgments remain verbatim. For the legacy protocol, only the
+/// documented absent-follow-up metadata alias can change.
 /// Scores, reasons, findings, raw answers and the failed original journal stay
 /// intact. This does not qualify the student's semantics.
 pub fn validate_import(
@@ -535,9 +539,11 @@ pub fn validate_import(
     crate::metric::require_completed(&evaluation["outcome"], "input_journey")?;
     let packet = packet(plan, example, evaluation)?;
     let request = load(&directory.join("request.json"))?;
-    if request["request"]["version"] != "horary-independent-input-review-2026-10-09.2"
-        || request["request"]["native_evaluation_sha256"] != digest(evaluation.to_string())
-    {
+    let version = request["request"]["version"]
+        .as_str()
+        .filter(|version| [VERSION, LEGACY_IMPORT_VERSION].contains(version))
+        .ok_or("Imported judge belongs to another review protocol")?;
+    if request["request"]["native_evaluation_sha256"] != digest(evaluation.to_string()) {
         return Err("Imported judge belongs to another protocol or native evaluation".into());
     }
     let old_packet = load(&directory.join("packet.json"))?;
@@ -548,9 +554,19 @@ pub fn validate_import(
     {
         return Err("Imported judge source packet differs from the actual input journey".into());
     }
-    let mut answer = load(&directory.join("answer.json"))?;
-    bind_legacy_metadata(&evaluation["outcome"], &mut answer)?;
+    let answer = bind_imported_answer(evaluation, load(&directory.join("answer.json"))?, version)?;
     validate(&packet, evaluation, answer)
+}
+
+fn bind_imported_answer(evaluation: &Value, mut answer: Value, version: &str) -> Result<Value> {
+    match version {
+        VERSION => bind_output(evaluation, answer),
+        LEGACY_IMPORT_VERSION => {
+            bind_legacy_metadata(&evaluation["outcome"], &mut answer)?;
+            Ok(answer)
+        }
+        _ => Err("Imported judge belongs to another review protocol".into()),
+    }
 }
 
 fn bind_legacy_metadata(outcome: &Value, answer: &mut Value) -> Result<()> {
@@ -710,14 +726,26 @@ pub fn evaluate(
         )?;
         if let Some(source) = &imported {
             let raw = load(&source.join("answer.json"))?;
-            keep(
-                &directory.join("metadata-binding.json"),
-                &json!({"source":source,"raw_answer_sha256":digest(read(&source.join("answer.json"))?),
-                    "original_native_journey_pass":raw["reviews"][0]["native_journey_pass"],
-                    "bound_native_journey_pass":evaluation["outcome"]["follow_up_pass"],
-                    "semantic_dimensions_unchanged":true,
-                    "qualification":"Explicit legacy metadata binding; an absent supplying turn stays unobserved. Original paid answer and failed journal remain intact."}),
-            )?;
+            let version = load(&source.join("request.json"))?["request"]["version"].clone();
+            if version == LEGACY_IMPORT_VERSION {
+                keep(
+                    &directory.join("metadata-binding.json"),
+                    &json!({"source":source,"raw_answer_sha256":digest(read(&source.join("answer.json"))?),
+                        "original_native_journey_pass":raw["reviews"][0]["native_journey_pass"],
+                        "bound_native_journey_pass":evaluation["outcome"]["follow_up_pass"],
+                        "semantic_dimensions_unchanged":true,
+                        "qualification":"Explicit legacy metadata binding; an absent supplying turn stays unobserved. Original paid answer and failed journal remain intact."}),
+                )?;
+            } else {
+                keep(
+                    &directory.join("judgment-import.json"),
+                    &json!({"source":source,"review_protocol":version,
+                        "raw_answer_sha256":digest(read(&source.join("answer.json"))?),
+                        "semantic_dimensions_unchanged":true,
+                        "native_metadata_from_recorded_evaluation":true,
+                        "qualification":"Completed paid judgments reused verbatim after validation repair. Citation expansion and native metadata binding do not change judgments or qualify the student."}),
+                )?;
+            }
         }
         journal.finish(&directory, &review)?;
         if !cache.exists() {
@@ -892,6 +920,63 @@ mod tests {
             checked["extractor"]["evidence"][0]["json_pointer"],
             "/session/method/consultation"
         );
+    }
+    #[test]
+    fn absent_reply_allows_inapplicable_inquiry_but_never_scored_conversation() {
+        let (mut p, mut e, mut a) = fixture(false);
+        e["objective"] = json!("extractor_reliability");
+        let source = p
+            .sources
+            .iter_mut()
+            .find(|s| s.file == "native-first-turn.json")
+            .unwrap();
+        source.value["session"]["messages"][0]["role"] = json!("user");
+        source.value["session"]["method"] = json!({"consultation":{"subject_owner":"unknown"}});
+        source.bytes = serde_json::to_vec(&source.value).unwrap();
+        let hash = digest(&source.bytes);
+        for r in p.refs.values_mut().filter(|r| r.file == source.file) {
+            r.sha256 = hash.clone();
+        }
+        p.refs.insert(
+            "r004".into(),
+            Evidence {
+                case_id: "synthetic".into(),
+                file: source.file.clone(),
+                json_pointer: "/session/method/consultation".into(),
+                sha256: hash,
+            },
+        );
+        a["reviews"][0]["extractor"] = json!({"state":"scored","score":0,"reason":"Authored incorrect accepted-state probe","evidence_refs":["r004","r000"]});
+        for d in a["reviews"][0]["first_turn"]
+            .as_object_mut()
+            .unwrap()
+            .values_mut()
+        {
+            d["state"] = json!("unobserved");
+            d["score"] = Value::Null;
+        }
+        a["reviews"][0]["first_turn"]["useful_inquiry"]["state"] = json!("not_applicable");
+        let checked = validate(&p, &e, a.clone()).unwrap();
+        assert_eq!(checked["extractor"]["score"], 0);
+        let body = judgment_body(&a);
+        let bound = bind_imported_answer(&e, body.clone(), VERSION).unwrap();
+        assert_eq!(judgment_body(&bound), body);
+        assert_eq!(validate(&p, &e, bound).unwrap(), checked);
+        assert_eq!(
+            checked["first_turn"]["useful_inquiry"]["state"],
+            "not_applicable"
+        );
+        a["reviews"][0]["first_turn"]["natural_phrasing"]["state"] = json!("scored");
+        a["reviews"][0]["first_turn"]["natural_phrasing"]["score"] = json!(2);
+        assert!(validate(&p, &e, a.clone())
+            .unwrap_err()
+            .contains("No first conversational reply"));
+        a["reviews"][0]["first_turn"]["natural_phrasing"]["state"] = json!("unobserved");
+        a["reviews"][0]["first_turn"]["natural_phrasing"]["score"] = Value::Null;
+        e["outcome"]["grade"]["actual"]["needs"] = json!([{"kind":"subject_owner"}]);
+        assert!(validate(&p, &e, a)
+            .unwrap_err()
+            .contains("necessary inquiry"));
     }
     #[test]
     fn native_identity_and_absent_supply_are_bound_without_reviewer_bookkeeping() {
