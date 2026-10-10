@@ -396,11 +396,102 @@ mod tests {
     fn root() -> &'static Path {
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
     }
+    fn json_difference(
+        current: &serde_json::Value,
+        generated: &serde_json::Value,
+        pointer: &str,
+    ) -> Option<String> {
+        use serde_json::Value;
+        match (current, generated) {
+            (Value::Object(a), Value::Object(b)) => {
+                let keys: std::collections::BTreeSet<_> = a.keys().chain(b.keys()).collect();
+                for key in keys {
+                    let escaped = key.replace('~', "~0").replace('/', "~1");
+                    let next = format!("{pointer}/{escaped}");
+                    match (a.get(key), b.get(key)) {
+                        (Some(a), Some(b)) => {
+                            if let Some(diff) = json_difference(a, b, &next) {
+                                return Some(diff);
+                            }
+                        }
+                        _ => return Some(format!("{next}: object key exists on only one side")),
+                    }
+                }
+                None
+            }
+            (Value::Array(a), Value::Array(b)) => {
+                for (index, (a, b)) in a.iter().zip(b).enumerate() {
+                    if let Some(diff) = json_difference(a, b, &format!("{pointer}/{index}")) {
+                        return Some(diff);
+                    }
+                }
+                (a.len() != b.len()).then(|| {
+                    format!(
+                        "{pointer}: array lengths checked-in={} generated={}",
+                        a.len(),
+                        b.len()
+                    )
+                })
+            }
+            (Value::String(a), Value::String(b)) if a != b => {
+                if let (Ok(a), Ok(b)) = (
+                    serde_json::from_str::<Value>(a),
+                    serde_json::from_str::<Value>(b),
+                ) {
+                    if let Some(diff) = json_difference(&a, &b, &format!("{pointer}#embedded-json"))
+                    {
+                        return Some(diff);
+                    }
+                }
+                Some(text_difference(a, b, pointer))
+            }
+            _ => (current != generated)
+                .then(|| format!("{pointer}: checked-in={current} generated={generated}")),
+        }
+    }
+    fn text_difference(current: &str, generated: &str, pointer: &str) -> String {
+        let byte = current
+            .as_bytes()
+            .iter()
+            .zip(generated.as_bytes())
+            .position(|(a, b)| a != b)
+            .unwrap_or_else(|| current.len().min(generated.len()));
+        let preview = |text: &str| {
+            text.chars()
+                .skip(text.char_indices().take_while(|(i, _)| *i < byte).count())
+                .take(100)
+                .collect::<String>()
+        };
+        format!("{pointer}: first differing byte={byte}, lengths checked-in={} generated={}, suffix checked-in={:?} generated={:?}", current.len(), generated.len(), preview(current), preview(generated))
+    }
+    fn first_difference(current: &str, generated: &str) -> String {
+        if let (Ok(a), Ok(b)) = (
+            serde_json::from_str::<serde_json::Value>(current),
+            serde_json::from_str::<serde_json::Value>(generated),
+        ) {
+            if let Some(diff) = json_difference(&a, &b, "") {
+                return diff;
+            }
+        }
+        text_difference(current, generated, "")
+    }
+    #[test]
+    fn diagnostic_descends_embedded_prompt_json_and_keeps_text_differences() {
+        let checked_in =
+            json!({"messages":[{"content":json!({"input":{"hours":1.25}}).to_string()}]})
+                .to_string();
+        let generated = json!({"messages":[{"content":json!({"input":{"hours":1.250000000000001}}).to_string()}]}).to_string();
+        assert!(first_difference(&checked_in, &generated)
+            .starts_with("/messages/0/content#embedded-json/input/hours:"));
+        let lf = format!("{}\n", json!({"a":1}));
+        let crlf = lf.replace('\n', "\r\n");
+        assert!(first_difference(&lf, &crlf).contains("first differing byte="));
+    }
     #[test]
     fn checked_in_reference_is_current() {
         for (name, expected) in generate(root()).expect("Generate actual process reference") {
             let current = std::fs::read_to_string(root().join(name)).unwrap_or_default();
-            assert!(current==expected,"{name} is stale. Run cargo test --manifest-path src-tauri/Cargo.toml --locked --lib process_reference::tests::regenerate -- --ignored --nocapture");
+            assert!(current == expected, "{name} is stale: {}. Run cargo test --manifest-path src-tauri/Cargo.toml --locked --lib process_reference::tests::regenerate -- --ignored --nocapture", first_difference(&current, &expected));
         }
     }
     #[test]
