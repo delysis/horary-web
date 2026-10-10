@@ -26,6 +26,13 @@ enum Action {
         #[arg(long)]
         audit: PathBuf,
     },
+    /// Separate one-reflection experiment, reusing the closed pilot's exact seed controls.
+    PrepareFeedbackTrial {
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+    },
     Run {
         #[arg(long)]
         state: PathBuf,
@@ -161,6 +168,17 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 "{}",
                 serde_json::json!({"prepared":state,"predecessor":predecessor,"new_model_calls":0,
                 "remaining_hard_budgets":{"physical":plan.max_physical_generation_attempts,"review":plan.max_review_calls,"teacher":plan.max_teacher_calls}})
+            );
+        }
+        Action::PrepareFeedbackTrial { source, state } => {
+            let controller = std::env::current_exe().map_err(|e| e.to_string())?;
+            let plan = horary_gepa::controls::prepare(&source, &state, &controller)?;
+            println!(
+                "{}",
+                serde_json::json!({"prepared":state,"source":source,
+                "new_paid_calls":0,"reused_controls":4,"actual_writer_stdin_preflight":true,
+                "new_bounded_experiment":{"teacher":plan.max_teacher_calls,"review":plan.max_review_calls,
+                    "physical_attempt_reservations":plan.max_physical_generation_attempts}})
             );
         }
         Action::Run { state } => {

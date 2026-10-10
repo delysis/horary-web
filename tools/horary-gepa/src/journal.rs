@@ -112,6 +112,17 @@ impl Journal {
                     artifact["sha256"].as_str().ok_or("No artifact hash")?,
                 )?;
             }
+            let cached = directory.join("cache-source.json");
+            if cached.exists() {
+                let source = load(&cached)?;
+                if source["type"] == "sealed_baseline_control_import" {
+                    crate::controls::verify_import(
+                        &source,
+                        &identity,
+                        &load(&directory.join("response.json"))?,
+                    )?;
+                }
+            }
             println!(
                 "{}",
                 json!({"event":"operation_reused","sequence":sequence,"kind":kind})

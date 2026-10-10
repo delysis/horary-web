@@ -263,7 +263,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "6ed1a2db7fc86668f11bfdc1e47aedde0cf7f142335423c82787ab23eee3308b"
+      "sha256": "9e6e9e4168fd822ace49263e61886ac9cf1258cf1cbf973740318988e0cbc46d"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -363,7 +363,11 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "36dba0124de52a6f801edf4d2634bbb2c4760a93fc7887e9bef8bc4fcf149415"
+      "sha256": "0cebe1b114aee647b0b07f958d8c1d35180ba2e16146c1a2219effffa435244a"
+    },
+    {
+      "path": "tools/horary-gepa/src/controls.rs",
+      "sha256": "c412c1bfbe65f949b05342264662e8ff6e6031fb7a1a46ec3cedfb29047148d0"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",
@@ -371,15 +375,15 @@
     },
     {
       "path": "tools/horary-gepa/src/journal.rs",
-      "sha256": "ba660d8f200228adae7d98ac041acd73ae40f2f5ea387fd7e0798eeadd550312"
+      "sha256": "1d213e42edfbc3a27e3401925f6bc08eb09e37574d3e2d413fba134f8d461fcc"
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "74a51c976f222e1fa2bea072089764ac7a01dd596937a42870c6d63a8656c36b"
+      "sha256": "75006798f0afa88f7f384d5c1739f4b86e936230abb8d28cdbc438d275acefe1"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "09bddb57e88565d7641e539e338c193e22d219cf3ed06fa07e4cf2a2885adb08"
+      "sha256": "f9753c6f661f2a3536d7cb4fbb52bbd26c8680a021b9d539429e67aec15021fb"
     },
     {
       "path": "tools/horary-gepa/src/metric.rs",
@@ -395,15 +399,15 @@
     },
     {
       "path": "tools/horary-gepa/src/review.rs",
-      "sha256": "fbd2e033e88f8f5b4a309358bc1ee28fffee8b9377b893e95fcf69b20fe50961"
+      "sha256": "2961d12cad93d01084c6987e807733a6ba27e8d2b195564250acdacd9ea3a2fe"
     },
     {
       "path": "tools/horary-gepa/src/status.rs",
-      "sha256": "6e06e5fd2ee40d964907391b563a331771994db22961cb1cba4ce3574bab960d"
+      "sha256": "bee66c1b46f2f6a656a98e7b6c66a95e4394419f3a4804617b90c38ffd238fcb"
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",
-      "sha256": "ae2aefb3d1bda89e9c70c2e53ad6df7dae80951ed636bf08595955461affcd4f"
+      "sha256": "d5aa0bb496501fa033c05602b160632b835e951e2a84e603fb235f0918f38c5a"
     },
     {
       "path": "tools/horary-loop/Cargo.lock",

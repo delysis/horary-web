@@ -274,6 +274,14 @@ pub fn inspect(root: &Path) -> Result<Value> {
                         Ok(()) => {}
                         Err(error) => errors.push(error.to_string()),
                     }
+                } else if source["type"] == "sealed_baseline_control_import" {
+                    if let Err(error) = crate::controls::verify_import(
+                        &source,
+                        &load(&directory.join("request.json"))?,
+                        &settled.response,
+                    ) {
+                        errors.push(error);
+                    }
                 }
             }
         }

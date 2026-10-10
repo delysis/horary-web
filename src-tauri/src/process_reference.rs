@@ -63,6 +63,7 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/Cargo.lock",
     "tools/horary-gepa/README.md",
     "tools/horary-gepa/src/lib.rs",
+    "tools/horary-gepa/src/controls.rs",
     "tools/horary-gepa/src/main.rs",
     "tools/horary-gepa/src/executable.rs",
     "tools/horary-gepa/src/journal.rs",

@@ -624,6 +624,23 @@ fn supplying_observed(outcome: &Value) -> Result<bool> {
 }
 /// Review only the executed case. Development may be judged for selection,
 /// but the reflection adapter never receives that review or its source packet.
+/// Reuse a completed semantic judgment only with the same observed packet.
+pub(crate) fn validate_saved(
+    plan: &Plan,
+    example: &Example,
+    evaluation: &Value,
+    review: &Value,
+) -> Result<()> {
+    let packet = packet(plan, example, evaluation)?;
+    let answer = json!({"version":1,"reviews":[review],"clusters":[],
+        "qualification":"Exact previously paid source-bound judgment; no new observation."});
+    let validated = validate_expanded(&packet, evaluation, answer)?;
+    if validated != *review {
+        return Err("Baseline review changed during source validation".into());
+    }
+    Ok(())
+}
+
 pub fn evaluate(
     plan: &Plan,
     journal: &mut Journal,
