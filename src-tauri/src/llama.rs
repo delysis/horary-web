@@ -415,7 +415,15 @@ pub fn get_model_by_id(app_data_dir: &Path, model_id: &str) -> LlamaResult<Model
             .to_string();
         if id == model_id {
             let display_name = display_name_from_id(&id);
-            return model_info_from_path(&path, id, display_name);
+            // Register existing app-local models in the shared store before loading.
+            // A matching Hub blob wins over making another local-cache copy.
+            return crate::imported_models::import(
+                app_data_dir,
+                &shared_cache_root(app_data_dir)?,
+                &path,
+                id,
+                display_name,
+            );
         }
     }
 
@@ -1138,7 +1146,30 @@ mod tests {
 
         assert_eq!(info.sha256.len(), 64);
         assert_eq!(listed[0].sha256, info.sha256);
-        assert!(model_info_cache_path(&model).exists());
+        assert!(crate::imported_models::path(&app_dir, "legacy-model.gguf")
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn legacy_model_selection_reuses_a_shared_hub_blob() {
+        let app_dir = temp_dir("legacy-hf-selection");
+        let legacy = models_dir(&app_dir).join("gemma.gguf");
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        write_model(&legacy);
+        let blob = shared_cache_root(&app_dir)
+            .unwrap()
+            .join("models--owner--repo/blobs")
+            .join(sha256_file(&legacy).unwrap());
+        fs::create_dir_all(blob.parent().unwrap()).unwrap();
+        fs::copy(&legacy, &blob).unwrap();
+        let info = get_model_by_id(&app_dir, "gemma").unwrap();
+        assert_eq!(
+            resolve_model_path(&app_dir, &info.filename).unwrap(),
+            blob.canonicalize().unwrap()
+        );
+        assert!(!shared_cache_root(&app_dir).unwrap().join("local").exists());
+        assert!(legacy.exists());
     }
 
     #[test]
