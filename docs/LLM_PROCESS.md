@@ -225,7 +225,7 @@ flowchart LR
 The bank contains only fixed teaching messages, not private question inputs or audio. It is bounded to one eighth of physical memory, at most 4 GiB. Eviction, owner restart, changed lesson text, changed model or template can require another prefill; an absolute once-ever guarantee would be false. The ordinary batch API accepts an authenticated saved prefix **per case**. The constrained API has one constraint program for the whole batch and no supplied per-case-prefix field in the current pin. Single text tasks use constrained JSON; independent analysis tasks use ordinary cached batching and native validation. This boundary is visible rather than hidden behind an apparent cache-hit claim.
 
 
-The [scenario evaluation guide](ELICITATION_EVALUATION.md) documents the executable 166-case bank, separate first-turn and continuation grades, and full private traces. The case catalogue is never inserted into the model's prompt. The [optimization loop](PROMPT_OPTIMIZATION.md) uses typed teaching candidates, the existing Codex login for review/writing, and paired native trials; [its first measured trial](llm-process/optimization-trial-1.json) was rejected on reserved validation.
+The [scenario evaluation guide](ELICITATION_EVALUATION.md) documents the executable 190-case bank, separate first-turn and continuation grades, and full private traces. The case catalogue is never inserted into the model's prompt. The [optimization loop](PROMPT_OPTIMIZATION.md) uses typed teaching candidates, the existing Codex login for review/writing, and paired native trials; [its first measured trial](llm-process/optimization-trial-1.json) was rejected on reserved validation.
 
 
 ## Stage inventory and reviewable outputs
@@ -293,7 +293,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `44655eb95332f0819dde131bbb1f96d066cb22af79413bd5bb4ab687eab82edd`
+Guide SHA256: `5b9bb665d5d4f53c6c396c6a00280e9f278a62590a90a5cf5bc5cf53ca6f11ad`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -314,7 +314,7 @@ relationship: Relationship, marriage and feelings — printed pp. 140, 191–200
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
 missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
-movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.
+movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.
 money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
@@ -322,7 +322,7 @@ existing_job: Keeping a job or existing career — printed pp. 224–226. Curren
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
 job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
-property: Buying or selling property — printed pp. 167–171. Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.
+property: Buying or selling property — printed pp. 167–171. Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.
 rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
 business_property: Property used for business — printed pp. 170–171. Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.
 choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
@@ -792,9 +792,7 @@ OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but th
                 "enum": [
                   "buy",
                   "sell",
-                  "rent",
-                  "profit",
-                  "quality"
+                  "rent"
                 ]
               },
               "quote": {
@@ -1502,6 +1500,8 @@ OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but th
                   "horizon",
                   "description",
                   "search_context",
+                  "deal_actor",
+                  "deal_beneficiary",
                   "deal_party",
                   "seller",
                   "job_context",
@@ -1572,6 +1572,8 @@ OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but th
                   "theft_raised",
                   "search_context",
                   "deal_capacity",
+                  "deal_actor",
+                  "deal_beneficiary",
                   "deal_party",
                   "seller",
                   "money_source",
@@ -2106,6 +2108,8 @@ The quesited is shown by Lord 7 even if the relationship exists as yet only as a
                 "context",
                 "current_option",
                 "custody_state",
+                "deal_actor",
+                "deal_beneficiary",
                 "deal_capacity",
                 "deal_party",
                 "description",
@@ -2372,6 +2376,8 @@ sometimes both in the same chart. This is not as confusing as it sounds, because
                 "context",
                 "current_option",
                 "custody_state",
+                "deal_actor",
+                "deal_beneficiary",
                 "deal_capacity",
                 "deal_party",
                 "description",
@@ -2611,6 +2617,8 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
                 "context",
                 "current_option",
                 "custody_state",
+                "deal_actor",
+                "deal_beneficiary",
                 "deal_capacity",
                 "deal_party",
                 "description",

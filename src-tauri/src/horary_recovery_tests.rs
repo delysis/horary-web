@@ -265,7 +265,7 @@ fn turn(intent: crate::reading_contracts::Intent) -> Value {
     serde_json::to_value(crate::reading_contracts::control(intent)).unwrap()
 }
 fn roles() -> Value {
-    json!({"selections":[{"id":"querent.self","reason":"The first house represents the person asking."},{"id":"bob.self","reason":"Bob is the explicitly stated husband, seventh house."},{"id":"subject.primary","reason":"These books are his possessions; use his turned second."},{"id":"deal.counterparty","reason":"The unspecified buyer is seventh from the seller."}],"summary":"Authored role assignment for controller testing.","unknowns":[]})
+    json!({"selections":[{"id":"querent.self","reason":"The first house represents the person asking."},{"id":"bob.self","reason":"Bob is the explicitly stated husband, seventh house."},{"id":"deal.counterparty","reason":"The unspecified buyer is seventh from the seller."}],"summary":"Authored role assignment for transaction completion; no unused goods-condition role.","unknowns":[]})
 }
 
 fn know_bob(session: &mut Session) {
@@ -389,7 +389,7 @@ fn every_role_rejection_returns_to_the_same_step_until_data_is_delivered() {
     )
     .unwrap()
     .unwrap();
-    assert_eq!(data.roles().len(), 4);
+    assert_eq!(data.roles().len(), 3);
     assert_eq!(session.method.records.len(), 6);
     assert!(session.method.records[..5].iter().all(|record| record
         .validation_error
@@ -2066,7 +2066,7 @@ fn guru_speaks_and_selects_a_missing_fact_without_mutating_the_question_or_compl
     let script = Script::new(vec![(
         Stage::Conversation,
         json!({
-            "reply":"Before I follow Bob's sales, are these his own books?", "ask":"need_1"
+            "reply":"How are you connected to Bob?", "ask":"need_0"
         }),
     )]);
     let original = session.clone();
@@ -2081,7 +2081,7 @@ fn guru_speaks_and_selects_a_missing_fact_without_mutating_the_question_or_compl
     .unwrap();
     assert_eq!(
         session.messages.last().unwrap().text,
-        "Before I follow Bob's sales, are these his own books?"
+        "How are you connected to Bob?"
     );
     assert_eq!(session.question, original.question);
     assert!(session.sections.is_empty());
@@ -2093,11 +2093,11 @@ fn guru_speaks_and_selects_a_missing_fact_without_mutating_the_question_or_compl
         .all(|(s, _)| *s == Stage::Conversation));
     assert_eq!(
         session.method.consultation.as_ref().unwrap().requested,
-        Some(crate::reading_contracts::RequirementKey::Owner)
+        Some(crate::reading_contracts::RequirementKey::PersonRelationship("bob".into()))
     );
     let calls = script.calls.lock().unwrap();
     assert_eq!(calls[0].1["canonical_question"], original.question);
-    assert!(calls[0].1["reminders"].as_array().unwrap().len() >= 2);
+    assert!(!calls[0].1["reminders"].as_array().unwrap().is_empty());
 }
 
 #[test]

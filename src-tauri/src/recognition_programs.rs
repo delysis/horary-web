@@ -34,6 +34,9 @@ pub(crate) fn guide(method: Method) -> String {
             Guard::Equals { field, value } => {
                 format!("only if {}={value}", field.name())
             }
+            Guard::AnswerFacet { facet } => {
+                format!("only if the requested answer facet is {}", facet.name())
+            }
             Guard::PrincipalOwnsSubject => {
                 "only if the principal owns the subject; unknown ownership is unresolved".into()
             }
@@ -137,11 +140,12 @@ Example: 'Where is my father Luis? He has not come home from his walk.' -> Luis 
         Method::MovableDeal => {
             r#"
 SALE OR PURCHASE OF MOVABLE GOODS (printed pp. 156–161, 167–172)
-1. Identify the goods, title owner, and deal actor separately. Extract deal_capacity=buy|sell|profit|quality as appropriate. Selling a thing or working a stall does not prove ownership. If sell, extract seller as the actual person's ID or querent. Leave an unnamed counterparty absent; native rules provide a generic deal partner.
-2. A named seller/buyer/owner whose relation is unknown remains unknown. A partner's goods and the speaker's goods sold by that partner differ. Potential possessions bought for the speaker can bind the principal where the words establish this prospective acquisition; do not identify a current third-party title owner as the buyer merely because they own the goods.
+1. Keep two independent decisions: deal_capacity is the transaction action buy|sell (never profit or quality); frame.facet is the requested outcome. Extract deal_actor as the actual contracting/affected buyer or seller ID or querent, not an estate agent or helper. An optional legacy seller means an actual contracting seller, not title ownership. Leave an unnamed counterparty absent; native rules supply its generic role. An identified counterparty is deal_party and retains its actual relationship.
+2. subject.owner_id means actual title ownership only. An intended purchase does not establish present ownership: 'Will I buy that piano from my friend?' -> deal_actor=querent, deal_capacity=buy, owner_id empty unless separately stated. For pure completion (event/timing), known parties suffice: do not ask who owns the goods or demand their quality/price. For quality/profit of selling goods, ownership determines their house and is genuinely necessary. A name alone never supplies a personal relationship. Selling, working a stall, and helping a relative do not prove title ownership.
 3. Will the transaction complete is event; is the item sound is situation; is it worthwhile is profit; which offered item is preferable is choice. How many units will sell stays quantity, with unit, even though the generic program cannot judge that exact count. Do not silently change the concern.
 4. Record a supplied fair/venue/date as event_place/event_time. It is not the reader's city or chart moment. baseline is not a sale input; a husband belongs in people.
-Example: 'My partner Noor is selling a piano that I own; will the sale complete?' -> piano owner=querent, seller=noor, Noor partner, deal_capacity=sell, event. 'Will Noor sell the piano?' does not prove Noor owns it.
+FINANCIAL BENEFICIARY. If frame.facet=profit, extract deal_beneficiary as the actual person whose financial benefit the question concerns, a known participant ID or querent, using a literal source quote. The contracting seller, title owner and beneficiary can differ. 'Noor is selling my piano; will I benefit financially?' has deal_actor=noor, owner_id=querent, deal_beneficiary=querent. Selling on another person's behalf does not by itself establish who receives proceeds or commission. If the concern leaves this genuinely unknown, leave the field missing; never infer it from title or deal_actor alone. Completion or quality does not require this profit-only field.
+Example: 'My partner Noor is selling a piano that I own; will the sale complete?' -> piano owner=querent, deal_actor=noor, Noor partner, deal_capacity=sell, event. 'Will I profit from selling my own books?' -> deal_capacity=sell AND facet=profit AND deal_actor=querent AND owner_id=querent. 'Will Noor sell the piano?' does not prove Noor owns it or their relationship; identify the contracting side without inventing either.
 "#
         }
         Method::Money => {
@@ -210,28 +214,31 @@ Example: 'Will my colleague Dev support my proposal?' -> work_person/event, Dev 
         Method::Property => {
             r#"
 BUYING OR SELLING PROPERTY (printed pp. 167–171)
-1. Identify the property, person making the deal, and actual title ownership where supplied. deal_capacity=buy|sell|profit|quality. House/property, its price, and the parties are separate; a relative selling for the principal is not automatically the title owner.
-2. For a purchase for the speaker, keep the principal's intended acquisition as the binding and an identified current seller as a separate party. Do not turn the buyer into the seller by copying title ownership alone.
+1. deal_capacity is only buy|sell; frame.facet separately records completion, quality, choice or profit. deal_actor is the actual contracting party whose purchase/sale is asked about, not a routine estate agent. Keep the property, actor, actual title owner (subject.owner_id) and counterparty (deal_party) distinct. Title is literal ownership only; prospective acquisition does not make a buyer already own the property.
+2. Pure completion (event/timing) needs the actual parties, not title ownership or property/price condition roles. For purchase quality, native rules frame potential property from the buyer; leave title owner empty when unknown. For sale quality/profit, extract actual ownership where given, otherwise it is a genuine missing fact. An identified relative counterparty keeps their own operative relationship, not an automatic seventh. A routine intermediary remains context unless the question actually concerns that intermediary's transaction.
 3. Deal completion is event; property condition or price suitability is situation; profit is profit; finite alternatives can be choice. Preserve a supplied horizon or location, but do not use the property's town as the reader's chart location.
-Example: 'Will I sell the apartment that I own?' -> property/event, owner=querent, deal_capacity=sell. 'Will my mother sell my apartment for me?' preserves mother as deal actor and speaker as owner.
+FINANCIAL BENEFICIARY. If frame.facet=profit, extract deal_beneficiary as the actual person whose financial benefit the question concerns, a known participant ID or querent, using a literal source quote. The contracting seller, title owner and beneficiary can differ. 'Noor is selling my piano; will I benefit financially?' has deal_actor=noor, owner_id=querent, deal_beneficiary=querent. Selling on another person's behalf does not by itself establish who receives proceeds or commission. If the concern leaves this genuinely unknown, leave the field missing; never infer it from title or deal_actor alone. Completion or quality does not require this profit-only field.
+Example: 'Will I sell the apartment that I own?' -> property/event, owner=querent, deal_actor=querent, deal_capacity=sell. 'My mother is helping as estate agent while I sell my apartment' -> deal_actor=querent, title owner=querent, mother in context, not automatically a contracting seller. 'Will my brother's sale of his apartment complete?' -> deal_actor=brother's known ID, sibling relationship, owner=brother, sell/event.
 "#
         }
         Method::Rental => {
             r#"
 RENTAL AGREEMENT (printed p. 170)
-1. Identify the tenancy/property and who is considering or holding the rental agreement. Extract deal_capacity=rent for the ordinary tenant/landlord arrangement. Owning a building, being a tenant, and arranging a lease for someone else are different capacities.
+1. Identify the tenancy/property and deal_actor: the actual affected party considering or holding the agreement, ID or querent. Extract deal_capacity=rent. Title ownership, being the tenant and arranging an agreement for someone else are different facts. subject.owner_id is actual title only, empty when unknown; a tenant does not own the building by renting it.
 2. Distinguish finding/completing a tenancy (event), an already available tenancy's suitability (situation), comparison (choice), and return (profit). Keep an identified landlord/tenant as a separate actual party if supplied.
-3. Bind the affected tenant/principal for a tenancy inquiry; preserve another title owner separately rather than treating their house as the buyer's frame. Modern tenant does not imply servant or employee. Renting for business use may need business_property distinctions.
-Example: 'Would taking this available lease for my own home be a good arrangement?' -> rental/situation, affected tenant=querent, deal_capacity=rent. 'Will I buy that house?' is property, not rental.
+3. Native rules frame the tenancy from deal_actor without falsifying ownership. Known contractual parties suffice for pure completion; landlord title is not a universal inquiry. Preserve an explicitly identified landlord separately as deal_party with actual operative relationship. Modern tenant does not imply servant or employee. Business use may need business_property distinctions.
+FINANCIAL BENEFICIARY. If frame.facet=profit, extract deal_beneficiary as the actual person whose financial benefit the question concerns, a known participant ID or querent, using a literal source quote. The contracting seller, title owner and beneficiary can differ. 'Noor is selling my piano; will I benefit financially?' has deal_actor=noor, owner_id=querent, deal_beneficiary=querent. Selling on another person's behalf does not by itself establish who receives proceeds or commission. If the concern leaves this genuinely unknown, leave the field missing; never infer it from title or deal_actor alone. Completion or quality does not require this profit-only field.
+Example: 'Would taking this available lease for my own home be a good arrangement?' -> rental/situation, deal_actor=querent, deal_capacity=rent, owner_id empty. 'Will I buy that house?' is property, not rental.
 "#
         }
         Method::BusinessProperty => {
             r#"
 PROPERTY USED FOR BUSINESS (printed pp. 170–171)
-1. Identify the premises and actual business use: working there, farming it, or operating a workshop differs from simply living in an ordinary home. Bind the relevant owner or prospective deal actor from supplied evidence, keeping an identified seller separate.
-2. Extract deal_capacity=buy|rent|sell|profit|quality and preserve the precise benefit/completion/condition concern. Business use and potential profit must remain visible as context, not disappear into an ordinary house-sale question.
+1. Identify premises and actual business use: working there, farming it or operating a workshop differs from an ordinary home. deal_actor identifies the affected business operator/contracting party, not legal title owner. Keep an identified contracting counterparty in deal_party; routine agent is context. subject.owner_id is actual title only, empty when unstated. Renting or planning to operate there cannot establish ownership.
+2. When supplied, deal_capacity is buy|rent|sell ONLY. frame.facet independently preserves benefit=profit, completion=event, condition=situation or comparison=choice. The book's available-business-premises judgment is the same for buying or renting: do not block this intake solely to ask which of those actions applies. Preserve business use/context; never replace an action with profit or quality, or an operator with a title owner.
 3. This is a specialist intake; complete facts do not establish its unreviewed profit roles or permit a judgment. An unnamed title owner is not automatically the speaker.
-Example: 'Would renting the mill as premises for my own pottery business pay off?' -> business_property/profit, business-premises subject, deal_capacity=rent, business context. 'Would this apartment be a pleasant home?' is ordinary property/rental quality.
+FINANCIAL BENEFICIARY. If frame.facet=profit, extract deal_beneficiary as the actual person whose financial benefit the question concerns, a known participant ID or querent, using a literal source quote. The contracting seller, title owner and beneficiary can differ. 'Noor is selling my piano; will I benefit financially?' has deal_actor=noor, owner_id=querent, deal_beneficiary=querent. Selling on another person's behalf does not by itself establish who receives proceeds or commission. If the concern leaves this genuinely unknown, leave the field missing; never infer it from title or deal_actor alone. Completion or quality does not require this profit-only field.
+Example: 'Would renting the mill as premises for my own pottery business pay off?' -> business_property/profit, deal_actor=querent, business-premises subject with owner_id empty, deal_capacity=rent, business context. 'Would this apartment be a pleasant home?' is ordinary property/rental quality.
 "#
         }
         Method::Choice => {

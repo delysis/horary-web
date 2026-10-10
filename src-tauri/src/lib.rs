@@ -42,6 +42,8 @@ use tauri::Manager;
 mod ai;
 mod conversation;
 #[cfg(test)]
+mod deal_training_bank;
+#[cfg(test)]
 mod elicitation_eval;
 mod geocode;
 mod hf_cache;
@@ -54,6 +56,7 @@ mod horary_role_options;
 mod horary_step;
 #[cfg(test)]
 mod hosted_gemma_eval;
+mod imported_models;
 mod inference;
 mod llama;
 mod local_dictation;

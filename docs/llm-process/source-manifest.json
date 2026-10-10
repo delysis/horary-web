@@ -39,7 +39,7 @@
     },
     {
       "path": "docs/ELICITATION_EVALUATION.md",
-      "sha256": "47ac17fdad402adf64b62c5a29e93cc97dbbee35f14ca374d4785bead7aff7a4"
+      "sha256": "d4b6cdd48702ebb19255d4cabec7e856fbfe3029818a9205453a3172be858aae"
     },
     {
       "path": "docs/ELICITATION_FINDINGS.md",
@@ -110,8 +110,12 @@
       "sha256": "7860d64f74624ea9279fcee874a433f372911927efebbd1c48920b164f69fa5c"
     },
     {
+      "path": "src-tauri/src/deal_training_bank.rs",
+      "sha256": "7c34f736f34386533e42cb4ab09796714fae3f542fd96021ee870994f2fc9faa"
+    },
+    {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "8c9e3deff03a5546f5e45acd5e4bb92f9b384a57633e392f1fbb92fa212fa1f7"
+      "sha256": "8b0306bf4e32121921f6fad5790c932c6f0ab2daba4dfacfcb257fbbcf87e16b"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -139,7 +143,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "6d1fd80d48cb02c5ec67429907d4c368cc533b5ca4b96627860c2629a4d6bbab"
+      "sha256": "69d329e1097626fd49d88229dfa058c52fdd15a14eb59a6fc6c26db666a60aa3"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -207,11 +211,11 @@
     },
     {
       "path": "src-tauri/src/horary_recovery_tests.rs",
-      "sha256": "23c14181ca2599a3041497f8ba942c446a91eb27d1d1403be1814d357c0a24d5"
+      "sha256": "5c9caacf75794fd712d4d5a707f13b65e6c53d2d0ee2078bf0fcb803d4d8203b"
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "4817806d99e540a5c6531882ff9f503f9352522aeaf53b1d5fdb40560e26c713"
+      "sha256": "41821361e592bf8550190b9d2909049522dc626a64dd29d21a21a3c1fb6507c0"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
@@ -226,8 +230,16 @@
       "sha256": "8e06ba7fc431c1c519764d75071f2efdee9960da4f3f6dbb0287189126dacab4"
     },
     {
+      "path": "src-tauri/src/imported_models.rs",
+      "sha256": "7819b89aa4bc7f763c4d44f904ba5edfa1506f0ceb3976a49c2d70a4fb9ff611"
+    },
+    {
       "path": "src-tauri/src/lib.rs",
-      "sha256": "54f9ea9c441882412e61ef2e3e4abd6d925b56bb10e730bc99b477542a52199b"
+      "sha256": "9224d675a966bf5255970692b3c23af269038ceacbe7d57aa01de6a51dbd6936"
+    },
+    {
+      "path": "src-tauri/src/llama.rs",
+      "sha256": "7a217e9ae749aa49f813fce7d8f8989372f093e40bb819fa439763add5d6ed7e"
     },
     {
       "path": "src-tauri/src/local_dictation.rs",
@@ -263,7 +275,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "9e6e9e4168fd822ace49263e61886ac9cf1258cf1cbf973740318988e0cbc46d"
+      "sha256": "4b7f6d4498c264e7425b17905ab38aeacecbefcb0651dfdb2c4394bc48cf8c35"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -271,11 +283,11 @@
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "5c7ea822b7ffa80b82bd7400c3b4ae0b4b0f5002b2b6cba7c1aa4c46d0b77435"
+      "sha256": "b164b0e4e8b664351b25a4461c5617c6ab98dc875d45ef06cc81037a704f4d4a"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
-      "sha256": "8709fe8794f0e26bcde06e37f6d598b47eb19604400702934f41f4ba14cd160c"
+      "sha256": "84dc40d50454287733ddb671c49b5dc6da200866cf5ce45b4966b3fe2d370b94"
     },
     {
       "path": "src-tauri/src/reading_eval.rs",
@@ -286,12 +298,16 @@
       "sha256": "d3ff9f8afbad00741058ae650a74be65c2674a29b9e9398157b8b46258683b4a"
     },
     {
+      "path": "src-tauri/src/reading_neural_eval.rs",
+      "sha256": "e5c99fb14af1bd94f3cf4ddf02008f47c08493034f31fd8a4e74faf12f79d76c"
+    },
+    {
       "path": "src-tauri/src/reading_store.rs",
       "sha256": "ba1710789b976a71ea15f199d35e2b446593691708c439f5890c4c7659614ec7"
     },
     {
       "path": "src-tauri/src/recognition_programs.rs",
-      "sha256": "875becb46d4dd07ee78c4b8a8086a990277241675da3db1534014840702b9eef"
+      "sha256": "614c600215824dfef2f43829b72b5aff67253f81266d39c62635c299ae6348e0"
     },
     {
       "path": "src-tauri/src/review_progress.rs",
@@ -318,6 +334,10 @@
       "sha256": "1b74a5069aa84fa3bbed1eaf2b12f2ab0e5056003e623c4c0a28f3c6fff4ddc2"
     },
     {
+      "path": "src-tauri/test-fixtures/elicitation/deal-action-training-20261010.json",
+      "sha256": "e2eb558c27ae8aa8f67c4f406296d3f6b97808689e2812e9afd891be1c2e26b9"
+    },
+    {
       "path": "src-tauri/test-fixtures/elicitation/edge.json",
       "sha256": "bd3d194122b4b4b8164610758d67378d7ca347037d778dfcf4c0d2a38423f7b0"
     },
@@ -332,6 +352,10 @@
     {
       "path": "src-tauri/test-fixtures/readings/core-rubrics.json",
       "sha256": "d1b766082fb7d2f90b7bbbb5021c43b5c3abb01720225daa47cc310ed419a55a"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/deal-action-training-rubrics-20261010.json",
+      "sha256": "4952065bb91ab40ed524355ac6e07a02e3af89da2c37da3555bf27a122ac42ae"
     },
     {
       "path": "src-tauri/test-fixtures/readings/specialist-rubrics.json",
@@ -363,11 +387,19 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "0cebe1b114aee647b0b07f958d8c1d35180ba2e16146c1a2219effffa435244a"
+      "sha256": "2e211d77b8374ff002b9b3f557ddc160d462b06a54156bbd4c5a2dc817d2ec7f"
+    },
+    {
+      "path": "tools/horary-gepa/src/campaign.rs",
+      "sha256": "65ea36739382d62821c01842d5ecb72b1a490055b4bb7d19ad13d7f41b9b0d75"
     },
     {
       "path": "tools/horary-gepa/src/controls.rs",
       "sha256": "c412c1bfbe65f949b05342264662e8ff6e6031fb7a1a46ec3cedfb29047148d0"
+    },
+    {
+      "path": "tools/horary-gepa/src/corpus.rs",
+      "sha256": "d3cfb55d0e0def92cbdfffe7fce7bd67a58ef60628a31e0cf0bd2f1217e0434b"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",
@@ -375,15 +407,15 @@
     },
     {
       "path": "tools/horary-gepa/src/journal.rs",
-      "sha256": "1d213e42edfbc3a27e3401925f6bc08eb09e37574d3e2d413fba134f8d461fcc"
+      "sha256": "6ea5634047e79a816f5ac0f98b8ef5827e1c11f04ca4553fd5fe6320e70a31a1"
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "75006798f0afa88f7f384d5c1739f4b86e936230abb8d28cdbc438d275acefe1"
+      "sha256": "97a46549034b99bb187f331044b6db2d6f461e7ab50471797350baf16165a411"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "f9753c6f661f2a3536d7cb4fbb52bbd26c8680a021b9d539429e67aec15021fb"
+      "sha256": "08904358d5d4609cd0802811298d0bf9e9442362e9a8cdcb4dbcdf24923d2537"
     },
     {
       "path": "tools/horary-gepa/src/metric.rs",
@@ -391,7 +423,11 @@
     },
     {
       "path": "tools/horary-gepa/src/native.rs",
-      "sha256": "c7b74fc9fd3ac4319b1a6b6c4203c374f382a9046f948f83d36ee5ca1520aaab"
+      "sha256": "e337016a40ce9f7e08fc369f31c752fb578b04f761b5093221ef12d12ff63af0"
+    },
+    {
+      "path": "tools/horary-gepa/src/reading.rs",
+      "sha256": "8ecb599b5dff2a371332ccb30b6f8876d057114d572d6de7380225bc51d70ab2"
     },
     {
       "path": "tools/horary-gepa/src/recovery.rs",
@@ -399,15 +435,15 @@
     },
     {
       "path": "tools/horary-gepa/src/review.rs",
-      "sha256": "2961d12cad93d01084c6987e807733a6ba27e8d2b195564250acdacd9ea3a2fe"
+      "sha256": "97db6087148f46c621b8f680ba6a5060190dbff22a24fb523afb64dbcea54c23"
     },
     {
       "path": "tools/horary-gepa/src/status.rs",
-      "sha256": "bee66c1b46f2f6a656a98e7b6c66a95e4394419f3a4804617b90c38ffd238fcb"
+      "sha256": "87c905b2899e1a4d1b3026e8052125b14f237205a2346bb357abf5405d8b5cff"
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",
-      "sha256": "d5aa0bb496501fa033c05602b160632b835e951e2a84e603fb235f0918f38c5a"
+      "sha256": "0df55993e489f75da355db009ef6bf0ba8b29d503c1a4e6fa39e527d2d73dd54"
     },
     {
       "path": "tools/horary-loop/Cargo.lock",

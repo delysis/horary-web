@@ -1,7 +1,8 @@
 #![forbid(unsafe_code)]
 use clap::{Parser, Subcommand};
 use horary_gepa::{
-    load, prepare, read, run, BookContext, ControlMode, Function, Objective, Plan, ENGINE_REV,
+    load, prepare, read, run, BookContext, ControlMode, Function, Objective, Plan, ReadingStage,
+    ENGINE_REV,
 };
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -17,6 +18,26 @@ struct Cli {
 enum Action {
     /// Offline sensitivity and safety probes, no credentials or models.
     Calibrate,
+    /// One fresh, bounded hosted production catalogue; never retries an existing owner.
+    Campaign {
+        #[arg(long)]
+        evidence: PathBuf,
+        #[arg(long)]
+        native_executable: PathBuf,
+        #[arg(long, value_delimiter = ',')]
+        cases: Vec<String>,
+        #[arg(long, default_value_t = 3600)]
+        case_seconds: u64,
+        #[arg(long, default_value_t = 28)]
+        max_calls: u64,
+    },
+    /// Seal a closed native corpus after its owner and child have exited.
+    SealCorpus {
+        #[arg(long)]
+        campaign: PathBuf,
+        #[arg(long)]
+        closure: PathBuf,
+    },
     Prepare(Box<Preparation>),
     PrepareRecovery {
         #[arg(long)]
@@ -82,6 +103,8 @@ struct Preparation {
     function: Function,
     #[arg(long)]
     target_method: Option<String>,
+    #[arg(long, value_enum)]
+    target_stage: Option<ReadingStage>,
     #[arg(long, default_value_t = 0)]
     max_review_calls: u64,
     #[arg(long, default_value_t = 600)]
@@ -102,6 +125,27 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
     match cli.action {
         Action::Calibrate => {
             println!("{}", horary_gepa::metric::calibration()?);
+        }
+        Action::Campaign {
+            evidence,
+            native_executable,
+            cases,
+            case_seconds,
+            max_calls,
+        } => {
+            println!(
+                "{}",
+                horary_gepa::campaign::run(
+                    &evidence,
+                    &native_executable,
+                    &cases,
+                    case_seconds,
+                    max_calls
+                )?
+            );
+        }
+        Action::SealCorpus { campaign, closure } => {
+            println!("{}", horary_gepa::corpus::seal(&campaign, &closure)?);
         }
         Action::Prepare(options) => {
             let Preparation {
@@ -124,6 +168,7 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 control_mode,
                 function,
                 target_method,
+                target_stage,
                 max_review_calls,
                 review_seconds,
                 book_source,
@@ -139,16 +184,18 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                     })
                 })
                 .transpose()?;
-            let plan=Plan {version:if function == Function::Classification {1} else {2},engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
+            let plan=Plan {version:match function {Function::Classification=>1,Function::InputJourney=>2,Function::ReadingJourney=>3},engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
                 manifest_sha256:String::new(),split_file:std::fs::canonicalize(split).map_err(|error|error.to_string())?,split_sha256:String::new(),
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
                 codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
-                function,objective,target_method,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
+                function,objective,target_method,target_stage,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
                 qualification:if function == Function::Classification {
                     "Training-only classification search; separate development selects candidates. No reading, reserved, on-device or deployment qualification. Fresh whole-journey/source/reserved gates required before promotion."
-                } else {
+                } else if function == Function::InputJourney {
                     "Training-only initial-extractor correctness and repair-reliability search. Fixed conversation and supplying stages are measured separately, not locally optimized. No reading generated or whole-journey, interpretation, reserved, on-device or deployment qualification. Fresh production reading/source/reserved gates required before promotion."
+                } else {
+                    "Training-only selected reading-stage search through fresh production question, elicitation, accepted inputs and chart. Independent source-cited component merit and whole-reading gates are separate. No reserved, on-device, packaged acceptance or automatic deployment qualification. Unsupported methods remain at expert-review boundaries."
                 }.into()};
             let plan = prepare(plan, &state, &training, &development)?;
             println!(

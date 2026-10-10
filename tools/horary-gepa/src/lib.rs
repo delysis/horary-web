@@ -1,10 +1,13 @@
 //! GEPA owns the search. Horary owns prompts, truth, validation and receipts.
 #![forbid(unsafe_code)]
+pub mod campaign;
 pub mod controls;
+pub mod corpus;
 pub mod executable;
 pub mod journal;
 pub mod metric;
 pub mod native;
+pub mod reading;
 pub mod recovery;
 pub mod review;
 pub mod status;
@@ -36,6 +39,31 @@ pub enum Function {
     #[default]
     Classification,
     InputJourney,
+    ReadingJourney,
+}
+
+/// Only production reading stages may be optimized by a reading round.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, clap::ValueEnum, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadingStage {
+    Significators,
+    Condition,
+    Reception,
+    Contacts,
+    Location,
+    Judgment,
+}
+impl ReadingStage {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Significators => "significators",
+            Self::Condition => "condition",
+            Self::Reception => "reception",
+            Self::Contacts => "contacts",
+            Self::Location => "location",
+            Self::Judgment => "judgment",
+        }
+    }
 }
 
 /// Search merit and application acceptance are deliberately different contracts.
@@ -46,6 +74,7 @@ pub enum Objective {
     #[default]
     WholeFunction,
     ExtractorReliability,
+    SelectedStageReliability,
 }
 impl Objective {
     fn is_default(&self) -> bool {
@@ -60,24 +89,28 @@ impl Function {
         match self {
             Self::Classification => "elicitation_eval::real_model_classification_function",
             Self::InputJourney => "elicitation_eval::real_model_input_journey_function",
+            Self::ReadingJourney => "elicitation_eval::reading::real_model_reading_function",
         }
     }
     pub fn phase(self) -> &'static str {
         match self {
             Self::Classification => "classify_question",
             Self::InputJourney => "complete_selected_program",
+            Self::ReadingJourney => "reading_journey",
         }
     }
     pub fn metric(self) -> &'static str {
         match self {
             Self::Classification => "classification",
             Self::InputJourney => "input_journey",
+            Self::ReadingJourney => "reading_journey",
         }
     }
     pub fn generation_factor(self) -> u64 {
         match self {
             Self::Classification => 3, // one branch × native client's three completed-error attempts
             Self::InputJourney => 6,   // conservatively reserve two input branches per group
+            Self::ReadingJourney => 12, // four real reading branches × three HTTP attempts
         }
     }
     fn expectations(self, fixture: &Value) -> Value {
@@ -86,7 +119,7 @@ impl Function {
                 json!({"method":fixture["method"], "allowed_methods":fixture["expected"]["allowed_methods"],
                 "facet":fixture["expected"]["facet"], "allowed_facets":fixture["expected"]["allowed_facets"]})
             }
-            Self::InputJourney => {
+            Self::InputJourney | Self::ReadingJourney => {
                 json!({"method":fixture["method"], "expected":fixture["expected"],
                 "follow_up_expected":fixture["follow_up_expected"], "rationale":fixture["rationale"]})
             }
@@ -100,7 +133,7 @@ impl Function {
     ) -> Result<()> {
         if fixture["id"] != example.id
             || example.expected != self.expectations(fixture)
-            || self == Self::InputJourney && fixture["method"].as_str() != target
+            || self != Self::Classification && fixture["method"].as_str() != target
         {
             return Err(format!(
                 "Materialized expectations or target method differ from the frozen fixture for {}",
@@ -203,6 +236,10 @@ pub struct Example {
     pub inspection_file: PathBuf,
     pub inspection_sha256: String,
     pub expected: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_branch: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_rubric_sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -245,6 +282,8 @@ pub struct Plan {
     pub objective: Objective,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_method: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_stage: Option<ReadingStage>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub max_review_calls: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -259,12 +298,14 @@ impl Plan {
         match self.objective {
             Objective::WholeFunction => self.function.metric(),
             Objective::ExtractorReliability => "extractor_reliability",
+            Objective::SelectedStageReliability => "selected_stage_reliability",
         }
     }
     pub fn signature(&self) -> horary_prompt_program::Signature<'_> {
         horary_prompt_program::Signature {
-            stage: "intake",
-            recognition_phase: Some(self.function.phase()),
+            stage: self.target_stage.map_or("intake", ReadingStage::name),
+            recognition_phase: (self.function != Function::ReadingJourney)
+                .then_some(self.function.phase()),
             method: self.target_method.as_deref(),
         }
     }
@@ -274,7 +315,10 @@ impl Plan {
             .as_ref()
             .map(|m| format!(".{m}"))
             .unwrap_or_default();
-        format!("{}{method}.region.{index:03}", self.function.phase())
+        let phase = self
+            .target_stage
+            .map_or(self.function.phase(), ReadingStage::name);
+        format!("{phase}{method}.region.{index:03}")
     }
     fn seed_for_guide(&self) -> Result<Candidate> {
         Ok(guide_parts(&self.guide)?
@@ -293,11 +337,18 @@ impl Plan {
                 "Extractor reliability requires an actual method-scoped input execution".into(),
             );
         }
+        if self.objective == Objective::SelectedStageReliability
+            && self.function != Function::ReadingJourney
+        {
+            return Err(
+                "Selected-stage reliability requires an actual full reading journey".into(),
+            );
+        }
         if self.version
-            != if self.function == Function::Classification {
-                1
-            } else {
-                2
+            != match self.function {
+                Function::Classification => 1,
+                Function::InputJourney => 2,
+                Function::ReadingJourney => 3,
             }
             || self.engine_rev != ENGINE_REV
             || self.max_metric_calls == 0
@@ -313,12 +364,19 @@ impl Plan {
             return Err("Positive finite budgets and the pinned GEPA engine are required".into());
         }
         match self.function {
-            Function::Classification if self.target_method.is_none() && self.max_review_calls == 0 && self.review_book.is_none() => {},
+            Function::Classification if self.target_method.is_none() && self.target_stage.is_none() && self.max_review_calls == 0 && self.review_book.is_none() => {},
             Function::InputJourney if self.control_mode == ControlMode::FreshHosted
+                && self.target_stage.is_none()
                 && self.max_review_calls > 0 && self.review_seconds > 0 && self.review_book.is_some()
                 && self.target_method.as_ref().is_some_and(|m| !m.is_empty()
                     && m.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')) => {},
-            _ => return Err("Classification has no method/reviewer; input journeys require an explicit method, fresh controls and bounded independent review".into()),
+            Function::ReadingJourney if self.control_mode == ControlMode::FreshHosted
+                && self.target_stage.is_some() && self.recovery.is_none()
+                && self.objective == Objective::SelectedStageReliability
+                && self.max_review_calls > 0 && self.review_seconds > 0 && self.review_book.is_some()
+                && self.target_method.as_ref().is_some_and(|m| !m.is_empty()
+                    && m.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')) => {},
+            _ => return Err("Classification has no method/reviewer; scoped journeys require fresh controls, an explicit method and bounded independent review; reading also requires a typed target stage and component objective".into()),
         }
         if let Some(book) = &self.review_book {
             book.excerpts()?;
@@ -349,6 +407,23 @@ impl Plan {
         {
             if !ids.insert(id) {
                 return Err(format!("Duplicate/overlapping case {id}"));
+            }
+        }
+        for example in self.training.iter().chain(&self.development) {
+            if self.function == Function::ReadingJourney {
+                if example
+                    .source_rubric_sha256
+                    .as_ref()
+                    .is_none_or(|sha| sha.len() != 64)
+                    || example.source_branch.is_some_and(|branch| branch >= 4)
+                {
+                    return Err(
+                        "Reading examples require a pinned authored rubric and bounded branch"
+                            .into(),
+                    );
+                }
+            } else if example.source_branch.is_some() || example.source_rubric_sha256.is_some() {
+                return Err("Reading-only evidence cannot enter an older function plan".into());
             }
         }
         self.reconstruct(&self.seed)?;
@@ -395,8 +470,8 @@ impl Plan {
             ),
             baseline_manifest_sha256: self.manifest_sha256.clone(),
             overrides: vec![Override {
-                stage: "intake".into(),
-                recognition_phase: Some(self.function.phase().into()),
+                stage: self.signature().stage.into(),
+                recognition_phase: self.signature().recognition_phase.map(str::to_owned),
                 method: self.target_method.clone(),
                 expected_guide_sha256: self.guide_sha256.clone(),
                 replacement_text: replacement,
@@ -413,7 +488,10 @@ impl Plan {
                         example.id,
                         example.source_request_file.display()
                     ),
-                    json_pointer: "/prompt/0/content".into(),
+                    json_pointer: example.source_branch.map_or_else(
+                        || "/prompt/0/content".into(),
+                        |branch| format!("/prompts/{branch}/0/content"),
+                    ),
                     sha256: example.source_request_sha256.clone(),
                 })
                 .collect(),
@@ -476,6 +554,9 @@ impl Plan {
                 &example.source_case_directory.join("initial.json"),
                 &example.source_initial_sha256,
             )?;
+            if self.function == Function::ReadingJourney {
+                reading::verify_example(example, self.target_method.as_deref())?;
+            }
         }
         Ok(())
     }
@@ -518,6 +599,13 @@ impl Plan {
 }
 
 pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -> Result<Plan> {
+    if plan.function == Function::ReadingJourney
+        && (plan.target_stage.is_none()
+            || plan.objective != Objective::SelectedStageReliability
+            || plan.recovery.is_some())
+    {
+        return Err("A new reading round requires a typed selected stage, explicit component objective and no input-only recovery ancestry".into());
+    }
     if plan.function == Function::InputJourney && plan.objective == Objective::WholeFunction {
         return Err("The editable initial extractor cannot optimize a whole input conversation. Prepare an explicit extractor-reliability objective; keep whole-journey qualification separate.".into());
     }
@@ -526,7 +614,7 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
         fs::create_dir_all(state).map_err(|e| e.to_string())?;
         keep(&state.join("objective-calibration.json"), &calibration)?;
     }
-    if plan.function == Function::InputJourney
+    if plan.function != Function::Classification
         && (plan.control_mode != ControlMode::FreshHosted
             || plan.target_method.is_none()
             || plan.max_review_calls == 0
@@ -582,7 +670,7 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
             .ok_or("Unsealed authored fixture")?;
         verify(&dir.join("fixture.json"), fixture_sha)?;
         let fixture = load(&dir.join("fixture.json"))?;
-        if plan.function == Function::InputJourney
+        if plan.function != Function::Classification
             && fixture["method"].as_str() != plan.target_method.as_deref()
         {
             return Err(format!(
@@ -604,17 +692,21 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
             .filter(|path| path.to_string_lossy().ends_with("-request.json"))
         {
             let request = load(path)?;
-            let input = horary_prompt_program::original_input(&request["input"]);
-            let signature = horary_prompt_program::signature("intake", input);
-            let wanted = plan.signature();
-            if request["stage"] != "intake"
-                || signature.stage != wanted.stage
-                || signature.recognition_phase != wanted.recognition_phase
-                || signature.method != wanted.method
-            {
+            let selected = if plan.function == Function::ReadingJourney {
+                reading::matching_tasks(&plan, &request)?.into_iter().next()
+            } else {
+                let scope = horary_prompt_program::signature("intake", &request["input"]);
+                let wanted = plan.signature();
+                (request["stage"] == "intake"
+                    && scope.stage == wanted.stage
+                    && scope.recognition_phase == wanted.recognition_phase
+                    && scope.method == wanted.method)
+                    .then_some((None, request.clone()))
+            };
+            let Some((source_branch, selected)) = selected else {
                 continue;
-            }
-            request["prompt"][0]["content"]
+            };
+            selected["prompt"][0]["content"]
                 .as_str()
                 .ok_or("No captured classifier guide")?;
             let relative = path
@@ -636,6 +728,16 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
                 inspection_file: PathBuf::new(),
                 inspection_sha256: String::new(),
                 expected: plan.function.expectations(&fixture),
+                source_branch,
+                source_rubric_sha256: if plan.function == Function::ReadingJourney {
+                    let sha = origin["files"]["reading-rubric.json"]
+                        .as_str()
+                        .ok_or("Reading capture lacks its sealed authored rubric")?;
+                    verify(&dir.join("reading-rubric.json"), sha)?;
+                    Some(sha.into())
+                } else {
+                    None
+                },
             });
             break;
         }
@@ -651,6 +753,11 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
             .as_str()
             .ok_or("Native inspection has no guide")?;
         let recorded = load(&dir.join(&example.source_request_file))?;
+        let recorded = if plan.function == Function::ReadingJourney {
+            reading::captured_task(&recorded, example.source_branch)?
+        } else {
+            recorded
+        };
         if plan.control_mode == ControlMode::ArchivedCapture
             && recorded["prompt"][0]["content"] != current_guide
         {
@@ -706,7 +813,14 @@ impl Adapter {
         }
         for example in examples {
             let evaluation = native::evaluate(&self.plan, &mut self.journal, &example, candidate)?;
-            let independent = if self.plan.function == Function::InputJourney {
+            let independent = if self.plan.function == Function::ReadingJourney {
+                Some(reading::evaluate(
+                    &self.plan,
+                    &mut self.journal,
+                    &example,
+                    &evaluation,
+                )?)
+            } else if self.plan.function == Function::InputJourney {
                 Some(review::evaluate(
                     &self.plan,
                     &mut self.journal,
@@ -716,11 +830,18 @@ impl Adapter {
             } else {
                 None
             };
-            let feedback = metric::grade(
-                &evaluation["outcome"],
-                independent.as_ref(),
-                self.plan.metric(),
-            )?;
+            let feedback = if self.plan.function == Function::ReadingJourney {
+                reading::grade(
+                    &evaluation,
+                    independent.as_ref().ok_or("Missing reading review")?,
+                )?
+            } else {
+                metric::grade(
+                    &evaluation["outcome"],
+                    independent.as_ref(),
+                    self.plan.metric(),
+                )?
+            };
             if !feedback.score.is_finite() || !(0.0..=1.0).contains(&feedback.score) {
                 return Err("Invalid or misaligned fitness".into());
             }
@@ -824,10 +945,13 @@ pub async fn run(plan: Plan, state: PathBuf) -> Result<Value> {
     match result {
         Ok(result) => {
             let program = plan.program(&result.best)?;
-            let value = json!({"engine":"dsrust-gepa","revision":ENGINE_REV,"plan_sha256":digest(read(&state.join("plan.json"))?),"best_index":result.best_idx,"candidates":result.candidates,
+            let mut value = json!({"engine":"dsrust-gepa","revision":ENGINE_REV,"plan_sha256":digest(read(&state.join("plan.json"))?),"best_index":result.best_idx,"candidates":result.candidates,
                 "parents":result.parents,"development_scores":result.val_aggregate_scores,"logical_metric_evaluations":result.total_num_evals,
                 "iterations":result.iterations,"selected_program":program,"function":plan.function,"target_method":plan.target_method,
                 "objective":plan.objective,"qualification":plan.qualification});
+            if plan.function == Function::ReadingJourney {
+                value["target_stage"] = json!(plan.target_stage);
+            }
             keep(&state.join("search-result.json"), &value)?;
             if let Some(program) = program {
                 keep(&state.join("selected-program.json"), &program)?;
@@ -908,6 +1032,8 @@ mod tests {
             inspection_file: "inspection".into(),
             inspection_sha256: digest("inspection"),
             expected: json!({"facet":"event"}),
+            source_branch: None,
+            source_rubric_sha256: None,
         };
         Plan {
             version: 1,
@@ -942,6 +1068,7 @@ mod tests {
             function: Function::Classification,
             objective: Objective::WholeFunction,
             target_method: None,
+            target_stage: None,
             max_review_calls: 0,
             review_seconds: 0,
             review_book: None,
@@ -1000,9 +1127,70 @@ mod tests {
     fn legacy_plans_deserialize_and_serialize_without_snapshot_fields() {
         let original = serde_json::to_value(plan()).unwrap();
         assert!(original.get("codex_snapshot").is_none());
+        assert!(original.get("target_stage").is_none());
+        assert!(original["training"][0].get("source_branch").is_none());
+        assert!(original["training"][0]
+            .get("source_rubric_sha256")
+            .is_none());
         let restored: Plan = serde_json::from_value(original.clone()).unwrap();
         assert!(restored.codex_snapshot.is_none());
         assert_eq!(serde_json::to_value(restored).unwrap(), original);
+    }
+    #[test]
+    fn reading_round_targets_one_real_stage_and_preserves_protected_sources() {
+        let mut plan = plan();
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("book.md");
+        let source = "<!-- page:0001 -->\nSynthetic source fixture.\n";
+        fs::write(&file, source).unwrap();
+        plan.version = 3;
+        plan.function = Function::ReadingJourney;
+        plan.objective = Objective::SelectedStageReliability;
+        plan.control_mode = ControlMode::FreshHosted;
+        plan.target_stage = Some(ReadingStage::Judgment);
+        plan.target_method = Some("relationship".into());
+        plan.max_review_calls = 8;
+        plan.review_seconds = 120;
+        plan.max_physical_generation_attempts = 36;
+        plan.review_book = Some(BookContext {
+            file,
+            sha256: digest(source),
+            ocr_pages: vec![1],
+        });
+        for example in plan.training.iter_mut().chain(&mut plan.development) {
+            example.source_rubric_sha256 = Some(digest("synthetic source rubric"));
+            example.source_branch = Some(1);
+        }
+        plan.seed = plan.seed_for_guide().unwrap();
+        plan.validate().unwrap();
+        let mut candidate = plan.seed.clone();
+        let component = candidate.keys().next().unwrap().clone();
+        candidate.insert(
+            component,
+            "A changed source-grounded judgment teaching paragraph. ".repeat(4),
+        );
+        let program = plan.program(&candidate).unwrap().unwrap();
+        assert_eq!(program.overrides[0].stage, "judgment");
+        assert!(program.overrides[0].recognition_phase.is_none());
+        assert_eq!(program.evidence[0].json_pointer, "/prompts/1/0/content");
+        let changed = plan.reconstruct(&candidate).unwrap();
+        assert_eq!(
+            guide_parts(&changed).unwrap().quoted_source,
+            guide_parts(&plan.guide).unwrap().quoted_source
+        );
+        assert!(program
+            .apply(
+                horary_prompt_program::Signature {
+                    stage: "intake",
+                    recognition_phase: Some("complete_selected_program"),
+                    method: Some("relationship")
+                },
+                &plan.guide
+            )
+            .unwrap()
+            .is_none());
+        plan.target_stage = None;
+        assert!(plan.validate().is_err());
     }
     #[test]
     fn final_cases_and_invalid_seed_cannot_enter_search() {

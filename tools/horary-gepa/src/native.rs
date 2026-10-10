@@ -32,6 +32,10 @@ pub fn evaluate(
     if plan.objective == Objective::ExtractorReliability {
         request["objective"] = json!(plan.objective);
     }
+    if plan.function == Function::ReadingJourney {
+        request["objective"] = json!(plan.objective);
+        request["target_stage"] = json!(plan.target_stage);
+    }
     let cache_key = digest(request.to_string());
     let cache = journal
         .root
@@ -163,13 +167,18 @@ pub fn evaluate(
         "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
         "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":plan.manifest_sha256,
         "program_file":program_file,"replay_completed_capture":archival});
-    if plan.function == Function::InputJourney {
+    if plan.function != Function::Classification {
         task.as_object_mut()
             .ok_or("Task is not an object")?
             .remove("replay_completed_capture");
         task["target_method"] = json!(plan.target_method);
         task["source_origin_sha256"] = json!(example.source_origin_sha256);
         task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+        if plan.function == Function::ReadingJourney {
+            task["target_stage"] = json!(plan.target_stage);
+            task["source_branch"] = json!(example.source_branch);
+            task["source_rubric_sha256"] = json!(example.source_rubric_sha256);
+        }
     }
     let task_file = directory.join("task.json");
     keep(&task_file, &task)?;
@@ -203,7 +212,7 @@ pub fn evaluate(
         plan.function_seconds.saturating_add(30),
     )?;
     let mut outcome = load(&evidence.join("outcome.json"))?;
-    let native_directory = if plan.function == Function::InputJourney {
+    let native_directory = if plan.function != Function::Classification {
         evidence.join("cases").join(&example.id)
     } else {
         evidence.clone()
@@ -229,6 +238,8 @@ pub fn evaluate(
         if !invoked {
             outcome["target_function_not_invoked_reason"] = json!("The observed upstream route did not select the optimized function; native grades are retained, but this target earns no fitness");
         }
+    } else if plan.function == Function::ReadingJourney {
+        crate::reading::verify_invocation(plan, &outcome, &focused)?;
     }
     if let Some(program) = &program {
         let mut applied = 0;
@@ -238,7 +249,13 @@ pub fn evaluate(
             let path = entry.map_err(|error| error.to_string())?.path();
             if path.to_string_lossy().ends_with("-request.json") {
                 let call = load(&path)?;
-                if call["prompt_program"]["candidate_id"] == program.id {
+                if call["prompt_program"]["candidate_id"] == program.id
+                    || call["prompt_program"].as_array().is_some_and(|branches| {
+                        branches
+                            .iter()
+                            .any(|branch| branch["candidate_id"] == program.id)
+                    })
+                {
                     applied += 1;
                 }
             }
@@ -315,6 +332,30 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
             continue;
         }
         let call = load(&file)?;
+        if plan.function == Function::ReadingJourney {
+            let result_name = name.replace("-request.json", "-result.json");
+            let result = load(&directory.join("calls").join(result_name))?;
+            for (branch, task) in crate::reading::matching_tasks(plan, &call)? {
+                let observed_result = if let Some(branch) = branch {
+                    if result["result"].get("Err").is_some() {
+                        result["result"].clone()
+                    } else {
+                        json!({"Ok":result["result"]["Ok"].as_array()
+                            .and_then(|results| results.get(branch))
+                            .ok_or("Reading branch lacks its actual generation result")?})
+                    }
+                } else {
+                    result["result"].clone()
+                };
+                calls.push(json!({"stage":task["stage"],"branch":branch,"sequence":call["sequence"],
+                    "input":task["input"],"schema":task["schema"],"guide_sha256":task["guide_sha256"],
+                    "prompt_program":task["prompt_program"],"result":observed_result,
+                    "source_request_file":format!("calls/{name}"),"source_request_sha256":digest(read(&file)?),
+                    "source_result_file":format!("calls/{}",name.replace("-request.json","-result.json")),
+                    "source_result_sha256":digest(read(&directory.join("calls").join(name.replace("-request.json","-result.json")))?)}));
+            }
+            continue;
+        }
         let input = horary_prompt_program::original_input(&call["input"]);
         let scope = horary_prompt_program::signature("intake", input);
         let desired = plan.signature();
@@ -343,10 +384,15 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
         "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
         "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":digest(read(&plan.campaign.join("manifest.json"))?),
         "inspect_prompt_only":true});
-    if plan.function == Function::InputJourney {
+    if plan.function != Function::Classification {
         task["target_method"] = json!(plan.target_method);
         task["source_origin_sha256"] = json!(example.source_origin_sha256);
         task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+        if plan.function == Function::ReadingJourney {
+            task["target_stage"] = json!(plan.target_stage);
+            task["source_branch"] = json!(example.source_branch);
+            task["source_rubric_sha256"] = json!(example.source_rubric_sha256);
+        }
     }
     keep(&task_file, &task)?;
     let mut command = Command::new(&plan.native_executable);
@@ -359,10 +405,10 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
     execute(&mut command, &directory, 60)?;
     let file = evidence.join("inspection.json");
     let inspection = load(&file)?;
-    let scope = if plan.function == Function::Classification {
-        "classification_prompt_inspection_only"
-    } else {
-        "input_journey_prompt_inspection_only"
+    let scope = match plan.function {
+        Function::Classification => "classification_prompt_inspection_only",
+        Function::InputJourney => "input_journey_prompt_inspection_only",
+        Function::ReadingJourney => "reading_journey_prompt_inspection_only",
     };
     if inspection["scope"] != scope
         || inspection["case_id"] != example.id

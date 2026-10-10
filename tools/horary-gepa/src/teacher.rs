@@ -1,7 +1,7 @@
 //! Strong reflection via the user's saved Codex login, with no model override.
 use crate::{
     journal::{Journal, Operation},
-    keep, load, native, read, Example, Objective, Plan, Result,
+    keep, load, native, read, Example, Function, Objective, Plan, Result,
 };
 use gepa::{Candidate, Reflective};
 use horary_prompt_program::{digest, guide_parts};
@@ -82,29 +82,66 @@ pub(crate) fn prepare(
     let mut samples = Vec::new();
     for (example, evaluation) in captured {
         let call = load(&example.inspection_file)?;
-        let inputs = json!({"case_id":example.id,"source_request_sha256":example.source_request_sha256,
+        let mut inputs = json!({"case_id":example.id,"source_request_sha256":example.source_request_sha256,
             "actual_application_input":horary_prompt_program::original_input(&call["input"]),
             "output_contract":call["schema"]});
-        let generated = if plan.objective == Objective::ExtractorReliability {
-            &evaluation["evaluation"]["initial_accepted_inputs"]
+        let generated = if plan.function == Function::ReadingJourney {
+            let calls = evaluation["evaluation"]["actual_function_calls"]
+                .as_array()
+                .filter(|calls| !calls.is_empty())
+                .ok_or("Reading reflection has no actual selected-stage calls")?;
+            inputs = json!({"case_id":example.id,"selected_stage":plan.target_stage,
+                "actual_stage_inputs":calls.iter().map(|call|json!({"input":call["input"],"schema":call["schema"],
+                    "source_request_sha256":call["source_request_sha256"],"branch":call["branch"]})).collect::<Vec<_>>()});
+            json!(calls
+                .iter()
+                .map(|call| json!({"result":call["result"],
+                "source_result_sha256":call["source_result_sha256"],"branch":call["branch"]}))
+                .collect::<Vec<_>>())
+        } else if plan.objective == Objective::ExtractorReliability {
+            evaluation["evaluation"]["initial_accepted_inputs"].clone()
         } else {
-            &evaluation["evaluation"]["final"]
+            evaluation["evaluation"]["final"].clone()
         };
         if generated.is_null() {
             return Err(
                 "Reflection lacks actual observed output for its editable component".into(),
             );
         }
-        samples.push(vec![("Inputs".into(),Reflective::Text(inputs.to_string())),
-            ("Generated Outputs".into(),Reflective::Text(generated.to_string())),
-            ("Feedback".into(),Reflective::Text(json!({"fitness":evaluation["fitness"],"authored_target_expectations":example.expected,
+        let mut feedback = json!({"fitness":evaluation["fitness"],"authored_target_expectations":example.expected,
                 "objective":plan.objective,"editable_signature":{"stage":"intake","recognition_phase":plan.function.phase(),"method":plan.target_method},
                 "actual_native_gates":evaluation["evaluation"]["outcome"]["hurdles"],
                 "validated_independent_input_review":evaluation["independent_review"],
-                "actual_focused_calls":evaluation["evaluation"]["actual_function_calls"]}).to_string()))]);
+                "actual_focused_calls":evaluation["evaluation"]["actual_function_calls"]});
+        if plan.function == Function::ReadingJourney {
+            crate::reading::verify_example(example, plan.target_method.as_deref())?;
+            feedback["editable_signature"] = json!({"stage":plan.signature().stage,
+                "recognition_phase":plan.signature().recognition_phase,"method":plan.target_method});
+            feedback
+                .as_object_mut()
+                .ok_or("Invalid reading feedback")?
+                .remove("validated_independent_input_review");
+            feedback["validated_independent_reading_review"] =
+                evaluation["independent_review"].clone();
+            feedback["source_reading_rubric"] =
+                load(&example.source_case_directory.join("reading-rubric.json"))?;
+        }
+        samples.push(vec![
+            ("Inputs".into(), Reflective::Text(inputs.to_string())),
+            (
+                "Generated Outputs".into(),
+                Reflective::Text(generated.to_string()),
+            ),
+            ("Feedback".into(), Reflective::Text(feedback.to_string())),
+        ]);
     }
     let reflection = gepa::render_prompt(current, &samples, None);
-    let reflection = format!("{reflection}\n\n{SCOPE_HINT}");
+    let scope = if plan.function == Function::ReadingJourney {
+        "Change only the named reading-stage component. Apply the supplied Frawley method in explicit steps to the actual accepted native facts and roles; improve the observed selected stage and its repairs. Immutable per-case rubrics and independently cited failures are TRAINING evaluation data, never student input or permission to invent testimony. Preserve direction of reception, applying contacts/event order, Moon treatment, conditional role selection and uncertainty. Explain the contextual answer only within the selected stage's actual authority. Full-journey and conversation failures remain separate; do not invent native features, change the question, bypass input/evidence guards or claim deployment qualification."
+    } else {
+        SCOPE_HINT
+    };
+    let reflection = format!("{reflection}\n\n{scope}");
     let fixed_source = guide_parts(&plan.guide)?.quoted_source.join("\n");
     let book = plan
         .review_book
@@ -261,5 +298,61 @@ mod tests {
         samples[0].pop();
         let rendered = gepa::render_prompt(current, &samples, None);
         assert!(payload_coverage(&rendered, current, &samples).is_err());
+    }
+
+    #[test]
+    fn reading_reflection_uses_actual_training_stage_not_the_inspection_checkpoint() {
+        let root = tempfile::tempdir().unwrap();
+        let mut plan = crate::tests::plan();
+        plan.function = Function::ReadingJourney;
+        plan.objective = Objective::SelectedStageReliability;
+        plan.target_stage = Some(crate::ReadingStage::Judgment);
+        plan.target_method = Some("relationship".into());
+        let example = &mut plan.training[0];
+        let directory = root.path().join("cases").join(&example.id);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::create_dir(root.path().join("case-origins")).unwrap();
+        example.source_case_directory = directory.clone();
+        let rubric = json!({"case_id":example.id,"declared_method":"relationship","reading_method":"relationship",
+            "context_requirements":[],"required_roles":[],"decisive_tests":[{"id":"test"}],
+            "forbidden_inferences":["Never invent"],"answer":{"must_address":"Actual question",
+                "uncertainty":"Preserve unknowns","conditional_conclusions":[]}});
+        keep(&directory.join("reading-rubric.json"), &rubric).unwrap();
+        let sha = digest(read(&directory.join("reading-rubric.json")).unwrap());
+        example.source_rubric_sha256 = Some(sha.clone());
+        let origin = root
+            .path()
+            .join("case-origins")
+            .join(format!("{}.json", example.id));
+        keep(&origin, &json!({"files":{"reading-rubric.json":sha}})).unwrap();
+        example.source_origin_sha256 = digest(read(&origin).unwrap());
+        example.inspection_file = root.path().join("inspection.json");
+        keep(
+            &example.inspection_file,
+            &json!({"input":{"inspection_only":"DO_NOT_TRANSPLANT_ARCHIVE"},"schema":{}}),
+        )
+        .unwrap();
+        let captured = vec![(
+            example.clone(),
+            json!({"evaluation":{"actual_function_calls":[{
+            "input":{"actual_stage":"FRESH_ACCEPTED_STAGE_INPUT"},"schema":{"required":["answer"]},
+            "result":{"Ok":{"text":"OBSERVED_STAGE_OUTPUT"}},"source_result_sha256":digest("actual result")}],
+            "outcome":{"hurdles":{"reading":{"status":"structure_pass_review_pending"}}}},
+            "fitness":{"score":0.5,"qualified":false},"independent_review":{"selected_stage":{"score":1}}}),
+        )];
+        let components = vec![plan.seed.keys().next().unwrap().clone()];
+        let prepared = prepare(&plan, &plan.seed, &components, &captured).unwrap();
+        assert!(prepared.prompt.contains("FRESH_ACCEPTED_STAGE_INPUT"));
+        assert!(prepared.prompt.contains("OBSERVED_STAGE_OUTPUT"));
+        assert!(prepared
+            .prompt
+            .contains("validated_independent_reading_review"));
+        assert!(!prepared.prompt.contains("DO_NOT_TRANSPLANT_ARCHIVE"));
+        let mut forbidden = captured;
+        forbidden[0].0.id = plan.development[0].id.clone();
+        assert!(prepare(&plan, &plan.seed, &components, &forbidden)
+            .err()
+            .unwrap()
+            .contains("Development or reserved"));
     }
 }

@@ -66,6 +66,19 @@ impl Journal {
             0,
         )
     }
+    pub fn begin_reading_review(
+        &mut self,
+        request: &Value,
+        new_submission: bool,
+    ) -> Result<Operation> {
+        self.begin_cost(
+            "codex_reading_review",
+            request,
+            0,
+            u64::from(new_submission),
+            0,
+        )
+    }
     fn begin_cost(
         &mut self,
         kind: &str,

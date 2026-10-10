@@ -179,11 +179,13 @@ fn actor_binding_genuine_missing_proposed_and_unavailable_facts_remain_elicitati
     let mut consultation = Consultation::default();
     consultation.apply(&patch, 1, words, false).unwrap();
     let seller_need = |case: &Consultation, state: &str| {
-        assert!(case
-            .plan(Some(&regression_anchor()))
-            .needs
-            .iter()
-            .any(|need| need.key == RequirementKey::Field(Field::Seller) && need.state == state));
+        assert!(
+            case.plan(Some(&regression_anchor()))
+                .needs
+                .iter()
+                .any(|need| need.key == RequirementKey::Field(Field::DealActor)
+                    && need.state == state)
+        );
         assert!(ReadyReading::prepare(case, regression_anchor()).is_err());
     };
     seller_need(&consultation, "missing");
@@ -204,7 +206,7 @@ fn actor_binding_genuine_missing_proposed_and_unavailable_facts_remain_elicitati
         let mut next = consultation.clone();
         let mut update = control(Intent::Clarify);
         update.updates.push(Update {
-            field: Field::Seller,
+            field: Field::DealActor,
             value: value.into(),
             quote: quote.into(),
             mode,
@@ -560,6 +562,14 @@ fn an_unresolved_override_never_silently_becomes_a_device_default() {
 #[test]
 fn a_person_can_say_they_do_not_know_an_owner_or_relationship() {
     let mut work = case(Method::MovableDeal, "");
+    work.frame = resolved(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Profit,
+    });
+    work.facts
+        .insert(Field::DealCapacity, resolved("sell".into()));
+    work.facts
+        .insert(Field::DealActor, resolved("querent".into()));
     work.requested = Some(RequirementKey::Owner);
     let mut patch = control(Intent::Clarify);
     patch.unavailable_quote = "I don't know".into();
@@ -587,6 +597,10 @@ fn recognition_does_not_repeat_the_private_change_history() {
 #[test]
 fn transaction_roles_include_parties_separately_from_goods() {
     let mut sale = case(Method::MovableDeal, "friend");
+    sale.frame = resolved(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Profit,
+    });
     sale.facts
         .insert(Field::DealCapacity, resolved("sell".into()));
     sale.facts.insert(Field::Seller, resolved("friend".into()));
@@ -733,20 +747,402 @@ fn a_source_span_rejection_identifies_the_bad_quote_without_normalising_it() {
 #[test]
 fn a_purchase_does_not_quietly_use_a_sellers_title_as_the_buyers_role_frame() {
     let mut property = case(Method::Property, "friend");
+    property.frame = resolved(Frame {
+        method: Method::Property,
+        facet: Facet::Situation,
+    });
     property
         .facts
         .insert(Field::DealCapacity, resolved("buy".into()));
+    property
+        .facts
+        .insert(Field::DealActor, resolved("querent".into()));
     let anchor = Anchor {
         timestamp_ms: 1789387200000.,
         latitude: 38.657,
         longitude: -77.249,
         timezone: "America/New_York".into(),
     };
+    let ready = ReadyReading::prepare(&property, anchor)
+        .unwrap_or_else(|_| panic!("The buyer's operative frame is now explicit"));
+    assert_eq!(primary(&property), Some(4));
+    assert_eq!(property.subject.resolved().unwrap().owner_id, "friend");
     assert_eq!(
-        property.plan(Some(&anchor)).limitation.unwrap().code,
-        "deal_party_frame_needs_review"
+        serde_json::to_value(ready).unwrap()["subject"]["owner_id"],
+        "friend"
     );
-    assert!(ReadyReading::prepare(&property, anchor).is_err());
+}
+
+#[test]
+fn transaction_action_and_desired_outcome_are_independent_contract_inputs() {
+    assert_eq!(allowed_values(Field::DealCapacity), ["buy", "sell", "rent"]);
+    let mut sale = case(Method::MovableDeal, "querent");
+    sale.frame = resolved(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Profit,
+    });
+    sale.facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    sale.facts
+        .insert(Field::DealBeneficiary, resolved("querent".into()));
+    for value in ["profit", "quality"] {
+        let mut next = sale.clone();
+        let before = serde_json::to_value(&next).unwrap();
+        let mut patch = control(Intent::Clarify);
+        patch.updates.push(Update {
+            field: Field::DealCapacity,
+            value: value.into(),
+            quote: value.into(),
+            mode: UpdateMode::Supply,
+        });
+        assert!(next.apply(&patch, 2, value, false).is_err());
+        assert_eq!(serde_json::to_value(next).unwrap(), before);
+    }
+    sale.facts
+        .insert(Field::DealCapacity, resolved("sell".into()));
+    let ready = ReadyReading::prepare(&sale, regression_anchor())
+        .unwrap_or_else(|_| panic!("Selling for profit has both fields"));
+    assert_eq!(ready.binding.frame.facet, Facet::Profit);
+    assert_eq!(ready.inputs[&Field::DealCapacity], "sell");
+}
+
+#[test]
+fn pure_completion_requires_contracting_actor_but_not_title_or_asset_condition_roles() {
+    for method in [Method::MovableDeal, Method::Property, Method::Rental] {
+        let mut deal = case(method, "");
+        deal.frame = resolved(Frame {
+            method,
+            facet: Facet::Event,
+        });
+        deal.facts.insert(
+            Field::DealCapacity,
+            resolved(
+                if method == Method::Rental {
+                    "rent"
+                } else {
+                    "sell"
+                }
+                .into(),
+            ),
+        );
+        assert!(deal
+            .plan(Some(&regression_anchor()))
+            .needs
+            .iter()
+            .any(|need| need.key == RequirementKey::Field(Field::DealActor)));
+        assert!(!deal
+            .plan(Some(&regression_anchor()))
+            .needs
+            .iter()
+            .any(|need| need.key == RequirementKey::Owner));
+        deal.facts
+            .insert(Field::DealActor, resolved("friend".into()));
+        ReadyReading::prepare(&deal, regression_anchor())
+            .unwrap_or_else(|_| panic!("Pure completion should not require title"));
+        let roles = options(&deal);
+        assert!(roles.missing.is_empty(), "{:?}", roles.missing);
+        assert!(!roles
+            .choices
+            .iter()
+            .any(|choice| choice.id.starts_with("subject.") || choice.id == "deal.price"));
+        assert!(roles
+            .choices
+            .iter()
+            .any(|choice| choice.id == "friend.self" && choice.house == Some(11)));
+        assert!(roles
+            .choices
+            .iter()
+            .any(|choice| choice.id == "deal.counterparty" && choice.house == Some(5)));
+    }
+}
+
+#[test]
+fn sold_asset_quality_needs_actual_owner_but_prospective_purchase_does_not() {
+    for method in [Method::MovableDeal, Method::Property] {
+        let mut deal = case(method, "");
+        deal.frame = resolved(Frame {
+            method,
+            facet: Facet::Situation,
+        });
+        deal.facts
+            .insert(Field::DealActor, resolved("friend".into()));
+        deal.facts
+            .insert(Field::DealCapacity, resolved("sell".into()));
+        assert!(deal
+            .plan(Some(&regression_anchor()))
+            .needs
+            .iter()
+            .any(|need| need.key == RequirementKey::Owner));
+        deal.facts
+            .insert(Field::DealCapacity, resolved("buy".into()));
+        ReadyReading::prepare(&deal, regression_anchor())
+            .unwrap_or_else(|_| panic!("Unknown seller title is not buyer's missing role"));
+        assert!(deal.subject.resolved().unwrap().owner_id.is_empty());
+        assert_eq!(
+            primary(&deal),
+            Some(if method == Method::MovableDeal { 12 } else { 2 })
+        );
+    }
+}
+
+#[test]
+fn property_financial_return_is_distinct_from_condition_and_price() {
+    let mut deal = case(Method::Property, "querent");
+    deal.frame = resolved(Frame {
+        method: Method::Property,
+        facet: Facet::Profit,
+    });
+    deal.facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    deal.facts
+        .insert(Field::DealCapacity, resolved("buy".into()));
+    let roles = options(&deal);
+    for (id, house) in [
+        ("subject.primary", 4),
+        ("deal.price", 10),
+        ("deal.property_profit", 5),
+    ] {
+        assert!(roles
+            .choices
+            .iter()
+            .any(|choice| choice.id == id && choice.house == Some(house)));
+        assert!(roles
+            .required_groups
+            .iter()
+            .any(|group| group.iter().any(|choice| choice == id)));
+    }
+}
+
+#[test]
+fn goods_profit_keeps_buyers_money_and_recipients_pocket_as_distinct_roles() {
+    let mut sale = case(Method::MovableDeal, "querent");
+    sale.frame = resolved(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Profit,
+    });
+    sale.facts
+        .insert(Field::DealCapacity, resolved("sell".into()));
+    sale.facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    sale.facts
+        .insert(Field::DealBeneficiary, resolved("querent".into()));
+    let money_house = |case: &Consultation| {
+        options(case)
+            .choices
+            .iter()
+            .find(|choice| choice.id == "deal.incoming_money")
+            .and_then(|choice| choice.house)
+    };
+    assert_eq!(money_house(&sale), Some(8));
+    assert!(options(&sale)
+        .choices
+        .iter()
+        .any(|choice| choice.id == "deal.pocket" && choice.house == Some(2)));
+    sale.facts
+        .insert(Field::DealParty, resolved("mother".into()));
+    assert_eq!(
+        money_house(&sale),
+        Some(11),
+        "An identified mother's money is second from her tenth, not a generic eighth"
+    );
+    assert!(!options(&sale)
+        .choices
+        .iter()
+        .any(|choice| choice.id == "deal.counterparty"));
+}
+
+#[test]
+fn profit_requires_a_sourced_beneficiary_distinct_from_seller_and_title() {
+    let words = "My friend Noor is selling my piano; will I benefit financially?";
+    let mut patch = control(Intent::Read);
+    patch.question = Some(words.into());
+    patch.frame = Some(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Profit,
+    });
+    patch.people.push(Person {
+        id: "noor".into(),
+        label: "Noor".into(),
+        relationship: "friend".into(),
+        source_quote: "My friend Noor".into(),
+    });
+    patch.subject = Some(Subject {
+        name: "piano".into(),
+        kind: "movable".into(),
+        owner_id: "querent".into(),
+        source_quote: "my piano".into(),
+    });
+    patch.updates = vec![
+        Update {
+            field: Field::DealActor,
+            value: "noor".into(),
+            quote: "My friend Noor is selling".into(),
+            mode: UpdateMode::Supply,
+        },
+        Update {
+            field: Field::DealCapacity,
+            value: "sell".into(),
+            quote: "selling".into(),
+            mode: UpdateMode::Supply,
+        },
+    ];
+    let mut sale = Consultation::default();
+    sale.apply(&patch, 1, words, false).unwrap();
+    assert!(sale
+        .plan(Some(&regression_anchor()))
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::Field(Field::DealBeneficiary)));
+    assert!(ReadyReading::prepare(&sale, regression_anchor()).is_err());
+    let mut recover = control(Intent::Clarify);
+    recover.updates.push(Update {
+        field: Field::DealBeneficiary,
+        value: "querent".into(),
+        quote: "will I benefit financially".into(),
+        mode: UpdateMode::Supply,
+    });
+    sale.apply(&recover, 1, words, false).unwrap();
+    let ready = ReadyReading::prepare(&sale, regression_anchor()).unwrap();
+    assert_eq!(ready.inputs[&Field::DealActor], "noor");
+    assert_eq!(ready.inputs[&Field::DealBeneficiary], "querent");
+    assert_eq!(sale.subject.resolved().unwrap().owner_id, "querent");
+    assert!(
+        options(&sale)
+            .choices
+            .iter()
+            .any(|choice| choice.id == "deal.pocket" && choice.house == Some(2)),
+        "The recipient is the question's explicit I, not the eleventh-house contracting friend"
+    );
+    let Slot::Resolved { observation } = &sale.facts[&Field::DealBeneficiary] else {
+        panic!("Expected sourced beneficiary")
+    };
+    assert!(
+        matches!(&observation.evidence, Evidence::User { quote, .. } if quote == "will I benefit financially")
+    );
+}
+
+#[test]
+fn available_business_premises_do_not_need_buy_versus_rent_to_choose_the_same_book_recipe() {
+    let mut opportunity = case(Method::BusinessProperty, "");
+    opportunity.frame = resolved(Frame {
+        method: Method::BusinessProperty,
+        facet: Facet::Profit,
+    });
+    opportunity
+        .facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    opportunity
+        .facts
+        .insert(Field::DealBeneficiary, resolved("querent".into()));
+    let plan = opportunity.plan(Some(&regression_anchor()));
+    assert!(plan.needs.is_empty());
+    assert_eq!(
+        plan.limitation.unwrap().code,
+        "judgment_program_needs_review"
+    );
+    assert!(ReadyReading::prepare(&opportunity, regression_anchor()).is_err());
+}
+
+#[test]
+fn tenant_and_operator_are_not_title_owners_and_do_not_inherit_landlords_relationship_gaps() {
+    for method in [Method::Rental, Method::BusinessProperty] {
+        let mut deal = case(method, "landlord");
+        deal.frame = resolved(Frame {
+            method,
+            facet: Facet::Profit,
+        });
+        deal.people.insert(
+            "landlord".into(),
+            Person {
+                id: "landlord".into(),
+                label: "Landlord".into(),
+                relationship: "unknown".into(),
+                source_quote: "landlord".into(),
+            },
+        );
+        deal.facts
+            .insert(Field::DealActor, resolved("querent".into()));
+        deal.facts
+            .insert(Field::DealBeneficiary, resolved("querent".into()));
+        deal.facts
+            .insert(Field::DealCapacity, resolved("rent".into()));
+        let plan = deal.plan(Some(&regression_anchor()));
+        assert!(plan.needs.is_empty());
+        assert_eq!(deal.subject.resolved().unwrap().owner_id, "landlord");
+        assert!(!options(&deal)
+            .choices
+            .iter()
+            .any(|choice| choice.id.starts_with("landlord.")));
+        if method == Method::BusinessProperty {
+            assert_eq!(
+                plan.limitation.unwrap().code,
+                "judgment_program_needs_review"
+            );
+            assert!(ReadyReading::prepare(&deal, regression_anchor()).is_err());
+        } else {
+            assert_eq!(primary(&deal), Some(4));
+        }
+    }
+}
+
+#[test]
+fn named_counterparty_retains_its_specific_house_in_pure_completion() {
+    let mut deal = case(Method::Property, "");
+    deal.facts
+        .insert(Field::DealCapacity, resolved("buy".into()));
+    deal.facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    deal.facts
+        .insert(Field::DealParty, resolved("mother".into()));
+    ReadyReading::prepare(&deal, regression_anchor())
+        .unwrap_or_else(|_| panic!("Known actual parties suffice"));
+    let roles = options(&deal);
+    assert!(!roles
+        .choices
+        .iter()
+        .any(|choice| choice.id == "deal.counterparty"));
+    assert!(roles
+        .choices
+        .iter()
+        .any(|choice| choice.id == "mother.self" && choice.house == Some(10)));
+}
+
+#[test]
+fn catalogue_upgrade_preserves_sources_and_reopens_ambiguous_legacy_deal_records() {
+    let mut deal = case(Method::Property, "querent");
+    deal.catalogue_version = PREVIOUS_VERSION.into();
+    deal.facts
+        .insert(Field::DealCapacity, resolved("profit".into()));
+    let original_subject = serde_json::to_value(&deal.subject).unwrap()["observation"].clone();
+    let question = serde_json::to_value(&deal.question).unwrap();
+    let receipt = upgrade_catalogue(&mut deal).unwrap();
+    assert_eq!(receipt.before_revision + 1, receipt.after_revision);
+    assert_eq!(deal.catalogue_version, VERSION);
+    assert_eq!(serde_json::to_value(&deal.question).unwrap(), question);
+    assert_eq!(
+        serde_json::to_value(&deal.subject).unwrap()["observation"],
+        original_subject
+    );
+    assert!(matches!(deal.subject, Slot::Proposed { .. }));
+    assert!(matches!(
+        deal.facts[&Field::DealCapacity],
+        Slot::Proposed { .. }
+    ));
+    assert!(upgrade_catalogue(&mut deal).is_none());
+    assert!(ReadyReading::prepare(&deal, regression_anchor()).is_err());
+    let mut future = case(Method::Property, "querent");
+    future.catalogue_version = "future-version".into();
+    let before = serde_json::to_value(&future).unwrap();
+    assert!(upgrade_catalogue(&mut future).is_none());
+    assert_eq!(serde_json::to_value(&future).unwrap(), before);
+    assert_eq!(
+        future
+            .plan(Some(&regression_anchor()))
+            .limitation
+            .unwrap()
+            .code,
+        "catalogue_migration_required"
+    );
 }
 
 #[test]
@@ -873,7 +1269,7 @@ fn an_article_does_not_turn_a_goods_name_into_ownership_evidence() {
         assert_eq!(serde_json::to_value(&case).unwrap(), before);
         patch.subject.as_mut().unwrap().owner_id.clear();
         case.apply(&patch, 1, &words, false).unwrap();
-        assert!(case
+        assert!(!case
             .plan(Some(&regression_anchor()))
             .needs
             .iter()
@@ -1264,7 +1660,7 @@ fn a_bare_sale_fragment_does_not_establish_ownership_or_overwrite_supplied_owner
     assert_eq!(serde_json::to_value(&consultation).unwrap(), before);
     patch.subject.as_mut().unwrap().owner_id.clear();
     consultation.apply(&patch, 1, words, false).unwrap();
-    assert!(consultation
+    assert!(!consultation
         .plan(Some(&regression_anchor()))
         .needs
         .iter()
@@ -1919,8 +2315,9 @@ fn an_object_labels_capitalization_does_not_make_an_owner_clarification_a_correc
 fn recognition_teaching_keeps_other_question_types_out_of_a_selected_sale() {
     let sale = recognition_guide(Some(&case(Method::MovableDeal, "")));
     assert!(sale.contains("(movable_deal)"));
-    assert!(sale.contains("Selling a thing or working a stall does not prove ownership"));
-    assert!(sale.contains("seller as the actual person's ID or querent"));
+    assert!(sale.contains("subject.owner_id means actual title ownership only"));
+    assert!(sale
+        .contains("deal_actor as the actual contracting/affected buyer or seller ID or querent"));
     assert!(!sale.contains("hoped_for"));
     assert!(!sale.contains("I'm single. Will I get married"));
     assert!(!sale.contains("money_source=customer"));

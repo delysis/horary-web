@@ -321,6 +321,45 @@ fn relevant(facts: &[Fact], roles: &[Role], kinds: &[&str]) -> Vec<Fact> {
         .collect()
 }
 
+/// Intervening planets need evidence without becoming mandatory subject roles.
+/// Preserve the supplied contact graph, including two intermediary contacts,
+/// so prohibition, translation and collection can be judged in event order.
+/// Moon seeds contextual evidence; it is not thereby assigned to the principal.
+fn contact_evidence(facts: &[Fact], roles: &[Role]) -> Vec<Fact> {
+    let mut planets: std::collections::BTreeSet<&str> =
+        roles.iter().map(|role| role.planet.as_str()).collect();
+    planets.insert("Moon");
+    loop {
+        let before = planets.len();
+        for fact in facts.iter().filter(|fact| fact.kind == "event") {
+            if fact
+                .planets
+                .iter()
+                .any(|planet| planets.contains(planet.as_str()))
+            {
+                planets.extend(fact.planets.iter().map(String::as_str));
+            }
+        }
+        if planets.len() == before {
+            break;
+        }
+    }
+    facts
+        .iter()
+        .filter(|fact| {
+            matches!(fact.kind.as_str(), "house" | "boundary")
+                || matches!(
+                    fact.kind.as_str(),
+                    "event" | "moon" | "position" | "condition" | "reception"
+                ) && fact
+                    .planets
+                    .iter()
+                    .all(|planet| planets.contains(planet.as_str()))
+        })
+        .cloned()
+        .collect()
+}
+
 pub fn native_place(
     brief: &Brief,
     candidates: &[LocationCandidate],
@@ -735,6 +774,16 @@ fn prepare_reading(
         session.method.consultation = Some(contracts::migrate(&session.method.brief));
     }
     let old_case_revision = session.method.consultation.as_ref().map(|c| c.revision);
+    let migration = session
+        .method
+        .consultation
+        .as_mut()
+        .and_then(contracts::upgrade_catalogue);
+    if let Some(receipt) = &migration {
+        session
+            .audit
+            .push(json!({"event":"catalogue_migration","receipt":receipt}));
+    }
     let old_method = session
         .method
         .consultation
@@ -747,6 +796,7 @@ fn prepare_reading(
     let record_start = session.method.records.len();
     let pending = session.method.flow.pending.clone();
     let typed_resume = audio.is_none()
+        && migration.is_none()
         && is_resume_request(&follow_up_words(session))
         && !session.question.is_empty()
         && session.method.brief.question == session.question
@@ -1319,7 +1369,7 @@ fn generate_reading(
     runtime.publish(session)?;
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
-    let events = relevant(&all, &roles, &["event", "moon", "boundary"]);
+    let events = contact_evidence(&all, &roles);
     let positions = relevant(&all, &roles, &["position", "boundary"]);
     let matter = session.method.brief.matter;
     let common = json!({"brief":reading_brief,"roles":roles});
@@ -1375,7 +1425,7 @@ fn generate_reading(
     session
         .audit
         .push(json!({"event":"native_stage","stage":"timing","result":timing}));
-    let facts = relevant(
+    let mut facts = relevant(
         &all,
         &roles,
         &[
@@ -1387,6 +1437,11 @@ fn generate_reading(
             "boundary",
         ],
     );
+    for fact in &events {
+        if !facts.iter().any(|existing| existing.id == fact.id) {
+            facts.push(fact.clone());
+        }
+    }
     let Some(judgment) = task(
         session,
         runtime,
@@ -1431,6 +1486,95 @@ fn generate_reading(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn contact_graph_keeps_unassigned_prohibition_and_two_intermediary_witnesses() {
+        let make = |id: &str, kind: &str, planets: &[&str], hours: Option<f64>| Fact {
+            id: id.into(),
+            kind: kind.into(),
+            label: id.into(),
+            detail: "Authored native evidence".into(),
+            planets: planets.iter().map(|planet| (*planet).into()).collect(),
+            condition_facet: None,
+            event: hours.map(|astronomical_hours| reading_method::EventCandidate {
+                within_current_signs: Some(true),
+                astronomical_hours,
+            }),
+        };
+        let facts = vec![
+            make("party-contact", "event", &["Mars", "Venus"], Some(20.)),
+            make(
+                "buyer-money-prohibition",
+                "event",
+                &["Mars", "Saturn"],
+                Some(5.),
+            ),
+            make(
+                "intermediary-contact",
+                "event",
+                &["Saturn", "Jupiter"],
+                Some(8.),
+            ),
+            make(
+                "second-intermediary-contact",
+                "event",
+                &["Jupiter", "Venus"],
+                Some(12.),
+            ),
+            make("money-ruler", "house", &["Saturn"], None),
+            make("intermediary-capacity", "condition", &["Jupiter"], None),
+            make(
+                "intermediary-reception",
+                "reception",
+                &["Saturn", "Jupiter"],
+                None,
+            ),
+            make("moon-context", "moon", &["Moon"], None),
+            make("uncertainty", "boundary", &[], None),
+            make("unconnected-position", "position", &["Uranus"], None),
+        ];
+        let roles = vec![
+            Role {
+                label: "Seller".into(),
+                house: Some(1),
+                planet: "Mars".into(),
+                reason: "Authored principal".into(),
+            },
+            Role {
+                label: "Buyer".into(),
+                house: Some(7),
+                planet: "Venus".into(),
+                reason: "Authored counterparty".into(),
+            },
+        ];
+        let ordinary = relevant(&facts, &roles, &["event"]);
+        assert_eq!(
+            ordinary.len(),
+            1,
+            "The old endpoint filter would discard intervening evidence"
+        );
+        let supplied = contact_evidence(&facts, &roles);
+        assert_eq!(supplied.len(), 9);
+        assert!(supplied
+            .iter()
+            .any(|fact| fact.id == "buyer-money-prohibition"
+                && fact.event.as_ref().unwrap().astronomical_hours == 5.));
+        assert!(supplied
+            .iter()
+            .any(|fact| fact.id == "intermediary-contact"));
+        assert!(supplied
+            .iter()
+            .any(|fact| fact.id == "intermediary-reception"));
+        assert!(supplied.iter().any(|fact| fact.id == "money-ruler"));
+        assert!(supplied.iter().any(|fact| fact.id == "moon-context"));
+        assert!(!supplied
+            .iter()
+            .any(|fact| fact.id == "unconnected-position"));
+        assert_eq!(
+            roles.len(),
+            2,
+            "Evidence availability does not assign intermediary or Moon roles"
+        );
+    }
     #[test]
     fn event_city_resolution_keeps_quoted_provenance_and_never_changes_reader_anchor() {
         use crate::reading_contracts::{Consultation, Evidence, Field, Observation, Slot};
@@ -6238,7 +6382,7 @@ pub fn build_for(
     let mut relevant: Vec<_> = people
         .iter()
         .filter(|p| {
-            p.id == subject.owner_id
+            (p.id == subject.owner_id && (!case.is_deal() || case.needs_title_owner()))
                 || (matches!(
                     method,
                     Some(
@@ -6247,7 +6391,9 @@ pub fn build_for(
                             | Method::Rental
                             | Method::BusinessProperty
                     )
-                ) && (Some(p.id.as_str()) == case.text(Field::Seller)
+                ) && (Some(p.id.as_str()) == case.deal_actor()
+                    || Some(p.id.as_str()) == case.text(Field::DealBeneficiary)
+                    || Some(p.id.as_str()) == case.text(Field::Seller)
                     || Some(p.id.as_str()) == case.text(Field::DealParty)))
                 || (method == Some(Method::Money)
                     && Some(p.id.as_str()) == case.text(Field::Sender))
@@ -6260,6 +6406,16 @@ pub fn build_for(
         }
     }
     let mut chosen = subject.clone();
+    if case.is_deal() {
+        // This is a local astrological projection, not an assertion of title.
+        // The immutable consultation keeps the actual owner, if supplied.
+        if case.is_pure_deal_completion() {
+            chosen.kind = "other".into();
+        }
+        if !case.needs_title_owner() {
+            chosen.owner_id = case.deal_actor().unwrap_or("").into();
+        }
+    }
     if method == Some(Method::WorkPerson) {
         // The work capacity is already a resolved input. Do not require a
         // second personal relationship or bind the same person twice.
@@ -6298,6 +6454,27 @@ pub fn build_for(
         chosen.owner_id = principal.into();
     }
     let mut options = build(matter, &relevant, &chosen);
+    if case.is_pure_deal_completion() {
+        // Frawley p. 168: completion is contact between the actual parties.
+        // The native chart still supplies all planets for prohibition,
+        // translation and collection; pruning an unused asset role does not
+        // prune intervening-event evidence.
+        options
+            .choices
+            .retain(|choice| !choice.id.starts_with("subject."));
+        options
+            .required_groups
+            .retain(|group| !group.iter().any(|id| id.starts_with("subject.")));
+        options.compare.clear();
+    } else if case.is_deal() && !case.needs_title_owner() {
+        for choice in options
+            .choices
+            .iter_mut()
+            .filter(|choice| choice.id.starts_with("subject."))
+        {
+            choice.basis = format!("The potential acquisition or tenancy is framed from the contracting actor {}. This role assignment does not assert legal title ownership; Frawley printed pp. 167–171.", chosen.owner_id);
+        }
+    }
     let base = if chosen.owner_id == "querent" || chosen.owner_id == principal {
         1
     } else {
@@ -6482,28 +6659,45 @@ pub fn build_for(
             moon.basis = "Required querent-emotions testimony in this relationship question unless a selected main house ruler already claims Moon; do not infer gender (Frawley pp. 191–193).".into();
         }
     }
-    if matches!(method, Some(Method::Property | Method::Rental)) {
+    if matches!(method, Some(Method::Property | Method::Rental)) && !case.is_pure_deal_completion()
+    {
         options.choices.push(Choice{id:"deal.price".into(),label:"The price".into(),house:Some(turn(base,10)),natural:None,basis:"Property and its price are distinct: fourth/tenth in the relevant frame, Frawley pp. 167–170.".into()});
         options.required_groups.push(vec!["deal.price".into()]);
     }
+    if matches!(method, Some(Method::Property | Method::Rental))
+        && case
+            .frame
+            .resolved()
+            .is_some_and(|frame| frame.facet == crate::reading_contracts::Facet::Profit)
+    {
+        options.choices.push(Choice {
+            id: "deal.property_profit".into(),
+            label: "Return from the property".into(),
+            house: Some(turn(base, 5)),
+            natural: None,
+            basis: "Property bought to improve/resell or let has its profit in the second from the property's fourth, the relevant fifth. This is distinct from the purchase price and working a business on the premises; Frawley printed p. 170.".into(),
+        });
+        options
+            .required_groups
+            .push(vec!["deal.property_profit".into()]);
+    }
+    let actor = case.deal_actor().unwrap_or("");
+    let participant_house = |id: &str| {
+        if id == "querent" || id == principal {
+            Some(1)
+        } else {
+            relevant
+                .iter()
+                .find(|p| p.id == id)
+                .and_then(|p| relationship_house(&p.relationship))
+        }
+    };
+    let actor_house = participant_house(actor);
     if matches!(
         method,
         Some(Method::MovableDeal | Method::Property | Method::Rental)
     ) && case.text(Field::DealParty).is_none()
     {
-        let actor = if case.text(Field::DealCapacity) == Some("sell") {
-            case.text(Field::Seller).unwrap_or(&chosen.owner_id)
-        } else {
-            principal
-        };
-        let actor_house = if actor == "querent" || actor == principal {
-            Some(1)
-        } else {
-            relevant
-                .iter()
-                .find(|p| p.id == actor)
-                .and_then(|p| relationship_house(&p.relationship))
-        };
         if let Some(actor_house) = actor_house {
             let house = turn(actor_house, 7);
             options.choices.push(Choice {
@@ -6520,6 +6714,37 @@ pub fn build_for(
             options
                 .missing
                 .push("The deal actor's operative capacity has not been resolved.".into());
+        }
+    }
+    if method == Some(Method::MovableDeal)
+        && case.text(Field::DealCapacity) == Some("sell")
+        && case
+            .frame
+            .resolved()
+            .is_some_and(|frame| frame.facet == crate::reading_contracts::Facet::Profit)
+    {
+        let customer_house = match case.text(Field::DealParty) {
+            Some(id) if id == "querent" || id == principal => Some(1),
+            Some(id) => relevant
+                .iter()
+                .find(|p| p.id == id)
+                .and_then(|p| relationship_house(&p.relationship)),
+            None => actor_house.map(|house| turn(house, 7)),
+        };
+        let beneficiary_house = case
+            .text(Field::DealBeneficiary)
+            .and_then(participant_house);
+        if let (Some(beneficiary_house), Some(customer_house)) = (beneficiary_house, customer_house)
+        {
+            for (id, label, house, basis) in [
+                ("deal.incoming_money", "The buyers' money", turn(customer_house, 2), "Customers' money is their second, ordinarily eighth from the recipient. Its condition concerns amount/quality; goods dignity alone cannot establish financial gain."),
+                ("deal.pocket", "The recipient's money", turn(beneficiary_house, 2), "Use the separately sourced financial beneficiary, never an owner or contracting seller default. Keep their second-house pocket distinct from incoming money and the goods, even when rulers coincide. Whether money arrives and whether an amount is good are separate judgments."),
+            ] {
+                options.choices.push(Choice { id: id.into(), label: label.into(), house: Some(house), natural: None, basis: format!("{basis} Frawley printed pp. 156–158.") });
+                options.required_groups.push(vec![id.into()]);
+            }
+        } else {
+            options.missing.push("The actual recipient or identified buyer's capacity is unresolved; do not invent a house for their money.".into());
         }
     }
     // Some method overrides rebuild the choices. Apply the relay identity last.

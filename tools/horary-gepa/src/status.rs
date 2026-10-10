@@ -89,6 +89,12 @@ fn review_scores(value: &Value) -> Value {
             project(&value["pipeline"][stage], &["state", "score"]),
         );
     }
+    if value.get("selected_stage").is_some() {
+        scores.insert(
+            "selected_stage".into(),
+            project(&value["selected_stage"], &["state", "score"]),
+        );
+    }
     Value::Object(scores)
 }
 
@@ -106,6 +112,7 @@ fn search_result(value: &Value, plan: &Value, plan_sha: &str) -> Result<Value> {
                 .cloned()
                 .unwrap_or(json!("classification"))
         || value["target_method"] != plan["target_method"]
+        || plan["function"] == "reading_journey" && value["target_stage"] != plan["target_stage"]
         || value["logical_metric_evaluations"].as_u64().is_none()
         || value["development_scores"].as_array().is_none_or(|scores| {
             scores.is_empty()
@@ -295,7 +302,10 @@ pub fn inspect(root: &Path) -> Result<Value> {
         if let Some(settled) = response.filter(|_| errors.is_empty()) {
             let response = settled.response;
             let cached = settled.artifacts.contains("cache-source.json");
-            if matches!(kind, Some("classification" | "input_journey")) {
+            if matches!(
+                kind,
+                Some("classification" | "input_journey" | "reading_journey")
+            ) {
                 native_cache_reuse += usize::from(cached);
                 let outcome = &response["outcome"];
                 if !cached {
@@ -331,6 +341,10 @@ pub fn inspect(root: &Path) -> Result<Value> {
                         "follow_up_execution_completed",
                         "follow_up_pass",
                         "target_function_invoked",
+                        "target_stage",
+                        "target_stage_authentic_inputs",
+                        "known_native_semantic_abort",
+                        "execution_status",
                         "logical_calls",
                         "logical_model_calls",
                         "physical_generation_attempts",
@@ -349,7 +363,7 @@ pub fn inspect(root: &Path) -> Result<Value> {
                     }
                 }
                 measurements.push(m);
-            } else if kind == Some("codex_input_review") {
+            } else if matches!(kind, Some("codex_input_review" | "codex_reading_review")) {
                 review_cache_reuse += usize::from(cached);
                 reviews.push(json!({"sequence":sequence,"case_id":case,"partition":partition,"cache_reuse":cached,"scores":review_scores(&response)}));
             }

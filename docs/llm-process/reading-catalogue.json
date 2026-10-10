@@ -1,6 +1,6 @@
 {
   "authorship": "Generated from the production Rust catalogue; not model output or expert qualification",
-  "version": "frawley-reading-contracts-2026-10-07.1",
+  "version": "frawley-reading-contracts-2026-10-10.2",
   "contracts": [
     {
       "method": "relationship",
@@ -104,7 +104,7 @@
       "method": "movable_deal",
       "title": "Sale or purchase of movable goods",
       "printed_pages": "156–161, 167–172",
-      "owner": "Required",
+      "owner": "DealContext",
       "requirements": [
         {
           "field": "deal_capacity",
@@ -113,11 +113,16 @@
           }
         },
         {
-          "field": "seller",
+          "field": "deal_actor",
           "guard": {
-            "condition": "equals",
-            "field": "deal_capacity",
-            "value": "sell"
+            "condition": "always"
+          }
+        },
+        {
+          "field": "deal_beneficiary",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "profit"
           }
         }
       ],
@@ -128,7 +133,7 @@
         "profit"
       ],
       "coverage": "Implemented",
-      "roles": "Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.",
+      "roles": "Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.",
       "judgment": "Preserve deal, quality or profit as asked. Non-property opposition may complete with regret. This recipe provides no exact count of books/tulips sold. A venue/date is event context, never the chart anchor.",
       "subject_kinds": [
         "movable"
@@ -297,12 +302,25 @@
       "method": "property",
       "title": "Buying or selling property",
       "printed_pages": "167–171",
-      "owner": "Required",
+      "owner": "DealContext",
       "requirements": [
         {
           "field": "deal_capacity",
           "guard": {
             "condition": "always"
+          }
+        },
+        {
+          "field": "deal_actor",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "deal_beneficiary",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "profit"
           }
         }
       ],
@@ -313,7 +331,7 @@
         "profit"
       ],
       "coverage": "Implemented",
-      "roles": "Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.",
+      "roles": "Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.",
       "judgment": "Assess condition, price and completion separately. Opposition may complete a sale; don't apply this exception to an ongoing rental.",
       "subject_kinds": [
         "property"
@@ -323,12 +341,25 @@
       "method": "rental",
       "title": "Rental agreement",
       "printed_pages": "170",
-      "owner": "Required",
+      "owner": "None",
       "requirements": [
         {
           "field": "deal_capacity",
           "guard": {
             "condition": "always"
+          }
+        },
+        {
+          "field": "deal_actor",
+          "guard": {
+            "condition": "always"
+          }
+        },
+        {
+          "field": "deal_beneficiary",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "profit"
           }
         }
       ],
@@ -349,12 +380,19 @@
       "method": "business_property",
       "title": "Property used for business",
       "printed_pages": "170–171",
-      "owner": "Required",
+      "owner": "None",
       "requirements": [
         {
-          "field": "deal_capacity",
+          "field": "deal_actor",
           "guard": {
             "condition": "always"
+          }
+        },
+        {
+          "field": "deal_beneficiary",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "profit"
           }
         }
       ],
@@ -1352,14 +1390,22 @@
     },
     {
       "id": "deal_capacity",
-      "question": "Are you buying, selling, renting, or asking about money from the deal?",
+      "question": "Are you buying, selling or renting?",
       "labels": [
         "buy",
         "sell",
-        "rent",
-        "profit",
-        "quality"
+        "rent"
       ]
+    },
+    {
+      "id": "deal_actor",
+      "question": "Whose purchase, sale or rental agreement are we considering?",
+      "labels": []
+    },
+    {
+      "id": "deal_beneficiary",
+      "question": "Whose financial benefit are you asking about?",
+      "labels": []
     },
     {
       "id": "deal_party",

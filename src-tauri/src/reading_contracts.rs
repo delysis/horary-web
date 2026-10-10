@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "frawley-reading-contracts-2026-10-07.1";
+pub const VERSION: &str = "frawley-reading-contracts-2026-10-10.2";
+const PREVIOUS_VERSION: &str = "frawley-reading-contracts-2026-10-07.1";
 
 macro_rules! names {
     ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
@@ -49,7 +50,7 @@ names!(Field {
     ReaderPlace => "reader_place", QuestionTime => "question_time", TimeOccurrence => "time_occurrence", EventPlace => "event_place",
     EventTime => "event_time", Horizon => "horizon", Baseline => "baseline",
     Description => "description", AnimalKind => "animal_kind", TheftRaised => "theft_raised",
-    SearchContext => "search_context", DealCapacity => "deal_capacity", DealParty => "deal_party", Seller => "seller",
+    SearchContext => "search_context", DealCapacity => "deal_capacity", DealActor => "deal_actor", DealBeneficiary => "deal_beneficiary", DealParty => "deal_party", Seller => "seller",
     MoneySource => "money_source", Discretionary => "discretionary", JobContext => "job_context",
     WorkCapacity => "work_capacity", Priorities => "priorities", CurrentOption => "current_option",
     Alternatives => "alternatives", HomeMeaning => "home_meaning", Candidates => "candidates",
@@ -229,6 +230,66 @@ impl Default for Consultation {
             }})]), changes: Vec::new(), requested: None, additional: Vec::new(), device_reader_place:false, unavailable:Vec::new() }
     }
 }
+
+#[derive(Clone, Debug, Serialize)]
+pub struct CatalogueMigration {
+    pub from: String,
+    pub to: String,
+    pub before_revision: u64,
+    pub after_revision: u64,
+    pub recheck: Vec<String>,
+}
+
+/// Reopen ambiguous legacy observations, retaining their exact source and all
+/// earlier revisions. Never manufacture a title owner or deal action from an
+/// old role binding. Unknown catalogue versions remain blocked by `plan`.
+pub fn upgrade_catalogue(case: &mut Consultation) -> Option<CatalogueMigration> {
+    if case.catalogue_version != PREVIOUS_VERSION {
+        return None;
+    }
+    let before_revision = case.revision;
+    let mut recheck = Vec::new();
+    if case.is_deal() {
+        recheck.push(Field::DealActor.name().into());
+        if case
+            .frame
+            .resolved()
+            .is_some_and(|frame| frame.facet == Facet::Profit)
+        {
+            recheck.push(Field::DealBeneficiary.name().into());
+        }
+        if let Some(slot) = case.facts.get_mut(&Field::DealCapacity) {
+            if slot
+                .resolved()
+                .is_some_and(|value| !allowed_values(Field::DealCapacity).contains(&value.as_str()))
+            {
+                if let Slot::Resolved { observation } = slot.clone() {
+                    *slot = Slot::Proposed { observation };
+                    recheck.push(Field::DealCapacity.name().into());
+                }
+            }
+        }
+        if matches!(
+            case.method(),
+            Some(Method::Rental | Method::BusinessProperty)
+        ) || case.text(Field::DealCapacity) != Some("sell")
+        {
+            if let Slot::Resolved { observation } = case.subject.clone() {
+                case.subject = Slot::Proposed { observation };
+                recheck.push("subject_title_ownership".into());
+            }
+        }
+    }
+    case.catalogue_version = VERSION.into();
+    case.revision = case.revision.saturating_add(1);
+    Some(CatalogueMigration {
+        from: PREVIOUS_VERSION.into(),
+        to: VERSION.into(),
+        before_revision,
+        after_revision: case.revision,
+        recheck,
+    })
+}
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Change {
     pub turn: usize,
@@ -268,6 +329,7 @@ pub struct InformationNeed {
 pub enum Guard {
     Always,
     Equals { field: Field, value: &'static str },
+    AnswerFacet { facet: Facet },
     PrincipalOwnsSubject,
 }
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -290,12 +352,21 @@ const fn when(field: Field, control: Field, value: &'static str) -> Requirement 
         },
     }
 }
+const fn for_facet(field: Field, facet: Facet) -> Requirement {
+    Requirement {
+        field,
+        guard: Guard::AnswerFacet { facet },
+    }
+}
 
 #[derive(Clone, Copy, Debug, Serialize)]
 pub enum OwnerRule {
     None,
     Required,
     Principal,
+    /// Title matters to an asset assessment, not to the book's pure party
+    /// completion test. A prospective buyer's asset is their potential one.
+    DealContext,
 }
 #[derive(Clone, Copy, Debug, Serialize)]
 pub enum Coverage {
@@ -386,9 +457,9 @@ pub const CATALOGUE: &[Contract] = &[
     card!(MissingPerson, "Missing person", "146–153", Required,
         &[], LOST, Implemented, "Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.",
         "Consider recovery/contact and location separately. Retain reported circumstances as reports."),
-    card!(MovableDeal, "Sale or purchase of movable goods", "156–161, 167–172", Required,
-        &[required(Field::DealCapacity), when(Field::Seller, Field::DealCapacity, "sell")], DEAL, Implemented,
-        "Goods are the relevant owner's second. Seller and owner are distinct. For completion use seller/buyer, not goods/buyer: an unspecified counterparty is the deal actor's seventh, while an identified relative keeps their own operative house. Potential possessions can be second-house goods.",
+    card!(MovableDeal, "Sale or purchase of movable goods", "156–161, 167–172", DealContext,
+        &[required(Field::DealCapacity), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
+        "Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.",
         "Preserve deal, quality or profit as asked. Non-property opposition may complete with regret. This recipe provides no exact count of books/tulips sold. A venue/date is event context, never the chart anchor."),
     card!(Money, "Payment, debt, gift or grant", "156–161", Required,
         &[required(Field::MoneySource), when(Field::Discretionary, Field::MoneySource, "government"), when(Field::Sender, Field::MoneySource, "relative")],
@@ -410,14 +481,14 @@ pub const CATALOGUE: &[Contract] = &[
     card!(WorkPerson, "Boss, colleague or subordinate", "224–225", None,
         &[required(Field::WorkCapacity)], EVENT_STATE, Implemented,
         "Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.", "Address the actual work relationship; do not reclassify a friendly colleague as eleventh by habit."),
-    card!(Property, "Buying or selling property", "167–171", Required,
-        &[required(Field::DealCapacity)], DEAL, Implemented,
-        "Ordinary parties first/seventh; specific relative may take their own house. Property fourth, price tenth. Profit is distinct.", "Assess condition, price and completion separately. Opposition may complete a sale; don't apply this exception to an ongoing rental."),
-    card!(Rental, "Rental agreement", "170", Required,
-        &[required(Field::DealCapacity)], DEAL, Implemented,
+    card!(Property, "Buying or selling property", "167–171", DealContext,
+        &[required(Field::DealCapacity), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
+        "Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.", "Assess condition, price and completion separately. Opposition may complete a sale; don't apply this exception to an ongoing rental."),
+    card!(Rental, "Rental agreement", "170", None,
+        &[required(Field::DealCapacity), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
         "Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.", "An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one."),
-    card!(BusinessProperty, "Property used for business", "170–171", Required,
-        &[required(Field::DealCapacity)], DEAL, ExpertReview,
+    card!(BusinessProperty, "Property used for business", "170–171", None,
+        &[required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, ExpertReview,
         "Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.", "Dedicated profit testimony and reviewed role allocation are required before this program can deliver a judgment."),
     card!(Choice, "Stay, change or compare alternatives", "201–203", None,
         &[required(Field::CurrentOption), required(Field::Alternatives)], &[Facet::Choice, Facet::Situation], ExpertReview,
@@ -525,7 +596,9 @@ pub fn field_prompt(field: Field) -> &'static str {
         Field::Baseline => "Is this about a hoped-for relationship, one already under way, or an arranged wedding?",
         Field::Description => "What does the missing object look like—its colour, material or shape?",
         Field::AnimalKind => "What kind of animal is missing?",
-        Field::DealCapacity => "Are you buying, selling, renting, or asking about money from the deal?",
+        Field::DealCapacity => "Are you buying, selling or renting?",
+        Field::DealActor => "Whose purchase, sale or rental agreement are we considering?",
+        Field::DealBeneficiary => "Whose financial benefit are you asking about?",
         Field::MoneySource => "Where is the money coming from—a customer, job, government, or someone you know?",
         Field::Discretionary => "Is this money already owed to you, or a gift or grant they can choose to give?",
         Field::WorkCapacity => "Is this person your boss, a colleague, or someone who works for you?",
@@ -581,7 +654,7 @@ pub fn allowed_values(field: Field) -> &'static [&'static str] {
         Field::PrincipalMode => &["self", "relay", "concerning_other"],
         Field::Baseline => &["hoped_for", "ongoing", "arranged_wedding"],
         Field::AnimalKind => &["small_kind", "large_kind"],
-        Field::DealCapacity => &["buy", "sell", "rent", "profit", "quality"],
+        Field::DealCapacity => &["buy", "sell", "rent"],
         Field::MoneySource => &[
             "customer",
             "partner",
@@ -641,7 +714,7 @@ fn validate_update_value(update: &Update) -> Result<(), String> {
 fn actor_reference_field(field: Field, method: Option<Method>) -> bool {
     match field {
         Field::PrincipalId => true,
-        Field::Seller | Field::DealParty => matches!(
+        Field::DealActor | Field::DealBeneficiary | Field::Seller | Field::DealParty => matches!(
             method,
             Some(
                 Method::MovableDeal | Method::Property | Method::Rental | Method::BusinessProperty
@@ -1402,6 +1475,11 @@ impl Guard {
                 Some(_) => Truth::No,
                 None => Truth::Unknown,
             },
+            Self::AnswerFacet { facet } => match case.frame.resolved() {
+                Some(frame) if frame.facet == facet => Truth::Yes,
+                Some(_) => Truth::No,
+                None => Truth::Unknown,
+            },
             Self::PrincipalOwnsSubject => match case.subject.resolved() {
                 Some(subject) if !subject.owner_id.is_empty() => {
                     let principal = if case.text(Field::PrincipalMode) == Some("relay") {
@@ -1485,6 +1563,48 @@ impl Consultation {
             RequirementKey::ChartMoment => field_prompt(Field::QuestionTime).into(),
         }
     }
+    pub fn is_deal(&self) -> bool {
+        matches!(
+            self.method(),
+            Some(
+                Method::MovableDeal | Method::Property | Method::Rental | Method::BusinessProperty
+            )
+        )
+    }
+
+    pub fn is_pure_deal_completion(&self) -> bool {
+        matches!(
+            self.method(),
+            Some(Method::MovableDeal | Method::Property | Method::Rental)
+        ) && self
+            .frame
+            .resolved()
+            .is_some_and(|frame| matches!(frame.facet, Facet::Event | Facet::Timing))
+    }
+
+    /// A sourced legacy movable seller already identifies the contracting
+    /// actor. It does not establish title ownership or a personal relationship.
+    pub fn deal_actor(&self) -> Option<&str> {
+        self.text(Field::DealActor).or_else(|| {
+            (self.method() == Some(Method::MovableDeal)
+                && self.text(Field::DealCapacity) == Some("sell"))
+            .then(|| self.text(Field::Seller))
+            .flatten()
+        })
+    }
+
+    pub fn needs_title_owner(&self) -> bool {
+        self.method()
+            .is_some_and(|method| match contract(method).owner {
+                OwnerRule::Required => true,
+                OwnerRule::DealContext => {
+                    !self.is_pure_deal_completion()
+                        && self.text(Field::DealCapacity) == Some("sell")
+                }
+                OwnerRule::None | OwnerRule::Principal => false,
+            })
+    }
+
     pub fn plan(&self, anchor: Option<&Anchor>) -> Plan {
         let mut plan = Plan {
             needs: Vec::new(),
@@ -1578,6 +1698,8 @@ impl Consultation {
         }
         for field in [
             Field::PrincipalId,
+            Field::DealActor,
+            Field::DealBeneficiary,
             Field::Seller,
             Field::Sender,
             Field::DealParty,
@@ -1632,7 +1754,7 @@ impl Consultation {
                         "The named person is already supplied but not bound to the person subject. Repair that binding before a reading handoff; do not replace them with an unnamed role.",
                     );
                 }
-                if matches!(card.owner, OwnerRule::Required) && subject.owner_id.is_empty() {
+                if self.needs_title_owner() && subject.owner_id.is_empty() {
                     need(
                         RequirementKey::Owner,
                         "missing",
@@ -1642,6 +1764,7 @@ impl Consultation {
                 if !subject.owner_id.is_empty()
                     && subject.owner_id != "querent"
                     && frame.method != Method::WorkPerson
+                    && (!self.is_deal() || self.needs_title_owner())
                 {
                     match self.people.get(&subject.owner_id) {
                         Some(person) if person.relationship != "unknown" => {},
@@ -1670,7 +1793,9 @@ impl Consultation {
                     continue;
                 }
             }
-            if self.text(field).is_none() {
+            if self.text(field).is_none()
+                && !(field == Field::DealActor && self.deal_actor().is_some())
+            {
                 need(
                     RequirementKey::Field(field),
                     self.facts.get(&field).map_or("missing", Slot::reason),
@@ -1723,26 +1848,6 @@ impl Consultation {
             && self.text(Field::MoneySource) == Some("other")
         {
             plan.limitation=Some(Limitation{code:"money_source_needs_review".into(),message:"This source of money needs a more specific role assignment before I can interpret it. I have kept the question for review.".into(),printed_pages:card.printed_pages.into()});
-        }
-        let principal = if principal_mode == Some("relay") {
-            self.text(Field::PrincipalId)
-        } else {
-            Some("querent")
-        };
-        let other_owner = self.subject.resolved().is_some_and(|subject| {
-            !subject.owner_id.is_empty() && Some(subject.owner_id.as_str()) != principal
-        });
-        if plan.limitation.is_none()
-            && other_owner
-            && (matches!(frame.method, Method::Property | Method::Rental)
-                || (frame.method == Method::MovableDeal
-                    && self.text(Field::DealCapacity) == Some("buy")))
-        {
-            plan.limitation = Some(Limitation {
-                code:"deal_party_frame_needs_review".into(),
-                message:"I have kept the people, ownership and question. This deal needs a reviewed distinction between the owner and the person making the purchase or agreement before I can interpret it.".into(),
-                printed_pages:card.printed_pages.into(),
-            });
         }
         plan
     }
@@ -1824,6 +1929,8 @@ impl ReadyReading {
                 id.as_str() == subject.owner_id
                     || [
                         Field::PrincipalId,
+                        Field::DealActor,
+                        Field::DealBeneficiary,
                         Field::Seller,
                         Field::DealParty,
                         Field::Sender,
@@ -1919,8 +2026,11 @@ fn relevant_input(case: &Consultation, field: Field) -> bool {
         Method::LostObject | Method::LostAnimal | Method::MissingPerson => {
             matches!(field, Description | TheftRaised | SearchContext)
         }
-        Method::MovableDeal | Method::Property | Method::Rental => {
-            matches!(field, Seller | DealParty | Priorities)
+        Method::MovableDeal | Method::Property | Method::Rental | Method::BusinessProperty => {
+            matches!(
+                field,
+                DealCapacity | DealActor | DealBeneficiary | Seller | DealParty | Priorities
+            )
         }
         Method::NewJob | Method::ExistingJob | Method::ReturnToJob | Method::JobOffer => {
             matches!(field, JobContext | Priorities)
@@ -2674,7 +2784,7 @@ pub fn recognition_guide_for(case: Option<&Consultation>, phase: &str) -> String
     } else {
         text.push_str("PHASE: update_selected_program. Read the retained consultation, latest_words, pending_requirement and last_reader_question. Return only new observations or explicitly corrected facts. question/frame/subject are null when accepted values are unchanged; people and updates are empty when unchanged. Never reconstruct the whole brief. A missing subject is not an unchanged subject: supply a clear target or newly supplied identity.\nUse clarify for new information on the same concern; correct only for an explicit factual correction or a clearly accepted single reframing; explain for a request to explain; resume to continue; pause to stop; use_device to request actual device location. A different matter uses new_question with only question/frame and subject=null, people=[], updates=[]; its own lesson then gathers its facts. Do not interpret explaining or resuming as a finished reading.\nIf last_reader_question offered ONE concrete reframing and latest_words clearly accept it, return correct with that agreed question/frame. Preserve unchanged people, subject and observations. An unaccepted suggestion has no authority; ambiguous yes or several offered alternatives require conversational clarification. Do not infer personal capacity or ownership from yes.\nAn explicit inability to answer the pending requirement uses unavailable_quote copied exactly from latest_words. Otherwise leave it empty. For direct audio heard is a faithful short meaning summary preserving negation, numbers, names, place/time and uncertainty, not a claimed transcript. Typed input uses heard=''.\n\n");
     }
-    text.push_str("SOURCE AUTHORITY. Supply exact quotes from actual current words or the retained ORIGINAL question when an omitted observation is being recovered. Never quote another matter, an editorial example or a rejected worksheet. In repair, original_input holds the accepted consultation and actual words; previous_worksheet was REJECTED and none of its proposed changes were saved. Fix the native error using actual source evidence, not the rejected answer as a fact. A name alone has personal relationship=unknown. Seller is a task role, not ownership or personal relationship. Actor fields principal_id, seller, deal_party and a relative-money sender contain known person IDs or querent, not prose. Leave an unspecified deal_party absent; Rust supplies the generic counterparty.\n\nCHART ANCHOR. The reader's place and the moment of understanding anchor the chart (Frawley printed pp. 7–8). Ordinary questions use supplied device coordinates and receipt UTC. CURRENT explicit reader-location or historical-consultation instructions must be extracted as reader_place/question_time; include both supplied components. A market, destination or appointment belongs in event_place/event_time and must not replace the chart anchor. Here/use my device supplies no guessed city. Preserve exact place/time source phrases; native tools own geocoding, time zones and civil-time validation. Calendar values can normalize a future Friday/tomorrow against current_local_clock/current_timezone, while their quotes remain literal. A natural horizon stays a horizon. TimeOccurrence means an explicit first/second occurrence of an ambiguous civil clock, never this morning or earlier/later event chronology.\n\n");
+    text.push_str("SOURCE AUTHORITY. Supply exact quotes from actual current words or the retained ORIGINAL question when an omitted observation is being recovered. Never quote another matter, an editorial example or a rejected worksheet. In repair, original_input holds the accepted consultation and actual words; previous_worksheet was REJECTED and none of its proposed changes were saved. Fix the native error using actual source evidence, not the rejected answer as a fact. A name alone has personal relationship=unknown. Seller is a task role, not ownership or personal relationship. Actor fields principal_id, deal_actor, deal_beneficiary, seller, deal_party and a relative-money sender contain known person IDs or querent, not prose. Leave an unspecified deal_party absent; Rust supplies the generic counterparty.\n\nCHART ANCHOR. The reader's place and the moment of understanding anchor the chart (Frawley printed pp. 7–8). Ordinary questions use supplied device coordinates and receipt UTC. CURRENT explicit reader-location or historical-consultation instructions must be extracted as reader_place/question_time; include both supplied components. A market, destination or appointment belongs in event_place/event_time and must not replace the chart anchor. Here/use my device supplies no guessed city. Preserve exact place/time source phrases; native tools own geocoding, time zones and civil-time validation. Calendar values can normalize a future Friday/tomorrow against current_local_clock/current_timezone, while their quotes remain literal. A natural horizon stays a horizon. TimeOccurrence means an explicit first/second occurrence of an ambiguous civil clock, never this morning or earlier/later event chronology.\n\n");
     text.push_str(&canonical_labels_guide(case));
     if let Some(method) = method {
         text.push_str(&crate::recognition_programs::guide(method));

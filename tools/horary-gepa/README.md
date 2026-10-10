@@ -18,6 +18,12 @@ Every review still separately records whole-input classification, elicitation, e
 
 The independent reviewer returns judgments and citations only. Rust supplies the case identity and the recorded native grades. In the shared legacy `CaseReview` format, `native_journey_pass` means the supplying-turn result (`follow_up_pass`), while `input_journey_pass` is the whole input journey. An absent supplying turn remains null. Requiring a model to echo these similar metadata fields confused a completed review; native facts now remain outside its output contract. The student still uses ordinary unconstrained text.
 
+The third adapter executes **complete reading journeys** and optimizes one actual specialist: significators, condition, reception, contacts, location, or judgment. Use `--function reading-journey --objective selected-stage-reliability --target-method METHOD --target-stage STAGE`. It begins with the original question and device facts, obtains a current native `ReadyReading` permit through the real conversation and extraction process, then runs `horary_pipeline::run`. No accepted record, chart, gold method or specialist checkpoint is injected. The authored rubric is supplied only to the independent reviewer.
+
+Reading merit is the independent 0–2 score for the observed, editable stage, divided by two. The review must cite its actual generation output, native context and pinned book. Separate acceptance gates check classification, elicitation, extraction, conversational actor/honesty/continuity, the actual final interpretation, and **every** authored decisive test, inference boundary and answer obligation. A good component cannot hide an incorrect complete answer. A stage never reached is unobserved; repair the upstream function rather than grading an invented specialist output. A bounded native rejection after authentic invocation can score zero only when every hosted response and request/result pair has settled and the exact rejected native job is preserved. Interruptions and uncertain provider requests remain errors.
+
+The deal contracts distinguish transaction action (`buy`, `sell`, `rent`), contracting actor, literal title owner and, for financial questions, the separately sourced beneficiary. Ordinary completion uses the actual parties; an unused asset role does not remove native intervening contact evidence. Native contact graphs retain possible prohibition, translation and collection witnesses, with their supplied house, condition and reception facts. These representation and routing guards are code responsibilities. GEPA changes teaching, not those facts or guards.
+
 ## Search and evidence
 
 GEPA selects candidate parents, samples reflection minibatches, proposes a mutation to one ordered teaching component, tests it on that minibatch, and retains improving candidates with their development scores. Merge is disabled for this initial integration. Components come from the actual system guide's editable teaching regions. Book blocks, tool schemas, native facts, rejected-answer feedback and other messages remain unchanged. Candidates use the existing typed `Program` and are checked against the actual classifier signature and guide hash.
@@ -39,6 +45,22 @@ Input-journey rounds always require `fresh-hosted`, an explicit method and a pos
 `prepare-feedback-trial --source /absolute/closed-input-pilot --state /absolute/new-trial` creates a separate one-reflection experiment after a closed input pilot. It reuses exactly the two sealed seed controls and their existing source-validated reviews, retains the original pool/guide/native/seed, and previews the actual training-only writer stdin with no new paid calls. Source closure, every completion seal and recorded PID absence are checked. Changed programs and uncertain work are ineligible. The new hard budget allows one materially different feedback-inclusive writer invocation and at most two changed student functions with independent reviews; predecessor ledgers are retained, not reset or counted as new trials. Imports are revalidated against their original request, answer and source ancestry on journal replay and status. Cached controls are not replications. This narrowly scoped preparation does not install an overlay or qualify a reading.
 
 Compile the ignored native test entry `elicitation_eval::real_model_classification_function` from the isolated application checkout first. Use a separate Cargo target from any running campaign. Then prepare an immutable plan:
+
+For a new source baseline, `campaign` runs the actual hosted full-reading entry on an explicit case list. It seals ownership before releasing the native child, retains unsuccessful outcomes, and never retries an existing directory. `seal-corpus` subsequently verifies the closed native observations and supplies ordinary case origins for search; it must run after the launcher has exited. Neither command fabricates a checkpoint, gold input, semantic score or recovery ancestry.
+
+```sh
+HORARY_GOOGLE_KEY_FILE=/absolute/path/to/private-key-file \
+  /absolute/copied/horary-gepa campaign \
+  --evidence /absolute/fresh-campaign \
+  --native-executable /absolute/copied/native-test-executable \
+  --cases deal10-movable-explicit-sale-profit,deal10-movable-missing-owner \
+  --case-seconds 3600 --max-calls 28
+/absolute/copied/horary-gepa seal-corpus \
+  --campaign /absolute/fresh-campaign \
+  --closure /absolute/fresh-campaign/corpus-closure.json
+```
+
+Native exit 101 can mean completed negative semantic observations. An uncertain provider submission, missing response or interrupted corpus remains ineligible for sealing. `campaign` writes its pre-start receipt in a sibling `.owner` directory because native execution creates the campaign directory itself; it mirrors those exact bytes after child exit. Provider quota waiting is recorded separately from generation latency. Use an isolated Cargo target to build new helpers, leaving all historical owned binaries intact.
 
 ```sh
 cargo build --manifest-path tools/horary-gepa/Cargo.toml --locked

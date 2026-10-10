@@ -29,6 +29,8 @@ use std::{
 };
 
 const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-10.3";
+#[path = "reading_neural_eval.rs"]
+mod reading;
 const CORE: &str = include_str!("../test-fixtures/elicitation/core.json");
 const SPECIALIST: &str = include_str!("../test-fixtures/elicitation/specialist.json");
 
@@ -1926,6 +1928,8 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
     .lines()
     .map(str::to_owned)
     .collect();
+    // This opt-in entry is compiled even when a local ignore rule hides it.
+    names.insert("src-tauri/src/reading_neural_eval.rs".into());
     // Include this untracked runner during development, as well as any new
     // production source. Ignored build artifacts are excluded by Git.
     names.extend(
@@ -3803,7 +3807,7 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     git(repository.path(), &["init", "--quiet"]).unwrap();
     fs::write(
         repository.path().join(".gitignore"),
-        "invariant-adversarial.json\nlocal-rubrics.json\n",
+        "invariant-adversarial.json\nlocal-rubrics.json\nreading_neural_eval.rs\n",
     )
     .unwrap();
     let directory = repository
@@ -3817,6 +3821,11 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     let rubric_path = rubric_directory.join("local-rubrics.json");
     let rubric_data = "[]\n";
     fs::write(&rubric_path, rubric_data).unwrap();
+    let reading_key = "src-tauri/src/reading_neural_eval.rs";
+    let reading_path = repository.path().join(reading_key);
+    fs::create_dir_all(reading_path.parent().unwrap()).unwrap();
+    let reading_source = "// Synthetic compiled reading module\n";
+    fs::write(&reading_path, reading_source).unwrap();
     let before = source_hashes(repository.path()).unwrap();
     let key = "src-tauri/test-fixtures/elicitation/invariant-adversarial.json";
     let rubric_key = "src-tauri/test-fixtures/readings/local-rubrics.json";
@@ -3824,6 +3833,10 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     assert_eq!(
         before[rubric_key],
         format!("{:x}", Sha256::digest(rubric_data))
+    );
+    assert_eq!(
+        before[reading_key],
+        format!("{:x}", Sha256::digest(reading_source))
     );
     assert!(before.keys().all(|name| !name.contains('\\')));
     fs::write(
@@ -3837,6 +3850,17 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
         before[rubric_key],
         source_hashes(repository.path()).unwrap()[rubric_key]
     );
+    fs::write(
+        &reading_path,
+        format!("{reading_source}// Changed module\n"),
+    )
+    .unwrap();
+    assert_ne!(
+        before[reading_key],
+        source_hashes(repository.path()).unwrap()[reading_key]
+    );
+    fs::remove_file(&reading_path).unwrap();
+    assert!(source_hashes(repository.path()).is_err());
 }
 
 #[cfg(unix)]

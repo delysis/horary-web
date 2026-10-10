@@ -15,25 +15,25 @@ use std::{
 
 pub(crate) const VERSION: &str = "horary-independent-input-review-2026-10-10.4";
 pub(crate) const LEGACY_IMPORT_VERSION: &str = "horary-independent-input-review-2026-10-09.2";
-struct Source {
-    file: String,
-    bytes: Vec<u8>,
-    value: Value,
+pub(crate) struct Source {
+    pub(crate) file: String,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) value: Value,
 }
-struct Packet {
-    sources: Vec<Source>,
-    refs: BTreeMap<String, Evidence>,
-    context: Value,
+pub(crate) struct Packet {
+    pub(crate) sources: Vec<Source>,
+    pub(crate) refs: BTreeMap<String, Evidence>,
+    pub(crate) context: Value,
 }
 impl Packet {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             sources: vec![],
             refs: BTreeMap::new(),
             context: json!({"observations":[]}),
         }
     }
-    fn source(&mut self, file: &str, bytes: Vec<u8>, pointers: &[&str]) -> Result<()> {
+    pub(crate) fn source(&mut self, file: &str, bytes: Vec<u8>, pointers: &[&str]) -> Result<()> {
         let value: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         if self.sources.iter().any(|s| s.file == file) {
             return Err("Duplicate review source".into());
@@ -66,7 +66,7 @@ impl Packet {
         });
         Ok(())
     }
-    fn expand(&self, value: &mut Value) -> Result<()> {
+    pub(crate) fn expand(&self, value: &mut Value) -> Result<()> {
         match value {
             Value::Object(fields) => {
                 if fields.contains_key("evidence") {
@@ -104,7 +104,7 @@ impl Packet {
         }
         Ok(())
     }
-    fn citation(&self, case_id: &str, e: &Evidence) -> Result<()> {
+    pub(crate) fn citation(&self, case_id: &str, e: &Evidence) -> Result<()> {
         if e.case_id != case_id || !self.refs.values().any(|known| known == e) {
             return Err("Review citation is outside this source-bound case packet".into());
         }
@@ -308,7 +308,7 @@ fn native_witness(d: &Dimension, conversation: Option<&str>, book: bool) -> Resu
     }
     Ok(())
 }
-fn required_inquiry(fixture: &Value, outcome: &Value) -> bool {
+pub(crate) fn required_inquiry(fixture: &Value, outcome: &Value) -> bool {
     fixture["expected"]["needs"]
         .as_array()
         .is_some_and(|n| !n.is_empty())
@@ -326,7 +326,7 @@ fn required_inquiry(fixture: &Value, outcome: &Value) -> bool {
 }
 /// The reviewer supplies judgments, never copies native identity or grades.
 /// This is a Codex artifact schema; it does not constrain the Gemma student.
-fn judgment_schema() -> Value {
+pub(crate) fn judgment_schema() -> Value {
     let legacy = horary_loop::compact_judge_schema();
     let mut schema = legacy["properties"]["reviews"]["items"].clone();
     let properties = schema["properties"].as_object_mut().unwrap();
@@ -596,7 +596,7 @@ fn bind_legacy_metadata(outcome: &Value, answer: &mut Value) -> Result<()> {
     }
     Ok(())
 }
-fn supplying_observed(outcome: &Value) -> Result<bool> {
+pub(crate) fn supplying_observed(outcome: &Value) -> Result<bool> {
     match outcome["follow_up_execution_completed"].as_bool() {
         Some(true) => {
             let after = &outcome["follow_up"];
