@@ -283,6 +283,17 @@ pub fn install_llama_sidecar_to_dir(
     Ok(get_llama_sidecar_status(app_data_dir, None))
 }
 
+fn shared_cache_root(_app_data_dir: &Path) -> LlamaResult<PathBuf> {
+    #[cfg(not(test))]
+    {
+        Ok(crate::hf_cache::cache_root()?)
+    }
+    #[cfg(test)]
+    {
+        Ok(_app_data_dir.join("test-hf/hub"))
+    }
+}
+
 pub fn import_model_to_dir(app_data_dir: &Path, req: ImportModelRequest) -> LlamaResult<ModelInfo> {
     let source = PathBuf::from(req.path);
     validate_gguf_path(&source)?;
@@ -293,14 +304,21 @@ pub fn import_model_to_dir(app_data_dir: &Path, req: ImportModelRequest) -> Llam
             .and_then(|value| value.to_str())
             .unwrap_or("model")
     }))?;
+    if crate::model_manifest::bundled_model_manifest()?
+        .models
+        .iter()
+        .any(|model| model.id == model_id)
+    {
+        return Err(LlamaError {
+            message: "Choose an import ID distinct from the bundled models".into(),
+        });
+    }
     let filename = format!("{model_id}.gguf");
-    let target_dir = models_dir(app_data_dir);
-    fs::create_dir_all(&target_dir)?;
-    let target = target_dir.join(&filename);
-    fs::copy(&source, &target)?;
-
-    model_info_from_path(
-        &target,
+    let root = shared_cache_root(app_data_dir)?;
+    crate::imported_models::import(
+        app_data_dir,
+        &root,
+        &source,
         model_id,
         req.display_name
             .filter(|value| !value.trim().is_empty())
@@ -311,6 +329,26 @@ pub fn import_model_to_dir(app_data_dir: &Path, req: ImportModelRequest) -> Llam
 pub fn list_models_in_dir(app_data_dir: &Path) -> LlamaResult<Vec<ModelInfo>> {
     let dir = models_dir(app_data_dir);
     let mut models = crate::hf_cache::registered_models(app_data_dir)?;
+    models.extend(crate::imported_models::list(app_data_dir)?);
+    let known_paths: std::collections::BTreeSet<_> = models
+        .iter()
+        .filter_map(|m| {
+            crate::hf_cache::registered_path(app_data_dir, &m.filename)
+                .ok()
+                .flatten()
+                .or_else(|| {
+                    crate::imported_models::path(app_data_dir, &m.filename)
+                        .ok()
+                        .flatten()
+                })
+                .and_then(|p| p.canonicalize().ok())
+        })
+        .collect();
+    for (info, path) in crate::imported_models::discovered(&shared_cache_root(app_data_dir)?)? {
+        if !known_paths.contains(&path) && !models.iter().any(|m| m.id == info.id) {
+            models.push(info);
+        }
+    }
     if !dir.exists() {
         return Ok(models);
     }
@@ -344,6 +382,17 @@ pub fn is_draft_model_id(model_id: &str) -> bool {
 
 pub fn get_model_by_id(app_data_dir: &Path, model_id: &str) -> LlamaResult<ModelInfo> {
     if let Some(model) = crate::hf_cache::verify_registered(app_data_dir, model_id)? {
+        return Ok(model);
+    }
+    if let Some(model) = crate::imported_models::get(app_data_dir, model_id)? {
+        return Ok(model);
+    }
+    if let Some((mut model, path)) =
+        crate::imported_models::discovered(&shared_cache_root(app_data_dir)?)?
+            .into_iter()
+            .find(|(m, _)| m.id == model_id)
+    {
+        model.sha256 = sha256_file(&path)?;
         return Ok(model);
     }
     let dir = models_dir(app_data_dir);
@@ -718,6 +767,15 @@ pub(crate) fn resolve_model_path(app_data_dir: &Path, filename: &str) -> LlamaRe
     }
     if let Some(path) = crate::hf_cache::registered_path(app_data_dir, filename)? {
         return Ok(fs::canonicalize(path)?);
+    }
+    if let Some(path) = crate::imported_models::path(app_data_dir, filename)? {
+        return Ok(path);
+    }
+    if let Some((_, path)) = crate::imported_models::discovered(&shared_cache_root(app_data_dir)?)?
+        .into_iter()
+        .find(|(m, _)| m.filename == filename)
+    {
+        return Ok(path);
     }
     let base = models_dir(app_data_dir);
     let model = base.join(filename);
@@ -1215,8 +1273,10 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            resolved.file_name().and_then(|value| value.to_str()),
-            Some("gemma-assistant.gguf")
+            resolved,
+            crate::imported_models::path(&app_dir, "gemma-assistant.gguf")
+                .unwrap()
+                .unwrap()
         );
     }
 
@@ -1241,8 +1301,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(
-            resolved.file_name().and_then(|value| value.to_str()),
-            Some("tiny-draft.gguf")
+            resolved,
+            crate::imported_models::path(&app_dir, "tiny-draft.gguf")
+                .unwrap()
+                .unwrap()
         );
 
         req.draft_model_id = Some("missing-draft".to_string());

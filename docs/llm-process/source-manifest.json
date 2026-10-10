@@ -227,7 +227,7 @@
     },
     {
       "path": "src-tauri/src/lib.rs",
-      "sha256": "54f9ea9c441882412e61ef2e3e4abd6d925b56bb10e730bc99b477542a52199b"
+      "sha256": "172557b66d9ab885e5fae5f5604822f2624aba934f40b1133e2db0d0a2a6b716"
     },
     {
       "path": "src-tauri/src/local_dictation.rs",

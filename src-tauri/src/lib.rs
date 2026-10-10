@@ -54,6 +54,7 @@ mod horary_role_options;
 mod horary_step;
 #[cfg(test)]
 mod hosted_gemma_eval;
+mod imported_models;
 mod inference;
 mod llama;
 mod local_dictation;
