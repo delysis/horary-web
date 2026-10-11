@@ -170,6 +170,40 @@ fn chart_context(session: &Session) -> Value {
         "event_context":{"place":session.method.brief.event_place,"time":session.method.brief.event_time,"other":session.method.brief.context}})
 }
 
+fn record_event_dates(session: &mut Session, normalizations: &[Value]) -> Result<(), String> {
+    if normalizations.is_empty() {
+        return Ok(());
+    }
+    let source_sha256 = normalizations[0]["source_input_sha256"]
+        .as_str()
+        .ok_or("A native event date lacks its original task binding.")?;
+    let worksheet_sha256 = normalizations[0]["worksheet_sha256"]
+        .as_str()
+        .ok_or("A native event date lacks its raw proposal binding.")?;
+    let (record_index, record) = session
+        .method
+        .records
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, record)| {
+            record.stage == Stage::Intake
+                && record.revision == session.revision
+                && record.validation_error.is_none()
+                && lessons::digest(&step::original_input(&record.input).to_string())
+                    == source_sha256
+                && lessons::digest(&record.worksheet.to_string()) == worksheet_sha256
+        })
+        .ok_or("A native event date lacks its accepted recognition record.")?;
+    session.audit.push(
+        json!({"event":"native_event_date_normalization","version":1,
+        "turn":session.messages.len(),"record_index":record_index,
+        "revision":record.revision,"record_input_sha256":record.input_sha256,
+        "normalizations":normalizations}),
+    );
+    Ok(())
+}
+
 fn intake_input(session: &Session, spoken: bool, instant: f64) -> Value {
     let device = session
         .candidates
@@ -381,6 +415,22 @@ fn contact_evidence(facts: &[Fact], roles: &[Role]) -> Vec<Fact> {
                     .planets
                     .iter()
                     .all(|planet| planets.contains(planet.as_str()))
+        })
+        .cloned()
+        .collect()
+}
+
+/// Contacts selects possible occasions independently of motive and ability.
+/// Keep its complete mechanical graph, but leave dignity and reception to
+/// their specialists. Judgment still receives the full contextual graph.
+fn contact_mechanics(context: &[Fact]) -> Vec<Fact> {
+    context
+        .iter()
+        .filter(|fact| {
+            matches!(
+                fact.kind.as_str(),
+                "event" | "moon" | "position" | "house" | "boundary"
+            )
         })
         .cloned()
         .collect()
@@ -854,13 +904,14 @@ fn prepare_reading(
     let (recognition, location) = std::thread::scope(|scope| {
         let location = acquire_device.then(|| scope.spawn(|| runtime.device_location()));
         let recognition = if typed_resume {
-            Ok(Some(contracts::control(Intent::Resume)))
+            Ok(Some((contracts::control(Intent::Resume), Vec::new())))
         } else {
             execute(session, runtime, Stage::Intake, input, &[], audio).and_then(|data| {
                 data.map(|data| {
                     data.turn()
                         .cloned()
                         .ok_or_else(|| "Recognition completion lacks its checked fact patch".into())
+                        .map(|turn| (turn, data.calendar_normalizations().to_vec()))
                 })
                 .transpose()
             })
@@ -883,7 +934,7 @@ fn prepare_reading(
             session.candidates.push(place);
         }
     }
-    let Some(mut turn) = recognition? else {
+    let Some((mut turn, calendar_normalizations)) = recognition? else {
         return Ok(None);
     };
     let words = if audio.is_some() {
@@ -928,6 +979,7 @@ fn prepare_reading(
         .consultation
         .get_or_insert_with(contracts::Consultation::default)
         .apply(&turn, session.messages.len(), &words, audio.is_some())?;
+    record_event_dates(session, &calendar_normalizations)?;
     #[cfg(test)]
     if let Some(target) = runtime.supplying_extractor_target() {
         let record_index = session.method.records.len().checked_sub(1);
@@ -1030,6 +1082,8 @@ fn prepare_reading(
             case.frame = contracts::Slot::Missing;
         }
         case.apply(patch, session.messages.len(), &words, false)?;
+        let confirmed = case.method();
+        record_event_dates(session, data.calendar_normalizations())?;
         #[cfg(test)]
         if let Some(target) = runtime.initial_extractor_target() {
             let record_index = session
@@ -1052,7 +1106,6 @@ fn prepare_reading(
             runtime.publish(session)?;
             return Ok(None);
         }
-        let confirmed = case.method();
         if confirmed == selected {
             break;
         }
@@ -1563,7 +1616,8 @@ fn generate_reading(
     let reception_roles = accepted_reception_roles(&assignment)?;
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
-    let events = contact_evidence(&all, &roles);
+    let contact_context = contact_evidence(&all, &roles);
+    let events = contact_mechanics(&contact_context);
     let positions = relevant(&all, &roles, &["position", "boundary"]);
     let matter = session.method.brief.matter;
     let common = json!({"brief":reading_brief,"roles":roles});
@@ -1656,7 +1710,7 @@ fn generate_reading(
             "boundary",
         ],
     );
-    for fact in &events {
+    for fact in &contact_context {
         if !facts.iter().any(|existing| existing.id == fact.id) {
             facts.push(fact.clone());
         }
@@ -2146,6 +2200,33 @@ mod tests {
             2,
             "Evidence availability does not assign intermediary or Moon roles"
         );
+        let mechanics = contact_mechanics(&supplied);
+        assert_eq!(
+            mechanics
+                .iter()
+                .map(|fact| fact.id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "party-contact",
+                "buyer-money-prohibition",
+                "intermediary-contact",
+                "second-intermediary-contact",
+                "money-ruler",
+                "moon-context",
+                "uncertainty",
+            ],
+            "Independent contact selection must keep intermediary order, Moon and coverage"
+        );
+        for fact in mechanics {
+            let original = facts
+                .iter()
+                .find(|original| original.id == fact.id)
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(fact).unwrap(),
+                serde_json::to_value(original).unwrap()
+            );
+        }
     }
     #[test]
     fn event_city_resolution_keeps_quoted_provenance_and_never_changes_reader_anchor() {
@@ -3057,6 +3138,46 @@ mod selected_stage_execution_tests {
                 }
             }
         }
+    }
+    #[test]
+    fn actual_stage_inputs_keep_contacts_mechanical_and_judgment_context_complete() {
+        let (session, reader, result) = execute(Some(Stage::Judgment), false);
+        result.unwrap();
+        let calls = reader.calls.lock().unwrap();
+        let contacts = &calls
+            .iter()
+            .find(|(stage, _, _)| *stage == Stage::Contacts)
+            .unwrap()
+            .1;
+        let judgment = &calls
+            .iter()
+            .find(|(stage, _, _)| *stage == Stage::Judgment)
+            .unwrap()
+            .1;
+        let roles: Vec<Role> = serde_json::from_value(contacts["roles"].clone()).unwrap();
+        let all = reading_method::facts(session.chart.as_ref());
+        let context = contact_evidence(&all, &roles);
+        let mechanics = contacts["facts"].as_array().unwrap();
+        assert!(context.iter().any(|fact| fact.kind == "condition"));
+        assert!(context.iter().any(|fact| fact.kind == "reception"));
+        assert!(mechanics
+            .iter()
+            .all(|fact| fact["kind"] != "condition" && fact["kind"] != "reception"));
+        for fact in &context {
+            let expected = serde_json::to_value(fact).unwrap();
+            assert!(
+                judgment["facts"].as_array().unwrap().contains(&expected),
+                "Final judgment lost {}",
+                fact.id
+            );
+            if matches!(
+                fact.kind.as_str(),
+                "event" | "moon" | "position" | "house" | "boundary"
+            ) {
+                assert!(mechanics.contains(&expected), "Contacts lost {}", fact.id);
+            }
+        }
+        assert!(mechanics.len() < context.len());
     }
 }
 

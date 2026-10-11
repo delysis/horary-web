@@ -15,7 +15,7 @@
     },
     {
       "path": "crates/horary-ai-core/src/chart_input.rs",
-      "sha256": "134549449a56b80dddc63a0b6bf1d47f1a502971e76ef466de54554465fc7127"
+      "sha256": "0d8658277a79f7b4f95687c491fffdf89fbdc980043103623915f1c6ba84c7d1"
     },
     {
       "path": "crates/horary-ai-core/src/ephemeris_coefficients.rs",
@@ -155,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "a2e8da860f07c9815d3936828a30484dc1a37423d69d23756f3d37c578495dc4"
+      "sha256": "c7a737564aea60d2d9e125dfd751c62fd7906e870eb4472bf5fe24f370d5ca28"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -231,7 +231,7 @@
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "752906e0033d17c342c6f780399f5e09337bf9029bae4b6334f82664983b4f79"
+      "sha256": "3e632b0dfd17d455876d01e9797e20ece789a04394af9d3ff418d2ad3585407d"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
@@ -287,7 +287,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "09fb36e624bb7cb42678acda839163cd5e16014aa54b2a1852ddbac0a9e93e18"
+      "sha256": "48370b4bd9204285534c2441144512701cd19a0b0f8d65777ddaa000d893b69c"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -371,7 +371,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "f47fcf5a7a742c3a5c11ca9a50243312ab4f29088c77ba05d1ee643977750438"
+      "sha256": "d954b48999a4d6a06fe40ddb9fb64848857a1d9bc52587900541c4a183c92d58"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",

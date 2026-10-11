@@ -125,6 +125,7 @@ pub struct CheckedData {
     worksheet: Value,
     roles: Vec<Role>,
     turn: Option<Box<crate::reading_contracts::Turn>>,
+    calendar_normalizations: Vec<Value>,
 }
 impl CheckedData {
     pub fn turn(&self) -> Option<&crate::reading_contracts::Turn> {
@@ -135,6 +136,9 @@ impl CheckedData {
     }
     pub fn roles(&self) -> &[Role] {
         &self.roles
+    }
+    pub fn calendar_normalizations(&self) -> &[Value] {
+        &self.calendar_normalizations
     }
 }
 
@@ -320,12 +324,13 @@ pub fn validation_authority() -> &'static str {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     HASH.get_or_init(|| {
         crate::horary_lessons::digest(&format!(
-            "{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("horary_step.rs"),
             include_str!("horary_contract.rs"),
             include_str!("reading_method.rs"),
             include_str!("horary_role_options.rs"),
-            include_str!("reading_contracts.rs")
+            include_str!("reading_contracts.rs"),
+            include_str!("../../crates/horary-ai-core/src/chart_input.rs")
         ))
     })
 }
@@ -600,12 +605,13 @@ pub fn check(
             worksheet: value.clone(),
             roles: Vec::new(),
             turn: None,
+            calendar_normalizations: Vec::new(),
         }));
     }
     if stage == Stage::Intake {
         let input = original_input(input);
         horary_contract::validate_shape(value, &response_schema_for(stage, matter, input, facts))?;
-        let turn: crate::reading_contracts::Turn =
+        let mut turn: crate::reading_contracts::Turn =
             serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
         let mut case: crate::reading_contracts::Consultation =
             serde_json::from_value(input["consultation"].clone()).unwrap_or_default();
@@ -637,6 +643,12 @@ pub fn check(
             // it does not turn clarification into a user-authorized rewrite
             // of the question, its subject, or previously accepted facts.
             case.frame = crate::reading_contracts::Slot::Missing;
+        }
+        let mut calendar_normalizations = normalize_event_dates(&mut turn, &case, input)?;
+        for receipt in &mut calendar_normalizations {
+            receipt["source_input_sha256"] =
+                json!(crate::horary_lessons::digest(&input.to_string()));
+            receipt["worksheet_sha256"] = json!(crate::horary_lessons::digest(&value.to_string()));
         }
         case.apply(
             &turn,
@@ -711,6 +723,7 @@ pub fn check(
             worksheet: value.clone(),
             roles: Vec::new(),
             turn: Some(Box::new(turn)),
+            calendar_normalizations,
         }));
     }
     if value.get("request_input").is_some() {
@@ -864,7 +877,76 @@ pub fn check(
         worksheet: value.clone(),
         roles,
         turn: None,
+        calendar_normalizations: Vec::new(),
     }))
+}
+
+/// Derive a current-turn event date before the same atomic fact application.
+/// The raw worksheet stays raw; the checked patch and audit expose the native
+/// normalization. Neither a retained quote nor a historical chart borrows this
+/// turn's clock. All other fields, quote proofs and conflict modes are untouched.
+fn normalize_event_dates(
+    turn: &mut crate::reading_contracts::Turn,
+    case: &crate::reading_contracts::Consultation,
+    input: &Value,
+) -> Result<Vec<Value>, String> {
+    use crate::reading_contracts::{Field, RequirementKey, UpdateMode};
+    use horary_ai_core::chart_input::{event_day_value, local_clock, resolve_event_day};
+
+    let mut receipts = Vec::new();
+    let (Some(instant), Some(zone), Some(clock)) = (
+        input["receipt_instant_ms"].as_f64(),
+        input["current_timezone"].as_str(),
+        input["current_local_clock"].as_str(),
+    ) else {
+        return Ok(receipts);
+    };
+    if local_clock(instant, zone).ok().as_deref() != Some(clock)
+        || case.facts.contains_key(&Field::QuestionTime)
+        || turn
+            .updates
+            .iter()
+            .any(|update| update.field == Field::QuestionTime)
+    {
+        return Ok(receipts);
+    }
+    let words = if input["spoken_input"] == true {
+        turn.heard.as_str()
+    } else {
+        input["latest_words"].as_str().unwrap_or("")
+    };
+    let question = case
+        .question
+        .resolved()
+        .map(String::as_str)
+        .or(turn.question.as_deref())
+        .unwrap_or("");
+    let pending_event_time = case.requested == Some(RequirementKey::Field(Field::EventTime));
+    for update in &mut turn.updates {
+        if update.field != Field::EventTime || update.mode == UpdateMode::Unavailable {
+            continue;
+        }
+        let Some(day) = resolve_event_day(
+            &update.quote,
+            words,
+            question,
+            pending_event_time,
+            instant,
+            zone,
+        )?
+        else {
+            continue;
+        };
+        let normalized = event_day_value(&update.value, &day).ok_or_else(|| {
+            format!("The exact current source establishes event date {}. Preserve one date component and all supplied event circumstances; do not combine competing dates or remove an hour. This date does not change question_time.", day.date)
+        })?;
+        receipts.push(
+            json!({"field":update.field,"mode":update.mode,"quote":update.quote,
+            "original_value":update.value,"normalized_value":normalized,"native_day":day}),
+        );
+        update.value = normalized;
+    }
+    Ok(receipts)
 }
 
 /// Explain a rejected nested check without changing or accepting its shape.
@@ -1147,6 +1229,206 @@ mod recognition_boundaries {
             input,
             &[],
         )
+    }
+
+    fn calendar_input(case: &Consultation, words: &str) -> Value {
+        let mut source = input(case, "complete_selected_program", words);
+        source["receipt_instant_ms"] = json!(horary_ai_core::chart_input::resolve_chart_time(
+            "2032-03-02T10:00",
+            "Europe/London",
+            ""
+        )
+        .unwrap());
+        source["current_local_clock"] = json!("2032-03-02T10:00");
+        source["current_timezone"] = json!("Europe/London");
+        source
+    }
+
+    fn calendar_patch(value: &str, quote: &str) -> reading_contracts::Turn {
+        let mut turn = reading_contracts::control(Intent::Clarify);
+        turn.updates.push(reading_contracts::Update {
+            field: reading_contracts::Field::EventTime,
+            value: value.into(),
+            quote: quote.into(),
+            mode: reading_contracts::UpdateMode::Supply,
+        });
+        turn
+    }
+
+    #[test]
+    fn native_event_date_acceptance_preserves_raw_proposal_quote_and_hour_with_clock_proof() {
+        let words = "Will my boat sell Friday at 3 PM?";
+        let mut case = retained(words, Method::MovableDeal, Facet::Event);
+        let source = calendar_input(&case, words);
+        let turn = calendar_patch("2032-03-04 at 3 PM", "Friday at 3 PM");
+        let Checked::Data(data) = run(&turn, &source).unwrap() else {
+            panic!("Expected data")
+        };
+        assert_eq!(
+            data.worksheet()["updates"][0]["value"],
+            "2032-03-04 at 3 PM"
+        );
+        let patch = data.turn().unwrap();
+        assert_eq!(patch.updates[0].value, "2032-03-05 at 3 PM");
+        assert_eq!(patch.updates[0].quote, "Friday at 3 PM");
+        assert_eq!(
+            data.calendar_normalizations()[0]["original_value"],
+            "2032-03-04 at 3 PM"
+        );
+        assert_eq!(
+            data.calendar_normalizations()[0]["native_day"]["local_clock"],
+            source["current_local_clock"]
+        );
+        case.apply(patch, 7, words, false).unwrap();
+        assert_eq!(
+            case.text(reading_contracts::Field::EventTime),
+            Some("2032-03-05 at 3 PM")
+        );
+        let Slot::Resolved { observation } = &case.facts[&reading_contracts::Field::EventTime]
+        else {
+            panic!("Expected resolved fact")
+        };
+        assert_eq!(
+            observation.evidence,
+            Evidence::User {
+                turn: 7,
+                quote: "Friday at 3 PM".into()
+            }
+        );
+        assert!(case.text(reading_contracts::Field::QuestionTime).is_none());
+        assert!(case
+            .text(reading_contracts::Field::TimeOccurrence)
+            .is_none());
+    }
+
+    #[test]
+    fn native_event_dates_keep_conflicts_and_explicit_corrections_atomic() {
+        let words = "Will my boat sell Friday?";
+        let mut case = retained(words, Method::MovableDeal, Facet::Event);
+        case.facts.insert(
+            reading_contracts::Field::EventTime,
+            Slot::Resolved {
+                observation: Observation {
+                    value: "2032-03-12".into(),
+                    evidence: Evidence::User {
+                        turn: 1,
+                        quote: "March 12".into(),
+                    },
+                },
+            },
+        );
+        let source = calendar_input(&case, words);
+        let mut turn = calendar_patch("Friday", "Friday");
+        let Checked::Data(data) = run(&turn, &source).unwrap() else {
+            panic!("Expected data")
+        };
+        case.apply(data.turn().unwrap(), 2, words, false).unwrap();
+        let Slot::Conflicting { observations } = &case.facts[&reading_contracts::Field::EventTime]
+        else {
+            panic!("Expected conflict")
+        };
+        assert_eq!(
+            observations
+                .iter()
+                .map(|o| o.value.as_str())
+                .collect::<Vec<_>>(),
+            ["2032-03-12", "2032-03-05"]
+        );
+        turn.updates[0].mode = reading_contracts::UpdateMode::Correct;
+        let Checked::Data(data) = run(&turn, &calendar_input(&case, words)).unwrap() else {
+            panic!("Expected data")
+        };
+        case.apply(data.turn().unwrap(), 3, words, false).unwrap();
+        assert_eq!(
+            case.text(reading_contracts::Field::EventTime),
+            Some("2032-03-05")
+        );
+
+        let before = serde_json::to_value(&case).unwrap();
+        turn.updates[0].quote = "Friday...".into();
+        assert!(run(&turn, &calendar_input(&case, words))
+            .err()
+            .unwrap()
+            .contains("does not occur"));
+        assert_eq!(serde_json::to_value(&case).unwrap(), before);
+    }
+
+    #[test]
+    fn native_event_dates_do_not_borrow_retained_historical_or_missing_clocks() {
+        let question = "Will my boat sell Friday?";
+        let mut case = retained(question, Method::MovableDeal, Facet::Event);
+        let turn = calendar_patch("Friday", "Friday");
+        let Checked::Data(data) =
+            run(&turn, &calendar_input(&case, "The boat belongs to me.")).unwrap()
+        else {
+            panic!("Expected data")
+        };
+        assert_eq!(data.turn().unwrap().updates[0].value, "Friday");
+        assert!(data.calendar_normalizations().is_empty());
+        for (field, value) in [
+            ("current_timezone", json!("unknown")),
+            ("current_local_clock", json!("2032-03-03T10:00")),
+            ("receipt_instant_ms", Value::Null),
+        ] {
+            let mut source = calendar_input(&case, question);
+            source[field] = value;
+            let Checked::Data(data) = run(&turn, &source).unwrap() else {
+                panic!("Expected data")
+            };
+            assert_eq!(data.turn().unwrap().updates[0].value, "Friday");
+            assert!(data.calendar_normalizations().is_empty());
+        }
+        case.facts.insert(
+            reading_contracts::Field::QuestionTime,
+            Slot::Resolved {
+                observation: Observation {
+                    value: "2031-04-10T11:00".into(),
+                    evidence: Evidence::User {
+                        turn: 1,
+                        quote: "April 10, 2031 at 11 AM".into(),
+                    },
+                },
+            },
+        );
+        let Checked::Data(data) = run(&turn, &calendar_input(&case, question)).unwrap() else {
+            panic!("Expected data")
+        };
+        assert_eq!(data.turn().unwrap().updates[0].value, "Friday");
+        assert!(data.calendar_normalizations().is_empty());
+        assert_eq!(
+            case.text(reading_contracts::Field::QuestionTime),
+            Some("2031-04-10T11:00")
+        );
+    }
+
+    #[test]
+    fn native_event_dates_preserve_authoritative_absolute_and_ambiguous_source_dates() {
+        for (words, value, quote) in [
+            (
+                "Will my boat sell Friday, March 12?",
+                "2032-03-12 at 3 PM",
+                "Friday, March 12",
+            ),
+            (
+                "Will my boat sell Friday or Saturday?",
+                "Friday or Saturday",
+                "Friday or Saturday",
+            ),
+            (
+                "Will my boat sell next Friday?",
+                "next Friday",
+                "next Friday",
+            ),
+        ] {
+            let case = retained(words, Method::MovableDeal, Facet::Event);
+            let Checked::Data(data) =
+                run(&calendar_patch(value, quote), &calendar_input(&case, words)).unwrap()
+            else {
+                panic!("Expected data")
+            };
+            assert_eq!(data.turn().unwrap().updates[0].value, value);
+            assert!(data.calendar_normalizations().is_empty());
+        }
     }
 
     fn subject() -> crate::horary_role_options::Subject {
