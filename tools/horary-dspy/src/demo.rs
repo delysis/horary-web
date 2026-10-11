@@ -25,6 +25,7 @@ const SUBSET: &str = "Demonstration only: native facts retain all cited IDs, pla
 pub fn compact(demonstration: &Example) -> Result<Example> {
     demonstration.inputs()?;
     let ids = Regex::new(r"\be[0-9]+\b")?;
+    let ranges = Regex::new(r"\be([0-9]+)\s*(?:–|—|-)\s*e([0-9]+)\b")?;
     let moon = Regex::new(r"\bMoon\b")?;
     let mut cited = BTreeSet::new();
     for field in ["evidence", "analysis", "answer"] {
@@ -33,6 +34,15 @@ pub fn compact(demonstration: &Example) -> Result<Example> {
                 .as_str()
                 .with_context(|| format!("Demonstration {field} must be text"))?;
             cited.extend(ids.find_iter(text).map(|found| found.as_str().to_owned()));
+            for range in ranges.captures_iter(text) {
+                let first: usize = range[1].parse()?;
+                let last: usize = range[2].parse()?;
+                ensure!(
+                    first <= last && last - first <= 4096,
+                    "Invalid demonstration evidence range"
+                );
+                cited.extend((first..=last).map(|id| format!("e{id}")));
+            }
         }
     }
     ensure!(
@@ -219,6 +229,27 @@ mod tests {
 
     fn projected(example: &Example) -> Value {
         serde_json::from_str(example.get("chart_evidence").unwrap().as_str().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn citation_ranges_preserve_intermediate_facts_and_refuse_missing_members() {
+        let mut example = reading(chart());
+        example.set("evidence", json!("e2–e4 and e7-e9"));
+        let facts = projected(&compact(&example).unwrap())["facts"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(facts.contains("e3\treception"));
+        assert!(facts.contains("e9\treception"));
+        example.set("evidence", json!("e7–e10"));
+        assert!(
+            compact(&example)
+                .unwrap_err()
+                .to_string()
+                .contains("absent native fact e10")
+        );
+        example.set("evidence", json!("e4–e2"));
+        assert!(compact(&example).is_err());
     }
 
     #[test]

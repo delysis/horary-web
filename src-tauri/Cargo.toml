@@ -48,6 +48,7 @@ llama-native-host = { git = "https://github.com/delysis/native-platform.git", re
 llama-native-types = { git = "https://github.com/delysis/native-platform.git", rev = "a2e7c92fec8f4a7649dd43e6baa88128a8d1b9e2", optional = true }
 
 [dev-dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 quick-xml = "=0.39.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]

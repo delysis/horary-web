@@ -175,10 +175,14 @@ pub fn chart_evidence(case: &Case) -> Result<Value> {
         case.chart.longitude,
     )
     .map_err(anyhow::Error::msg)?;
-    let chart = horary_ai_core::book_method::apply(&raw);
-    let conditions = horary_ai_core::book_method::evidence(&chart);
-    // Hourly samples are calculator input, not thousands of irrelevant model tokens.
-    let compact = json!({"anchor":case.chart,"native_facts":crate::native_evidence::facts(Some(&chart)),"calculated_testimony":conditions,"event_search":chart["derived"]["eventSearch"],"limitations":"Approximate planetary positions. Event search covers a finite seven-day astronomical window; that window is not a one-year symbolic prediction. Do not invent stars, antiscia or longer-range event coverage."});
+    // Astronomy already applies the book's calculation rules. Present every
+    // native fact once, in the same notation as an original-message journey;
+    // repeating structured and prose versions adds tokens, not testimony.
+    let native = crate::native_evidence::facts(Some(&raw));
+    let compact = json!({"anchor":case.chart,"facts":compact_native_facts(&native),
+        "moon":raw["derived"]["voidOfCourseMoon"],
+        "search_limitations":raw["calculationNote"],
+        "input_scope":"Independently supplied chart for a reading-function test, not an observed extraction journey. All native fact IDs and details are present; no omitted fact is inferred absent."});
     Ok(compact)
 }
 
@@ -237,7 +241,13 @@ pub fn example(case: &Case, task: &str, book: &Book) -> Result<Example> {
         json!({"method":case.method,"rubric":case.expected}),
     );
     // Correct-family primary context belongs only to the independent grader.
-    example.set("__review_source", json!(source));
+    // The independent teacher sees the complete salient family context, even
+    // when this component chose a wrong branch. This is a private label field;
+    // it never expands the student's declared inputs or primes its answer.
+    example.set(
+        "__review_source",
+        json!(method_source(book, &case.method, task == "reading")?),
+    );
     Ok(example)
 }
 
@@ -377,6 +387,56 @@ pub fn coverage_card(method: &str) -> Result<Value> {
 #[cfg(test)]
 mod source_context_tests {
     use super::*;
+
+    #[test]
+    fn component_chart_preserves_every_native_fact_without_duplicate_presentations() {
+        let case: Case = serde_json::from_value(json!({
+            "id":"synthetic-presentation", "method":"movable_deal", "split":"train",
+            "variant":"explicit", "question":"Will my synthetic sale complete?", "history":[],
+            "device":{"observed_at":"2031-04-17T11:30:00Z","time_zone":"America/New_York",
+                "place":{"name":"Synthetic reader place","latitude":38.657,"longitude":-77.249}},
+            "chart":{"utc":"2031-04-17T11:30:00Z","latitude":38.657,"longitude":-77.249},
+            "expected":{"facet":"event","facts":[],"missing":[],"reading_status":"answer",
+                "must_explain":["Synthetic test only"],"must_not":[],"source_pages":[7,8]}
+        }))
+        .unwrap();
+        let raw = horary_ai_core::astronomy::chart(
+            chrono::DateTime::parse_from_rfc3339(&case.chart.utc)
+                .unwrap()
+                .timestamp_millis() as f64,
+            case.chart.latitude,
+            case.chart.longitude,
+        )
+        .unwrap();
+        let native = crate::native_evidence::facts(Some(&raw));
+        let presented = chart_evidence(&case).unwrap();
+        let rows = presented["facts"]
+            .as_str()
+            .unwrap()
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>();
+        assert_eq!(rows.len(), native.len());
+        for (row, fact) in rows.iter().zip(native) {
+            assert_eq!(
+                *row,
+                format!(
+                    "{}\t{}\t{}\t{}",
+                    fact.id, fact.kind, fact.label, fact.detail
+                )
+            );
+        }
+        assert_eq!(presented["moon"], raw["derived"]["voidOfCourseMoon"]);
+        assert_eq!(presented["search_limitations"], raw["calculationNote"]);
+        assert!(presented.get("native_facts").is_none());
+        assert!(presented.get("calculated_testimony").is_none());
+        assert!(
+            presented["input_scope"]
+                .as_str()
+                .unwrap()
+                .contains("not an observed extraction journey")
+        );
+    }
 
     #[test]
     fn family_teacher_context_contains_every_declared_branch_page() {

@@ -29,6 +29,8 @@ use std::{
 };
 
 const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-10.3";
+#[path = "first_message_journey_eval.rs"]
+mod first_message_journey;
 #[path = "reading_neural_eval.rs"]
 mod reading;
 #[path = "response_memo_tests.rs"]
@@ -2259,6 +2261,7 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
     // This opt-in entry is compiled even when a local ignore rule hides it.
     names.insert("src-tauri/src/reading_neural_eval.rs".into());
     names.insert("src-tauri/src/selected_stage_eval.rs".into());
+    names.insert("src-tauri/src/first_message_journey_eval.rs".into());
     // Include this untracked runner during development, as well as any new
     // production source. Ignored build artifacts are excluded by Git.
     names.extend(
@@ -4381,8 +4384,8 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
                 let (completed, receiver) = mpsc::channel();
                 let workers = group
                     .iter()
-                    .cloned()
                     .map(|case| {
+                        let case = case.clone();
                         let id = case.id.clone();
                         let worker_id = id.clone();
                         let config = config.clone();
@@ -4592,7 +4595,7 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     git(repository.path(), &["init", "--quiet"]).unwrap();
     fs::write(
         repository.path().join(".gitignore"),
-        "invariant-adversarial.json\nlocal-rubrics.json\nreading_neural_eval.rs\nselected_stage_eval.rs\n",
+        "invariant-adversarial.json\nlocal-rubrics.json\nreading_neural_eval.rs\nselected_stage_eval.rs\nfirst_message_journey_eval.rs\n",
     )
     .unwrap();
     let directory = repository
@@ -4615,6 +4618,10 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     let selected_path = repository.path().join(selected_key);
     let selected_source = "// Synthetic compiled selected stage module\n";
     fs::write(&selected_path, selected_source).unwrap();
+    let journey_key = "src-tauri/src/first_message_journey_eval.rs";
+    let journey_path = repository.path().join(journey_key);
+    let journey_source = "// Synthetic compiled first-message journey module\n";
+    fs::write(&journey_path, journey_source).unwrap();
     let before = source_hashes(repository.path()).unwrap();
     let key = "src-tauri/test-fixtures/elicitation/invariant-adversarial.json";
     let rubric_key = "src-tauri/test-fixtures/readings/local-rubrics.json";
@@ -4626,6 +4633,10 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     assert_eq!(
         before[reading_key],
         format!("{:x}", Sha256::digest(reading_source))
+    );
+    assert_eq!(
+        before[journey_key],
+        format!("{:x}", Sha256::digest(journey_source))
     );
     assert!(before.keys().all(|name| !name.contains('\\')));
     assert_eq!(

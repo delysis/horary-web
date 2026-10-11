@@ -63,7 +63,7 @@
     },
     {
       "path": "docs/PROMPT_OPTIMIZATION.md",
-      "sha256": "16708551fe95f73633e7408d9adf849f8e35450df8716259e58df297a317cb45"
+      "sha256": "fc02f13b7218908ad3a0fce7e1f487c5422204558e593f021a1f63dc313bb0d9"
     },
     {
       "path": "docs/llm-process/adversarial-fixture-provenance.json",
@@ -87,11 +87,11 @@
     },
     {
       "path": "src-tauri/Cargo.lock",
-      "sha256": "74e484392c871023953b5c714219bc70eecc2572cc9d9ad2bd34240203f3b176"
+      "sha256": "9a0847d620a817ce63f3f15775a867935fbffb56b4bf97dbdb5837c239272bf8"
     },
     {
       "path": "src-tauri/Cargo.toml",
-      "sha256": "a62653b02b8eaa7e4d3dcc65fef0aa5ee40a7fc0a7548e015932e9612fc1256b"
+      "sha256": "1b13f81a1dc294586e4b325014b82aa72c5035a5d8ecba04398f1bb6ed2968eb"
     },
     {
       "path": "src-tauri/Info.plist",
@@ -131,7 +131,11 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "49802e8553dab77029ed2827f21980aa97afa812dcc8597d160184751af17b97"
+      "sha256": "4a10af66f6bcdd881b3a5004f03c6e18d6a90f913aca3828f49a28987a25d117"
+    },
+    {
+      "path": "src-tauri/src/first_message_journey_eval.rs",
+      "sha256": "58b966069e11f428445e36d22425db61facd4706c581c344290af26d895b0973"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -287,11 +291,11 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "e3ecba386c1d073f93cae0297cb889b9b98c0b257f4d63b78a73ccf506f3c06c"
+      "sha256": "2bbd2ea826bcb4c3abe584d69a20a81055047103e6ca12798a699b2873edf6ea"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "0d568180380a7e88cb50251fb5bf8ca61e81a251c388c4d5d764456d15c91313"
+      "sha256": "bc52ec1d40b0fb1912fae65553ee468f825b3c8abb795699cbd2e623900a0757"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -375,7 +379,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "ab8ba665b2e1000fedd5b9e6dee8eaba3a5929a74062d1641815c2337e29533f"
+      "sha256": "97fd92d852e0e6a7e017d3fd086a370a0f0d0045a234c69aebc7e7ffddfc7991"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
@@ -408,6 +412,442 @@
     {
       "path": "src/ReadingHistory.tsx",
       "sha256": "0a88bc75587b858bd3e97a1d2096abc9f4adc22e4dddeda70c7d8de2acb4e437"
+    },
+    {
+      "path": "tools/horary-dspy/Cargo.lock",
+      "sha256": "1dc7ec12352aba8b1460e96a1573b6594bd7b5616dd3c297e5bbf18ea382fcd3"
+    },
+    {
+      "path": "tools/horary-dspy/Cargo.toml",
+      "sha256": "971dc183472b8073c819700697805dd1bd158e6f43a288ce341bc5815b799527"
+    },
+    {
+      "path": "tools/horary-dspy/README.md",
+      "sha256": "abb9896023699dfebf27dfe85101a02a7ade056ff4e6a3aa37cb5a2cf41fcdb4"
+    },
+    {
+      "path": "tools/horary-dspy/coverage.json",
+      "sha256": "a0338883a87bfaa2c23ef9acacd484c5ceb7c027587b2d5f3939bb5ae7eac79a"
+    },
+    {
+      "path": "tools/horary-dspy/examples/CORE22_README.md",
+      "sha256": "66f0aed1e9fef8a6c37f8c241b4197075587519c9cb9ef64aaed61e116d6ccc9"
+    },
+    {
+      "path": "tools/horary-dspy/examples/adoption.jsonl",
+      "sha256": "a78741bcd0929032e6eeceb81b2c632109d906a81799e020e9a7aa0a9054a7a9"
+    },
+    {
+      "path": "tools/horary-dspy/examples/allegation.jsonl",
+      "sha256": "392caabe5035576eaf7d89ff4b56cd9337ce738f622029f337670a5481ce10d6"
+    },
+    {
+      "path": "tools/horary-dspy/examples/bet.jsonl",
+      "sha256": "a0c585417065d4371c7108bf1e0a395c9077feffb39272cbbf0c0a35ca11653e"
+    },
+    {
+      "path": "tools/horary-dspy/examples/business_property.jsonl",
+      "sha256": "272c2333a0496095d3d20032bf2552a5c673791903512670b19b7441db458782"
+    },
+    {
+      "path": "tools/horary-dspy/examples/choice.jsonl",
+      "sha256": "5260c641b50159378648bec9ab96d5423a7adc3a46605dfbb7934d8d19ccdad5"
+    },
+    {
+      "path": "tools/horary-dspy/examples/contact.jsonl",
+      "sha256": "a68e512528b93dade8a86f7fc7ffa41eb662e63de26aeeb319a34eb001789aba"
+    },
+    {
+      "path": "tools/horary-dspy/examples/contest.jsonl",
+      "sha256": "30228ab68ef01ba5a53a45079d560abf1474ff8245f2b900bddad33f7456e835"
+    },
+    {
+      "path": "tools/horary-dspy/examples/court_case.jsonl",
+      "sha256": "ea100efee916c35ea8b8ed6e8c8b0729722c678d7926c5021f2218c1bf688102"
+    },
+    {
+      "path": "tools/horary-dspy/examples/custody.jsonl",
+      "sha256": "65e957cb9a6a7b8b88709510d14d241ca965410d5e67c10a295bf34993682fc8"
+    },
+    {
+      "path": "tools/horary-dspy/examples/dream.jsonl",
+      "sha256": "8ad7a3a9b9ff847f85cba521a80ab8c86411ea8ce9752b983401c0c5a5c950e7"
+    },
+    {
+      "path": "tools/horary-dspy/examples/education.jsonl",
+      "sha256": "411db306fd994895c9074f4d1f27702ffbce71c035c19348df5f2e606c226416"
+    },
+    {
+      "path": "tools/horary-dspy/examples/election.jsonl",
+      "sha256": "f7e5e92f6a005ef55870e8552ea9514067e74a9bcfdd0e5b917d09dd8fe9fde8"
+    },
+    {
+      "path": "tools/horary-dspy/examples/exam.jsonl",
+      "sha256": "a74489e584691992b53b41aee25b59c29d722cf836b060bf82b4e49fe6c0bd09"
+    },
+    {
+      "path": "tools/horary-dspy/examples/existing_job.jsonl",
+      "sha256": "619f9500b417a80375519bcb424948d83303976467775735eb9c7837888fd0cd"
+    },
+    {
+      "path": "tools/horary-dspy/examples/fertility.jsonl",
+      "sha256": "da2979cc2f0720c51cf5fb518395c32f5d8afd7dd5edb3c92ed656ab8d5c1f5c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/functions/moment.jsonl",
+      "sha256": "ea35897e7c526551dfffda2027650a28bfb40ff1235a403bfe56d26fbfbd7968"
+    },
+    {
+      "path": "tools/horary-dspy/examples/functions/place.jsonl",
+      "sha256": "8a9cb5fc0d263a9562606fc1ab3de131aba2fe8c1d39e14be3a3a3fdc0706ba0"
+    },
+    {
+      "path": "tools/horary-dspy/examples/functions/update.jsonl",
+      "sha256": "c0021854aec43b0c1e8995c3a5af64a1ac31f20dd7773a4fd1365ae3737a40c3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/hiring.jsonl",
+      "sha256": "203ace6b7ad16cbd5423c3e4f88f2eeb073dad8dfb94be926baa2b5c36b2fe60"
+    },
+    {
+      "path": "tools/horary-dspy/examples/information.jsonl",
+      "sha256": "c09c9ed1632b6bcc1ff464bab288065c7a8dea29e8017afb449a9105020203ef"
+    },
+    {
+      "path": "tools/horary-dspy/examples/investment.jsonl",
+      "sha256": "b9bad67e7ad365350e3711895672a38181dcd4140460a51fd0e1f06636afcec3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/job_offer.jsonl",
+      "sha256": "f2212cbfa4b4837cc58be18e59aa760ae0c96836a23ec390e82112d3e7fcd9ba"
+    },
+    {
+      "path": "tools/horary-dspy/examples/knowledge.jsonl",
+      "sha256": "d03fe6b7f0435b49a1ddc1a19144a3edb717665c53255084ce60f3e8b6155eff"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/branch-diversity-review/hiring.jsonl",
+      "sha256": "3e3f907a6bc0b32c2515cba2d58e61f0f0aab84f087485e23bd279af68f4e691"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/branch-diversity-review/lost_object.jsonl",
+      "sha256": "d79d0adf61b5581f3ac8fc96662fdf8e089eed674c0ed5cb34251610113cfc26"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/branch-diversity-review/visit.jsonl",
+      "sha256": "06768641a9ce81f103a27ae16e274144e2bbf928a22558448ab2331f4bfbb1af"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/contact.jsonl",
+      "sha256": "f687a40a98ca3ec40795d223778b638f29294042e20e32a9bcac98be21599477"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/lost_animal.jsonl",
+      "sha256": "853416693df50f629cecae1b670c345f8aae28e6d184afd87e44a5c33c3a41c3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/lost_object.jsonl",
+      "sha256": "0a6d31c2d59cd0b490a794f13243bf238d14b3d57cfa04c2dcf3dbcebdb34c4c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/money.jsonl",
+      "sha256": "cb70b63befd3c4cbda30d5e1fd15066de530227e319418b0f0229eae00f27a9c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/parcel.jsonl",
+      "sha256": "9b7a1b8ff6b9a9ecdf9575b32ef71ecd4af140ef7bb58f8e02915df7905d5659"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/work_person.jsonl",
+      "sha256": "46c3c644f900a9f4c0030ac6226e41f2f442c3aca39fcb581c773f865fa71d5a"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/court_case.jsonl",
+      "sha256": "64598fe4fba5d9b6dc407f1bc6a8297ba7e6fad1714b93714f290348e303fd63"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/facet-choice-review/court_case.jsonl",
+      "sha256": "dddf1c139d5e7b52318e69bb8157c600c769a78ee7e15f9c59935c2a24b67104"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/facet-choice-review/education.jsonl",
+      "sha256": "d73e13c10209ce8ff9ff9d6e7debb1817fa44a72a9e09c6f309acc7c1d55ba9f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/fertility.jsonl",
+      "sha256": "69627e1858f148c4d8e891525ee16099694e40b0fc5aa738359b7a25fed42ede"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/CORE22_README.md",
+      "sha256": "cb871d7f3a7c31037fc80d1d57c956f5578250387c72de9e325335ce48a4ecfa"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/existing_job.jsonl",
+      "sha256": "c33875228034fa80a0c3dbcc462242b0c39f6d3d344042a0d8389c2256981c9c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/missing_person.jsonl",
+      "sha256": "00f7c37e40122c451032ce3d6b62ccd135f34ecf9190fd7d5b6adc23f8088980"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/relationship.jsonl",
+      "sha256": "5228417222943d79878265e1d0bae5853ac094768afd7492a34f7da82cb52d0b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/rental.jsonl",
+      "sha256": "0aa90e68d982c7733af87e527f69b95ab1e59afc6082fd0cafe72baa628b2888"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/work_person.jsonl",
+      "sha256": "4439bc3579c45be61b103bbeba32c37dfcf3268ce8f6d6c6ddbf574480bf453e"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-source-review/business_property.jsonl",
+      "sha256": "94aecceb5921bc32af43029a21b58ee512dea8160873b44334db6e11a8c4ad85"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-source-review/new_job.jsonl",
+      "sha256": "4c36799f8a75f44c08f0e8f6e1f9531935e8d6864225978905d141074f3df4df"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/information.jsonl",
+      "sha256": "bbd3c52e0d23aeb198ccc1fc2a7fd2b65ecf5f08b5033b5a323ee3fb785e3b5f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/medical.jsonl",
+      "sha256": "d70199f505307b09917865a500cae8c601aafe98e514cc10b947cb1f4ab8d745"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/movable_deal.jsonl",
+      "sha256": "1c847a94554e8c3fff3b5fae659bd5c693c5d84065035d25177e9c7a02b82027"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/new_job.jsonl",
+      "sha256": "98edc0590108db952b03b9b004880936274326c553f53004843bcf7fb7580b93"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/person_description.jsonl",
+      "sha256": "5de35438ac221219cd0dd60ac584fa7271a3bdaf5aed54959b997f18f59693da"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/job_offer.jsonl",
+      "sha256": "6075c2eb4e51d1b1465f1e2de827cad3d988236e54000a98ca4a4dbf4ec21fb3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/lost_object.jsonl",
+      "sha256": "3a2bc5124655a2f52730c3a61721c6592b871b92719e5e1843073d126e656c6e"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/movable_deal.jsonl",
+      "sha256": "4491bfdecb0712722dbdff005e27c1352924cd97e77eb213c40fc1e02554b633"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/new_job.jsonl",
+      "sha256": "2b91c3d8ac64ffd58d4d1847e616701a315c479ad748bc57b9d6670610322349"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/work_person.jsonl",
+      "sha256": "4f308252afe00b92243b58f8ddce45a861da2d4db3e1f2ce1719cc980e43f87b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/relationship.jsonl",
+      "sha256": "4a86abc2a7391846c0018560f1692cd4283d6bb3ea33527ede779da273346ae0"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-branch-gap-review/medical.jsonl",
+      "sha256": "228b7dae67fce8e090475b1d386c764eb626a0dc840b25ab3fecd8941232ca01"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-branch-gap-review/pregnancy.jsonl",
+      "sha256": "01d9fb5c6aa29d17e7bf5673998b74dbce20de640877119f125eb63b16d3a529"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-quote-review/lost_animal.jsonl",
+      "sha256": "edf5912bf2b97b3e4d37d500c9be91a716abf25aa6acdc07d0066c89b7153ba3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-quote-review/movable_deal.jsonl",
+      "sha256": "f9d248f8c7407078a1e0daf0c86181511fc2357c087da16e3b677fbb7b5f5402"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-quote-review/new_job.jsonl",
+      "sha256": "3b14279aed4b430572946aef6cdd655e585b1664e2979d262a9680f33bdd0f0b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/trust.jsonl",
+      "sha256": "9cf8e78db6bd2f144a5fd6694072c5b389a30222989946148ce1e4dc14dc676d"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/unclassified.jsonl",
+      "sha256": "d535f31a5318d0b1aefde32d667b540c375a9dc8693e13017825f2ba761b8ed6"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/vehicle.jsonl",
+      "sha256": "ea1da1add707a206612e1a6272e4eeca13c773f52f7331efab0172d5234c1043"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/wish.jsonl",
+      "sha256": "5fbf14f99b3871a3c5aa36edc0f26417ca391145871ab6c205675ed22a75f8ce"
+    },
+    {
+      "path": "tools/horary-dspy/examples/lost_animal.jsonl",
+      "sha256": "157efea576198cca0711f8a342c6fc8eec1f513968fa6007c9a960e4c1b111df"
+    },
+    {
+      "path": "tools/horary-dspy/examples/lost_object.jsonl",
+      "sha256": "a4a13aa2c4045a709dd9d5b3298fb9d2c664bb9aae58051c587f1ae7cd24d251"
+    },
+    {
+      "path": "tools/horary-dspy/examples/medical.jsonl",
+      "sha256": "03ca32c7c034ba9a87927a12b1d638232657e58456476ca49498e92c5bc98915"
+    },
+    {
+      "path": "tools/horary-dspy/examples/missing_person.jsonl",
+      "sha256": "d98903e540b68278259f2cae4fd9b292ad0efbb929950c40318352175c9119ac"
+    },
+    {
+      "path": "tools/horary-dspy/examples/money.jsonl",
+      "sha256": "216cdfcb99384f405fc1f8b665ab416faf839c8145f42c2ba51f1d91f6bdca62"
+    },
+    {
+      "path": "tools/horary-dspy/examples/movable_deal.jsonl",
+      "sha256": "4853a05ceb84ea6d43510cd7afab40e2a24b0d1cb6a4a41d6a2971a509294a38"
+    },
+    {
+      "path": "tools/horary-dspy/examples/new_job.jsonl",
+      "sha256": "2c41d6009789307475493880f89471fb484bd996435af9dc210bdb71ec7801d8"
+    },
+    {
+      "path": "tools/horary-dspy/examples/parcel.jsonl",
+      "sha256": "5e508954e442cad86b872b9f2757438c7d051399450197204285c8837a8205f6"
+    },
+    {
+      "path": "tools/horary-dspy/examples/person_description.jsonl",
+      "sha256": "a934bc560c526e097783783dcda12a41b1d3c1c4212faa14f93c2179055d7b02"
+    },
+    {
+      "path": "tools/horary-dspy/examples/politics.jsonl",
+      "sha256": "532adaed6edeb85cab9f8defd336922dcb5d4aea632096faa59b9a2429568488"
+    },
+    {
+      "path": "tools/horary-dspy/examples/pregnancy.jsonl",
+      "sha256": "399f720246a19246a84355af6dcf75d56269de146dc219fd407b786a7481d32b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/property.jsonl",
+      "sha256": "e3166a6ccec57f23781a920efc052f50c1f8c606714c3335389c572e3b237637"
+    },
+    {
+      "path": "tools/horary-dspy/examples/relationship.jsonl",
+      "sha256": "bd3596164a7bc2aca8e6250b86db2a7248fea8cc24c0f03c51acb8444d0a9c8a"
+    },
+    {
+      "path": "tools/horary-dspy/examples/rental.jsonl",
+      "sha256": "83c59aafdb425bf4f44f10edc888468f10b47dc49086562516fd789ee9f54b27"
+    },
+    {
+      "path": "tools/horary-dspy/examples/return_to_job.jsonl",
+      "sha256": "8433f80692c0301800e37709131299f1dc72134f2ae24705efd04447ff8cf5b5"
+    },
+    {
+      "path": "tools/horary-dspy/examples/tax.jsonl",
+      "sha256": "30935e56a9674e50b0ab5713381cd1fa1c3147ab74a49cfac8dbd8867b361ff7"
+    },
+    {
+      "path": "tools/horary-dspy/examples/trust.jsonl",
+      "sha256": "24c8ab56467b33ceae703454f559010efed708348034a2126de6a596694a260f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/undertaking.jsonl",
+      "sha256": "cbb6238123954c91326f5e1fc3009f13f1a5f535853b47b514f5720cb15134b7"
+    },
+    {
+      "path": "tools/horary-dspy/examples/vehicle.jsonl",
+      "sha256": "e51a468197201533bfb42858bc54f57da6bbe07c3f1a39409ac7e6346e0ef101"
+    },
+    {
+      "path": "tools/horary-dspy/examples/visit.jsonl",
+      "sha256": "19b104d7a75f6b92eb111d30ebafb395a9f4cc82a31e2db4975e6822a0922107"
+    },
+    {
+      "path": "tools/horary-dspy/examples/weather.jsonl",
+      "sha256": "676d1fe0f3727890c84ac8e06b151b311a1aa210b28140bfae0cda0cce5d602f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/work_person.jsonl",
+      "sha256": "3bb09f4289a40e97d4fe9f33393d24c9054b150525016101a1dde00012720f2d"
+    },
+    {
+      "path": "tools/horary-dspy/src/anchors.rs",
+      "sha256": "9ad4b064fec46f6c2fcfec9a98e1b230cdffe1f38c422fd6ff638b2fea441769"
+    },
+    {
+      "path": "tools/horary-dspy/src/book.rs",
+      "sha256": "5d798392387c6111eeb189f9a659796569a5062c618fa281ef7c3728c1674d39"
+    },
+    {
+      "path": "tools/horary-dspy/src/catalogue.rs",
+      "sha256": "0e0072267077282fb2bf7b05f53c244cdb16becd5fe50b44f65ea6e4a1d7434d"
+    },
+    {
+      "path": "tools/horary-dspy/src/codex.rs",
+      "sha256": "990f06c79a327ca4f935ae856390419fe70434f4018aa6768ed4d67835ebb663"
+    },
+    {
+      "path": "tools/horary-dspy/src/demo.rs",
+      "sha256": "1bd471640a5f02988f7e41b4362340fb67f2618d421cc76247b9bc99ebc372ac"
+    },
+    {
+      "path": "tools/horary-dspy/src/functions.rs",
+      "sha256": "000654973e920119215c6fc837b2cf239b2cf1f04cb8ca7bc89420acb7411e33"
+    },
+    {
+      "path": "tools/horary-dspy/src/google.rs",
+      "sha256": "bbb626f14819aac188192501c337461241c2b52a30dc732c232c32de68ed300e"
+    },
+    {
+      "path": "tools/horary-dspy/src/journey.rs",
+      "sha256": "2a5a6631dd67710f6595ee2ca14e7f18e6f3a41fa6e93b639f63c4b3c29d180d"
+    },
+    {
+      "path": "tools/horary-dspy/src/journey_tests.rs",
+      "sha256": "157c30fe3d4cf2962bb80befc4eb08c2b6d9f99f2daa7c1cc3c39cca226f6a22"
+    },
+    {
+      "path": "tools/horary-dspy/src/lib.rs",
+      "sha256": "83f3f5ff38d4801031b9720a6e63ad9be47d3f7dc5d4f99b819bd8e2008f258d"
+    },
+    {
+      "path": "tools/horary-dspy/src/main.rs",
+      "sha256": "212097963d34282bdb7fe3da6d5221393b92043c821f56b752673d4792c2cbe6"
+    },
+    {
+      "path": "tools/horary-dspy/src/native_export.rs",
+      "sha256": "4dcc6c95aba377620e5fd433cc1329f2f6b45785d4d812778eccc6b77af8e78b"
+    },
+    {
+      "path": "tools/horary-dspy/src/optimize.rs",
+      "sha256": "ccd14e67e305821905efb0eec4b01495edb653928a77d2f8b921f428f242bc1e"
+    },
+    {
+      "path": "tools/horary-dspy/src/preflight.rs",
+      "sha256": "14cf90d271b726aac18f804531356cf64d44cbda98507d116f341b1da1aa9b72"
+    },
+    {
+      "path": "tools/horary-dspy/src/queue.rs",
+      "sha256": "0b0909673597aa9958fdda916e469b7853280103ae5211481e9befdbb34ded6c"
+    },
+    {
+      "path": "tools/horary-dspy/src/runner.rs",
+      "sha256": "60b2d2bd87d46d13ff3ba215b8f8f2d61dd7ab4901ac9c4ff83f5f1f373d52af"
+    },
+    {
+      "path": "tools/horary-dspy/src/signatures.rs",
+      "sha256": "50ebf20ebf82305b4b42021687909b6b6f7237242644d864c80e10e669f83dfa"
+    },
+    {
+      "path": "tools/horary-dspy/src/teachers.rs",
+      "sha256": "653818d36986475f8b4a0f418a72d336fba8cfef34ca2a2ad445462baa61c8f2"
     },
     {
       "path": "tools/horary-gepa/Cargo.lock",

@@ -291,6 +291,8 @@ Single production tasks currently use constrained JSON; independent analysis tas
 
 ## Review and refresh
 
+The source manifest also fingerprints the full [conventional Rust DSPy queue](../tools/horary-dspy/README.md), its typed function signatures and its public synthetic corpus. Its 42 families each have twenty first-message cases. Separate extraction/reading optimization is followed by original-message journey gates; available Gemini teacher routes precede the saved Codex fallback. These experiment artifacts do not change the application until native-format teaching and complete source/held-out gates have been reviewed.
+
 Rust generates this document from the live lesson builder, schemas, dependency catalog and executable authored fixture. The fixture is labeled; it is not a model result. A normal test fails when code or teaching material changes without refreshing this reference.
 
 Run `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib process_reference::tests::regenerate -- --ignored --nocapture` to refresh. The companion source manifest fingerprints the exact files. Private readings, audio and the complete OCR are not included.

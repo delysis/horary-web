@@ -1,5 +1,7 @@
 # Prompt optimization
 
+The current conventional path is the full pinned [Rust DSPy port and all-function queue](../tools/horary-dspy/README.md). It has 840 first-message reading cases across 42 substantive question families, sixty auxiliary cases, typed signatures, source-grounded independent metrics, component GEPA jobs and fresh composed journey gates. Available Gemini text models are tried in sequence before the saved Codex fallback. This supersedes manual prompt iteration as the active optimization mechanism; older rounds below remain a preserved research record. Compiled candidates require source and held-out qualification before native application promotion.
+
 The optimization loop proposes changes to model teaching, then measures them through the application's actual native checks. It preserves the book, accepted facts, schemas, guards and authored expectations. A proposal is an evidence-backed artifact; it does not edit the running application.
 
 ## Executable signatures and candidates

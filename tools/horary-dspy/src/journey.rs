@@ -39,6 +39,10 @@ pub struct Journey {
     model: Arc<dyn DynChatModel>,
     book: Arc<Book>,
     source: BTreeMap<String, String>,
+    component_extractors: BTreeMap<String, Predict>,
+    component_readers: BTreeMap<String, Predict>,
+    component_sources: BTreeMap<String, String>,
+    case_bank_sha256: String,
     labels: BTreeMap<String, Example>,
     stream: Option<PathBuf>,
     pub observations: Arc<Mutex<Vec<Value>>>,
@@ -75,6 +79,10 @@ impl Journey {
             model,
             book,
             source,
+            component_extractors: BTreeMap::new(),
+            component_readers: BTreeMap::new(),
+            component_sources: BTreeMap::new(),
+            case_bank_sha256: crate::google::digest(serde_json::to_vec(cases)?),
             labels,
             stream: None,
             observations: Arc::new(Mutex::new(Vec::new())),
@@ -83,6 +91,75 @@ impl Journey {
     pub fn with_stream(mut self, path: PathBuf) -> Result<Self> {
         fs::create_dir_all(path.parent().context("No stream directory")?)?;
         self.stream = Some(path);
+        Ok(self)
+    }
+
+    /// Compose measured function artifacts for a fresh original-message gate.
+    /// The actual classifier still selects the family; the evaluation label is
+    /// never used as a route or as an accepted fact. No runtime installation.
+    pub fn with_components(mut self, queue_root: &Path) -> Result<Self> {
+        let plan = crate::queue::verify_composition_plan(queue_root)?;
+        ensure!(
+            plan.case_banks_canonical_sha256.get(&self.family) == Some(&self.case_bank_sha256),
+            "Journey cases differ from the compiled queue's sealed canonical bank"
+        );
+        let classifier = queue_root.join("jobs/classification/compiled.json");
+        if classifier.exists() {
+            crate::optimize::load_component_for_dataset(
+                &mut self.classifier,
+                &classifier,
+                "all",
+                "classification",
+                plan.component_datasets_sha256
+                    .get("classification")
+                    .context("No sealed classification dataset")?,
+            )?;
+            self.component_sources.insert(
+                "classification".into(),
+                crate::google::digest(fs::read(classifier)?),
+            );
+        }
+        for method in signatures::METHODS
+            .iter()
+            .copied()
+            .filter(|m| !matches!(*m, "wish" | "unclassified"))
+        {
+            for function in ["extraction", "reading"] {
+                let path = queue_root.join(format!("jobs/{method}-{function}/compiled.json"));
+                if !path.exists() {
+                    continue;
+                }
+                let mut predictor = if function == "extraction" {
+                    plain(signatures::extraction(method)?, self.model.clone())
+                } else {
+                    plain(signatures::reading(method)?, self.model.clone())
+                };
+                crate::optimize::load_component_for_dataset(
+                    &mut predictor,
+                    &path,
+                    method,
+                    function,
+                    plan.component_datasets_sha256
+                        .get(&format!("{method}-{function}"))
+                        .context("No sealed component dataset")?,
+                )?;
+                self.component_sources.insert(
+                    format!("{function}.{method}"),
+                    crate::google::digest(fs::read(path)?),
+                );
+                if method == self.family {
+                    if function == "extraction" {
+                        self.extractor = predictor;
+                    } else {
+                        self.reader = predictor;
+                    }
+                } else if function == "extraction" {
+                    self.component_extractors.insert(method.into(), predictor);
+                } else {
+                    self.component_readers.insert(method.into(), predictor);
+                }
+            }
+        }
         Ok(self)
     }
     fn record_native(
@@ -101,7 +178,7 @@ impl Journey {
                 file,
                 "{}",
                 serde_json::to_string(
-                    &json!({"phase":phase,"original_inputs":input.rendered(),"stages":stages,"independently_reviewed":false})
+                    &json!({"phase":phase,"original_inputs":input.rendered(),"stages":stages,"compiled_components":self.component_sources,"independently_reviewed":false})
                 )?
             )?;
             file.sync_data()?;
@@ -162,6 +239,8 @@ impl Journey {
         let fallback_extractor;
         let extractor = if method == self.family {
             &self.extractor
+        } else if let Some(predictor) = self.component_extractors.get(method) {
+            predictor
         } else {
             fallback_extractor = plain(signatures::extraction(method)?, self.model.clone());
             &fallback_extractor
@@ -186,7 +265,12 @@ impl Journey {
                 Vec::new()
             }
         };
+        let mut paths = std::collections::BTreeSet::new();
         for fact in &facts {
+            if fact.field.trim().is_empty() || !paths.insert(fact.field.as_str()) {
+                failures
+                    .push("Native fact array contains an empty or duplicate canonical path".into());
+            }
             if !fact.quote.is_empty() && !question.contains(&fact.quote) {
                 failures.push(format!("{} uses a nonliteral quote", fact.field));
             }
@@ -233,6 +317,8 @@ impl Journey {
         let fallback_reader;
         let reader = if method == self.family {
             &self.reader
+        } else if let Some(predictor) = self.component_readers.get(method) {
+            predictor
         } else {
             fallback_reader = plain(signatures::reading(method)?, self.model.clone());
             &fallback_reader
@@ -242,9 +328,15 @@ impl Journey {
         relabel(trace, from, &format!("reading.{method}"));
         stages.insert("reading".into(), fields(&prediction));
         self.record_native(input, &stages, "reading")?;
-        for cited in regex::Regex::new(r"\be\d+\b")?.find_iter(text(&prediction, "evidence")?) {
-            if !native.iter().any(|fact| fact.id == cited.as_str()) {
-                failures.push(format!("Unknown native fact citation {}", cited.as_str()));
+        let citation_pattern = regex::Regex::new(r"\be\d+\b")?;
+        for field in ["answer", "analysis", "evidence", "unresolved"] {
+            for cited in citation_pattern.find_iter(text(&prediction, field)?) {
+                if !native.iter().any(|fact| fact.id == cited.as_str()) {
+                    failures.push(format!(
+                        "Unknown native fact citation {} in {field}",
+                        cited.as_str()
+                    ));
+                }
             }
         }
         Ok((prediction, Value::Object(stages), failures))
@@ -324,7 +416,7 @@ impl Journey {
         prediction.example.set("__score", json!(score));
         prediction.example.set("__feedback", json!(feedback));
         prediction.example.set("__passed", json!(passed));
-        let observation = json!({"case_id":label.get("case_id"),"original_inputs":input.rendered(),"stages":stages,"review":fields(&review),"native_failures":failures,"score":score,"passed":prediction.get("__passed")});
+        let observation = json!({"case_id":label.get("case_id"),"original_inputs":input.rendered(),"stages":stages,"compiled_components":self.component_sources,"review":fields(&review),"native_failures":failures,"score":score,"passed":prediction.get("__passed")});
         if let Some(path) = &self.stream {
             use std::io::Write;
             let mut file = fs::OpenOptions::new()

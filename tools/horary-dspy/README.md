@@ -2,7 +2,47 @@
 
 This crate uses the full [getlatentic/dsrust](https://github.com/getlatentic/dsrust/tree/f24adde08c1d8850e4d7079d019643bb40f905cb) API directly, pinned to `f24adde08c1d8850e4d7079d019643bb40f905cb` in [Cargo.toml](Cargo.toml) and [Cargo.lock](Cargo.lock). Rust derives the neural signatures; the port owns prompt rendering, parsing, demonstrations, evaluation and optimization. The local code supplies the Horary module, source context, provider transport and grading. It does not implement a replacement GEPA engine.
 
-This is an experimental optimizer path. It has not been promoted into the production application. At the October 11 transport checkpoint, the requested Gemini 3.8 teacher returned HTTP 503 on both the legacy Google generation route and the Interactions route. The user explicitly authorized a temporary Codex teacher using the saved login; `--teacher codex` is now the default, while `--teacher gemini` retains the requested `gemini-3.8-flash` route. This is an explicit transport choice, not a silent model substitution. There is no qualified new winner from this path.
+This is an experimental optimizer path. It has not been promoted into the production application. The default teacher policy is now `--teacher pool`: use the available listed Gemini text generation models in a deterministic sequence, preferring Gemini 3.8 Flash, and use the saved Codex login only after those eligible routes have known quota or availability failures. Each model has its own cache and pacing state; all teacher submissions share one physical-call cap. An uncertain response, authentication failure or completed bad semantic answer never triggers model substitution. Explicit `--teacher gemini` and `--teacher codex` remain available for controlled experiments. There is no qualified new application winner from this path.
+
+## The complete conventional queue
+
+`queue-plan` seals 130 jobs: one mixed-family classifier, three auxiliary functions, 84 family extraction/reading components and 42 fresh original-message journey gates. Each initial reading family has twenty cases, split 12/4/4. The independent judge is fixed. The queue calls the pinned port's GEPA compiler directly; it does not implement a second optimizer. This first queue optimizes instructions with zero bootstrap demonstrations, an explicit policy that avoids repeating the earlier bulky-bootstrap pilot. The optional older `optimize` command still supports the port's standard bootstrap path and preserves full teacher demonstrations.
+
+```mermaid
+flowchart TB
+    sealed[Sealed source, book, examples and available models] --> c[Mixed-family classification GEPA]
+    c --> aux[Place, moment and update GEPA]
+    aux --> x[Selected family's extraction component GEPA]
+    x --> r[Same family's reading component GEPA]
+    r --> g[Fresh original question: classifier → extraction → native chart → reader]
+    g --> next[Next question family]
+    next --> x
+    g --> review[Independent book-grounded dimensions and held-out results]
+    review --> proposed[Reviewable candidate; no automatic application installation]
+```
+
+The reading component receives an independently authored accepted consultation and a real native chart. It is labelled as a component, not successful elicitation. The journey gate instead acquires its own facts and calculates its own chart from the actual classifier and extractor outputs. Compiled components must match the queue's executable, teaching sources, exact fixture digest and canonical family bank. The queue rechecks source and fixture identity at each job boundary. Expected method, facts, chart seed and grading rubric never become journey inputs.
+
+Function-local dimensions and native checks drive optimization. Inapplicable stages cannot veto a component. Raw independent-summary disagreements remain visible and withhold qualification; they are not rewritten as a win. A completed invalid fact array, unsupported route or invented native citation is an observed rejection with feedback. Missing/interrupted provider evidence remains unknown and stops further submissions. The port's fallback zero for an execution error cannot qualify a search result.
+
+Google's listed input context limit is checked separately from input-token pacing. The configured rate is an initial hint, not a per-request length limit. The limiter probes higher throughput after successes up to a recorded ceiling, adopts actual provider quota hints on 429, and retains RetryInfo/Retry-After waits. One student client and limiter span the entire queue. Physical retries count against the same caps. Never restart a queue to bypass its durable guard or reset counters.
+
+From a built, copied executable, using absolute paths:
+
+```sh
+horary-dspy models --output /absolute/path/to/model-listing.json
+horary-dspy preflight --examples /absolute/path/to/examples \
+  --models /absolute/path/to/model-listing.json --output /absolute/path/to/preflight
+horary-dspy queue-plan --examples /absolute/path/to/examples \
+  --models /absolute/path/to/model-listing.json --output /absolute/path/to/queue
+horary-dspy queue-execute --examples /absolute/path/to/examples \
+  --plan /absolute/path/to/queue/queue-plan.json
+horary-dspy queue-status --output /absolute/path/to/queue
+```
+
+Preflight formats every baseline exchange locally and counts the largest rendered exchange per function by default; `--all-counts` counts every fixture. Sampling does not prove every request's token admission. The actual transport counts every exact request before generation. These checks establish source and execution mechanics, not guaranteed semantic improvement. The plan records nominal function evaluations and hard physical caps. Until observed tokens, waits and latencies arrive, elapsed time is a conditional forecast rather than a promised completion time.
+
+The pure `export-native` command can create an explicit native-format teaching seed with a source-bound authored mapping. It withholds foreign demonstrations rather than inventing native typed records. The application's separate `real_model_first_message_application_journey` gate starts a default native session with only the original words and fixture device context, optionally using a pinned native candidate. Its full traces still need an independent source review. Neither exporting a seed nor passing the DSPy journey installs or qualifies the production application.
 
 The first actual student reading received a completed Codex review with score 0.75: classification and extraction passed, while reading and answer quality failed. The feedback identified unsupported absence claims, translation/collection omissions and overclaiming from `None` or unknown evidence. Its raw answer remains intact. A validator initially mistook an exact disabled-Code-Mode startup notice for tool execution; the narrow notice check was repaired so that successful paid answer can be reused without resubmission. The repair changes neither the judgment nor the failed reading's qualification.
 
@@ -16,7 +56,7 @@ flowchart TD
     V -->|unresolved or invalid| U[Observed incomplete journey]
     V -->|valid inputs| N[Native place, calendar and chart tools]
     N --> R[Reader for the actual selected family]
-    R --> J[Separate selected teacher judge: Codex or Gemini 3.8]
+    R --> J[Separate book-grounded judge on the recorded teacher route]
     U --> J
     B[Hash-checked Frawley primary text] --> X
     B --> R
@@ -114,7 +154,7 @@ cargo run --manifest-path tools/horary-dspy/Cargo.toml -- \
 
 `run --training-limit N` is a training-only transport check, not the full family evaluation; with `--method all`, it selects up to N training cases per family. `models` checks the requested Google identities even when the temporary teacher is Codex. The student always remains hosted `gemma-4-26b-a4b-it`. Select `--teacher gemini` before the subcommand to use `gemini-3.8-flash` for teaching, reflection and judging. The Google credential is read from a private file locator and is never an example, prompt or evidence artifact.
 
-The port's `ChatAdapter::without_json_fallback()` renders and parses ordinary text. Both transports reject response schemas and tools, so typed Rust signatures do not imply constrained provider decoding. [codex.rs](src/codex.rs) invokes the existing saved login without a model override, disables tool surfaces, and checks the saved event stream for a completed tool-free turn. Its prompt treats synthetic questions, observed outputs, rubrics and book passages as data. The Gemini teacher route uses stateless Interactions with `store=false`; the student uses `generateContent`.
+The port's `ChatAdapter::without_json_fallback()` renders and parses ordinary text. Both transports reject response schemas and tools, so typed Rust signatures do not imply constrained provider decoding. [codex.rs](src/codex.rs) invokes the existing saved login without a model override, disables tool surfaces, and checks the saved event stream for a completed tool-free turn. Its prompt treats synthetic questions, observed outputs, rubrics and book passages as data. The queue's listed Gemini pool and Gemma student use `generateContent`; the legacy explicit preferred-Gemini transport also retains stateless Interactions with `store=false`. The grading criterion is fixed, while quota-driven reviewer model changes are recorded and remain a comparison limitation requiring source review.
 
 Completed responses can be reused by exact request identity. The Google transport permits at most three physical submissions for a logical request when it has fully received HTTP 429, 500, 502, 503 or 504, with bounded backoff. Each submission is paced, charged against the physical cap and recorded separately. Send failures, incomplete responses, parsing failures and nontransient HTTP errors are not retried; automatic protocol retries and redirects are disabled. A failed or unresolved request already present on disk is never automatically resumed. `import-codex` can copy an already successful, tool-free raw answer into a new cache after a local reporting/parser repair, preserving its original request, prompt, answer, events and exit plus their hashes; it makes no model call and does not revise the judgment. `run --cached-student-only --cached-teacher-only` disables fresh generation for both transports and fails if an exact needed response is absent. This is bounded saved-answer reuse, not a new owner/retry engine or authority to replay uncertain work.
 

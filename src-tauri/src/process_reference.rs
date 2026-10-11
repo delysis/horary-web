@@ -238,6 +238,7 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/reading_contracts.rs",
     "src-tauri/src/recognition_programs.rs",
     "src-tauri/src/elicitation_eval.rs",
+    "src-tauri/src/first_message_journey_eval.rs",
     "src-tauri/src/reading_neural_eval.rs",
     "src-tauri/src/response_memo_tests.rs",
     "src-tauri/src/selected_stage_eval.rs",
@@ -306,6 +307,10 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/src/review.rs",
     "tools/horary-gepa/src/recovery.rs",
     "tools/horary-gepa/src/status.rs",
+    "tools/horary-dspy/Cargo.toml",
+    "tools/horary-dspy/Cargo.lock",
+    "tools/horary-dspy/README.md",
+    "tools/horary-dspy/coverage.json",
     "src-tauri/src/reading_contract_overview.md",
     "src-tauri/src/reading_contract_tests.rs",
     "src-tauri/src/horary_recovery_tests.rs",
@@ -346,10 +351,37 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/process_reference.rs",
 ];
 
+fn collect_source_files(
+    root: &Path,
+    directory: &Path,
+    paths: &mut Vec<String>,
+) -> Result<(), String> {
+    for entry in std::fs::read_dir(directory).map_err(|e| e.to_string())? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.is_dir() {
+            collect_source_files(root, &path, paths)?;
+        } else if path.extension().is_some_and(|extension| {
+            matches!(extension.to_str(), Some("rs" | "json" | "jsonl" | "md"))
+        }) {
+            paths.push(
+                path.strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
+        }
+    }
+    Ok(())
+}
+
 fn generate(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
     let examples = crate::horary_pipeline::process_examples()?;
     let case_count = crate::elicitation_eval::catalogue_size(root)?;
     let mut paths: Vec<String> = SOURCES.iter().map(|p| (*p).into()).collect();
+    // The executable optimizer and its public synthetic corpus are part of
+    // the reviewable process, not a prose-only side report.
+    collect_source_files(root, &root.join("tools/horary-dspy/src"), &mut paths)?;
+    collect_source_files(root, &root.join("tools/horary-dspy/examples"), &mut paths)?;
     for entry in
         std::fs::read_dir(root.join("src-tauri/src/horary_prompts")).map_err(|e| e.to_string())?
     {

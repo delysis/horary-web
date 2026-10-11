@@ -1,18 +1,24 @@
 #![forbid(unsafe_code)]
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand, ValueEnum};
 use dsrust::{Module, lm::DynChatModel};
-use horary_dspy::{book, catalogue, codex, google, optimize, runner, signatures};
+use horary_dspy::{
+    book, catalogue, codex, google, native_export, optimize, preflight, queue, runner, signatures,
+    teachers,
+};
+use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Arc};
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 enum Teacher {
+    Pool,
     Gemini,
     Codex,
 }
 #[derive(Parser)]
 struct Args {
-    #[arg(long, value_enum, default_value = "codex")]
+    #[arg(long, value_enum, default_value = "pool")]
     teacher: Teacher,
     #[arg(long, default_value = "/opt/homebrew/bin/codex")]
     codex: PathBuf,
@@ -25,6 +31,64 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Bind all conventional DSPy jobs to executable, book, corpus and provider policy.
+    QueuePlan {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        models: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long, default_value_t = 24)]
+        max_metric_calls: usize,
+        #[arg(long, default_value_t = 14_000)]
+        student_tokens_per_minute: usize,
+        #[arg(long, default_value_t = 224_000)]
+        student_probe_ceiling: usize,
+        #[arg(long, default_value_t = 18_000)]
+        student_call_cap: usize,
+        #[arg(long, default_value_t = 10_000)]
+        teacher_call_cap: usize,
+    },
+    /// Execute a sealed queue once; provider clients and caps span every job.
+    QueueExecute {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        plan: PathBuf,
+    },
+    QueueStatus {
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Format every baseline exchange, then count a source-bound sample or all.
+    Preflight {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        models: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long)]
+        all_counts: bool,
+    },
+    ExportRequirements {
+        #[arg(long)]
+        method: String,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Prepare an explicit native-format teaching seed; does not install or qualify it.
+    ExportNative {
+        #[arg(long)]
+        compiled: PathBuf,
+        #[arg(long)]
+        baseline_manifest: PathBuf,
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     ImportCodex {
         #[arg(long)]
         source: PathBuf,
@@ -102,6 +166,180 @@ enum Command {
 async fn main() -> Result<()> {
     let args = Args::parse();
     match args.command {
+        Command::QueuePlan {
+            examples,
+            models,
+            output,
+            max_metric_calls,
+            student_tokens_per_minute,
+            student_probe_ceiling,
+            student_call_cap,
+            teacher_call_cap,
+        } => {
+            ensure!(
+                student_call_cap > 0 && teacher_call_cap > 0,
+                "Physical-call bounds must be positive"
+            );
+            ensure!(
+                student_probe_ceiling >= student_tokens_per_minute,
+                "Probe ceiling must cover the initial hint"
+            );
+            let bytes = fs::read(models)?;
+            let listing: serde_json::Value = serde_json::from_slice(&bytes)?;
+            google::model_context_limit(&listing, google::STUDENT)?;
+            let configuration = QueueConfiguration {
+                teacher: args.teacher,
+                model_listing_sha256: google::digest(&bytes),
+                teacher_sequence: teachers::available(&listing)?
+                    .iter()
+                    .map(|info| info.name.clone())
+                    .collect(),
+                codex: args.codex.clone(),
+                codex_sha256: google::digest(fs::read(&args.codex)?),
+                student_tokens_per_minute,
+                student_probe_ceiling,
+                student_call_cap,
+                teacher_call_cap,
+                teacher_tokens_per_minute: 120_000,
+            };
+            let plan = queue::plan(
+                &examples,
+                &args.book,
+                max_metric_calls,
+                serde_json::to_value(&configuration)?,
+            )?;
+            // A fresh output prevents changing a live queue's available routes.
+            fs::create_dir(&output)?;
+            fs::write(output.join("model-listing.json"), bytes)?;
+            queue::write_plan(&output, &plan)?;
+            println!("{}", serde_json::to_string_pretty(&plan)?);
+        }
+        Command::QueueExecute { examples, plan } => {
+            let output = plan
+                .parent()
+                .context("Queue plan must have a parent directory")?;
+            ensure!(
+                plan.file_name()
+                    .is_some_and(|name| name == "queue-plan.json"),
+                "Use the bound queue-plan.json"
+            );
+            let saved: queue::Plan = serde_json::from_slice(&fs::read(&plan)?)?;
+            let configuration: QueueConfiguration =
+                serde_json::from_value(saved.configuration.clone())?;
+            let model_bytes = fs::read(output.join("model-listing.json"))?;
+            ensure!(
+                google::digest(&model_bytes) == configuration.model_listing_sha256,
+                "Model listing drifted"
+            );
+            ensure!(
+                google::digest(fs::read(&configuration.codex)?) == configuration.codex_sha256,
+                "Codex executable drifted"
+            );
+            let listing: serde_json::Value = serde_json::from_slice(&model_bytes)?;
+            ensure!(
+                teachers::available(&listing)?
+                    .iter()
+                    .map(|info| info.name.clone())
+                    .collect::<Vec<_>>()
+                    == configuration.teacher_sequence,
+                "Actual available teacher order differs from the sealed configuration"
+            );
+            let http = google::client(&args.credential_file)?;
+            let student_budget = google::CallBudget::new(configuration.student_call_cap);
+            let teacher_budget = google::CallBudget::new(configuration.teacher_call_cap);
+            let student_limiter = google::RateLimiter::with_probe_ceiling(
+                configuration.student_tokens_per_minute,
+                configuration.student_probe_ceiling,
+            )?;
+            let student_info: google::ModelInfo =
+                serde_json::from_value(listing["student"].clone()).context("No listed student")?;
+            let student = Arc::new(google::Google::from_listing(
+                student_info,
+                http.clone(),
+                output.join("student"),
+                student_budget,
+                student_limiter,
+            )?);
+            let teacher = pooled_teacher(
+                configuration.teacher,
+                configuration.codex,
+                http,
+                output.join("teacher"),
+                configuration.teacher_call_cap,
+                teacher_budget,
+                &listing,
+                configuration.teacher_tokens_per_minute,
+            )?;
+            let models = runner::Models {
+                student,
+                teacher,
+                teacher_id: teacher_identity(configuration.teacher).into(),
+            };
+            let result = queue::execute(
+                &saved,
+                &examples,
+                &args.book,
+                Arc::new(book::Book::open(&args.book)?),
+                &models,
+                output,
+            )
+            .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::QueueStatus { output } => println!(
+            "{}",
+            serde_json::to_string_pretty(&queue::status(&output)?)?
+        ),
+        Command::Preflight {
+            examples,
+            models,
+            output,
+            all_counts,
+        } => {
+            let listing: serde_json::Value = serde_json::from_slice(&fs::read(models)?)?;
+            let limit = google::model_context_limit(&listing, google::STUDENT)?;
+            let result = preflight::run(
+                &examples,
+                &book::Book::open(&args.book)?,
+                &google::client(&args.credential_file)?,
+                &output,
+                limit,
+                all_counts,
+            )
+            .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::ExportRequirements { method, output } => fs::write(
+            output,
+            serde_json::to_vec_pretty(&native_export::requirements(&method)?)?,
+        )?,
+        Command::ExportNative {
+            compiled,
+            baseline_manifest,
+            plan,
+            output,
+        } => {
+            let compiled_bytes = fs::read(compiled)?;
+            let manifest_bytes = fs::read(baseline_manifest)?;
+            let plan_bytes = fs::read(plan)?;
+            let plan: native_export::ExportPlan = serde_json::from_slice(&plan_bytes)?;
+            let export = native_export::export(&compiled_bytes, &manifest_bytes, &plan)?;
+            // Validation precedes creating evidence. Never overwrite an earlier
+            // proposal or relabel a changed-format seed as the DSPy winner.
+            fs::create_dir(&output)?;
+            fs::write(output.join("compiled-source.json"), compiled_bytes)?;
+            fs::write(output.join("baseline-manifest-source.json"), manifest_bytes)?;
+            fs::write(output.join("export-plan.json"), plan_bytes)?;
+            fs::write(
+                output.join("program.json"),
+                serde_json::to_vec_pretty(&export.program)?,
+            )?;
+            fs::write(
+                output.join("export-receipt.json"),
+                serde_json::to_vec_pretty(&export.receipt)?,
+            )?;
+            println!("Native teaching seed exported; application validation is still required");
+        }
         Command::ImportCodex {
             source,
             destination,
@@ -140,8 +378,8 @@ async fn main() -> Result<()> {
                 fs::write(path, serde_json::to_vec_pretty(&models)?)?;
             }
             ensure!(
-                !models["teacher"].is_null() && !models["student"].is_null(),
-                "Requested teacher/student pair is not available on this credential; no substitution performed"
+                !models["student"].is_null(),
+                "Requested student is not available on this credential; no substitution performed"
             );
         }
         Command::Check { examples } => println!(
@@ -233,7 +471,8 @@ async fn main() -> Result<()> {
                 } else {
                     80 * methods.len()
                 },
-            )?;
+            )
+            .await?;
             let models = runner::Models {
                 student,
                 teacher,
@@ -292,7 +531,8 @@ async fn main() -> Result<()> {
                 http,
                 output.join("teacher"),
                 300 * methods.len(),
-            )?;
+            )
+            .await?;
             let models = runner::Models {
                 student,
                 teacher,
@@ -339,7 +579,7 @@ async fn main() -> Result<()> {
                 student_tokens_per_minute,
             )?);
             let teacher =
-                teacher_model(args.teacher, args.codex, http, output.join("teacher"), 3000)?;
+                teacher_model(args.teacher, args.codex, http, output.join("teacher"), 3000).await?;
             let models = runner::Models {
                 student,
                 teacher,
@@ -362,11 +602,12 @@ async fn main() -> Result<()> {
 }
 fn teacher_identity(mode: Teacher) -> &'static str {
     match mode {
+        Teacher::Pool => "available-gemini-text-sequence-then-codex",
         Teacher::Gemini => google::TEACHER,
         Teacher::Codex => "codex-saved-login-temporary-teacher",
     }
 }
-fn teacher_model(
+async fn teacher_model(
     mode: Teacher,
     executable: PathBuf,
     http: reqwest::Client,
@@ -374,6 +615,19 @@ fn teacher_model(
     max_calls: usize,
 ) -> Result<Arc<dyn DynChatModel>> {
     match mode {
+        Teacher::Pool => {
+            let listing = google::models(&http).await?;
+            pooled_teacher(
+                mode,
+                executable,
+                http,
+                output,
+                max_calls,
+                google::CallBudget::new(max_calls),
+                &listing,
+                120_000,
+            )
+        }
         Teacher::Gemini => Ok(Arc::new(google::Google::new(
             google::TEACHER,
             http,
@@ -382,5 +636,59 @@ fn teacher_model(
             120_000,
         )?)),
         Teacher::Codex => Ok(Arc::new(codex::Codex::new(executable, output, max_calls)?)),
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QueueConfiguration {
+    teacher: Teacher,
+    model_listing_sha256: String,
+    teacher_sequence: Vec<String>,
+    codex: PathBuf,
+    codex_sha256: String,
+    student_tokens_per_minute: usize,
+    student_probe_ceiling: usize,
+    student_call_cap: usize,
+    teacher_call_cap: usize,
+    teacher_tokens_per_minute: usize,
+}
+#[allow(clippy::too_many_arguments)]
+fn pooled_teacher(
+    mode: Teacher,
+    executable: PathBuf,
+    http: reqwest::Client,
+    output: PathBuf,
+    max_calls: usize,
+    budget: Arc<google::CallBudget>,
+    listing: &serde_json::Value,
+    rate: usize,
+) -> Result<Arc<dyn DynChatModel>> {
+    match mode {
+        Teacher::Pool => {
+            let fallback = codex::Codex::new(executable, output.join("codex"), max_calls)?;
+            Ok(Arc::new(teachers::TeacherPool::new(
+                http,
+                listing,
+                output,
+                budget,
+                rate,
+                Some(fallback),
+            )?))
+        }
+        Teacher::Codex => Ok(Arc::new(
+            codex::Codex::new(executable, output, max_calls)?.with_budget(budget),
+        )),
+        Teacher::Gemini => {
+            let info: google::ModelInfo = serde_json::from_value(listing["teacher"].clone())
+                .context("Preferred Gemini teacher is not listed")?;
+            Ok(Arc::new(google::Google::from_listing(
+                info,
+                http,
+                output,
+                budget,
+                google::RateLimiter::new(rate)?,
+            )?))
+        }
     }
 }

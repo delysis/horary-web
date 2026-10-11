@@ -3,6 +3,7 @@
 use crate::{
     book::Book,
     catalogue::{self, Case, Fact},
+    functions::{self, Fixture},
     signatures,
 };
 use anyhow::{Context, Result, ensure};
@@ -11,14 +12,17 @@ use dsrust::{
     Feedback,
     example::Prediction,
     lm::{DynChatModel, LmConfig},
-    module::{NamedPredictor, TraceStep},
+    module::{NamedPredictor, TraceStep, relabel},
 };
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     fs,
-    path::Path,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 fn input_key(input: &Example) -> Result<String> {
@@ -62,7 +66,10 @@ pub struct Graded {
     judge: Predict,
     examples: BTreeMap<String, Example>,
     function: String,
+    predictor_name: String,
     observations: Arc<Mutex<Vec<Value>>>,
+    stream: Option<PathBuf>,
+    failed: Arc<AtomicBool>,
 }
 impl Graded {
     pub fn new(
@@ -86,33 +93,81 @@ impl Graded {
                 "Duplicate neural inputs have ambiguous labels"
             );
         }
+        let mut judge = plain(signatures::auxiliary("judge")?, teacher);
+        judge
+            .signature
+            .instructions
+            .push_str(&functions::grading_instruction(function)?);
         Ok(Self {
             oracle: plain(signature, student),
-            judge: plain(signatures::auxiliary("judge")?, teacher),
+            judge,
             examples: index,
             function: function.into(),
+            predictor_name: predictor_name(method, function)?,
             observations: Arc::new(Mutex::new(Vec::new())),
+            stream: None,
+            failed: Arc::new(AtomicBool::new(false)),
         })
     }
+    pub fn with_stream(mut self, path: PathBuf) -> Result<Self> {
+        fs::create_dir_all(path.parent().context("No component stream directory")?)?;
+        self.stream = Some(path);
+        Ok(self)
+    }
+    fn record(&self, suffix: bool, observation: &Value) -> Result<()> {
+        if let Some(path) = &self.stream {
+            use std::io::Write;
+            let path = if suffix {
+                path.with_extension("native.jsonl")
+            } else {
+                path.clone()
+            };
+            let mut file = fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(path)?;
+            writeln!(file, "{}", serde_json::to_string(observation)?)?;
+            file.sync_data()?;
+        }
+        Ok(())
+    }
+    pub fn save_observations(&self, path: &Path) -> Result<()> {
+        crate::queue::write_json_atomic(
+            path,
+            &json!(
+                &*self
+                    .observations
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
+            ),
+        )
+    }
     async fn ask(&self, input: Example, trace: &mut Vec<TraceStep>) -> Result<Prediction> {
+        let input = input.inputs()?;
         let example = self
             .examples
             .get(&input_key(&input)?)
             .context("Unknown evaluation input")?;
+        let from = trace.len();
         let mut prediction = self.oracle.forward_traced(input.clone(), trace).await?;
+        relabel(trace, from, &self.predictor_name);
+        self.record(true, &json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"prediction":fields(&prediction),"independently_reviewed":false}))?;
         let source = example
             .get("__review_source")
             .or_else(|| input.get("source_text"))
             .or_else(|| input.get("requirements"))
             .or_else(|| input.get("catalogue"))
             .cloned()
-            .unwrap_or(json!(
-                "Native device/calendar context and Frawley printed7–8."
-            ));
+            .context("No actual primary context for independent review")?;
         let mut errors = Vec::new();
         if self.function == "extraction" {
-            let facts: Vec<Fact> =
-                serde_json::from_str(text(&prediction, "facts")?).context("Facts did not parse")?;
+            let facts: Vec<Fact> = match serde_json::from_str(text(&prediction, "facts")?) {
+                Ok(facts) => facts,
+                Err(error) => {
+                    errors.push(format!("Native fact array rejected: {error}"));
+                    Vec::new()
+                }
+            };
             let words = input
                 .get("question")
                 .and_then(Value::as_str)
@@ -123,7 +178,13 @@ impl Graded {
                     .and_then(Value::as_str)
                     .unwrap_or("[]"),
             )?;
+            let mut paths = std::collections::BTreeSet::new();
             for fact in &facts {
+                if fact.field.trim().is_empty() || !paths.insert(fact.field.as_str()) {
+                    errors.push(
+                        "Native fact array contains an empty or duplicate canonical path".into(),
+                    );
+                }
                 if !fact.quote.is_empty()
                     && !words.contains(&fact.quote)
                     && !history
@@ -142,8 +203,73 @@ impl Graded {
                     ));
                 }
             }
-            serde_json::from_str::<Vec<String>>(text(&prediction, "missing")?)
-                .context("Missing fields did not parse")?;
+            if let Err(error) = serde_json::from_str::<Vec<String>>(text(&prediction, "missing")?) {
+                errors.push(format!("Native missing-input array rejected: {error}"));
+            }
+        } else if functions::AUXILIARY.contains(&self.function.as_str()) {
+            errors.extend(functions::native_failures(
+                &self.function,
+                &input,
+                &prediction,
+            )?);
+        } else if self.function == "classification" {
+            let method = text(&prediction, "method")?;
+            let branch = text(&prediction, "branch")?;
+            if !signatures::METHODS.contains(&method) {
+                errors.push(format!("Unknown method {method}"));
+            } else if !catalogue::coverage_card(method)?["judgment_subbranches"]
+                .as_array()
+                .context("No branches")?
+                .iter()
+                .any(|b| b["id"] == branch)
+            {
+                errors.push(format!("Unknown {method} branch {branch}"));
+            }
+        } else if self.function == "reading" {
+            let chart: Value = serde_json::from_str(
+                input
+                    .get("chart_evidence")
+                    .and_then(Value::as_str)
+                    .context("No actual chart")?,
+            )?;
+            let mut ids = std::collections::BTreeSet::new();
+            if let Some(table) = chart["facts"].as_str() {
+                ids.extend(
+                    table
+                        .lines()
+                        .skip(1)
+                        .filter_map(|row| row.split('\t').next())
+                        .map(str::to_owned),
+                );
+            } else if let Some(facts) = chart["native_facts"].as_array() {
+                ids.extend(
+                    facts
+                        .iter()
+                        .filter_map(|fact| fact["id"].as_str())
+                        .map(str::to_owned),
+                );
+            }
+            ensure!(
+                !ids.is_empty(),
+                "Reading component lacks native evidence IDs"
+            );
+            let pattern = regex::Regex::new(r"\be[0-9]+\b")?;
+            for field in ["answer", "analysis", "evidence", "unresolved"] {
+                for found in pattern.find_iter(text(&prediction, field)?) {
+                    if !ids.contains(found.as_str()) {
+                        errors.push(format!(
+                            "{field}: cites absent native evidence {}",
+                            found.as_str()
+                        ));
+                    }
+                }
+            }
+            if !matches!(
+                text(&prediction, "status")?,
+                "answer" | "need_information" | "method_limit"
+            ) {
+                errors.push("Unknown reading status".into());
+            }
         }
         let review = self.judge.forward(dsrust::input!{
             function:self.function,inputs:serde_json::to_string(&input.rendered())?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
@@ -161,15 +287,24 @@ impl Graded {
             !feedback.trim().is_empty(),
             "Independent review omitted its evidence"
         );
-        let dimension = match self.function.as_str() {
-            "classification" => "classification",
-            "extraction" | "place" | "moment" | "update" => "extraction",
-            "reading" => "reading",
-            _ => anyhow::bail!("Unknown graded function"),
-        };
-        let passed = errors.is_empty()
-            && review.get("passed") == Some(&json!(true))
-            && text(&review, dimension)? == "pass";
+        for dimension in ["classification", "extraction", "reading", "answer_quality"] {
+            ensure!(
+                matches!(text(&review, dimension)?, "pass" | "fail" | "unobserved"),
+                "Invalid function review dimension"
+            );
+        }
+        let dimensions = functions::dimensions(&self.function)?;
+        let semantic_pass = dimensions
+            .iter()
+            .all(|dimension| text(&review, dimension).is_ok_and(|v| v == "pass"));
+        let raw_passed = review
+            .get("passed")
+            .and_then(Value::as_bool)
+            .context("No independent pass decision")?;
+        // Inapplicable stages do not veto a component. A contradictory summary
+        // is retained visibly instead of being silently rewritten for a win.
+        let summary_consistent = raw_passed == semantic_pass;
+        let passed = errors.is_empty() && semantic_pass;
         let score = if !errors.is_empty() {
             0.
         } else if passed {
@@ -178,9 +313,14 @@ impl Graded {
             judged.min(0.99)
         };
         prediction.example.set("__score", json!(score));
-        prediction.example.set("__feedback",json!(format!("Native checks: {errors:?}. Independent review: {feedback}\nSALIENT PRIMARY FRAWLEY CONTEXT FOR THIS QUESTION TYPE:\n{source}")));
+        prediction.example.set("__feedback",json!(format!("Native checks: {errors:?}. Applicable dimensions: {dimensions:?}. Independent summary consistent with those dimensions: {summary_consistent}. Independent review: {feedback}\nSALIENT PRIMARY FRAWLEY CONTEXT FOR THIS QUESTION TYPE:\n{source}")));
         prediction.example.set("__passed", json!(passed));
-        self.observations.lock().map_err(|_|anyhow::anyhow!("Observation lock poisoned"))?.push(json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"prediction":fields(&prediction),"review":fields(&review),"native_failures":errors}));
+        let observation = json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"prediction":fields(&prediction),"review":fields(&review),"native_failures":errors,"applicable_dimensions":dimensions,"review_summary_consistent":summary_consistent,"score":score,"passed":passed});
+        self.record(false, &observation)?;
+        self.observations
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
+            .push(observation);
         eprintln!(
             "{} {} score {:.3}",
             self.function,
@@ -188,6 +328,17 @@ impl Graded {
             score
         );
         Ok(prediction)
+    }
+    async fn guarded(&self, input: Example, trace: &mut Vec<TraceStep>) -> Result<Prediction> {
+        ensure!(
+            !self.failed.load(Ordering::SeqCst),
+            "Component stopped after an unobserved execution/review failure; no new call submitted"
+        );
+        let result = self.ask(input, trace).await;
+        if result.is_err() {
+            self.failed.store(true, Ordering::SeqCst);
+        }
+        result
     }
     pub fn metric(_example: &Example, prediction: &Prediction) -> f64 {
         prediction
@@ -210,17 +361,24 @@ impl Module for Graded {
         &'a self,
         input: Example,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<Prediction>> + Send + 'a>> {
-        Box::pin(async move { self.ask(input, &mut Vec::new()).await })
+        Box::pin(async move { self.guarded(input, &mut Vec::new()).await })
     }
     fn forward_traced<'a>(
         &'a self,
         input: Example,
         trace: &'a mut Vec<TraceStep>,
     ) -> std::pin::Pin<Box<dyn Future<Output = Result<Prediction>> + Send + 'a>> {
-        Box::pin(self.ask(input, trace))
+        Box::pin(self.guarded(input, trace))
     }
     fn named_predictors(&mut self) -> Vec<NamedPredictor<'_>> {
-        self.oracle.named_predictors()
+        self.oracle
+            .named_predictors()
+            .into_iter()
+            .map(|mut predictor| {
+                predictor.name = self.predictor_name.clone();
+                predictor
+            })
+            .collect()
     }
 }
 
@@ -233,19 +391,389 @@ pub async fn compile(
     directory: &Path,
     max_metrics: usize,
 ) -> Result<Value> {
+    let fixtures = cases
+        .iter()
+        .map(|case| {
+            Ok(Fixture {
+                split: case.split.clone(),
+                example: catalogue::example(case, function, book)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    compile_fixtures(
+        &fixtures,
+        method,
+        function,
+        models,
+        directory,
+        CompileOptions {
+            max_metrics,
+            bootstrap_demos: 2,
+        },
+    )
+    .await
+}
+
+#[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompileOptions {
+    pub max_metrics: usize,
+    /// Zero is conventional instruction-only GEPA. Nonzero explicitly enables
+    /// the port's BootstrapFewShot first; it is not a different search engine.
+    pub bootstrap_demos: usize,
+}
+
+pub fn predictor_name(method: &str, function: &str) -> Result<String> {
+    match function {
+        "reading" | "extraction" => {
+            ensure!(
+                signatures::METHODS.contains(&method) && !matches!(method, "wish" | "unclassified"),
+                "Select a substantive family"
+            );
+            Ok(format!("{function}.{method}"))
+        }
+        "classification" | "place" | "moment" | "update" => Ok(function.to_owned()),
+        _ => anyhow::bail!("Unknown component function"),
+    }
+}
+
+fn declaration(method: &str, function: &str) -> Result<dsrust::signature::Signature> {
+    match function {
+        "reading" => signatures::reading(method),
+        "extraction" => signatures::extraction(method),
+        _ => signatures::auxiliary(function),
+    }
+}
+
+fn declaration_digest(method: &str, function: &str) -> Result<String> {
+    let signature = declaration(method, function)?;
+    Ok(crate::google::digest(serde_json::to_vec(&json!({
+        "signature":dsrust::module::SignatureState::of(&signature),
+        "inputs":signature.inputs.iter().map(|f|json!({"name":f.name,"type":f.annotation()})).collect::<Vec<_>>(),
+        "outputs":signature.outputs.iter().map(|f|json!({"name":f.name,"type":f.annotation()})).collect::<Vec<_>>()
+    }))?))
+}
+
+pub fn teaching_sources() -> BTreeMap<String, String> {
+    [
+        ("book.rs", include_bytes!("book.rs").as_slice()),
+        ("anchors.rs", include_bytes!("anchors.rs").as_slice()),
+        (
+            "coverage.json",
+            include_bytes!("../coverage.json").as_slice(),
+        ),
+        (
+            "reading-catalogue.json",
+            include_bytes!("../../../docs/llm-process/reading-catalogue.json").as_slice(),
+        ),
+        (
+            "source-manifest.json",
+            include_bytes!("../../../docs/llm-process/source-manifest.json").as_slice(),
+        ),
+        (
+            "passages.json",
+            include_bytes!("../../../src-tauri/src/horary_prompts/passages.json").as_slice(),
+        ),
+        (
+            "native-reading-method.rs",
+            include_bytes!("../../../src-tauri/src/reading_method.rs").as_slice(),
+        ),
+        (
+            "native-geocode.rs",
+            include_bytes!("../../../src-tauri/src/geocode.rs").as_slice(),
+        ),
+        (
+            "cities.json",
+            include_bytes!("../../../src/data/cities.json").as_slice(),
+        ),
+        (
+            "us_locations.json",
+            include_bytes!("../../../src/data/us_locations.json").as_slice(),
+        ),
+        (
+            "country_names.json",
+            include_bytes!("../../../src/data/country_names.json").as_slice(),
+        ),
+        (
+            "core/lib.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/lib.rs").as_slice(),
+        ),
+        (
+            "core/astronomy.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/astronomy.rs").as_slice(),
+        ),
+        (
+            "core/book_method.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/book_method.rs").as_slice(),
+        ),
+        (
+            "core/chart_input.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/chart_input.rs").as_slice(),
+        ),
+        (
+            "core/events.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/events.rs").as_slice(),
+        ),
+        (
+            "core/anchor_authority.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/anchor_authority.rs").as_slice(),
+        ),
+        (
+            "core/ephemeris_coefficients.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/ephemeris_coefficients.rs")
+                .as_slice(),
+        ),
+        (
+            "core/review.rs",
+            include_bytes!("../../../crates/horary-ai-core/src/review.rs").as_slice(),
+        ),
+        (
+            "horary-interpretation.schema.json",
+            include_bytes!("../../../src/ai/horary-interpretation.schema.json").as_slice(),
+        ),
+        (
+            "horary-judgement-pipeline.json",
+            include_bytes!("../../../src/ai/horary-judgement-pipeline.json").as_slice(),
+        ),
+    ]
+    .into_iter()
+    .map(|(name, bytes)| (name.to_owned(), crate::google::digest(bytes)))
+    .collect()
+}
+
+pub fn fixtures_digest(fixtures: &[Fixture]) -> Result<String> {
+    Ok(crate::google::digest(serde_json::to_vec(
+        &fixtures
+            .iter()
+            .map(|fixture| json!({"split":fixture.split,"example":fixture.example.rendered()}))
+            .collect::<Vec<_>>(),
+    )?))
+}
+
+fn source_receipt(
+    method: &str,
+    function: &str,
+    compiled: &[u8],
+    dataset_digest: &str,
+) -> Result<Value> {
+    Ok(
+        json!({"version":1,"method":method,"function":function,"predictor_name":predictor_name(method,function)?,
+        "port_revision":crate::native_export::PORT_REVISION,"signatures_sha256":crate::google::digest(include_bytes!("signatures.rs")),
+        "declaration_sha256":declaration_digest(method,function)?,"catalogue_sha256":crate::google::digest(include_bytes!("catalogue.rs")),
+        "functions_sha256":crate::google::digest(include_bytes!("functions.rs")),"optimizer_source_sha256":crate::google::digest(include_bytes!("optimize.rs")),
+        "book_sha256":crate::book::OCR_SHA256,"teaching_sources_sha256":teaching_sources(),"compiled_sha256":crate::google::digest(compiled),"dataset_sha256":dataset_digest}),
+    )
+}
+
+fn exact_keys(value: &Value, keys: &[&str]) -> Result<()> {
+    use std::collections::BTreeSet;
+    ensure!(
+        value
+            .as_object()
+            .context("Expected saved object")?
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>()
+            == keys.iter().copied().collect(),
+        "Saved state has missing or unexpected fields"
+    );
+    Ok(())
+}
+
+/// The port intentionally tolerates partial saved state; a composition gate
+/// cannot. Verify source identity, exact predictor membership, ordered fields,
+/// types and demo privacy before changing the existing live predictor.
+pub fn load_component(
+    predictor: &mut Predict,
+    path: &Path,
+    method: &str,
+    function: &str,
+) -> Result<()> {
+    let compiled = fs::read(path)?;
+    let receipt: Value = serde_json::from_slice(&fs::read(
+        path.parent()
+            .context("No component parent")?
+            .join("component-source.json"),
+    )?)?;
+    let dataset_digest = receipt["dataset_sha256"]
+        .as_str()
+        .context("Component source has no dataset identity")?;
+    ensure!(
+        dataset_digest.len() == 64 && dataset_digest.bytes().all(|b| b.is_ascii_hexdigit()),
+        "Invalid component dataset identity"
+    );
+    ensure!(
+        receipt == source_receipt(method, function, &compiled, dataset_digest)?,
+        "Compiled component source identity differs"
+    );
+    let value: Value = serde_json::from_slice(&compiled)?;
+    let name = predictor_name(method, function)?;
+    exact_keys(&value, &["metadata", &name])?;
+    exact_keys(&value["metadata"], &["dependency_versions"])?;
+    exact_keys(&value["metadata"]["dependency_versions"], &["dspy"])?;
+    exact_keys(
+        &value[&name],
+        &["traces", "train", "demos", "signature", "lm"],
+    )?;
+    exact_keys(&value[&name]["signature"], &["instructions", "fields"])?;
+    for field in value[&name]["signature"]["fields"]
+        .as_array()
+        .context("No ordered fields")?
+    {
+        exact_keys(field, &["prefix", "description"])?;
+    }
+    let state: dsrust::module::ProgramState = serde_json::from_value(value)?;
+    ensure!(
+        state.metadata == dsrust::module::Metadata::default(),
+        "Pinned DSPy metadata differs"
+    );
+    let saved = state.get(&name).context("Required component missing")?;
+    let signature = declaration(method, function)?;
+    ensure!(
+        dsrust::module::SignatureState::of(&predictor.signature)
+            == dsrust::module::SignatureState::of(&signature),
+        "Target predictor is not the baseline declaration"
+    );
+    ensure!(
+        saved.signature.fields == dsrust::module::SignatureState::of(&signature).fields,
+        "Saved ordered fields differ"
+    );
+    ensure!(
+        !saved.signature.instructions.trim().is_empty()
+            && saved.traces.is_empty()
+            && saved.train.is_empty()
+            && saved.lm.is_none(),
+        "Saved component carries empty teaching or runtime/training state"
+    );
+    let permitted = signature
+        .inputs
+        .iter()
+        .map(|field| field.name.as_str())
+        .chain(signature.outputs.iter().map(|field| field.name.as_str()))
+        .collect::<std::collections::BTreeSet<_>>();
+    for demo in &saved.demos {
+        ensure!(
+            demo.keys().all(|key| permitted.contains(key.as_str()))
+                && demo.values().all(Value::is_string),
+            "Saved demo contains private/unknown or differently typed fields"
+        );
+        ensure!(
+            signature
+                .outputs
+                .iter()
+                .all(|field| demo.contains_key(&field.name)),
+            "Saved demo lacks required outputs"
+        );
+    }
+    // All validation precedes mutation. Apply only the exact predictor's fields.
+    saved.signature.restore(&mut predictor.signature);
+    predictor.demos = saved
+        .demos
+        .iter()
+        .map(|demo| {
+            Example::new(
+                demo.iter()
+                    .map(|(name, value)| (name.clone(), value.clone())),
+            )
+            .with_inputs(signature.inputs.iter().map(|field| field.name.clone()))
+        })
+        .collect();
+    Ok(())
+}
+
+pub fn load_component_for_dataset(
+    predictor: &mut Predict,
+    path: &Path,
+    method: &str,
+    function: &str,
+    expected_dataset_sha256: &str,
+) -> Result<()> {
+    let receipt: Value = serde_json::from_slice(&fs::read(
+        path.parent()
+            .context("No component parent")?
+            .join("component-source.json"),
+    )?)?;
+    ensure!(
+        receipt["dataset_sha256"] == expected_dataset_sha256,
+        "Compiled component belongs to a different fixture/input/label/split bank"
+    );
+    load_component(predictor, path, method, function)
+}
+
+/// Serialize observed grades separately from execution errors. DsRust's own
+/// Evaluate keeps a failure_score for aggregation; it is never reported as an
+/// observed semantic zero here.
+pub fn evaluation_receipt(evaluation: &dsrust::Evaluation) -> Value {
+    json!({"score":if evaluation.failure_count()==0{Some(evaluation.score)}else{None},
+        "case_count":evaluation.results.len(),"execution_errors":evaluation.failure_count(),
+        "observations":evaluation.results.iter().map(|row|match &row.prediction {
+            Ok(prediction)=>json!({"case_id":row.example.get("case_id"),"score":row.score,"passed":prediction.get("__passed"),"prediction":fields(prediction)}),
+            Err(error)=>json!({"case_id":row.example.get("case_id"),"score":null,"passed":null,"execution_error":error})
+        }).collect::<Vec<_>>()})
+}
+
+struct ReflectionGuard {
+    inner: Arc<dyn DynChatModel>,
+    failed: Arc<AtomicBool>,
+}
+impl DynChatModel for ReflectionGuard {
+    fn forward_dyn<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+        request: &'a dsrust::lm::api::LmRequest,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<dsrust::lm::api::LmResponse>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            ensure!(
+                !self.failed.load(Ordering::SeqCst),
+                "Unobserved component failure withheld reflection; no teacher call submitted"
+            );
+            let result = self.inner.forward_dyn(http, request).await;
+            if result.is_err() {
+                self.failed.store(true, Ordering::SeqCst);
+            }
+            result
+        })
+    }
+    fn capabilities_dyn<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+    ) -> std::pin::Pin<Box<dyn Future<Output = dsrust::lm::Capabilities> + Send + 'a>> {
+        self.inner.capabilities_dyn(http)
+    }
+    fn native_reasoning_usable_dyn(&self) -> bool {
+        self.inner.native_reasoning_usable_dyn()
+    }
+}
+
+pub async fn compile_fixtures(
+    fixtures: &[Fixture],
+    method: &str,
+    function: &str,
+    models: &crate::runner::Models,
+    directory: &Path,
+    options: CompileOptions,
+) -> Result<Value> {
+    ensure!(
+        options.max_metrics > 0,
+        "GEPA needs a positive metric budget"
+    );
     fs::create_dir_all(directory)?;
     let mut train = Vec::new();
     let mut development = Vec::new();
     let mut test = Vec::new();
-    for case in cases {
-        let example = catalogue::example(case, function, book)?;
-        match case.split.as_str() {
-            "train" => train.push(example),
-            "development" => development.push(example),
-            "test" => test.push(example),
-            _ => anyhow::bail!("Unknown split"),
+    for fixture in fixtures {
+        match fixture.split.as_str() {
+            "train" => train.push(fixture.example.clone()),
+            "development" => development.push(fixture.example.clone()),
+            "test" => test.push(fixture.example.clone()),
+            _ => anyhow::bail!("Unknown component split"),
         }
     }
+    ensure!(
+        !train.is_empty() && !development.is_empty() && !test.is_empty(),
+        "All three component pools are required"
+    );
     let all = train
         .iter()
         .chain(&development)
@@ -258,7 +786,10 @@ pub async fn compile(
         &all,
         models.student.clone(),
         models.teacher.clone(),
-    )?;
+    )?
+    .with_stream(directory.join("observations.jsonl"))?;
+    program.save(&directory.join("baseline-program.json"))?;
+    let dataset_digest = fixtures_digest(fixtures)?;
     let before = Evaluate::new(
         development.clone(),
         |input| program.forward(input),
@@ -266,35 +797,65 @@ pub async fn compile(
     )
     .run()
     .await;
+    crate::queue::write_json_atomic(&directory.join("before.json"), &evaluation_receipt(&before))?;
+    program.save_observations(&directory.join("before-observations.json"))?;
     ensure!(
         before.failure_count() == 0,
         "Baseline contains execution/review errors; no learned comparison can be qualified"
     );
-    let mut strong = Graded::new(
-        method,
-        function,
-        &all,
-        models.teacher.clone(),
-        models.teacher.clone(),
-    )?;
-    let mut bootstrap = BootstrapFewShot::new(Graded::metric);
-    bootstrap.max_bootstrapped_demos = 2;
-    bootstrap.max_labeled_demos = 0;
-    bootstrap.metric_threshold = Some(1.);
-    bootstrap.max_errors = 1;
-    let demos = bootstrap
-        .compile_with_teacher(&mut program, &mut strong, &train)
-        .await?;
+    let demos = if options.bootstrap_demos == 0 {
+        0
+    } else {
+        let mut strong = Graded::new(
+            method,
+            function,
+            &all,
+            models.teacher.clone(),
+            models.teacher.clone(),
+        )?
+        .with_stream(directory.join("teacher-observations.jsonl"))?;
+        let mut bootstrap = BootstrapFewShot::new(Graded::metric);
+        bootstrap.max_bootstrapped_demos = options.bootstrap_demos;
+        bootstrap.max_labeled_demos = 0;
+        bootstrap.metric_threshold = Some(1.);
+        bootstrap.max_errors = 1;
+        let result = bootstrap
+            .compile_with_teacher(&mut program, &mut strong, &train)
+            .await;
+        strong.save_observations(&directory.join("teacher-observations.json"))?;
+        result?
+    };
+    program.save(&directory.join("bootstrapped-full.json"))?;
     // Constant primary context is supplied on every real call. Keeping it in
     // every demonstration would repeat entire book chapters without adding data.
     for demo in &mut program.oracle.demos {
         *demo = crate::demo::compact(demo)?;
     }
-    let outcome = GEPA::new(Graded::feedback, models.teacher.clone())
-        .with_max_metric_calls(max_metrics)
+    program.save(&directory.join("bootstrapped.json"))?;
+    let reflection = Arc::new(ReflectionGuard {
+        inner: models.teacher.clone(),
+        failed: program.failed.clone(),
+    });
+    let outcome = GEPA::new(Graded::feedback, reflection)
+        .with_max_metric_calls(options.max_metrics)
         .with_seed(23)
         .compile(&mut program, &train, &development)
         .await?;
+    program.save_observations(&directory.join("search-observations.json"))?;
+    ensure!(
+        !program.failed.load(Ordering::SeqCst),
+        "GEPA encountered an unobserved execution/review failure; provisional engine scores/candidate are withheld"
+    );
+    program.save(&directory.join("compiled.json"))?;
+    crate::queue::write_json_atomic(
+        &directory.join("component-source.json"),
+        &source_receipt(
+            method,
+            function,
+            &fs::read(directory.join("compiled.json"))?,
+            &dataset_digest,
+        )?,
+    )?;
     let after = Evaluate::new(
         development.clone(),
         |input| program.forward(input),
@@ -302,27 +863,393 @@ pub async fn compile(
     )
     .run()
     .await;
+    crate::queue::write_json_atomic(&directory.join("after.json"), &evaluation_receipt(&after))?;
     let held = Evaluate::new(test, |input| program.forward(input), Graded::metric)
         .run()
         .await;
+    crate::queue::write_json_atomic(&directory.join("held.json"), &evaluation_receipt(&held))?;
+    program.save_observations(&directory.join("observations.json"))?;
+    let observed = after.failure_count() == 0 && held.failure_count() == 0;
+    let review_consistent = program
+        .observations
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
+        .iter()
+        .all(|observation| observation["review_summary_consistent"] == true);
+    let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":crate::google::STUDENT,"bootstrap_demos":demos,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     ensure!(
-        after.failure_count() == 0 && held.failure_count() == 0,
+        observed,
         "A provider/parser/reviewer error remains unqualified, never a fabricated semantic zero"
     );
-    let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":crate::google::STUDENT,"bootstrap_demos":demos,"before_development":before.score,"after_development":after.score,"held_out":held.score,"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"application_promoted":false});
-    program.save(&directory.join("compiled.json"))?;
-    fs::write(
-        directory.join("observations.json"),
-        serde_json::to_vec_pretty(
-            &*program
-                .observations
-                .lock()
-                .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?,
-        )?,
-    )?;
-    fs::write(
-        directory.join("result.json"),
-        serde_json::to_vec_pretty(&result)?,
-    )?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod component_tests {
+    use super::*;
+    use dsrust::DummyLM;
+
+    fn review(
+        classification: &str,
+        extraction: &str,
+        reading: &str,
+        answer_quality: &str,
+        passed: bool,
+    ) -> Example {
+        dsrust::example! {score:0.75,passed:passed,classification:classification,extraction:extraction,reading:reading,answer_quality:answer_quality,feedback:"Scripted mechanics review with observed output; not a source-qualified judgment."}
+    }
+    fn classification_input() -> Example {
+        dsrust::example!{question:"Will I sell my bicycle?",conversation:"[]",catalogue:"Actual declared catalogue only.",case_id:"private-case-id",expected:"PRIVATE GOLD MUST STAY OUT OF ORACLE",__review_source:"Private primary context for the independent reviewer."}
+            .with_inputs(["question","conversation","catalogue"])
+    }
+    fn classification_reply() -> Example {
+        dsrust::example! {method:"movable_deal",facet:"event",branch:"pure_completion",principal:"querent",clarification:""}
+    }
+    #[tokio::test]
+    async fn classification_metric_ignores_absent_other_stages_and_keeps_gold_private() {
+        let oracle = Arc::new(DummyLM::new([classification_reply()]));
+        let judge = Arc::new(DummyLM::new([review("pass", "fail", "fail", "fail", true)]));
+        let input = classification_input();
+        let program = Graded::new(
+            "all",
+            "classification",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge.clone(),
+        )
+        .unwrap();
+        let output = program.forward(input).await.unwrap();
+        assert_eq!(output.get("__score"), Some(&json!(1.0)));
+        assert_eq!(output.get("__passed"), Some(&json!(true)));
+        let request = &oracle.asked()[0];
+        assert!(!format!("{} {:?}", request.system, request.turns).contains("PRIVATE GOLD"));
+        assert!(!format!("{} {:?}", request.system, request.turns).contains("private-case-id"));
+        assert!(judge.asked()[0].last_message().contains("PRIVATE GOLD"));
+        assert!(
+            judge.asked()[0]
+                .system
+                .contains("Applicable dimensions: classification")
+        );
+    }
+    #[tokio::test]
+    async fn contradictory_summary_is_retained_without_vetoing_scoped_learning() {
+        let oracle = Arc::new(DummyLM::new([classification_reply()]));
+        let judge = Arc::new(DummyLM::new([review(
+            "pass", "fail", "fail", "fail", false,
+        )]));
+        let input = classification_input();
+        let program = Graded::new(
+            "all",
+            "classification",
+            std::slice::from_ref(&input),
+            oracle,
+            judge,
+        )
+        .unwrap();
+        let output = program.forward(input).await.unwrap();
+        assert_eq!(output.get("__score"), Some(&json!(1.0)));
+        let observations = program.observations.lock().unwrap();
+        assert_eq!(observations[0]["review"]["passed"], false);
+        assert_eq!(observations[0]["review_summary_consistent"], false);
+        assert_eq!(
+            observations[0]["applicable_dimensions"],
+            json!(["classification"])
+        );
+    }
+    #[tokio::test]
+    async fn reader_cannot_pass_by_procedure_while_failing_to_answer() {
+        let input=dsrust::example!{question:"Synthetic question.",consultation:"Independent declared inputs.",chart_evidence:"{\"facts\":\"ID\\tKIND\\tLABEL\\tCALCULATED TESTIMONY\\ne1\\tboundary\\tLimits\\tSynthetic supplied boundary.\\n\"}",source_text:"Synthetic primary context.",expected:"Synthetic rubric.",case_id:"synthetic"}
+            .with_inputs(["question","consultation","chart_evidence","source_text"]);
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {status:"answer",answer:"",analysis:"Synthetic e1 observation.",evidence:"e1",unresolved:""},
+        ]));
+        let judge = Arc::new(DummyLM::new([review(
+            "unobserved",
+            "unobserved",
+            "pass",
+            "fail",
+            false,
+        )]));
+        let output = Graded::new(
+            "movable_deal",
+            "reading",
+            std::slice::from_ref(&input),
+            oracle,
+            judge,
+        )
+        .unwrap()
+        .forward(input)
+        .await
+        .unwrap();
+        assert_eq!(output.get("__passed"), Some(&json!(false)));
+        assert_ne!(output.get("__score"), Some(&json!(1.0)));
+    }
+    #[tokio::test]
+    async fn received_invalid_fact_json_becomes_native_feedback_not_a_transport_retry() {
+        let input=dsrust::example!{question:"My bicycle.",conversation:"[]",context:"Actual device only.",requirements:"Declared extraction contract.",expected:"Synthetic rubric.",__review_source:"Synthetic primary context."}
+            .with_inputs(["question","conversation","context","requirements"]);
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {facts:"not JSON",missing:"[]",inferences:"",clarification:""},
+        ]));
+        let judge = Arc::new(DummyLM::new([review(
+            "unobserved",
+            "fail",
+            "unobserved",
+            "unobserved",
+            false,
+        )]));
+        let program = Graded::new(
+            "movable_deal",
+            "extraction",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge,
+        )
+        .unwrap();
+        let prediction = program.forward(input).await.unwrap();
+        assert_eq!(prediction.get("__score"), Some(&json!(0.0)));
+        assert!(
+            text(&prediction, "__feedback")
+                .unwrap()
+                .contains("Native fact array rejected")
+        );
+        assert!(!program.failed.load(Ordering::SeqCst));
+        assert_eq!(oracle.asked().len(), 1);
+        assert_eq!(
+            program.observations.lock().unwrap()[0]["prediction"]["facts"],
+            "not JSON"
+        );
+    }
+    #[tokio::test]
+    async fn unobserved_execution_stops_future_oracle_and_reflection_submissions() {
+        let input = classification_input();
+        let oracle = Arc::new(DummyLM::new([]));
+        let judge = Arc::new(DummyLM::new([]));
+        let program = Graded::new(
+            "all",
+            "classification",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge.clone(),
+        )
+        .unwrap();
+        assert!(program.forward(input.clone()).await.is_err());
+        assert!(program.forward(input).await.is_err());
+        assert_eq!(oracle.asked().len(), 1);
+        assert!(judge.asked().is_empty());
+        let teacher = Arc::new(DummyLM::new([]));
+        let reflection = ReflectionGuard {
+            inner: teacher.clone(),
+            failed: program.failed.clone(),
+        };
+        let request = dsrust::lm::api::LmRequest::new("Synthetic reflection", vec![]);
+        assert!(
+            reflection
+                .forward_dyn(&reqwest::Client::new(), &request)
+                .await
+                .is_err()
+        );
+        assert!(teacher.asked().is_empty());
+    }
+    fn saved_component(
+        directory: &Path,
+        function: &str,
+        method: &str,
+        mutate: impl FnOnce(&mut Value),
+    ) -> PathBuf {
+        let declaration = declaration(method, function).unwrap();
+        let state = dsrust::module::ProgramState::new(BTreeMap::from([(
+            predictor_name(method, function).unwrap(),
+            dsrust::module::PredictorState::of(&declaration, &[]),
+        )]));
+        let mut value = serde_json::to_value(state).unwrap();
+        mutate(&mut value);
+        let bytes = serde_json::to_vec_pretty(&value).unwrap();
+        let path = directory.join("compiled.json");
+        fs::write(&path, &bytes).unwrap();
+        fs::write(
+            directory.join("component-source.json"),
+            serde_json::to_vec_pretty(
+                &source_receipt(
+                    method,
+                    function,
+                    &bytes,
+                    &crate::google::digest("Synthetic fixture corpus"),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        path
+    }
+    #[test]
+    fn exact_component_loads_but_wrong_scope_partial_fields_private_state_do_not() {
+        let directory = tempfile::tempdir().unwrap();
+        let model = Arc::new(DummyLM::new([]));
+        let path = saved_component(directory.path(), "extraction", "movable_deal", |value| {
+            value["extraction.movable_deal"]["signature"]["instructions"] =
+                json!("Synthetic improved instruction.");
+        });
+        let mut target = plain(
+            signatures::extraction("movable_deal").unwrap(),
+            model.clone(),
+        );
+        load_component(&mut target, &path, "movable_deal", "extraction").unwrap();
+        assert_eq!(
+            target.signature.instructions,
+            "Synthetic improved instruction."
+        );
+        assert!(load_component(&mut target, &path, "money", "extraction").is_err());
+        for mutate in [
+            |v: &mut Value| {
+                v["extraction.money"] = v["extraction.movable_deal"].clone();
+            },
+            |v: &mut Value| {
+                v["extraction.movable_deal"]["signature"]["fields"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+            },
+            |v: &mut Value| {
+                v["extraction.movable_deal"]["signature"]["fields"]
+                    .as_array_mut()
+                    .unwrap()
+                    .swap(0, 1);
+            },
+            |v: &mut Value| {
+                v["extraction.movable_deal"]["lm"] = json!({"key":"Synthetic forbidden runtime"});
+            },
+            |v: &mut Value| {
+                v["extraction.movable_deal"]["demos"] = json!([{"__feedback":"private"}]);
+            },
+        ] {
+            let path = saved_component(directory.path(), "extraction", "movable_deal", mutate);
+            let mut target = plain(
+                signatures::extraction("movable_deal").unwrap(),
+                model.clone(),
+            );
+            let original = target.signature.instructions.clone();
+            assert!(load_component(&mut target, &path, "movable_deal", "extraction").is_err());
+            assert_eq!(target.signature.instructions, original);
+        }
+    }
+    #[tokio::test]
+    async fn real_port_compile_saves_loadable_function_and_three_observed_phase_receipts() {
+        let fixtures = ["train", "development", "test"].map(|split| {
+            let mut example = classification_input();
+            example.set(
+                "question",
+                json!(format!("Synthetic {split}: will I sell my bicycle?")),
+            );
+            example.set("case_id", json!(format!("synthetic-{split}")));
+            Fixture {
+                split: split.into(),
+                example,
+            }
+        });
+        // Scripted replies test the actual pinned GEPA compiler, not a simulated
+        // search or a claim of model-quality improvement.
+        let oracle = Arc::new(DummyLM::new((0..100).map(|_| classification_reply())));
+        let judge =
+            Arc::new(DummyLM::new((0..100).map(|_| {
+                review("pass", "unobserved", "unobserved", "unobserved", true)
+            })));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: judge,
+            teacher_id: "Synthetic offline model only".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let result = compile_fixtures(
+            &fixtures,
+            "all",
+            "classification",
+            &models,
+            directory.path(),
+            CompileOptions {
+                max_metrics: 2,
+                bootstrap_demos: 0,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["bootstrap_demos"], 0);
+        assert_eq!(result["component_only"], true);
+        assert_eq!(result["application_promoted"], false);
+        assert!(oracle.asked().len() >= 4);
+        for phase in ["before.json", "after.json", "held.json"] {
+            let receipt: Value =
+                serde_json::from_slice(&fs::read(directory.path().join(phase)).unwrap()).unwrap();
+            assert_eq!(receipt["execution_errors"], 0);
+            assert_eq!(receipt["score"], 1.0);
+        }
+        let mut live = plain(signatures::auxiliary("classification").unwrap(), oracle);
+        load_component(
+            &mut live,
+            &directory.path().join("compiled.json"),
+            "all",
+            "classification",
+        )
+        .unwrap();
+        assert!(live.demos.is_empty());
+    }
+    #[test]
+    fn source_drift_and_state_tampering_fail_before_predictor_mutation() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = saved_component(directory.path(), "classification", "all", |_| {});
+        let mut receipt: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("component-source.json")).unwrap(),
+        )
+        .unwrap();
+        receipt["book_sha256"] = json!(crate::google::digest("Different source"));
+        fs::write(
+            directory.path().join("component-source.json"),
+            serde_json::to_vec(&receipt).unwrap(),
+        )
+        .unwrap();
+        let mut target = plain(
+            signatures::auxiliary("classification").unwrap(),
+            Arc::new(DummyLM::new([])),
+        );
+        assert!(load_component(&mut target, &path, "all", "classification").is_err());
+        let path = saved_component(directory.path(), "classification", "all", |_| {});
+        fs::write(&path, b"{}").unwrap();
+        assert!(load_component(&mut target, &path, "all", "classification").is_err());
+    }
+    #[test]
+    fn expected_dataset_and_split_identity_are_required_for_a_composition_gate() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = saved_component(directory.path(), "classification", "all", |_| {});
+        let mut target = plain(
+            signatures::auxiliary("classification").unwrap(),
+            Arc::new(DummyLM::new([])),
+        );
+        assert!(
+            load_component_for_dataset(
+                &mut target,
+                &path,
+                "all",
+                "classification",
+                &crate::google::digest("Different current corpus")
+            )
+            .is_err()
+        );
+        load_component_for_dataset(
+            &mut target,
+            &path,
+            "all",
+            "classification",
+            &crate::google::digest("Synthetic fixture corpus"),
+        )
+        .unwrap();
+        let mut fixture = Fixture {
+            split: "train".into(),
+            example: classification_input(),
+        };
+        let before = fixtures_digest(std::slice::from_ref(&fixture)).unwrap();
+        fixture.split = "test".into();
+        assert_ne!(before, fixtures_digest(&[fixture]).unwrap());
+    }
 }

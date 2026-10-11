@@ -19,6 +19,7 @@ pub struct Codex {
     directory: PathBuf,
     max_calls: usize,
     spent: AtomicUsize,
+    shared_budget: Option<std::sync::Arc<crate::google::CallBudget>>,
     failed: AtomicBool,
     serial: Mutex<()>,
 }
@@ -153,9 +154,36 @@ impl Codex {
             directory,
             max_calls,
             spent: AtomicUsize::new(0),
+            shared_budget: None,
             failed: AtomicBool::new(false),
             serial: Mutex::new(()),
         })
+    }
+    /// The teacher pool charges only fresh subprocess submissions, not cache hits.
+    pub fn with_budget(mut self, budget: std::sync::Arc<crate::google::CallBudget>) -> Self {
+        self.shared_budget = Some(budget);
+        self
+    }
+    fn identity(&self, request: &LmRequest) -> Result<(String, String)> {
+        let executable_sha = crate::google::digest(fs::read(&self.executable)?);
+        let key = crate::google::digest(format!(
+            "codex-login-text-v1\0{executable_sha}\0{}",
+            request.cache_key("codex-saved-login")
+        ));
+        Ok((executable_sha, key))
+    }
+    /// Reuse only the existing successful exact request without submitting or
+    /// resuming a failed/unsettled operation. Teacher routing may call this
+    /// before trying a newly available Gemini model.
+    pub fn cached_response(&self, request: &LmRequest) -> Result<Option<LmResponse>> {
+        let (_, key) = self.identity(request)?;
+        let path = self.directory.join(key).join("response.json");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let mut response: LmResponse = serde_json::from_slice(&fs::read(path)?)?;
+        response.cache_hit = true;
+        Ok(Some(response))
     }
     async fn request(&self, request: &LmRequest) -> Result<LmResponse> {
         let _guard = self.serial.lock().await;
@@ -167,16 +195,10 @@ impl Codex {
             request.output_schema().is_none() && request.tools.is_empty(),
             "Teacher uses ordinary unconstrained text without tools"
         );
-        let executable_sha = crate::google::digest(fs::read(&self.executable)?);
-        let key = crate::google::digest(format!(
-            "codex-login-text-v1\0{executable_sha}\0{}",
-            request.cache_key("codex-saved-login")
-        ));
+        let (executable_sha, key) = self.identity(request)?;
         let directory = self.directory.join(&key);
         let cached = directory.join("response.json");
-        if cached.exists() {
-            let mut response: LmResponse = serde_json::from_slice(&fs::read(cached)?)?;
-            response.cache_hit = true;
+        if let Some(response) = self.cached_response(request)? {
             return Ok(response);
         }
         ensure!(
@@ -207,6 +229,26 @@ impl Codex {
             )?,
         )?;
         fs::write(directory.join("prompt.txt"), &prompt)?;
+        if let Some(budget) = &self.shared_budget
+            && budget.reserve().is_none()
+        {
+            fs::write(
+                directory.join("failure.json"),
+                serde_json::to_vec_pretty(&json!({
+                    "reason":"shared teacher physical-call cap exhausted",
+                    "generation_submitted":false,"automatic_retry":false
+                }))?,
+            )?;
+            return Err(crate::google::ProviderFailure {
+                disposition: crate::google::Disposition::BudgetExhausted,
+                model: "codex-saved-login-temporary-teacher".into(),
+                http_status: None,
+                retry_after: None,
+                generation_submitted: false,
+                detail: "Shared teacher physical-call cap exhausted".into(),
+            }
+            .into());
+        }
         self.spent.fetch_add(1, Ordering::Relaxed);
         eprintln!(
             "Codex temporary teacher generation {} {}",
@@ -281,6 +323,50 @@ impl ChatModel for Codex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn exact_cached_teacher_response_uses_no_physical_budget_or_subprocess() {
+        let dir = tempfile::tempdir().unwrap();
+        let executable = dir.path().join("public-executable-snapshot");
+        fs::write(&executable, b"Synthetic non-executable identity").unwrap();
+        let budget = crate::google::CallBudget::new(0);
+        let model = Codex::new(executable, dir.path().join("cache"), 0)
+            .unwrap()
+            .with_budget(budget.clone());
+        let request = LmRequest::new(
+            "gepa-reflection",
+            vec![dsrust::lm::api::LmMessage::user(vec![
+                dsrust::lm::api::LmPart::text("Synthetic exact source-bound request"),
+            ])],
+        );
+        let (_, key) = model.identity(&request).unwrap();
+        let operation = model.directory.join(key);
+        fs::create_dir(&operation).unwrap();
+        fs::write(
+            operation.join("response.json"),
+            serde_json::to_vec(&LmResponse {
+                model: Some("codex-saved-login-temporary-teacher".into()),
+                outputs: vec![LmOutput::text("Synthetic completed answer")],
+                ..Default::default()
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let response = model
+            .forward(&reqwest::Client::new(), &request)
+            .await
+            .unwrap();
+        assert!(response.cache_hit);
+        assert_eq!(budget.spent(), 0);
+        assert_eq!(model.spent.load(Ordering::Relaxed), 0);
+        assert!(!operation.join("events.jsonl").exists());
+        let changed = LmRequest::new(
+            "gepa-reflection",
+            vec![dsrust::lm::api::LmMessage::user(vec![
+                dsrust::lm::api::LmPart::text("Different request"),
+            ])],
+        );
+        assert!(model.cached_response(&changed).unwrap().is_none());
+    }
     #[test]
     fn uses_login_without_output_schema_or_model_override() {
         let a = arguments(std::path::Path::new("answer.txt"));

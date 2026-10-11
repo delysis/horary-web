@@ -365,6 +365,40 @@ async fn journey_nonliteral_fact_withholds_chart_and_reading_even_if_judge_passe
 }
 
 #[tokio::test]
+async fn journey_conflicting_or_empty_fact_paths_withhold_chart_and_reader() {
+    for empty in [false, true] {
+        let case = case();
+        let mut observed = facts();
+        let mut conflict = observed[1].clone();
+        conflict.value = "another-person".into();
+        if empty {
+            conflict.field = "   ".into();
+        }
+        observed.push(conflict);
+        let student = Arc::new(DummyLM::new([
+            classify("movable_deal", "pure_completion"),
+            extract(&observed, &[]),
+        ]));
+        let judge = Arc::new(DummyLM::new([review("pass", "pass", true)]));
+        let program = program(&case, student.clone(), judge);
+        let result = program
+            .forward(journey::example(&case).inputs().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(student.call_count(), 2);
+        assert_eq!(result.get("__passed"), Some(&json!(false)));
+        let records = program.observations.lock().unwrap();
+        assert!(records[0]["stages"].get("chart").is_none());
+        assert!(records[0]["stages"].get("reading").is_none());
+        assert!(
+            records[0]["native_failures"]
+                .to_string()
+                .contains("empty or duplicate canonical path")
+        );
+    }
+}
+
+#[tokio::test]
 async fn journey_unknown_method_or_branch_is_observed_rejection_without_downstream_work() {
     for (method, branch) in [
         ("money", "not_a_book_branch"),
@@ -427,6 +461,38 @@ async fn journey_model_error_is_not_an_observed_semantic_zero() {
     assert!(student.call_count() >= 1);
     assert_eq!(judge.call_count(), 0);
     assert!(program.observations.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn journey_checks_citations_in_answer_analysis_and_unresolved() {
+    for field in ["answer", "analysis", "unresolved"] {
+        let case = case();
+        let mut reply = reading();
+        reply.set(field, json!("Invented native fact e999999"));
+        let student = Arc::new(DummyLM::new([
+            classify("movable_deal", "pure_completion"),
+            extract(&facts(), &[]),
+            reply,
+        ]));
+        // A mistaken all-pass independent answer cannot hide an invented ID.
+        let judge = Arc::new(DummyLM::new([review("pass", "pass", true)]));
+        let program = program(&case, student, judge);
+        let result = program
+            .forward(journey::example(&case).inputs().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(result.get("__passed"), Some(&json!(false)));
+        let observations = program.observations.lock().unwrap();
+        assert!(
+            observations[0]["native_failures"]
+                .to_string()
+                .contains(&format!("e999999 in {field}"))
+        );
+        assert_eq!(
+            observations[0]["review"]["passed"], true,
+            "Keep the raw disagreement"
+        );
+    }
 }
 
 #[tokio::test]

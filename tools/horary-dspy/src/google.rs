@@ -4,15 +4,19 @@ use dsrust::lm::{
     Capabilities, ChatModel,
     api::{LmOutput, LmRequest, LmResponse},
 };
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderValue, RETRY_AFTER};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     collections::VecDeque,
     fs,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
-    time::{Duration, Instant},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
 
@@ -21,6 +25,406 @@ pub const STUDENT: &str = "gemma-4-26b-a4b-it";
 pub const CREDENTIAL_FILE: &str = "/Users/george/.codex/credentials/horary-google-api.key";
 const API: &str = "https://generativelanguage.googleapis.com/v1beta";
 const MAX_SUBMISSIONS: usize = 3;
+const WINDOW: Duration = Duration::from_secs(61);
+const MAX_AUTOMATIC_DELAY: Duration = Duration::from_secs(10 * 60);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Disposition {
+    QuotaOrUnavailable,
+    QuotaDeferred,
+    ContextLimit,
+    BudgetExhausted,
+    Uncertain,
+    Authentication,
+    CompletedOutput,
+    InvalidRequest,
+    PriorUnresolved,
+}
+
+#[derive(Debug)]
+pub struct ProviderFailure {
+    pub disposition: Disposition,
+    pub model: String,
+    pub http_status: Option<u16>,
+    pub retry_after: Option<Duration>,
+    pub generation_submitted: bool,
+    pub detail: String,
+}
+impl std::fmt::Display for ProviderFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Google {} {:?}: {}",
+            self.model, self.disposition, self.detail
+        )
+    }
+}
+impl std::error::Error for ProviderFailure {}
+pub fn disposition(error: &anyhow::Error) -> Option<&ProviderFailure> {
+    error.downcast_ref::<ProviderFailure>()
+}
+fn provider_error(
+    model: &str,
+    disposition: Disposition,
+    http_status: Option<u16>,
+    retry_after: Option<Duration>,
+    generation_submitted: bool,
+    detail: impl Into<String>,
+) -> anyhow::Error {
+    ProviderFailure {
+        disposition,
+        model: model.into(),
+        http_status,
+        retry_after,
+        generation_submitted,
+        detail: detail.into(),
+    }
+    .into()
+}
+pub fn model_context_limit(listing: &Value, model: &str) -> Result<usize> {
+    let row = listing["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|row| row["name"] == format!("models/{model}"))
+        .or_else(|| {
+            ["student", "teacher"]
+                .iter()
+                .map(|key| &listing[key])
+                .find(|row| row["name"] == format!("models/{model}"))
+        })
+        .context("Requested model is absent from actual listing")?;
+    let info: ModelInfo = serde_json::from_value(row.clone())?;
+    info.id()?;
+    Ok(info.input_token_limit)
+}
+pub fn quota_hints(provider: &Value, retry_after: Option<&str>, model: &str) -> Value {
+    serde_json::to_value(quota_advice(
+        &serde_json::to_vec(provider).expect("JSON serializable"),
+        retry_after,
+        model,
+    ))
+    .expect("Quota observation serializable")
+}
+
+/// One physical-generation bound shared by all routes in a teacher pool.
+pub struct CallBudget {
+    spent: AtomicUsize,
+    maximum: usize,
+}
+impl CallBudget {
+    pub fn new(maximum: usize) -> Arc<Self> {
+        Arc::new(Self {
+            spent: AtomicUsize::new(0),
+            maximum,
+        })
+    }
+    pub fn spent(&self) -> usize {
+        self.spent.load(Ordering::Relaxed)
+    }
+    pub fn remaining(&self) -> usize {
+        self.maximum.saturating_sub(self.spent())
+    }
+    pub(crate) fn reserve(&self) -> Option<usize> {
+        self.spent
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                (n < self.maximum).then(|| n + 1)
+            })
+            .ok()
+            .map(|n| n + 1)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfo {
+    pub name: String,
+    pub supported_generation_methods: Vec<String>,
+    pub input_token_limit: usize,
+    pub output_token_limit: usize,
+}
+impl ModelInfo {
+    pub fn id(&self) -> Result<&str> {
+        let id = self
+            .name
+            .strip_prefix("models/")
+            .context("Model listing lacks resource prefix")?;
+        ensure!(
+            !id.is_empty()
+                && id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'.' | b'_')),
+            "Invalid listed model identity"
+        );
+        ensure!(
+            self.input_token_limit > 0 && self.output_token_limit > 0,
+            "Listed model has no positive context/output limit"
+        );
+        Ok(id)
+    }
+}
+
+#[derive(Default)]
+struct PaceState {
+    window: VecDeque<(Instant, usize)>,
+    requests: VecDeque<Instant>,
+    rate_debt: Option<Instant>,
+    provider_retry: Option<Instant>,
+    probed_tpm: usize,
+    reported_tpm: Option<usize>,
+    reported_rpm: Option<usize>,
+}
+/// Share this object across student jobs. A rate hint is not a context limit.
+pub struct RateLimiter {
+    hint: usize,
+    probe_ceiling: usize,
+    state: Mutex<PaceState>,
+}
+impl RateLimiter {
+    pub fn new(tokens_per_minute_hint: usize) -> Result<Arc<Self>> {
+        ensure!(tokens_per_minute_hint > 0, "Rate hint must be positive");
+        Self::with_probe_ceiling(
+            tokens_per_minute_hint,
+            tokens_per_minute_hint.saturating_mul(16),
+        )
+    }
+    pub fn with_probe_ceiling(hint: usize, probe_ceiling: usize) -> Result<Arc<Self>> {
+        ensure!(
+            hint > 0 && probe_ceiling >= hint,
+            "Positive rate hint and a ceiling at least that hint are required"
+        );
+        Ok(Arc::new(Self {
+            hint,
+            probe_ceiling,
+            state: Mutex::new(PaceState {
+                probed_tpm: hint,
+                ..Default::default()
+            }),
+        }))
+    }
+    async fn pace(&self, tokens: usize) -> Duration {
+        let begun = Instant::now();
+        loop {
+            let mut state = self.state.lock().await;
+            while state
+                .window
+                .front()
+                .is_some_and(|(at, _)| at.elapsed() >= WINDOW)
+            {
+                state.window.pop_front();
+            }
+            while state
+                .requests
+                .front()
+                .is_some_and(|at| at.elapsed() >= WINDOW)
+            {
+                state.requests.pop_front();
+            }
+            let now = Instant::now();
+            let rate = state.reported_tpm.unwrap_or(state.probed_tpm).max(1);
+            let used = state.window.iter().map(|(_, n)| *n).sum::<usize>();
+            let debt = state
+                .rate_debt
+                .into_iter()
+                .chain(state.provider_retry)
+                .map(|until| until.saturating_duration_since(now))
+                .max()
+                .unwrap_or_default();
+            let token_ready = state.window.is_empty() || used.saturating_add(tokens) <= rate;
+            let requests_ready = state
+                .reported_rpm
+                .is_none_or(|rpm| state.requests.len() < rpm);
+            if debt.is_zero() && token_ready && requests_ready {
+                state.window.push_back((now, tokens));
+                state.requests.push_back(now);
+                if tokens > rate {
+                    // Admit one oversized exchange, then pay its rate debt before
+                    // another. The provider's context limit is checked separately.
+                    let periods = tokens.div_ceil(rate).min(u32::MAX as usize) as u32;
+                    state.rate_debt = Some(now + WINDOW.saturating_mul(periods));
+                }
+                return begun.elapsed();
+            }
+            let delay = if !debt.is_zero() {
+                debt
+            } else if !token_ready {
+                WINDOW.saturating_sub(
+                    state
+                        .window
+                        .front()
+                        .expect("Nonempty token window")
+                        .0
+                        .elapsed(),
+                )
+            } else {
+                WINDOW.saturating_sub(
+                    state
+                        .requests
+                        .front()
+                        .expect("Nonempty request window")
+                        .elapsed(),
+                )
+            };
+            drop(state);
+            tokio::time::sleep(delay).await;
+        }
+    }
+    async fn observe(&self, advice: &QuotaAdvice) {
+        let mut state = self.state.lock().await;
+        if let Some(rate) = advice.tokens_per_minute.filter(|n| *n > 0) {
+            state.reported_tpm = Some(rate);
+            Self::recompute_debt(&mut state, rate);
+        } else if advice.requests_per_minute.is_none() && !advice.daily_quota && !advice.zero_quota
+        {
+            // The error supplied no usable minute dimension. Back off the
+            // probe rather than pretending the initial hint was a known limit.
+            state.probed_tpm = (state.probed_tpm / 2).max(1);
+            let rate = state.reported_tpm.unwrap_or(state.probed_tpm);
+            Self::recompute_debt(&mut state, rate);
+        }
+        if let Some(rate) = advice.requests_per_minute.filter(|n| *n > 0) {
+            state.reported_rpm = Some(rate);
+        }
+        if let Some(delay) = advice.retry_after {
+            let until = Instant::now() + delay;
+            state.provider_retry = Some(state.provider_retry.map_or(until, |old| old.max(until)));
+        }
+    }
+    fn recompute_debt(state: &mut PaceState, rate: usize) {
+        let used = state.window.iter().map(|(_, n)| *n).sum::<usize>();
+        state.rate_debt = if used > rate {
+            state.window.front().map(|(at, _)| {
+                *at + WINDOW.saturating_mul(used.div_ceil(rate).min(u32::MAX as usize) as u32)
+            })
+        } else {
+            None
+        };
+    }
+    async fn success(&self, tokens: usize) {
+        let mut state = self.state.lock().await;
+        if state.reported_tpm.is_none() {
+            // A bounded probe, explicitly not a provider-published quota. Every
+            // successful exchange raises the hint by at most 25% (or its own
+            // observed size); a 429 immediately replaces it with actual limits.
+            state.probed_tpm = state
+                .probed_tpm
+                .saturating_add(state.probed_tpm.div_ceil(4))
+                .max(tokens)
+                .min(self.probe_ceiling);
+            let rate = state.probed_tpm;
+            Self::recompute_debt(&mut state, rate);
+        }
+    }
+    pub async fn snapshot(&self) -> Value {
+        let mut state = self.state.lock().await;
+        while state
+            .window
+            .front()
+            .is_some_and(|(at, _)| at.elapsed() >= WINDOW)
+        {
+            state.window.pop_front();
+        }
+        while state
+            .requests
+            .front()
+            .is_some_and(|at| at.elapsed() >= WINDOW)
+        {
+            state.requests.pop_front();
+        }
+        json!({"configured_hint_tpm":self.hint,"probe_ceiling_tpm":self.probe_ceiling,"probed_hint_tpm":state.probed_tpm,"probe_policy":"success +25%, capped; published 429 quota overrides probing","provider_reported_tpm":state.reported_tpm,"provider_reported_rpm":state.reported_rpm,
+            "charged_input_tokens":state.window.iter().map(|(_,n)|*n).sum::<usize>(),"charged_requests":state.requests.len(),
+            "next_window_release_ms":state.window.front().map(|(at,_)|WINDOW.saturating_sub(at.elapsed()).as_millis()),
+            "cooldown_remaining_ms":state.rate_debt.into_iter().chain(state.provider_retry).map(|at|at.saturating_duration_since(Instant::now()).as_millis()).max()})
+    }
+}
+
+#[derive(Default, Debug, Serialize)]
+struct QuotaAdvice {
+    #[serde(skip)]
+    retry_after: Option<Duration>,
+    retry_after_ms: Option<u128>,
+    retry_after_header: Option<String>,
+    tokens_per_minute: Option<usize>,
+    requests_per_minute: Option<usize>,
+    zero_quota: bool,
+    daily_quota: bool,
+    violations: Vec<Value>,
+}
+struct BlockedModel {
+    until: Option<Instant>,
+    disposition: Disposition,
+}
+fn duration_seconds(text: &str) -> Option<Duration> {
+    let value = text.trim().trim_end_matches('s').parse::<f64>().ok()?;
+    (value.is_finite() && value >= 0.).then(|| Duration::from_secs_f64(value.min(7. * 24. * 3600.)))
+}
+fn quota_advice(bytes: &[u8], header: Option<&str>, model: &str) -> QuotaAdvice {
+    let mut result = QuotaAdvice {
+        retry_after_header: header.map(str::to_owned),
+        ..Default::default()
+    };
+    if let Some(header) = header {
+        result.retry_after = duration_seconds(header).or_else(|| {
+            let at = chrono::DateTime::parse_from_rfc2822(header)
+                .ok()?
+                .timestamp();
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?.as_secs() as i64;
+            Some(Duration::from_secs(at.saturating_sub(now).max(0) as u64))
+        });
+    }
+    if let Ok(body) = serde_json::from_slice::<Value>(bytes) {
+        for detail in body["error"]["details"].as_array().into_iter().flatten() {
+            if detail["@type"]
+                .as_str()
+                .is_some_and(|t| t.ends_with("RetryInfo"))
+                && let Some(delay) = detail["retryDelay"].as_str().and_then(duration_seconds)
+            {
+                result.retry_after = Some(result.retry_after.map_or(delay, |old| old.max(delay)));
+            }
+            for violation in detail["violations"].as_array().into_iter().flatten() {
+                result.violations.push(violation.clone());
+                let relevant = violation["quotaDimensions"]["model"]
+                    .as_str()
+                    .is_none_or(|id| id == model || id == format!("models/{model}"));
+                if !relevant {
+                    continue;
+                }
+                let number = violation["quotaValue"]
+                    .as_u64()
+                    .map(|n| n as usize)
+                    .or_else(|| violation["quotaValue"].as_str()?.parse().ok());
+                let metric = format!(
+                    "{} {}",
+                    violation["quotaMetric"].as_str().unwrap_or_default(),
+                    violation["quotaId"].as_str().unwrap_or_default()
+                )
+                .to_ascii_lowercase();
+                let minute = metric.contains("perminute") || metric.contains("per_minute");
+                result.daily_quota |= metric.contains("perday") || metric.contains("per_day");
+                if let Some(number) = number {
+                    result.zero_quota |= number == 0;
+                    if minute && (metric.contains("input_token") || metric.contains("inputtoken")) {
+                        result.tokens_per_minute = Some(
+                            result
+                                .tokens_per_minute
+                                .map_or(number, |old| old.min(number)),
+                        );
+                    }
+                    if minute && metric.contains("request") {
+                        result.requests_per_minute = Some(
+                            result
+                                .requests_per_minute
+                                .map_or(number, |old| old.min(number)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    result.retry_after_ms = result.retry_after.map(|d| d.as_millis());
+    result
+}
 
 fn retry_delay(status: u16, complete: bool, attempt: usize, remaining: usize) -> Option<Duration> {
     (complete
@@ -62,35 +466,223 @@ pub fn client(credential_file: &Path) -> Result<reqwest::Client> {
 
 /// Listing is read-only; only public identities and capabilities are returned.
 pub async fn models(http: &reqwest::Client) -> Result<Value> {
-    let response = http
-        .get(format!("{API}/models?pageSize=1000"))
-        .send()
-        .await?;
-    ensure!(
-        response.status().is_success(),
-        "Google model listing HTTP {}",
-        response.status()
-    );
-    let body: Value = response.json().await?;
-    let rows = body["models"].as_array().context("No Google model list")?;
+    let mut rows = Vec::new();
+    let mut token = None;
+    let mut seen = std::collections::BTreeSet::new();
+    loop {
+        let mut url = reqwest::Url::parse(&format!("{API}/models"))?;
+        url.query_pairs_mut().append_pair("pageSize", "1000");
+        if let Some(value) = token.as_deref() {
+            url.query_pairs_mut().append_pair("pageToken", value);
+        }
+        let response = http.get(url).send().await?;
+        ensure!(
+            response.status().is_success(),
+            "Google model listing HTTP {}",
+            response.status()
+        );
+        let body: Value = response.json().await?;
+        rows.extend(body["models"].as_array().context("No Google model list")?.iter().map(|m|json!({"name":m["name"],"supportedGenerationMethods":m["supportedGenerationMethods"],"inputTokenLimit":m["inputTokenLimit"],"outputTokenLimit":m["outputTokenLimit"]})));
+        token = body["nextPageToken"]
+            .as_str()
+            .filter(|t| !t.is_empty())
+            .map(str::to_owned);
+        let Some(next) = token.as_ref() else {
+            break;
+        };
+        ensure!(
+            seen.insert(next.clone()) && seen.len() < 100,
+            "Google model listing pagination repeated or exceeded its bound"
+        );
+    }
     let select = |id: &str| {
-        rows.iter().find(|m| m["name"] == format!("models/{id}")).map(|m| json!({"name":m["name"],"supportedGenerationMethods":m["supportedGenerationMethods"],"inputTokenLimit":m["inputTokenLimit"],"outputTokenLimit":m["outputTokenLimit"]}))
+        rows.iter()
+            .find(|m| m["name"] == format!("models/{id}"))
+            .cloned()
     };
     Ok(
-        json!({"teacher":select(TEACHER),"student":select(STUDENT),"next_page":body["nextPageToken"]}),
+        json!({"teacher":select(TEACHER),"student":select(STUDENT),"models":rows,"listing_complete":true,"next_page":null}),
     )
+}
+
+/// Count a student exchange without generation or teacher access. The exact
+/// port-rendered request and provider count are retained for queue admission.
+pub async fn count_tokens(
+    http: &reqwest::Client,
+    request: &LmRequest,
+    directory: &Path,
+) -> Result<Value> {
+    count_tokens_at(http, request, directory, API).await
+}
+fn validate_count(record: &Value) -> Result<()> {
+    let status = record["http_status"]
+        .as_u64()
+        .context("No recorded count HTTP status")? as u16;
+    if !(200..300).contains(&status) {
+        let hints = &record["quota_hints"];
+        let kind = match status {
+            429 if hints["zero_quota"] == true || hints["daily_quota"] == true => {
+                Disposition::QuotaDeferred
+            }
+            429 | 500 | 502 | 503 | 504 => Disposition::QuotaOrUnavailable,
+            401 | 403 => Disposition::Authentication,
+            _ => Disposition::InvalidRequest,
+        };
+        let delay = hints["retry_after_ms"].as_u64().map(Duration::from_millis);
+        return Err(provider_error(
+            STUDENT,
+            kind,
+            Some(status),
+            delay,
+            false,
+            "Read-only token count failed; exact completed response retained, no generation submitted",
+        ));
+    }
+    ensure!(
+        record["input_tokens"].as_u64().is_some(),
+        "Provider token count missing"
+    );
+    Ok(())
+}
+async fn count_tokens_at(
+    http: &reqwest::Client,
+    request: &LmRequest,
+    directory: &Path,
+    api: &str,
+) -> Result<Value> {
+    ensure!(
+        request.model == STUDENT && request.output_schema().is_none() && request.tools.is_empty(),
+        "Student budget preflight permits ordinary text only"
+    );
+    fs::create_dir_all(directory)?;
+    let key = request.cache_key(STUDENT);
+    let file = directory.join(format!("{key}.json"));
+    if file.exists() {
+        let record = serde_json::from_slice(&fs::read(file)?)?;
+        validate_count(&record)?;
+        return Ok(record);
+    }
+    let started = directory.join(format!("{key}.request.json"));
+    if started.exists() {
+        return Err(provider_error(
+            STUDENT,
+            Disposition::PriorUnresolved,
+            None,
+            None,
+            false,
+            "Previous read-only count is unsettled or invalid; preserved without replay",
+        ));
+    }
+    let contents = request.wire_messages().iter().filter(|message| message["role"] != "system").map(|message| {
+        let text = message["content"].as_str().context("Budget preflight requires text inputs")?;
+        Ok(json!({"role":if message["role"]=="assistant"{"model"}else{"user"},"parts":[{"text":text}]}))
+    }).collect::<Result<Vec<_>>>()?;
+    let body = json!({"generateContentRequest":{"model":format!("models/{STUDENT}"),
+        "contents":contents,"systemInstruction":{"parts":[{"text":request.system()}]}}});
+    write_new(
+        &started,
+        &serde_json::to_vec_pretty(
+            &json!({"request":request,"body":body,"generation_submitted":false,"teacher_called":false}),
+        )?,
+    )?;
+    let failure_record = |kind: Disposition, status: Option<u16>, detail: &str| -> Result<()> {
+        write_new(
+            &directory.join(format!("{key}.failure.json")),
+            &serde_json::to_vec_pretty(
+                &json!({"disposition":kind,"http_status":status,"response_complete":kind==Disposition::CompletedOutput,"generation_submitted":false,"teacher_called":false,"error":detail}),
+            )?,
+        )
+    };
+    let mut response = match http
+        .post(format!("{api}/models/{STUDENT}:countTokens"))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(e) => {
+            failure_record(Disposition::Uncertain, None, &e.to_string())?;
+            return Err(provider_error(
+                STUDENT,
+                Disposition::Uncertain,
+                None,
+                None,
+                false,
+                format!("Read-only count transport unsettled: {e}"),
+            ));
+        }
+    };
+    let status = response.status();
+    let header = response
+        .headers()
+        .get(RETRY_AFTER)
+        .and_then(|h| h.to_str().ok())
+        .map(str::to_owned);
+    let mut bytes = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) => bytes.extend_from_slice(&chunk),
+            Ok(None) => break,
+            Err(e) => {
+                write_new(&directory.join(format!("{key}.body")), &bytes)?;
+                failure_record(
+                    Disposition::Uncertain,
+                    Some(status.as_u16()),
+                    &e.to_string(),
+                )?;
+                return Err(provider_error(
+                    STUDENT,
+                    Disposition::Uncertain,
+                    Some(status.as_u16()),
+                    None,
+                    false,
+                    format!("Read-only count response incomplete: {e}"),
+                ));
+            }
+        }
+    }
+    write_new(&directory.join(format!("{key}.body")), &bytes)?;
+    let provider: Value = match serde_json::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(_) if !status.is_success() => Value::Null,
+        Err(e) => {
+            failure_record(
+                Disposition::CompletedOutput,
+                Some(status.as_u16()),
+                &e.to_string(),
+            )?;
+            return Err(provider_error(
+                STUDENT,
+                Disposition::CompletedOutput,
+                Some(status.as_u16()),
+                None,
+                false,
+                format!("Read-only count completed with invalid JSON: {e}"),
+            ));
+        }
+    };
+    let advice = quota_advice(&bytes, header.as_deref(), STUDENT);
+    let record = json!({"request_key":key,"request":request,"count_body":body,"http_status":status.as_u16(),
+        "provider_response":provider,"input_tokens":provider["totalTokens"],"quota_hints":advice,"response_complete":true,"eligible_retry_unix_ms":advice.retry_after.map(|d|SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis()+d.as_millis()),
+        "generation_submitted":false,"teacher_called":false});
+    write_new(&file, &serde_json::to_vec_pretty(&record)?)?;
+    validate_count(&record)?;
+    Ok(record)
 }
 
 /// A shared rolling window, rather than an arbitrary pause between each function.
 pub struct Google {
-    model: &'static str,
+    model: String,
     http: reqwest::Client,
     directory: PathBuf,
     spent: AtomicUsize,
-    max_calls: usize,
+    budget: Arc<CallBudget>,
     failed: AtomicBool,
-    window: Mutex<VecDeque<(Instant, usize)>>,
-    tokens_per_minute: usize,
+    limiter: Arc<RateLimiter>,
+    info: Mutex<Option<ModelInfo>>,
+    interactions: bool,
+    max_submissions: usize,
+    quota_block: Mutex<Option<BlockedModel>>,
     serial: Mutex<()>,
     // Fixed in production; credential-free unit tests substitute a local server.
     api: String,
@@ -98,52 +690,225 @@ pub struct Google {
 
 impl Google {
     pub fn new(
-        model: &'static str,
+        model: impl Into<String>,
         http: reqwest::Client,
         directory: PathBuf,
         max_calls: usize,
         tokens_per_minute: usize,
     ) -> Result<Self> {
+        let model = model.into();
         ensure!(
-            matches!(model, TEACHER | STUDENT),
+            matches!(model.as_str(), TEACHER | STUDENT),
             "Unapproved model identity"
         );
         fs::create_dir_all(&directory)?;
+        let interactions = model == TEACHER;
         Ok(Self {
             model,
             http,
             directory,
             spent: AtomicUsize::new(0),
-            max_calls,
+            budget: CallBudget::new(max_calls),
             failed: AtomicBool::new(false),
-            window: Mutex::new(VecDeque::new()),
-            tokens_per_minute,
+            limiter: RateLimiter::new(tokens_per_minute)?,
+            info: Mutex::new(None),
+            interactions,
+            max_submissions: MAX_SUBMISSIONS,
+            quota_block: Mutex::new(None),
             serial: Mutex::new(()),
             api: API.into(),
         })
     }
-    async fn pace(&self, estimate: usize) -> Result<()> {
+    /// Listed text models use ordinary generateContent. A pool shares its
+    /// physical bound while each model owns its distinct pacing state/cache.
+    pub fn from_listing(
+        info: ModelInfo,
+        http: reqwest::Client,
+        directory: PathBuf,
+        budget: Arc<CallBudget>,
+        limiter: Arc<RateLimiter>,
+    ) -> Result<Self> {
+        let model = info.id()?.to_owned();
         ensure!(
-            estimate <= self.tokens_per_minute,
-            "One prompt exceeds the configured per-minute token allowance; shorten demonstrations or source selection"
+            model == STUDENT || crate::teachers::is_text_teacher(&info),
+            "Listed model is not an approved text teacher or fixed student"
         );
-        loop {
-            let mut window = self.window.lock().await;
-            while window
-                .front()
-                .is_some_and(|(at, _)| at.elapsed() >= Duration::from_secs(61))
-            {
-                window.pop_front();
-            }
-            if window.iter().map(|(_, n)| n).sum::<usize>() + estimate <= self.tokens_per_minute {
-                window.push_back((Instant::now(), estimate));
-                return Ok(());
-            }
-            let delay = Duration::from_secs(61)
-                .saturating_sub(window.front().context("Empty quota window")?.0.elapsed());
-            drop(window);
-            tokio::time::sleep(delay).await;
+        ensure!(
+            info.supported_generation_methods
+                .iter()
+                .any(|m| m == "generateContent"),
+            "Listed model does not support ordinary generation"
+        );
+        fs::create_dir_all(&directory)?;
+        let max_submissions = if model == STUDENT { MAX_SUBMISSIONS } else { 1 };
+        Ok(Self {
+            model,
+            http,
+            directory,
+            spent: AtomicUsize::new(0),
+            budget,
+            failed: AtomicBool::new(false),
+            limiter,
+            info: Mutex::new(Some(info)),
+            interactions: false,
+            max_submissions,
+            quota_block: Mutex::new(None),
+            serial: Mutex::new(()),
+            api: API.into(),
+        })
+    }
+    pub fn limiter(&self) -> Arc<RateLimiter> {
+        self.limiter.clone()
+    }
+    pub fn with_limiter(mut self, limiter: Arc<RateLimiter>) -> Self {
+        self.limiter = limiter;
+        self
+    }
+    fn routed_key(&self, request: &LmRequest) -> (LmRequest, String) {
+        let mut routed = request.clone();
+        routed.model = self.model.clone();
+        let key = if self.interactions {
+            digest(format!(
+                "interactions-stateless-v1\0{}",
+                routed.cache_key(&self.model)
+            ))
+        } else {
+            routed.cache_key(&self.model)
+        };
+        (routed, key)
+    }
+    /// Exact settled success lookup only. No metadata/token requests, quota
+    /// retries or generation occur, even when this route is now exhausted.
+    pub fn cached_response(&self, request: &LmRequest) -> Result<Option<LmResponse>> {
+        ensure!(
+            request.output_schema().is_none() && request.tools.is_empty(),
+            "This experiment permits unconstrained text only"
+        );
+        let (routed, key) = self.routed_key(request);
+        let cached = self.directory.join(format!("{key}.response.json"));
+        if !cached.exists() {
+            return Ok(None);
         }
+        let saved: Value = serde_json::from_slice(&fs::read(
+            self.directory.join(format!("{key}.request.json")),
+        )?)?;
+        ensure!(
+            saved["model"] == self.model && saved["request"] == serde_json::to_value(&routed)?,
+            "Cached Google response request identity differs"
+        );
+        let mut result: LmResponse = serde_json::from_slice(&fs::read(cached)?)?;
+        ensure!(
+            result.model.as_deref() == Some(self.model.as_str())
+                && !result.first_text().trim().is_empty(),
+            "Cached Google response is not a settled success for this model"
+        );
+        result.cache_hit = true;
+        Ok(Some(result))
+    }
+    #[cfg(test)]
+    pub(crate) fn test_api(&mut self, api: &str) {
+        self.api = api.into();
+    }
+    fn failure(
+        &self,
+        disposition: Disposition,
+        http_status: Option<u16>,
+        retry_after: Option<Duration>,
+        generation_submitted: bool,
+        detail: impl Into<String>,
+    ) -> anyhow::Error {
+        provider_error(
+            &self.model,
+            disposition,
+            http_status,
+            retry_after,
+            generation_submitted,
+            detail,
+        )
+    }
+    async fn model_info(&self) -> Result<ModelInfo> {
+        let mut info = self.info.lock().await;
+        if let Some(info) = info.as_ref() {
+            return Ok(info.clone());
+        }
+        let file = self.directory.join("model-info.json");
+        let value: Value = if file.exists() {
+            serde_json::from_slice(&fs::read(&file)?)?
+        } else {
+            let response = self
+                .http
+                .get(format!("{}/models/{}", self.api, self.model))
+                .send()
+                .await
+                .map_err(|e| {
+                    self.failure(
+                        Disposition::Uncertain,
+                        None,
+                        None,
+                        false,
+                        format!("Read-only model metadata transport unsettled: {e}"),
+                    )
+                })?;
+            let status = response.status();
+            let bytes = response.bytes().await.map_err(|e| {
+                self.failure(
+                    Disposition::Uncertain,
+                    Some(status.as_u16()),
+                    None,
+                    false,
+                    format!("Read-only model metadata incomplete: {e}"),
+                )
+            })?;
+            write_new(&self.directory.join("model-info.body"), &bytes)?;
+            let value: Value = serde_json::from_slice(&bytes)
+                .or_else(|e| {
+                    if !status.is_success() {
+                        Ok(Value::Null)
+                    } else {
+                        Err(e)
+                    }
+                })
+                .map_err(|e| {
+                    self.failure(
+                        Disposition::CompletedOutput,
+                        Some(status.as_u16()),
+                        None,
+                        false,
+                        format!("Model metadata is not JSON: {e}"),
+                    )
+                })?;
+            if !status.is_success() {
+                return Err(self.http_failure(
+                    status.as_u16(),
+                    None,
+                    false,
+                    "Read-only model metadata failed",
+                ));
+            }
+            write_new(&file, &serde_json::to_vec_pretty(&value)?)?;
+            value
+        };
+        let result: ModelInfo = serde_json::from_value(value)?;
+        ensure!(
+            result.id()? == self.model,
+            "Provider model metadata identity differs"
+        );
+        *info = Some(result.clone());
+        Ok(result)
+    }
+    fn http_failure(
+        &self,
+        status: u16,
+        retry_after: Option<Duration>,
+        submitted: bool,
+        detail: impl Into<String>,
+    ) -> anyhow::Error {
+        let kind = match status {
+            429 | 500 | 502 | 503 | 504 | 404 => Disposition::QuotaOrUnavailable,
+            401 | 403 => Disposition::Authentication,
+            _ => Disposition::InvalidRequest,
+        };
+        self.failure(kind, Some(status), retry_after, submitted, detail)
     }
 
     /// Only a fully received, known transient HTTP response permits another submission.
@@ -155,30 +920,56 @@ impl Google {
         tokens: usize,
         request_sha256: &str,
     ) -> Result<(Vec<u8>, usize)> {
-        let endpoint = if self.model == TEACHER {
+        let endpoint = if self.interactions {
             format!("{}/interactions", self.api)
         } else {
             format!("{}/models/{}:generateContent", self.api, self.model)
         };
         let mut delay = Duration::ZERO;
-        for attempt in 1..=MAX_SUBMISSIONS {
-            ensure!(
-                self.spent.load(Ordering::Relaxed) < self.max_calls,
-                "Configured physical generation-call budget exhausted"
-            );
-            tokio::time::sleep(delay).await;
-            self.pace(tokens).await?;
+        for attempt in 1..=self.max_submissions {
+            if self.budget.remaining() == 0 {
+                return Err(self.failure(
+                    Disposition::BudgetExhausted,
+                    None,
+                    None,
+                    false,
+                    "Configured shared physical generation-call budget exhausted",
+                ));
+            }
             let file = |suffix: &str| {
                 self.directory
                     .join(format!("{key}.attempt-{attempt}.{suffix}"))
             };
-            let physical_call = self.spent.load(Ordering::Relaxed) + 1;
+            write_new(
+                &file("wait.json"),
+                &serde_json::to_vec_pretty(
+                    &json!({"model":self.model,"logical_key":key,"attempt":attempt,"input_tokens":tokens,"recorded_at_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis(),"retry_backoff_ms":delay.as_millis(),"pacing_before":self.limiter.snapshot().await,"generation_submitted":false,"scope":"Client pacing forecast, not inference latency"}),
+                )?,
+            )?;
+            let wait_started = Instant::now();
+            tokio::time::sleep(delay).await;
+            let pacing_delay = self.limiter.pace(tokens).await;
+            write_new(
+                &file("wait-complete.json"),
+                &serde_json::to_vec_pretty(
+                    &json!({"model":self.model,"attempt":attempt,"actual_wait_ms":wait_started.elapsed().as_millis(),"pacing_after":self.limiter.snapshot().await,"generation_submitted":false}),
+                )?,
+            )?;
+            let physical_call = self.budget.reserve().ok_or_else(|| {
+                self.failure(
+                    Disposition::BudgetExhausted,
+                    None,
+                    None,
+                    false,
+                    "Configured shared physical generation-call budget exhausted",
+                )
+            })?;
             write_new(
                 &file("request.json"),
                 &serde_json::to_vec_pretty(&json!({"logical_key":key,"attempt":attempt,
                     "physical_call":physical_call,"model":self.model,"request_sha256":request_sha256,
                     "body":body,"body_sha256":digest(serde_json::to_vec(body)?),
-                    "input_tokens":tokens,"delay_before_ms":delay.as_millis()}))?,
+                    "input_tokens":tokens,"delay_before_ms":delay.as_millis(),"pacing_delay_ms":pacing_delay.as_millis(),"pacing":self.limiter.snapshot().await}))?,
             )?;
             self.spent.fetch_add(1, Ordering::Relaxed);
             eprintln!(
@@ -200,10 +991,21 @@ impl Google {
                             "error_class":"transport_unsettled","elapsed_ms":begun.elapsed().as_millis()
                         }))?,
                     )?;
-                    return Err(error).context("Google transport is unsettled; no retry");
+                    return Err(self.failure(
+                        Disposition::Uncertain,
+                        None,
+                        None,
+                        true,
+                        format!("Google transport is unsettled; no retry: {error}"),
+                    ));
                 }
             };
             let status = response.status();
+            let retry_after_header = response
+                .headers()
+                .get(RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
             let mut bytes = Vec::new();
             loop {
                 match response.chunk().await {
@@ -220,25 +1022,54 @@ impl Google {
                                 "error_class":"response_unsettled","elapsed_ms":begun.elapsed().as_millis()
                             }))?,
                         )?;
-                        return Err(error).context("Google response is incomplete; no retry");
+                        return Err(self.failure(
+                            Disposition::Uncertain,
+                            Some(status.as_u16()),
+                            None,
+                            true,
+                            format!("Google response is incomplete; no retry: {error}"),
+                        ));
                     }
                 }
             }
             write_new(&file("body"), &bytes)?;
-            let next_delay = retry_delay(
-                status.as_u16(),
-                true,
-                attempt,
-                self.max_calls
-                    .saturating_sub(self.spent.load(Ordering::Relaxed)),
-            );
+            let advice = quota_advice(&bytes, retry_after_header.as_deref(), &self.model);
+            if status.as_u16() == 429 {
+                self.limiter.observe(&advice).await;
+                if advice.zero_quota
+                    || self.model != STUDENT && (advice.daily_quota || advice.retry_after.is_some())
+                {
+                    *self.quota_block.lock().await = Some(BlockedModel {
+                        until: advice.retry_after.map(|d| Instant::now() + d),
+                        disposition: if advice.zero_quota || advice.daily_quota {
+                            Disposition::QuotaDeferred
+                        } else {
+                            Disposition::QuotaOrUnavailable
+                        },
+                    });
+                }
+            }
+            let next_delay = retry_delay(status.as_u16(), true, attempt, self.budget.remaining())
+                .filter(|_| {
+                    attempt < self.max_submissions
+                        && !advice.zero_quota
+                        && (!advice.daily_quota
+                            || self.model == STUDENT && advice.retry_after.is_some())
+                })
+                .map(|base| base.max(advice.retry_after.unwrap_or_default()))
+                .filter(|d| {
+                    *d <= MAX_AUTOMATIC_DELAY
+                        || status.as_u16() == 429
+                            && self.model == STUDENT
+                            && advice.retry_after.is_some()
+                });
             write_new(
                 &file("result.json"),
                 &serde_json::to_vec_pretty(&json!({
                     "logical_key":key,"attempt":attempt,"physical_call":physical_call,
                     "http_status":status.as_u16(),"response_complete":true,
                     "body_sha256":digest(&bytes),"automatic_retry":next_delay.is_some(),
-                    "retry_delay_ms":next_delay.map(|value|value.as_millis()),
+                    "retry_delay_ms":next_delay.map(|value|value.as_millis()),"provider_quota_advice":advice,
                     "elapsed_ms":begun.elapsed().as_millis()
                 }))?,
             )?;
@@ -253,62 +1084,108 @@ impl Google {
                 &self.directory.join(format!("{key}.failure.json")),
                 &serde_json::to_vec_pretty(&json!({"http_status":status.as_u16(),
                     "elapsed_ms":begun.elapsed().as_millis(),"physical_submissions":attempt,
-                    "automatic_retry":false}))?,
+                    "automatic_retry":false,"response_complete":true,"disposition":if status.as_u16()==429 && (advice.zero_quota || advice.daily_quota || advice.retry_after.is_some_and(|d|d>MAX_AUTOMATIC_DELAY)){Disposition::QuotaDeferred}else{match status.as_u16(){429|500|502|503|504|404=>Disposition::QuotaOrUnavailable,401|403=>Disposition::Authentication,_=>Disposition::InvalidRequest}},"eligible_retry_unix_ms":advice.retry_after.map(|d|SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis()+d.as_millis()),"provider_quota_advice":advice}))?,
             )?;
-            bail!(
-                "Google {} HTTP {}; stopped after {attempt} physical submissions",
-                self.model,
-                status
-            );
+            if status.as_u16() == 429
+                && (advice.zero_quota
+                    || advice.daily_quota
+                    || advice.retry_after.is_some_and(|d| d > MAX_AUTOMATIC_DELAY))
+            {
+                return Err(self.failure(Disposition::QuotaDeferred,Some(429),advice.retry_after,true,"Known daily/zero/long quota response; durable deferral retained, no automatic replay"));
+            }
+            return Err(self.http_failure(
+                status.as_u16(),
+                advice.retry_after,
+                true,
+                format!(
+                    "HTTP {}; stopped after {attempt} physical submissions",
+                    status
+                ),
+            ));
         }
         bail!("No Google response after bounded physical submissions")
     }
     async fn request(&self, request: &LmRequest) -> Result<LmResponse> {
         ensure!(
-            !self.failed.load(Ordering::Relaxed),
-            "A prior transport/budget failure withholds further provider work"
-        );
-        ensure!(
             request.output_schema().is_none() && request.tools.is_empty(),
             "This experiment permits unconstrained text only"
         );
-        let mut routed = request.clone();
-        routed.model = self.model.into();
-        let key = if self.model == TEACHER {
-            digest(format!(
-                "interactions-stateless-v1\0{}",
-                routed.cache_key(self.model)
-            ))
-        } else {
-            routed.cache_key(self.model)
-        };
+        let (routed, key) = self.routed_key(request);
         let _guard = self.serial.lock().await;
-        ensure!(
-            !self.failed.load(Ordering::Relaxed),
-            "A prior transport/budget failure withholds further provider work"
-        );
+        if let Some(response) = self.cached_response(request)? {
+            return Ok(response);
+        }
+        if self.failed.load(Ordering::Relaxed) {
+            return Err(self.failure(
+                Disposition::PriorUnresolved,
+                None,
+                None,
+                false,
+                "A prior uncertain/authentication transport stops new work",
+            ));
+        }
         let cached = self.directory.join(format!("{key}.response.json"));
-        if cached.exists() {
-            let mut result: LmResponse = serde_json::from_slice(&fs::read(cached)?)?;
-            result.cache_hit = true;
-            return Ok(result);
+        {
+            let mut blocked = self.quota_block.lock().await;
+            if let Some(block) = blocked.as_ref() {
+                if block.until.is_none_or(|until| until > Instant::now()) {
+                    return Err(self.failure(
+                        block.disposition,
+                        Some(429),
+                        block
+                            .until
+                            .map(|until| until.saturating_duration_since(Instant::now())),
+                        false,
+                        "Retained provider quota blocks this model; no new generation submitted",
+                    ));
+                }
+                *blocked = None;
+            }
         }
         let started = self.directory.join(format!("{key}.request.json"));
-        ensure!(
-            !started.exists(),
-            "A previous Google request is unresolved or failed; it is preserved and will not be replayed"
-        );
-        ensure!(
-            self.spent.load(Ordering::Relaxed) < self.max_calls,
-            "Configured physical generation-call budget exhausted"
-        );
+        if started.exists() {
+            let failure = self.directory.join(format!("{key}.failure.json"));
+            if failure.exists() {
+                let saved: Value = serde_json::from_slice(&fs::read(failure)?)?;
+                let status = saved["http_status"].as_u64().map(|s| s as u16);
+                if let Some(status) = status {
+                    let deferred = saved["disposition"] == "quota_deferred";
+                    return Err(if deferred {
+                        self.failure(
+                            Disposition::QuotaDeferred,
+                            Some(status),
+                            None,
+                            true,
+                            "A previous known quota deferral is retained and will not be replayed",
+                        )
+                    } else {
+                        self.http_failure(status,None,true,"A previous completed HTTP failure is retained and will not be replayed")
+                    });
+                }
+            }
+            return Err(self.failure(Disposition::PriorUnresolved,None,None,true,"A previous Google request is unresolved or failed; it is preserved and will not be replayed"));
+        }
+        if self.budget.remaining() == 0 {
+            return Err(self.failure(
+                Disposition::BudgetExhausted,
+                None,
+                None,
+                false,
+                "Configured shared physical generation-call budget exhausted",
+            ));
+        }
+        let info = self.model_info().await?;
         let wire = routed.wire_messages();
         let contents = wire.iter().filter(|m| m["role"] != "system").map(|m| {
             let text = m["content"].as_str().context("Nontext input not allowed in this curriculum")?;
             Ok(json!({"role":if m["role"] == "assistant" {"model"} else {"user"},"parts":[{"text":text}]}))
         }).collect::<Result<Vec<_>>>()?;
-        let legacy_body = json!({"systemInstruction":{"parts":[{"text":routed.system()}]},"contents":contents,"generationConfig":{"temperature":routed.config.temperature.unwrap_or(0.0),"maxOutputTokens":routed.config.max_tokens.unwrap_or(4096),"thinkingConfig":{"thinkingLevel":"MINIMAL","includeThoughts":false}}});
-        let body = if self.model == TEACHER {
+        let mut legacy_body = json!({"systemInstruction":{"parts":[{"text":routed.system()}]},"contents":contents,"generationConfig":{"temperature":routed.config.temperature.unwrap_or(0.0),"maxOutputTokens":routed.config.max_tokens.unwrap_or(4096)}});
+        if self.model == STUDENT {
+            legacy_body["generationConfig"]["thinkingConfig"] =
+                json!({"thinkingLevel":"MINIMAL","includeThoughts":false});
+        }
+        let body = if self.interactions {
             json!({"model":self.model,"store":false,"system_instruction":routed.system(),"input":contents.iter().map(|m|json!({"type":if m["role"]=="model"{"model_output"}else{"user_input"},"content":[{"type":"text","text":m["parts"][0]["text"]}]})).collect::<Vec<_>>(),"generation_config":{"temperature":routed.config.temperature.unwrap_or(0.),"max_output_tokens":routed.config.max_tokens.unwrap_or(4096),"thinking_level":"low"}})
         } else {
             legacy_body.clone()
@@ -317,23 +1194,92 @@ impl Google {
         let count: Value = if counted.exists() {
             serde_json::from_slice(&fs::read(&counted)?)?
         } else {
-            let response=self.http.post(format!("{}/models/{}:countTokens",self.api,self.model)).json(&json!({"generateContentRequest":{"model":format!("models/{}",self.model),"contents":legacy_body["contents"],"systemInstruction":legacy_body["systemInstruction"]}})).send().await?;
-            ensure!(
-                response.status().is_success(),
-                "Google token count HTTP {}; no generation submitted",
-                response.status()
-            );
-            let value: Value = response.json().await?;
-            fs::write(&counted, serde_json::to_vec_pretty(&value)?)?;
+            let response=self.http.post(format!("{}/models/{}:countTokens",self.api,self.model)).json(&json!({"generateContentRequest":{"model":format!("models/{}",self.model),"contents":legacy_body["contents"],"systemInstruction":legacy_body["systemInstruction"]}})).send().await.map_err(|e|self.failure(Disposition::Uncertain,None,None,false,format!("Read-only count transport unsettled: {e}")))?;
+            let status = response.status();
+            let header = response
+                .headers()
+                .get(RETRY_AFTER)
+                .and_then(|h| h.to_str().ok())
+                .map(str::to_owned);
+            let bytes = response.bytes().await.map_err(|e| {
+                self.failure(
+                    Disposition::Uncertain,
+                    Some(status.as_u16()),
+                    None,
+                    false,
+                    format!("Read-only count response incomplete: {e}"),
+                )
+            })?;
+            write_new(&self.directory.join(format!("{key}.count-body")), &bytes)?;
+            let value: Value = serde_json::from_slice(&bytes)
+                .or_else(|e| {
+                    if !status.is_success() {
+                        Ok(Value::Null)
+                    } else {
+                        Err(e)
+                    }
+                })
+                .map_err(|e| {
+                    self.failure(
+                        Disposition::CompletedOutput,
+                        Some(status.as_u16()),
+                        None,
+                        false,
+                        format!("Read-only count is not JSON: {e}"),
+                    )
+                })?;
+            if !status.is_success() {
+                let advice = quota_advice(&bytes, header.as_deref(), &self.model);
+                write_new(
+                    &self.directory.join(format!("{key}.count-failure.json")),
+                    &serde_json::to_vec_pretty(
+                        &json!({"http_status":status.as_u16(),"provider_response":value,"provider_quota_advice":advice,"generation_submitted":false,"response_complete":true}),
+                    )?,
+                )?;
+                if status.as_u16() == 429 {
+                    self.limiter.observe(&advice).await;
+                }
+                return Err(self.http_failure(
+                    status.as_u16(),
+                    advice.retry_after,
+                    false,
+                    "Read-only token count failed; no generation submitted",
+                ));
+            }
+            write_new(&counted, &serde_json::to_vec_pretty(&value)?)?;
             value
         };
         let tokens = count["totalTokens"]
             .as_u64()
             .context("No counted input tokens")? as usize;
-        ensure!(
-            tokens <= self.tokens_per_minute,
-            "One prompt exceeds the configured per-minute token allowance; shorten demonstrations or source selection"
-        );
+        let preflight = self.directory.join(format!("{key}.preflight.json"));
+        if !preflight.exists() {
+            write_new(
+                &preflight,
+                &serde_json::to_vec_pretty(&json!({
+                    "model":self.model,"request_key":key,"request":routed,"body":body,
+                    "input_tokens":tokens,"configured_input_tokens_per_minute":self.limiter.hint,"pacing":self.limiter.snapshot().await,
+                    "model_input_token_limit":info.input_token_limit,"admitted":tokens<=info.input_token_limit,"generation_submitted":false,
+                    "scope":"Read-only provider token count and client admission; not a model response or verified project quota"
+                }))?,
+            )?;
+        }
+        if tokens > info.input_token_limit {
+            return Err(self.failure(Disposition::ContextLimit,None,None,false,format!("Prompt has {tokens} input tokens, above listed model context {}. Exact preflight retained at {}",info.input_token_limit,preflight.display())));
+        }
+        if routed
+            .config
+            .max_tokens
+            .is_some_and(|n| n as usize > info.output_token_limit)
+        {
+            return Err(self.failure(
+                Disposition::ContextLimit,
+                None,
+                None,
+                false,
+                "Requested output budget exceeds listed model outputTokenLimit",
+            ));
+        }
         let saved_request =
             serde_json::to_vec_pretty(&json!({"model":self.model,"request":routed,"body":body}))?;
         write_new(&started, &saved_request)?;
@@ -341,57 +1287,77 @@ impl Google {
         let (bytes, attempts) = self
             .generate(&key, &body, tokens, &digest(saved_request))
             .await?;
-        let raw: Value = serde_json::from_slice(&bytes)?;
+        let raw: Value = serde_json::from_slice(&bytes).map_err(|e| {
+            self.failure(
+                Disposition::CompletedOutput,
+                Some(200),
+                None,
+                true,
+                format!("Completed provider output is invalid JSON: {e}"),
+            )
+        })?;
         write_new(
             &self.directory.join(format!("{key}.raw.json")),
             &serde_json::to_vec_pretty(&raw)?,
         )?;
-        let outputs = if self.model == TEACHER {
-            ensure!(
-                raw["status"] == "completed",
-                "Teacher interaction did not complete; raw response is retained"
-            );
-            let result = raw["steps"]
-                .as_array()
-                .context("No interaction steps")?
-                .iter()
-                .filter(|s| s["type"] == "model_output")
-                .flat_map(|s| s["content"].as_array().into_iter().flatten())
-                .filter(|p| p["type"] == "text")
-                .filter_map(|p| p["text"].as_str())
-                .collect::<String>();
-            vec![LmOutput::text(result)]
-        } else {
-            raw["candidates"]
-                .as_array()
-                .context("Google returned no candidates")?
-                .iter()
-                .map(|c| {
-                    let text = c["content"]["parts"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter(|p| p["thought"] != true)
-                        .filter_map(|p| p["text"].as_str())
-                        .collect::<String>();
-                    let mut output = LmOutput::text(text);
-                    output.finish_reason = c["finishReason"].as_str().map(str::to_owned);
-                    output.truncated = c["finishReason"] == "MAX_TOKENS";
-                    output
-                })
-                .collect::<Vec<_>>()
-        };
-        ensure!(
-            !outputs.is_empty()
-                && outputs
+        let parsed_outputs = || -> Result<Vec<LmOutput>> {
+            let outputs = if self.interactions {
+                ensure!(
+                    raw["status"] == "completed",
+                    "Teacher interaction did not complete; raw response is retained"
+                );
+                let result = raw["steps"]
+                    .as_array()
+                    .context("No interaction steps")?
                     .iter()
-                    .all(|o| !o.as_text().is_empty() && !o.truncated),
-            "Google produced empty or truncated output; raw response retained"
-        );
+                    .filter(|s| s["type"] == "model_output")
+                    .flat_map(|s| s["content"].as_array().into_iter().flatten())
+                    .filter(|p| p["type"] == "text")
+                    .filter_map(|p| p["text"].as_str())
+                    .collect::<String>();
+                vec![LmOutput::text(result)]
+            } else {
+                raw["candidates"]
+                    .as_array()
+                    .context("Google returned no candidates")?
+                    .iter()
+                    .map(|c| {
+                        let text = c["content"]["parts"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter(|p| p["thought"] != true)
+                            .filter_map(|p| p["text"].as_str())
+                            .collect::<String>();
+                        let mut output = LmOutput::text(text);
+                        output.finish_reason = c["finishReason"].as_str().map(str::to_owned);
+                        output.truncated = c["finishReason"] == "MAX_TOKENS";
+                        output
+                    })
+                    .collect::<Vec<_>>()
+            };
+            ensure!(
+                !outputs.is_empty()
+                    && outputs
+                        .iter()
+                        .all(|o| !o.as_text().is_empty() && !o.truncated),
+                "Google produced empty or truncated output; raw response retained"
+            );
+            Ok(outputs)
+        };
+        let outputs = parsed_outputs().map_err(|error| {
+            self.failure(
+                Disposition::CompletedOutput,
+                Some(200),
+                None,
+                true,
+                error.to_string(),
+            )
+        })?;
         let result = LmResponse {
-            model: Some(self.model.into()),
+            model: Some(self.model.clone()),
             outputs,
-            response_id: raw[if self.model == TEACHER {
+            response_id: raw[if self.interactions {
                 "id"
             } else {
                 "responseId"
@@ -403,10 +1369,17 @@ impl Google {
         write_new(
             &self.directory.join(format!("{key}.receipt.json")),
             &serde_json::to_vec_pretty(
-                &json!({"model":self.model,"api":if self.model==TEACHER{"interactions-stateless"}else{"generateContent"},"request_sha256":digest(fs::read(started)?),"elapsed_ms":begun.elapsed().as_millis(),"usage":raw[if self.model==TEACHER{"usage"}else{"usageMetadata"}],"response_schema":false,"physical_submissions":attempts}),
+                &json!({"model":self.model,"api":if self.interactions{"interactions-stateless"}else{"generateContent"},"request_sha256":digest(fs::read(started)?),"elapsed_ms":begun.elapsed().as_millis(),"timing_scope":"Whole generation request wall time includes retries and pacing; each attempt/result elapsed_ms measures its HTTP response and wait artifacts record pacing separately.","usage":raw[if self.interactions{"usage"}else{"usageMetadata"}],"response_schema":false,"physical_submissions":attempts,"shared_physical_calls":self.budget.spent()}),
             )?,
         )?;
         write_new(&cached, &serde_json::to_vec_pretty(&result)?)?;
+        self.limiter.success(tokens).await;
+        write_new(
+            &self
+                .directory
+                .join(format!("{key}.pacing-after-success.json")),
+            &serde_json::to_vec_pretty(&self.limiter.snapshot().await)?,
+        )?;
         Ok(result)
     }
 }
@@ -414,7 +1387,16 @@ impl Google {
 impl ChatModel for Google {
     async fn forward(&self, _http: &reqwest::Client, request: &LmRequest) -> Result<LmResponse> {
         let result = self.request(request).await;
-        if result.is_err() {
+        if result.as_ref().err().is_some_and(|error| {
+            disposition(error).is_some_and(|f| {
+                matches!(
+                    f.disposition,
+                    Disposition::Uncertain
+                        | Disposition::Authentication
+                        | Disposition::PriorUnresolved
+                )
+            })
+        }) {
             self.failed.store(true, Ordering::Relaxed);
         }
         result
@@ -425,7 +1407,7 @@ impl ChatModel for Google {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use dsrust::lm::api::{LmMessage, LmPart};
     use std::{
@@ -437,15 +1419,16 @@ mod tests {
 
     const SUCCESS: &str = r#"{"candidates":[{"content":{"parts":[{"text":"Observed response"}]},"finishReason":"STOP"}]}"#;
 
-    enum Reply {
+    pub(crate) enum Reply {
         Complete(u16, &'static str),
+        CompleteWithRetry(u16, &'static str, &'static str),
         Disconnect,
         Partial(u16, &'static str),
     }
 
-    struct Mock {
-        api: String,
-        requests: Arc<StdMutex<Vec<Value>>>,
+    pub(crate) struct Mock {
+        pub(crate) api: String,
+        pub(crate) requests: Arc<StdMutex<Vec<Value>>>,
         stop: Arc<AtomicBool>,
         thread: Option<thread::JoinHandle<()>>,
     }
@@ -469,15 +1452,15 @@ mod tests {
                     .strip_prefix("content-length:")
                     .map(|value| value.trim().parse::<usize>().unwrap())
             })
-            .unwrap();
+            .unwrap_or(0);
         let mut body = vec![0; length];
         stream.read_exact(&mut body).unwrap();
         json!({"path":header.split_whitespace().nth(1).unwrap(),
-            "body":serde_json::from_slice::<Value>(&body).unwrap(),"body_sha256":digest(&body)})
+            "body":if body.is_empty(){Value::Null}else{serde_json::from_slice::<Value>(&body).unwrap()},"body_sha256":digest(&body)})
     }
 
     impl Mock {
-        fn new(replies: Vec<Reply>) -> Self {
+        pub(crate) fn new(replies: Vec<Reply>) -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let api = format!("http://{}", listener.local_addr().unwrap());
@@ -508,6 +1491,9 @@ mod tests {
                         Reply::Complete(status, body) => {
                             write!(stream,"HTTP/1.1 {status} Mock\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
                         }
+                        Reply::CompleteWithRetry(status, body, retry) => {
+                            write!(stream,"HTTP/1.1 {status} Mock\r\nRetry-After: {retry}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+                        }
                         Reply::Partial(status, body) => {
                             write!(stream,"HTTP/1.1 {status} Mock\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()+20).unwrap();
                         }
@@ -533,6 +1519,12 @@ mod tests {
             let mut model =
                 Google::new(STUDENT, http, directory.into(), max_calls, allowance).unwrap();
             model.api = self.api.clone();
+            model.info = Mutex::new(Some(ModelInfo {
+                name: format!("models/{STUDENT}"),
+                supported_generation_methods: vec!["generateContent".into()],
+                input_token_limit: 100_000,
+                output_token_limit: 8192,
+            }));
             model
         }
     }
@@ -614,9 +1606,11 @@ mod tests {
         assert_eq!(model.spent.load(Ordering::Relaxed), 3);
         assert_eq!(
             model
-                .window
+                .limiter
+                .state
                 .lock()
                 .await
+                .window
                 .iter()
                 .map(|(_, n)| n)
                 .sum::<usize>(),
@@ -672,7 +1666,7 @@ mod tests {
         let error = model.forward(&model.http, &request).await.unwrap_err();
         assert!(error.to_string().contains("3 physical submissions"));
         assert_eq!(model.spent.load(Ordering::Relaxed), 3);
-        assert!(model.failed.load(Ordering::Relaxed));
+        assert!(!model.failed.load(Ordering::Relaxed));
         assert!(!dir.path().join(format!("{key}.response.json")).exists());
         assert_eq!(
             artifact(dir.path(), &key, "failure.json")["http_status"],
@@ -771,13 +1765,13 @@ mod tests {
             artifact(dir.path(), &key, "attempt-1.result.json")["retry_delay_ms"],
             Value::Null
         );
-        assert!(
-            model
-                .forward(&model.http, &prompt("Other work"))
-                .await
-                .unwrap_err()
-                .to_string()
-                .contains("withholds further")
+        let error = model
+            .forward(&model.http, &prompt("Other work"))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            disposition(&error).unwrap().disposition,
+            Disposition::BudgetExhausted
         );
         assert_eq!(mock.requests.lock().unwrap().len(), 1);
     }
@@ -785,7 +1779,7 @@ mod tests {
     #[tokio::test]
     async fn every_retry_consumes_the_shared_token_window() {
         let mock = Mock::new(vec![
-            Reply::Complete(429, "Limited"),
+            Reply::Complete(429, MINUTE_QUOTA),
             Reply::Complete(200, SUCCESS),
         ]);
         let dir = tempfile::tempdir().unwrap();
@@ -795,9 +1789,11 @@ mod tests {
         model.forward(&model.http, &request).await.unwrap();
         assert_eq!(
             model
-                .window
+                .limiter
+                .state
                 .lock()
                 .await
+                .window
                 .iter()
                 .map(|(_, n)| n)
                 .sum::<usize>(),
@@ -815,8 +1811,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oversized_prompt_or_zero_physical_budget_submits_nothing() {
-        for (cap, tokens) in [(0, 100), (3, 14_001)] {
+    async fn context_limit_or_zero_physical_budget_submits_nothing() {
+        for (cap, tokens) in [(0, 100), (3, 100_001)] {
             let mock = Mock::new(vec![]);
             let dir = tempfile::tempdir().unwrap();
             let request = prompt("Preflight failure");
@@ -825,7 +1821,22 @@ mod tests {
             assert!(model.forward(&model.http, &request).await.is_err());
             assert_eq!(model.spent.load(Ordering::Relaxed), 0);
             assert!(mock.requests.lock().unwrap().is_empty());
-            assert!(model.window.lock().await.is_empty());
+            assert!(model.limiter.state.lock().await.window.is_empty());
+            if tokens > 100_000 {
+                let key = request.cache_key(STUDENT);
+                let proof = artifact(dir.path(), &key, "preflight.json");
+                assert_eq!(proof["input_tokens"], tokens);
+                assert_eq!(proof["configured_input_tokens_per_minute"], 14_000);
+                assert_eq!(proof["model_input_token_limit"], 100_000);
+                assert_eq!(proof["admitted"], false);
+                assert_eq!(proof["generation_submitted"], false);
+                assert_eq!(proof["request"]["model"], STUDENT);
+                assert_eq!(
+                    proof["body"]["contents"][0]["parts"][0]["text"],
+                    "Preflight failure"
+                );
+                assert!(!dir.path().join(format!("{key}.request.json")).exists());
+            }
         }
     }
     #[test]
@@ -855,5 +1866,233 @@ mod tests {
                 .contains("unconstrained")
         );
         assert_eq!(model.spent.load(Ordering::Relaxed), 0);
+    }
+    const MINUTE_QUOTA: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentInputTokensPerMinutePerModel","quotaMetric":"generativelanguage.googleapis.com/generate_content_input_tokens","quotaDimensions":{"model":"gemma-4-26b-a4b-it"},"quotaValue":"20000"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"0.01s"}]}}"#;
+    const DAILY_QUOTA: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentRequestsPerDayPerModel","quotaDimensions":{"model":"gemma-4-26b-a4b-it"},"quotaValue":"100"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"0.01s"}]}}"#;
+    const ZERO_QUOTA: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentRequestsPerDayPerModel","quotaValue":"0"}]}]}}"#;
+
+    #[tokio::test]
+    async fn prompt_larger_than_rate_hint_is_admitted_and_charged_not_called_context_failure() {
+        let mock = Mock::new(vec![Reply::Complete(200, SUCCESS)]);
+        let dir = tempfile::tempdir().unwrap();
+        let request = prompt("Synthetic larger exchange");
+        let key = counted(dir.path(), &request, 20_000);
+        let model = mock.model(dir.path(), 1, 14_000);
+        model.forward(&model.http, &request).await.unwrap();
+        assert_eq!(
+            artifact(dir.path(), &key, "preflight.json")["admitted"],
+            true
+        );
+        assert_eq!(
+            model.limiter.snapshot().await["charged_input_tokens"],
+            20_000
+        );
+        assert_eq!(model.spent.load(Ordering::Relaxed), 1);
+        assert!(
+            dir.path()
+                .join(format!("{key}.attempt-1.wait.json"))
+                .is_file()
+        );
+    }
+    #[tokio::test]
+    async fn provider_minute_quota_and_retry_headers_adapt_pacing_and_retain_waits() {
+        let mock = Mock::new(vec![
+            Reply::CompleteWithRetry(429, MINUTE_QUOTA, "1"),
+            Reply::Complete(200, SUCCESS),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let request = prompt("Synthetic quota adaptation");
+        let key = counted(dir.path(), &request, 6000);
+        let model = mock.model(dir.path(), 2, 14_000);
+        model.forward(&model.http, &request).await.unwrap();
+        let result = artifact(dir.path(), &key, "attempt-1.result.json");
+        assert_eq!(result["provider_quota_advice"]["tokens_per_minute"], 20_000);
+        assert_eq!(result["retry_delay_ms"], 1000);
+        assert_eq!(
+            model.limiter.snapshot().await["provider_reported_tpm"],
+            20_000
+        );
+        assert_eq!(model.budget.spent(), 2);
+        assert_eq!(
+            artifact(dir.path(), &key, "attempt-2.wait.json")["retry_backoff_ms"],
+            1000
+        );
+    }
+    #[tokio::test]
+    async fn nonzero_daily_quota_uses_supplied_retry_time_with_same_bounded_accounting() {
+        let mock = Mock::new(vec![
+            Reply::Complete(429, DAILY_QUOTA),
+            Reply::Complete(200, SUCCESS),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let request = prompt("Synthetic daily reset wait");
+        let key = counted(dir.path(), &request, 100);
+        let model = mock.model(dir.path(), 2, 14_000);
+        model.forward(&model.http, &request).await.unwrap();
+        assert_eq!(model.budget.spent(), 2);
+        assert_eq!(
+            artifact(dir.path(), &key, "attempt-1.result.json")["automatic_retry"],
+            true
+        );
+        assert_eq!(
+            artifact(dir.path(), &key, "attempt-2.request.json")["physical_call"],
+            2
+        );
+    }
+    #[tokio::test]
+    async fn zero_quota_is_durable_deferral_without_invented_retry_or_more_calls() {
+        let mock = Mock::new(vec![Reply::Complete(429, ZERO_QUOTA)]);
+        let dir = tempfile::tempdir().unwrap();
+        let request = prompt("Synthetic absent quota");
+        let key = counted(dir.path(), &request, 100);
+        let model = mock.model(dir.path(), 3, 14_000);
+        let error = model.forward(&model.http, &request).await.unwrap_err();
+        assert_eq!(
+            disposition(&error).unwrap().disposition,
+            Disposition::QuotaDeferred
+        );
+        assert_eq!(disposition(&error).unwrap().retry_after, None);
+        assert_eq!(
+            artifact(dir.path(), &key, "failure.json")["eligible_retry_unix_ms"],
+            Value::Null
+        );
+        let error = model
+            .forward(&model.http, &prompt("A different synthetic task"))
+            .await
+            .unwrap_err();
+        assert_eq!(
+            disposition(&error).unwrap().disposition,
+            Disposition::QuotaDeferred
+        );
+        assert!(!disposition(&error).unwrap().generation_submitted);
+        assert_eq!(mock.requests.lock().unwrap().len(), 1);
+    }
+    #[tokio::test]
+    async fn successful_rate_probes_are_bounded_and_reported_quota_replaces_them() {
+        let limiter = RateLimiter::with_probe_ceiling(10_000, 20_000).unwrap();
+        for _ in 0..10 {
+            limiter.success(100).await;
+        }
+        assert_eq!(limiter.snapshot().await["probed_hint_tpm"], 20_000);
+        let mut advice = quota_advice(MINUTE_QUOTA.as_bytes(), None, STUDENT);
+        advice.tokens_per_minute = Some(9000);
+        limiter.observe(&advice).await;
+        limiter.success(100).await;
+        assert_eq!(limiter.snapshot().await["provider_reported_tpm"], 9000);
+        assert_eq!(limiter.snapshot().await["probed_hint_tpm"], 20_000);
+    }
+    #[tokio::test]
+    async fn separate_student_jobs_share_one_limiter_and_physical_budget() {
+        let mock = Mock::new(vec![Reply::Complete(200, SUCCESS)]);
+        let dir = tempfile::tempdir().unwrap();
+        let budget = CallBudget::new(2);
+        let limiter = RateLimiter::with_probe_ceiling(14_000, 14_000).unwrap();
+        let info = ModelInfo {
+            name: format!("models/{STUDENT}"),
+            supported_generation_methods: vec!["generateContent".into()],
+            input_token_limit: 100_000,
+            output_token_limit: 8192,
+        };
+        let http = reqwest::Client::builder()
+            .no_proxy()
+            .retry(reqwest::retry::never())
+            .build()
+            .unwrap();
+        let mut first = Google::from_listing(
+            info.clone(),
+            http.clone(),
+            dir.path().join("job1"),
+            budget.clone(),
+            limiter.clone(),
+        )
+        .unwrap();
+        first.test_api(&mock.api);
+        let mut second = Google::from_listing(
+            info,
+            http.clone(),
+            dir.path().join("job2"),
+            budget.clone(),
+            limiter.clone(),
+        )
+        .unwrap();
+        second.test_api(&mock.api);
+        let a = prompt("Synthetic first job");
+        let b = prompt("Synthetic second job");
+        counted(&first.directory, &a, 6000);
+        counted(&second.directory, &b, 9000);
+        first.forward(&http, &a).await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), second.forward(&http, &b))
+                .await
+                .is_err()
+        );
+        assert_eq!(budget.spent(), 1);
+        assert_eq!(mock.requests.lock().unwrap().len(), 1);
+        assert_eq!(limiter.snapshot().await["charged_input_tokens"], 6000);
+    }
+    #[tokio::test]
+    async fn actual_model_metadata_context_limit_blocks_generation_independently_of_rate() {
+        const PROFILE: &str = r#"{"name":"models/gemma-4-26b-a4b-it","supportedGenerationMethods":["generateContent"],"inputTokenLimit":10000,"outputTokenLimit":8192}"#;
+        let mock = Mock::new(vec![Reply::Complete(200, PROFILE)]);
+        let dir = tempfile::tempdir().unwrap();
+        let input = prompt("Synthetic context overflow");
+        let key = counted(dir.path(), &input, 10001);
+        let mut model = mock.model(dir.path(), 1, 1_000_000);
+        model.info = Mutex::new(None);
+        let error = model.forward(&model.http, &input).await.unwrap_err();
+        assert_eq!(
+            disposition(&error).unwrap().disposition,
+            Disposition::ContextLimit
+        );
+        assert_eq!(
+            artifact(dir.path(), &key, "preflight.json")["model_input_token_limit"],
+            10000
+        );
+        assert_eq!(model.budget.spent(), 0);
+        assert_eq!(mock.requests.lock().unwrap().len(), 1);
+    }
+    #[tokio::test]
+    async fn read_only_count_quota_and_uncertainty_are_preserved_and_not_replayed() {
+        for reply in [
+            Reply::CompleteWithRetry(429, MINUTE_QUOTA, "2"),
+            Reply::Partial(200, "{\"totalTokens\":"),
+        ] {
+            let mock = Mock::new(vec![reply]);
+            let dir = tempfile::tempdir().unwrap();
+            let request = prompt("Synthetic read-only count");
+            let http = reqwest::Client::builder()
+                .no_proxy()
+                .retry(reqwest::retry::never())
+                .build()
+                .unwrap();
+            let error = count_tokens_at(&http, &request, dir.path(), &mock.api)
+                .await
+                .unwrap_err();
+            let kind = disposition(&error).unwrap().disposition;
+            assert!(matches!(
+                kind,
+                Disposition::QuotaOrUnavailable | Disposition::Uncertain
+            ));
+            let second = count_tokens_at(&http, &request, dir.path(), &mock.api)
+                .await
+                .unwrap_err();
+            assert!(matches!(
+                disposition(&second).unwrap().disposition,
+                Disposition::QuotaOrUnavailable | Disposition::PriorUnresolved
+            ));
+            assert_eq!(mock.requests.lock().unwrap().len(), 1);
+            if kind == Disposition::QuotaOrUnavailable {
+                let record: Value = serde_json::from_slice(
+                    &fs::read(
+                        dir.path()
+                            .join(format!("{}.json", request.cache_key(STUDENT))),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                assert_eq!(record["quota_hints"]["tokens_per_minute"], 20_000);
+                assert_eq!(record["quota_hints"]["retry_after_ms"], 2000);
+            }
+        }
     }
 }

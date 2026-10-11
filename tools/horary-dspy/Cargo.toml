@@ -11,6 +11,7 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
 dsrust = { git = "https://github.com/getlatentic/dsrust", rev = "f24adde08c1d8850e4d7079d019643bb40f905cb" }
 horary-ai-core = { path = "../../crates/horary-ai-core" }
+horary-prompt-program = { path = "../../crates/horary-prompt-program" }
 regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
