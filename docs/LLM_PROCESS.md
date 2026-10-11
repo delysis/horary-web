@@ -132,14 +132,17 @@ flowchart TB
   place --> chart
   moment --> chart
   intake --> consultation_clipboard["N: accepted facts, missing inputs and boundaries"]
-  judgment --> consultation_clipboard
+  judgment --> accepted_answer{"Fresh Judgment accepted for the current reading?"}
+  accepted_answer -->|Yes| deliver_answer["N: publish that exact model answer"]
+  accepted_answer -->|No fresh answer; inquiry or follow-up| consultation_clipboard
   explanation --> consultation_clipboard
   consultation_clipboard --> conversation
-  conversation --> document["Model reply + unfolding chart and evidence"]
+  deliver_answer --> document["Model reply + unfolding chart and evidence"]
+  conversation --> document
   document --> words
 ```
 
-The model conducts the conversation. Rust holds the private clipboard, validates extracted observations and computes remaining prerequisites. A missing fact or method boundary becomes a reminder to the conversational reader, never a canned reply. The reader can select one reminder to pursue, without changing accepted facts or authorizing judgment. Specialized explanation and judgment findings return to that same reader. Its complete prompt and live constrained reminder IDs are exported below.
+The model conducts the conversation. Rust holds the private clipboard, validates extracted observations and computes remaining prerequisites. A missing fact or method boundary becomes a reminder to the conversational reader, never a canned reply. The reader can select one reminder to pursue, without changing accepted facts or authorizing judgment. Once a fresh Judgment is accepted, Rust publishes its exact answer as the immediate assistant reply, without another generation that could omit the interpretation. The handoff checks the current chart revision, worksheet, reading binding, completed job, document section and cancellation state, and records the source of the reply. Cached judgments do not replace genuine follow-up responses. Explanation, unfinished inquiry and later follow-ups still use the conversational reader, whose complete prompt and live constrained reminder IDs are exported below. This establishes a backend delivery boundary; speech accuracy and packaged presentation require separate review.
 
 A new matter is archived into a separate leaf before downstream work. Condition, reception and contact mechanics, plus location when applicable, are submitted as **one native generation batch** with separate prompts and saved prefixes. Contact selection does not need the other worksheets: its input retains the connected event graph, positions, Moon, house and coverage facts, while dignity and reception go to their own specialists. The final judgment receives the full graph, including intervening planets' condition and directed reception, and combines the independent findings. A possible occasion is not itself a conclusion about assistance, obstruction or the requested outcome.
 

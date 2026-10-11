@@ -58,6 +58,69 @@ pub(crate) fn current_answer(session: &Session) -> Option<&str> {
     Some(answer)
 }
 
+/// The newly accepted Judgment is itself model-authored human-facing prose.
+/// Publish that exact answer without a second model rewriting or withholding
+/// it. The caller supplies only a record accepted during this execution.
+pub(crate) fn deliver_fresh_answer(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    record_index: usize,
+) -> Result<(), String> {
+    let answer = current_answer(session)
+        .ok_or("No current accepted interpretation can be delivered")?
+        .to_owned();
+    let Some(ReadingResult::Judgment {
+        binding, worksheet, ..
+    }) = &session.method.result
+    else {
+        return Err("An unfinished reading cannot supply an immediate answer".into());
+    };
+    let record = session
+        .method
+        .records
+        .get(record_index)
+        .ok_or("The immediate answer lacks its accepted native record")?;
+    let jobs = session.method.flow.jobs.iter().filter(|job| {
+        job.stage == Stage::Judgment && job.revision == session.revision
+            && matches!(job.phase(), crate::horary_step::Phase::Complete { record_index: index } if *index == record_index)
+    }).collect::<Vec<_>>();
+    if record.stage != Stage::Judgment
+        || record.revision != session.revision
+        || binding.question != session.question
+        || record.validation_error.is_some()
+        || record.worksheet != *worksheet
+        || record.raw != record.generation.content
+        || crate::horary_step::original_input(&record.input)["reading_request"]["binding"]
+            != serde_json::to_value(binding).map_err(|e| e.to_string())?
+        || jobs.len() != 1
+        || session.messages.last().is_none_or(|m| m.role != "user")
+        || !session.sections.iter().any(|section| {
+            section.method_stage == Some(Stage::Judgment)
+                && section.revision == session.revision
+                && section.after_message == session.messages.len()
+                && section.body == answer
+                && section.worksheet == *worksheet
+        })
+    {
+        return Err(
+            "The immediate answer is stale or differs from its current native acceptance".into(),
+        );
+    }
+    runtime.check()?;
+    session.audit.push(json!({"event":"judgment_answer_reply","record_index":record_index,
+        "revision":session.revision,"binding":binding,"native_job":jobs[0],
+        "record_input_sha256":record.input_sha256,"guide_sha256":record.guide_sha256,
+        "schema_sha256":record.schema_sha256,"generation_sha256":crate::horary_lessons::digest(&record.raw),
+        "answer_sha256":crate::horary_lessons::digest(&answer),"after_message":session.messages.len()+1,
+        "authorship":"Exact newly accepted model-authored Judgment.answer; no later Conversation generated",
+        "speech":"Existing voice handoff; spoken delivery not asserted by this receipt"}));
+    session.messages.push(Message {
+        role: "assistant".into(),
+        text: answer,
+    });
+    runtime.publish(session)
+}
+
 pub(crate) fn interruption_reply(session: &Session, cancelled: bool) -> &'static str {
     if cancelled {
         "We can pause here. Your chart and completed passages are kept; say ‘continue’ when you’re ready."

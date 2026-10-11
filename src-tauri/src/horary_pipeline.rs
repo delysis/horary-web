@@ -776,20 +776,29 @@ pub fn run(
     audio: Option<&[u8]>,
     previous: &Session,
 ) -> Result<(), String> {
-    let result = run_inner(session, runtime, geocode, instant, audio, previous).and_then(|()| {
-        let speak = session.method.brief.intent != "pause";
-        #[cfg(test)]
-        let speak = speak
-            && !(runtime.selected_stage_target().is_some()
-                && session.audit.iter().any(|event| {
-                    event["event"] == "selected_stage_boundary"
-                        || event["event"] == "selected_stage_uninvoked"
-                }));
-        if speak {
-            crate::horary_conversation::respond(session, runtime)?;
-        }
-        Ok(())
-    });
+    let result =
+        run_inner(session, runtime, geocode, instant, audio, previous).and_then(|answer| {
+            let speak = session.method.brief.intent != "pause";
+            #[cfg(test)]
+            let speak = speak
+                && !(runtime.selected_stage_target().is_some()
+                    && session.audit.iter().any(|event| {
+                        event["event"] == "selected_stage_boundary"
+                            || event["event"] == "selected_stage_uninvoked"
+                    }));
+            if speak {
+                if let Some(record_index) = answer {
+                    crate::horary_conversation::deliver_fresh_answer(
+                        session,
+                        runtime,
+                        record_index,
+                    )?;
+                } else {
+                    crate::horary_conversation::respond(session, runtime)?;
+                }
+            }
+            Ok(())
+        });
     if let Err(error) = &result {
         crate::horary_executor::pause_after_error(session, error.clone());
         runtime.publish(session)?;
@@ -804,11 +813,11 @@ fn run_inner(
     instant: f64,
     audio: Option<&[u8]>,
     previous: &Session,
-) -> Result<(), String> {
+) -> Result<Option<usize>, String> {
     if let Some(ready) = prepare_reading(session, runtime, geocode, instant, audio, previous)? {
-        generate_reading(session, runtime, ready)?;
+        return generate_reading(session, runtime, ready);
     }
-    Ok(())
+    Ok(None)
 }
 
 /// Exercise production input preparation and actual inquiries. At ReadyReading,
@@ -1568,7 +1577,7 @@ fn generate_reading(
     session: &mut Session,
     runtime: &impl Runtime,
     ready: crate::reading_contracts::ReadyReading,
-) -> Result<(), String> {
+) -> Result<Option<usize>, String> {
     use crate::reading_contracts as contracts;
     let chart = session.chart.as_ref().ok_or("A chart is required")?.clone();
     let reading_request = ready.input();
@@ -1597,7 +1606,7 @@ fn generate_reading(
         &houses,
     )?
     else {
-        return Ok(());
+        return Ok(None);
     };
     let choices = assignment.worksheet();
     let roles = assignment.roles().to_vec();
@@ -1611,7 +1620,8 @@ fn generate_reading(
     runtime.publish(session)?;
     #[cfg(test)]
     if runtime.selected_stage_target() == Some(Stage::Significators) {
-        return selected_stage_boundary(session, runtime, &ready, Stage::Significators);
+        return selected_stage_boundary(session, runtime, &ready, Stage::Significators)
+            .map(|()| None);
     }
     let reception_roles = accepted_reception_roles(&assignment)?;
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
@@ -1662,9 +1672,9 @@ fn generate_reading(
             // absent, never represented by fabricated successful worksheets.
             if let Some(data) = task(session, runtime, *stage, input.clone(), facts)? {
                 section(session, *stage, data.worksheet(), facts, Vec::new());
-                return selected_stage_boundary(session, runtime, &ready, *stage);
+                return selected_stage_boundary(session, runtime, &ready, *stage).map(|()| None);
             }
-            return Ok(());
+            return Ok(None);
         }
         // This method does not invoke the selected stage (e.g. Location on a
         // non-lost question). Do not manufacture authority or run other actors.
@@ -1672,7 +1682,7 @@ fn generate_reading(
             json!({"event":"selected_stage_uninvoked","target_stage":target,
             "reason":"The real method does not dispatch this independent stage"}),
         );
-        return runtime.publish(session);
+        return runtime.publish(session).map(|()| None);
     }
     let values = execute_batch(session, runtime, &tasks)?;
     for ((stage, _, facts), value) in tasks.iter().zip(&values) {
@@ -1683,7 +1693,7 @@ fn generate_reading(
     runtime.publish(session)?;
     if values.iter().any(Option::is_none) {
         ask_pending(session);
-        return Ok(());
+        return Ok(None);
     }
     let c = values[0].as_ref().map(CheckedData::worksheet);
     let r = values[1].as_ref().map(CheckedData::worksheet);
@@ -1715,6 +1725,7 @@ fn generate_reading(
             facts.push(fact.clone());
         }
     }
+    let record_start = session.method.records.len();
     let Some(judgment) = task(
         session,
         runtime,
@@ -1724,7 +1735,7 @@ fn generate_reading(
         &facts,
     )?
     else {
-        return Ok(());
+        return Ok(None);
     };
     ready.validate_current(
         session
@@ -1735,7 +1746,7 @@ fn generate_reading(
     )?;
     #[cfg(test)]
     if runtime.selected_stage_target() == Some(Stage::Judgment) {
-        return selected_stage_boundary(session, runtime, &ready, Stage::Judgment);
+        return selected_stage_boundary(session, runtime, &ready, Stage::Judgment).map(|()| None);
     }
     let answer = judgment.worksheet();
     session.method.result = Some(contracts::ReadingResult::Judgment {
@@ -1758,7 +1769,15 @@ fn generate_reading(
         &facts,
         Vec::new(),
     );
-    Ok(())
+    // A cached earlier Judgment is still valid native data, but cannot replace
+    // the response to a new follow-up. Only this execution's accepted record
+    // supplies the immediate model-authored reply.
+    Ok(session
+        .method
+        .records
+        .len()
+        .checked_sub(1)
+        .filter(|index| *index >= record_start))
 }
 
 /// Acceptance is emitted only after the production guard completed its native
@@ -2812,11 +2831,18 @@ mod selected_stage_execution_tests {
         atomic::{AtomicBool, Ordering},
         Mutex,
     };
+    #[derive(Clone, Copy)]
+    enum JudgmentReply {
+        Answer,
+        MissingContext,
+        Invalid,
+    }
     struct Reader {
         dir: tempfile::TempDir,
         target: Option<Stage>,
         calls: Mutex<Vec<(Stage, Value, Value)>>,
         reject_first: AtomicBool,
+        judgment: JudgmentReply,
     }
     impl Runtime for Reader {
         fn selected_stage_target(&self) -> Option<Stage> {
@@ -2844,6 +2870,11 @@ mod selected_stage_execution_tests {
             let answer = match stage {
                 Stage::Conversation => {
                     return Err("Unchanged conversation callback intentionally fails".into())
+                }
+                Stage::Judgment if matches!(self.judgment, JudgmentReply::MissingContext) => {
+                    json!({"request_input":{"field":"context",
+                        "question":"Which circumstances are you concerned about?",
+                        "reason":"The synthetic reader requires additional event context"}})
                 }
                 Stage::Intake if original["recognition_phase"] == "complete_selected_program" => {
                     json!({
@@ -2909,7 +2940,12 @@ mod selected_stage_execution_tests {
                     }
                     if stage == Stage::Judgment {
                         value["verdict"] = json!("unresolved");
-                        value["answer"] = json!("Offline mechanics fixture only");
+                        value["answer"] =
+                            json!(if matches!(self.judgment, JudgmentReply::Invalid) {
+                                ""
+                            } else {
+                                "  Offline mechanics fixture only; no interpretation claim.\n"
+                            });
                         value["evidence"] = json!([]);
                         let boundary = original["facts"]
                             .as_array()
@@ -2977,11 +3013,19 @@ mod selected_stage_execution_tests {
         }
     }
     fn execute(target: Option<Stage>, reject_first: bool) -> (Session, Reader, Result<(), String>) {
+        execute_with(target, reject_first, JudgmentReply::Answer)
+    }
+    fn execute_with(
+        target: Option<Stage>,
+        reject_first: bool,
+        judgment: JudgmentReply,
+    ) -> (Session, Reader, Result<(), String>) {
         let reader = Reader {
             dir: tempfile::tempdir().unwrap(),
             target,
             calls: Mutex::new(vec![]),
             reject_first: AtomicBool::new(reject_first),
+            judgment,
         };
         let mut session = Session::default();
         session.messages.push(Message {
@@ -3031,18 +3075,225 @@ mod selected_stage_execution_tests {
             .audit
             .iter()
             .any(|e| e["event"] == "selected_stage_boundary"));
-        drop(calls);
-        let (_, reader, result) = execute(None, false);
+    }
+    #[test]
+    fn fresh_current_judgment_is_exact_immediate_reply_without_redundant_conversation() {
+        let (session, reader, result) = execute(None, false);
+        result.unwrap();
+        assert!(!reader
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(stage, _, _)| *stage == Stage::Conversation));
+        let crate::reading_contracts::ReadingResult::Judgment {
+            binding,
+            answer,
+            worksheet,
+            ..
+        } = session.method.result.as_ref().unwrap()
+        else {
+            panic!("The production judgment must be retained");
+        };
+        let reply = session.messages.last().unwrap();
+        assert_eq!(reply.role, "assistant");
+        assert_eq!(
+            &reply.text, answer,
+            "No trimming, paraphrase or scaffold prose"
+        );
+        assert!(answer.starts_with("  ") && answer.ends_with('\n'));
+        assert_eq!(binding.question, session.question);
+        let receipt = session
+            .audit
+            .iter()
+            .find(|event| event["event"] == "judgment_answer_reply")
+            .unwrap();
+        let index = receipt["record_index"].as_u64().unwrap() as usize;
+        let record = &session.method.records[index];
+        assert_eq!(record.stage, Stage::Judgment);
+        assert!(record.validation_error.is_none());
+        assert_eq!(&record.worksheet, worksheet);
+        assert_eq!(receipt["binding"], serde_json::to_value(binding).unwrap());
+        assert_eq!(receipt["answer_sha256"], lessons::digest(answer));
+        assert_eq!(receipt["native_job"]["phase"]["record_index"], index);
+        let section = session
+            .sections
+            .iter()
+            .find(|section| section.method_stage == Some(Stage::Judgment))
+            .unwrap();
+        assert_eq!(&section.body, answer);
+        assert_eq!(&section.worksheet, worksheet);
+        assert_eq!(section.after_message + 1, session.messages.len());
+    }
+    #[test]
+    fn cached_judgment_on_a_later_turn_keeps_the_conversation_route() {
+        let (mut session, reader, result) = execute(None, false);
+        result.unwrap();
+        let previous = session.clone();
+        let judgments = reader
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(stage, _, _)| *stage == Stage::Judgment)
+            .count();
+        let replies = session
+            .audit
+            .iter()
+            .filter(|event| event["event"] == "judgment_answer_reply")
+            .count();
+        session.messages.push(Message {
+            role: "user".into(),
+            text: "continue".into(),
+        });
+        let result = run(
+            &mut session,
+            &reader,
+            &GeocodeState::default(),
+            1791388801000.,
+            None,
+            &previous,
+        );
         assert_eq!(
             result.unwrap_err(),
             "Unchanged conversation callback intentionally fails"
         );
+        let calls = reader.calls.lock().unwrap();
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|(stage, _, _)| *stage == Stage::Judgment)
+                .count(),
+            judgments
+        );
+        assert!(calls
+            .iter()
+            .any(|(stage, _, _)| *stage == Stage::Conversation));
+        assert_eq!(
+            session
+                .audit
+                .iter()
+                .filter(|event| event["event"] == "judgment_answer_reply")
+                .count(),
+            replies
+        );
+        assert_eq!(session.messages.last().unwrap().text, "continue");
+    }
+    #[test]
+    fn stale_rejected_or_already_delivered_judgment_cannot_supply_a_new_reply() {
+        let (completed, reader, result) = execute(None, false);
+        result.unwrap();
+        let index = completed.method.records.len() - 1;
+        let mut before_delivery = completed.clone();
+        before_delivery.messages.pop().unwrap();
+        for change in 0..8 {
+            let mut session = before_delivery.clone();
+            match change {
+                0 => session.method.consultation.as_mut().unwrap().revision += 1,
+                1 => {
+                    session
+                        .sections
+                        .iter_mut()
+                        .find(|s| s.method_stage == Some(Stage::Judgment))
+                        .unwrap()
+                        .revision += 1
+                }
+                2 => {
+                    session.method.records[index].validation_error =
+                        Some("Synthetic native rejection".into())
+                }
+                3 => {
+                    session.method.records[index].input["reading_request"]["binding"]
+                        ["case_revision"] = json!(999)
+                }
+                4 => session.messages.push(Message {
+                    role: "user".into(),
+                    text: "A new follow-up needs a new reply".into(),
+                }),
+                5 => session.method.result = None,
+                6 => session.question = "A different original question".into(),
+                7 => session.method.records[index].raw.push_str("changed"),
+                _ => unreachable!(),
+            }
+            let snapshot = serde_json::to_value(&session).unwrap();
+            assert!(
+                crate::horary_conversation::deliver_fresh_answer(&mut session, &reader, index)
+                    .is_err(),
+                "Invalid current answer {change}"
+            );
+            assert_eq!(
+                serde_json::to_value(&session).unwrap(),
+                snapshot,
+                "A rejected delivery must not mutate the native state"
+            );
+        }
+        let mut twice = completed;
+        let messages = twice.messages.len();
+        assert!(
+            crate::horary_conversation::deliver_fresh_answer(&mut twice, &reader, index).is_err()
+        );
+        assert_eq!(twice.messages.len(), messages);
+    }
+    #[test]
+    fn incomplete_judgment_keeps_its_real_inquiry_and_conversation_route() {
+        let (session, reader, result) = execute_with(None, false, JudgmentReply::MissingContext);
+        assert_eq!(
+            result.unwrap_err(),
+            "Unchanged conversation callback intentionally fails"
+        );
+        assert!(matches!(
+            session.method.result,
+            Some(crate::reading_contracts::ReadingResult::NeedsInformation { .. })
+        ));
+        assert!(session
+            .method
+            .flow
+            .pending
+            .iter()
+            .any(|pending| pending.stage == Stage::Judgment));
         assert!(reader
             .calls
             .lock()
             .unwrap()
             .iter()
-            .any(|(s, _, _)| *s == Stage::Conversation));
+            .any(|(stage, _, _)| *stage == Stage::Conversation));
+        assert!(!session
+            .audit
+            .iter()
+            .any(|event| event["event"] == "judgment_answer_reply"));
+        assert!(!session
+            .sections
+            .iter()
+            .any(|section| section.method_stage == Some(Stage::Judgment)));
+    }
+    #[test]
+    fn failed_judgment_preserves_native_repair_and_never_delivers_invalid_prose() {
+        let (session, reader, result) = execute_with(None, false, JudgmentReply::Invalid);
+        assert!(result.is_err());
+        let records = session
+            .method
+            .records
+            .iter()
+            .filter(|record| record.stage == Stage::Judgment)
+            .collect::<Vec<_>>();
+        assert!(
+            records.len() > 1,
+            "The original native repair route remains in use"
+        );
+        assert!(records
+            .iter()
+            .all(|record| record.validation_error.is_some()));
+        assert!(session.method.result.is_none());
+        assert!(!session
+            .audit
+            .iter()
+            .any(|event| event["event"] == "judgment_answer_reply"));
+        assert!(!reader
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(stage, _, _)| *stage == Stage::Conversation));
     }
     #[test]
     fn actual_rejected_then_repaired_condition_has_original_job_and_effective_guide() {

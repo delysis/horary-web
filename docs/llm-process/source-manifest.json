@@ -143,7 +143,7 @@
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
-      "sha256": "42b066bb151db522d21a1d37d064735e90913080336e72941a72a929f0b3589b"
+      "sha256": "82913f37b4e0974c2cd5b8ebeab6fa6faefa000f6642d50cb666e5b06a938d67"
     },
     {
       "path": "src-tauri/src/horary_executor.rs",
@@ -155,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "c7a737564aea60d2d9e125dfd751c62fd7906e870eb4472bf5fe24f370d5ca28"
+      "sha256": "ec62f65b625465b18e51c88b3a588e1e3f40f5267a0dd65efe15f794f51d1dbe"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -287,7 +287,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "48370b4bd9204285534c2441144512701cd19a0b0f8d65777ddaa000d893b69c"
+      "sha256": "5029e1ee1713e1d3891c93d3dad5345850ab2813b93a1b97cbb9393e9ef55de1"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -371,7 +371,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "d954b48999a4d6a06fe40ddb9fb64848857a1d9bc52587900541c4a183c92d58"
+      "sha256": "f72a21a9259ceade41c2d248f9cc16af39eb5ced1303a67a15f449e0d5941fe7"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
