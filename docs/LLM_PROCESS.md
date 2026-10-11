@@ -213,7 +213,7 @@ flowchart LR
   hit -->|Yes| bank
   bank --> verify["Verify exact token prefix and live ownership"]
   verify --> tasks["1 to 4 independent case prompts"]
-  changing["Changing question, facts and output contract"] --> tasks
+  changing["Changing question and facts; protected native contract and format reminder"] --> tasks
   tasks --> batch["Native generate_batch: distinct KV sequences, one weight copy"]
   batch --> check["Parse each worksheet; check schema, facts and native completion rules"]
   check -->|Valid| receipt["Keep original output, checks, source IDs and metrics"]
@@ -253,7 +253,7 @@ The [scenario evaluation guide](ELICITATION_EVALUATION.md) documents the executa
 2. Are house and natural roles justified by the matter? For the querent's lost object, are Lords 2 and 4 compared? For another owner, is the owner's second house turned correctly? Is the Moon's role explicit?
    Recognition proposes people, the subject, ownership and exact source phrases. The catalogue resolves applicable ownership and capacity before dispatching the role program; a workplace capacity or generic future partner does not require an invented personal relationship. Named native options bind identities and compute turned houses. A numeric guess cannot complete that step. Contextual classification still needs Eileen's review, and the English quote checks do not prove a sentence's full meaning.
 3. Are quality, ability, and motive distinguished? Does each reception run from the planet in the dignity to that dignity's ruler? Are mixed or negative receptions retained?
-   Reception and final judgment receive the calculator's typed guest, host and dignity/polarity rows beside the accepted role IDs and their corresponding houses and planets. Shared planets retain every accepted role. This clipboard does not choose their contextual meaning or declare reciprocity: the reader must justify the relevant role and inspect each direction separately. A Moon assigned to buyers' money cannot silently become the querent's feelings.
+   Reception and final judgment receive the calculator's typed guest, host and dignity/polarity rows beside the accepted role IDs and their corresponding houses and planets. Shared planets retain every accepted role. Reception includes the resolved roles beside each direction; judgment refers to the same complete role table by indices, avoiding repeated copies. This clipboard does not choose their contextual meaning or declare reciprocity: the reader must justify the relevant role and inspect each direction separately. A Moon assigned to buyers' money cannot silently become the querent's feelings.
    Condition review carries native facet tags, separate from its rendered prose. Before a worksheet completes, every selected planet with supplied essential-condition or house-capacity testimony must cite that testimony in the corresponding check. Shared rulers reuse the same proof; absent calculations stay unknown. Each check's evidence allowance follows the selected planets and supplied native facets, so solar and cusp testimony can accompany the required dignity and house facts. The current fact-ID allowlist remains authoritative. Repair feedback lists all missing planet/facet obligations together with the applicable limits; it retains the rejected worksheet and original input. The full output contract appears once in a repair conversation, alongside the unchanged original input, rejected answer and native rejection. This enforces the existing per-role coverage obligation (printed pp. 44–45, 56; applicant and job, p. 222); it does not certify the interpretation of a citation, force a positive state or prove an event. Earlier untyped receipts remain untyped and are not retroactively qualified.
 4. Is an applying contact relevant to the selected actors? What changes or intervenes before it? Does the calculation actually establish a claimed translation, collection, or prevention?
    Payment-arrival roles must retain all permitted receipt routes: the incoming money to the recipient, their second-house pocket, or the appropriate Moon (printed p. 158). The native options require the pocket and conditionally require Moon when that recipient is the effective principal. A claimed house ruler retains its planet; Moon does not automatically transfer to a person merely enquired about (p. 32). Amount and quality do not acquire an arrival-aspect requirement. The existing ambiguous relay owner alias and relative-sender turning remain separate review boundaries.
@@ -265,6 +265,8 @@ The main document carries the proposed interpretation and keeps spoken words as 
 Location acquisition and permission refresh wait for Core Location's initial authorization callback. Reading a newly created manager's property before that callback can falsely report pending access. Refresh requests neither consent nor coordinates; the controller separately acquires device coordinates after access is granted. Consent-only startup does not start tracking. The native callback regression exercises initialization and denied/restricted/granted status without prompting or using real location services.
 
 Every accepted control request stays attached to its unfinished step. A model proposal becomes data only through the shared native acceptance path. Repeated repairs and user clarification continue until the required data arrives; cancellation/backend interruption pauses that work. Neither an existing chart nor an error message means that an interpretation is finished.
+
+The editable horary lesson is separate from the native response contract and its short, schema-derived format reminder. An optimizer can improve the lesson without removing required fields or changing the direct state/evidence/finding check structure. Fresh and repair calls receive that reminder beside the complete contract. Judgment shares identical evidence contracts by reference; expanding them restores every original limit and allowed ID. Repairs retain the actual rejected answer and native error without repeating the full contract. These measures support ordinary text generation; they do not certify the model's interpretation.
 
 When a focused extractor proposes a different method together with facts, native scope checks reject the facts as premature. The repair names the proposed method and facet explicitly so it can request a frame-only reroute. That proposal remains unverified; its own lesson must check the original question and establish its facts before a reading can proceed. The rejected patch remains in the receipts, and the original question and candidate moment survive.
 
@@ -4433,7 +4435,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
 
 ### A working answer · judgment
 
-Guide SHA256: `48d8998ea533af3ee1e99d625d9671ca6617e255c68d438aff9acbb8b94d01b9`
+Guide SHA256: `e86b728000d2562d804233653cae45c9a2afd9f0bd992c9b973af7e041f2c525`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -4484,7 +4486,7 @@ F — contrary testimony versus missing evidence. An explicit blocked/negative c
 G — booked wedding versus first meeting. Both charts have no new candidate within the computed week. In an arranged_wedding case, that is not a reason to withhold the occasion or call the wedding unverified: the baseline is that the plan proceeds unless disrupted. Explain actual role-correct support/tension, then qualify any obstruction tests that remain unchecked beyond the window. In a hoped_for case, the event has not already been arranged and still needs relevant occasion testimony. The same candidate list does not give the same answer for these different accepted circumstances. Do not turn the arranged baseline into a categorical promise that all disruptions were checked.
 </worked_examples>
 
-<output_fields>verdict, checks question_answered/supporting_testimony/contrary_testimony/missing_information/scope_of_answer, answer, evidence, unknowns. answer is the visible interpretation. Reference current evidence and the boundary. Do not produce a fixed open-outcome closing in place of the answer.</output_fields>
+<output_fields>verdict, checks question_answered/supporting_testimony/contrary_testimony/missing_information/scope_of_answer, answer, evidence, summary, unknowns. answer is the visible interpretation. Reference current evidence and the boundary. Do not produce a fixed open-outcome closing in place of the answer.</output_fields>
 
 
 <book_extracts>

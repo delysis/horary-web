@@ -1395,8 +1395,10 @@ struct ReceptionRoleEdge<'a> {
     fact_id: &'a str,
     guest_role_indices: Vec<usize>,
     host_role_indices: Vec<usize>,
-    guest_roles: Vec<&'a AcceptedReceptionRole>,
-    host_roles: Vec<&'a AcceptedReceptionRole>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guest_roles: Option<Vec<&'a AcceptedReceptionRole>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    host_roles: Option<Vec<&'a AcceptedReceptionRole>>,
 }
 
 /// Selection IDs and role order come from the same native acceptance permit.
@@ -1428,6 +1430,18 @@ fn accepted_reception_roles(data: &CheckedData) -> Result<Vec<AcceptedReceptionR
 }
 
 fn reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact]) -> Value {
+    reception_clipboard_view(roles, facts, true)
+}
+
+fn judgment_reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact]) -> Value {
+    reception_clipboard_view(roles, facts, false)
+}
+
+fn reception_clipboard_view(
+    roles: &[AcceptedReceptionRole],
+    facts: &[Fact],
+    direct_roles: bool,
+) -> Value {
     let edges: Vec<_> = facts
         .iter()
         .filter(|fact| fact.kind == "reception")
@@ -1445,8 +1459,8 @@ fn reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact]) -> Value
                 fact_id: &fact.id,
                 guest_role_indices: guest_roles.iter().map(|role| role.role_index).collect(),
                 host_role_indices: host_roles.iter().map(|role| role.role_index).collect(),
-                guest_roles,
-                host_roles,
+                guest_roles: direct_roles.then_some(guest_roles),
+                host_roles: direct_roles.then_some(host_roles),
             })
         })
         .collect();
@@ -1608,7 +1622,7 @@ fn generate_reading(
         runtime,
         Stage::Judgment,
         json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
-            "native_reception":reception_clipboard(&reception_roles,&facts)}),
+            "native_reception":judgment_reception_clipboard(&reception_roles,&facts)}),
         &facts,
     )?
     else {
@@ -1698,6 +1712,25 @@ fn selected_stage_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn expand_indexed_reception_clipboard(mut clipboard: Value) -> Value {
+        let roles = clipboard["accepted_roles"].as_array().unwrap().clone();
+        for edge in clipboard["edges"].as_array_mut().unwrap() {
+            for (direct, indices) in [
+                ("guest_roles", "guest_role_indices"),
+                ("host_roles", "host_role_indices"),
+            ] {
+                let rows = edge[indices]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|index| roles[index.as_u64().unwrap() as usize].clone())
+                    .collect::<Vec<_>>();
+                edge[direct] = json!(rows);
+            }
+        }
+        clipboard
+    }
 
     fn reception_binding_fixture() -> (Value, Value, Vec<Fact>) {
         let facts = reading_method::facts(Some(&json!({
@@ -1909,6 +1942,45 @@ mod tests {
         .err()
         .unwrap();
         assert!(error.contains("house ruler has first claim"));
+    }
+
+    #[test]
+    fn judgment_reception_clipboard_reconstructs_exact_shared_and_unassigned_roles() {
+        let (input, worksheet, facts) = reception_binding_fixture();
+        let step::Checked::Data(data) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &worksheet,
+            &input,
+            &facts,
+        )
+        .unwrap() else {
+            panic!("Expected native role acceptance");
+        };
+        let roles = accepted_reception_roles(&data).unwrap();
+        let before_roles = serde_json::to_value(data.roles()).unwrap();
+        let unassigned = reading_method::facts(Some(&json!({
+            "derived":{"receptions":[
+                {"guestPlanet":"Moon","hostPlanet":"Venus","dignity":"fall","polarity":"negative"},
+                {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"domicile","polarity":"positive"}
+            ]}
+        })));
+        for facts in [facts, unassigned] {
+            let before_facts = serde_json::to_value(&facts).unwrap();
+            let expanded = reception_clipboard(&roles, &facts);
+            let indexed = judgment_reception_clipboard(&roles, &facts);
+            assert_eq!(indexed["accepted_roles"], expanded["accepted_roles"]);
+            for edge in indexed["edges"].as_array().unwrap() {
+                assert!(edge.get("guest_roles").is_none());
+                assert!(edge.get("host_roles").is_none());
+                assert!(edge["guest_role_indices"].is_array());
+                assert!(edge["host_role_indices"].is_array());
+            }
+            assert!(indexed.to_string().len() < expanded.to_string().len());
+            assert_eq!(expand_indexed_reception_clipboard(indexed), expanded);
+            assert_eq!(serde_json::to_value(&facts).unwrap(), before_facts);
+        }
+        assert_eq!(serde_json::to_value(data.roles()).unwrap(), before_roles);
     }
 
     #[test]
@@ -2402,6 +2474,8 @@ mod tests {
         let fixture = process_examples().unwrap();
         let examples = fixture["examples"].as_array().unwrap();
         let mut accepted_roles = None;
+        let mut current_roles = None;
+        let mut reception_facts: Option<Vec<Value>> = None;
         for example in examples {
             let envelope: Value =
                 serde_json::from_str(example["messages"][1]["content"].as_str().unwrap()).unwrap();
@@ -2419,6 +2493,26 @@ mod tests {
                     accepted_roles = Some(clipboard["accepted_roles"].clone());
                 }
                 let facts = input["facts"].as_array().unwrap();
+                let roles = input.get("roles").unwrap_or(&input["question"]["roles"]);
+                if let Some(previous) = &current_roles {
+                    assert_eq!(previous, roles);
+                } else {
+                    current_roles = Some(roles.clone());
+                }
+                let raw_reception_facts = facts
+                    .iter()
+                    .filter(|fact| fact["kind"] == "reception" && fact["reception"].is_object())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if let Some(previous) = &reception_facts {
+                    // Judgment also receives unselected native edges. The
+                    // Reception subset must survive with identical facts.
+                    for fact in previous {
+                        assert!(raw_reception_facts.contains(fact));
+                    }
+                } else {
+                    reception_facts = Some(raw_reception_facts);
+                }
                 let typed_ids = facts
                     .iter()
                     .filter(|fact| fact["kind"] == "reception" && fact["reception"].is_object())
@@ -2431,18 +2525,24 @@ mod tests {
                     .map(|edge| edge["fact_id"].clone())
                     .collect::<Vec<_>>();
                 assert_eq!(bound_ids, typed_ids);
+                let expanded = expand_indexed_reception_clipboard(clipboard.clone());
                 for edge in clipboard["edges"].as_array().unwrap() {
                     for (direct, indices) in [
                         ("guest_roles", "guest_role_indices"),
                         ("host_roles", "host_role_indices"),
                     ] {
-                        let expected = edge[indices]
+                        let reconstructed = expanded["edges"]
                             .as_array()
                             .unwrap()
                             .iter()
-                            .map(|index| &roles[index.as_u64().unwrap() as usize])
-                            .collect::<Vec<_>>();
-                        assert_eq!(edge[direct], json!(expected));
+                            .find(|row| row["fact_id"] == edge["fact_id"])
+                            .unwrap();
+                        assert_eq!(edge[indices], reconstructed[indices]);
+                        if example["stage"] == "judgment" {
+                            assert!(edge.get(direct).is_none());
+                        } else {
+                            assert_eq!(edge[direct], reconstructed[direct]);
+                        }
                     }
                 }
             } else {

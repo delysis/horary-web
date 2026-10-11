@@ -139,7 +139,7 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "0c961d9b3964ce5836bf93320e082243c78adf08e8641028bf842bd422e971c2"
+      "sha256": "746455624627e40fa1f0d857c9e7a8a26ca9600e121b16ae792a56b0bf4a0c14"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
@@ -155,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "f53d109b45a28155758f04cdc5c42f01103577fadee0fa1f5ff680c6e1e70f0c"
+      "sha256": "78fca09e54b802ea3a993cb0f2b32b0b9680f70126ffd580e51092f35a206202"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -179,7 +179,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/judgment.md",
-      "sha256": "ccddafec4e266996699f9ceca725e742748aa6823ad3f8950a18304af6000281"
+      "sha256": "e804fd74c7276eae7b2ee5cb09b5b9821b6f2696977573e85416130c1b4aa7b3"
     },
     {
       "path": "src-tauri/src/horary_prompts/location.md",
@@ -283,11 +283,11 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "e740ea15b53323b7da93315837fbb389dd14635caa3b4600f1919e1887abe977"
+      "sha256": "e3ecba386c1d073f93cae0297cb889b9b98c0b257f4d63b78a73ccf506f3c06c"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "35c7f8ab20a98fb9c98aa208c07e711a552a5bb1f42e0399f34e91340f8b4677"
+      "sha256": "eb838b02b736386202b8004f83535611b9718e4f1c0dbc256a50837b46c3ba92"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -371,7 +371,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "8a10f50c515a0d7520c7fe45b4ea2279745e59b6030d285fd32e4eaf092f7cd0"
+      "sha256": "ac49af73bc31c16314c0160198e6aaa150fdaa3cdffbf2552767fbe0f59df411"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
@@ -415,7 +415,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "dc6c140940480b04e7827740f4832729cdd1ee37b34cb32af11e3077da2f64a7"
+      "sha256": "fe8e8b121353db25457db27600d258f649e16845630b95d00038d881fb451a68"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",

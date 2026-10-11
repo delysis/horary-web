@@ -502,7 +502,7 @@ flowchart LR
   hit -->|Yes| bank
   bank --> verify["Verify exact token prefix and live ownership"]
   verify --> tasks["1 to 4 independent case prompts"]
-  changing["Changing question, facts and output contract"] --> tasks
+  changing["Changing question and facts; protected native contract and format reminder"] --> tasks
   tasks --> batch["Native generate_batch: distinct KV sequences, one weight copy"]
   batch --> check["Parse each worksheet; check schema, facts and native completion rules"]
   check -->|Valid| receipt["Keep original output, checks, source IDs and metrics"]

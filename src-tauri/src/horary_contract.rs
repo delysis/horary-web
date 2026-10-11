@@ -287,6 +287,21 @@ fn model_contract(stage: Stage, schema: &Value) -> Value {
     }
     let mut presented = schema.clone();
     presented["$defs"] = json!({"judgment_check":shared});
+    let evidence_path = if schema.get("oneOf").is_some() {
+        "/oneOf/0/properties/evidence"
+    } else {
+        "/properties/evidence"
+    };
+    let evidence = &shared["properties"]["evidence"];
+    if evidence.is_object() && schema.pointer(evidence_path) == Some(evidence) {
+        presented["$defs"]["judgment_evidence"] = evidence.clone();
+        presented["$defs"]["judgment_check"]["properties"]["evidence"] =
+            json!({"$ref":"#/$defs/judgment_evidence"});
+        *presented
+            .pointer_mut(evidence_path)
+            .expect("The equal evidence contract exists") =
+            json!({"$ref":"#/$defs/judgment_evidence"});
+    }
     for check in presented
         .pointer_mut(checks_path)
         .and_then(Value::as_object_mut)
@@ -298,11 +313,65 @@ fn model_contract(stage: Stage, schema: &Value) -> Value {
     presented
 }
 
+/// Contract-derived formatting stays outside the editable system teaching.
+fn native_output_protocol(schema: &Value) -> Option<String> {
+    let alternatives = schema["oneOf"].as_array();
+    let worksheet = alternatives
+        .and_then(|branches| {
+            branches
+                .iter()
+                .find(|branch| branch["properties"]["checks"].is_object())
+        })
+        .unwrap_or(schema);
+    let checks = worksheet["properties"]["checks"]["properties"].as_object()?;
+    if checks.is_empty()
+        || !checks.values().all(|check| {
+            check["type"] == "object"
+                && check["properties"].as_object().is_some_and(|fields| {
+                    fields.len() == 3
+                        && fields
+                            .get("state")
+                            .is_some_and(|field| field["type"] == "string")
+                        && fields
+                            .get("evidence")
+                            .is_some_and(|field| field["type"] == "array")
+                        && fields
+                            .get("finding")
+                            .is_some_and(|field| field["type"] == "string")
+                })
+        })
+    {
+        return None;
+    }
+    let required = worksheet["required"]
+        .as_array()?
+        .iter()
+        .map(Value::as_str)
+        .collect::<Option<Vec<_>>>()?;
+    if required.is_empty() {
+        return None;
+    }
+    let mut protocol = format!("Required:{}. Each named check directly has state,evidence,finding: evidence is an ID array; finding is one string covering role differences, never planet/role maps. Use actual input/contract values.", required.join(","));
+    if alternatives.is_some_and(|branches| {
+        branches
+            .iter()
+            .any(|branch| branch["properties"]["request_input"].is_object())
+    }) {
+        protocol.push_str(" Allowed request_input replaces the worksheet.");
+    }
+    Some(protocol)
+}
+
 fn prompt_with_guide(stage: Stage, input: &Value, schema: &Value, fixed: String) -> String {
-    let schema = model_contract(stage, schema);
+    let repair =
+        input.get("original_input").is_some() && input.get("native_validation_error").is_some();
+    let mut payload = json!({"input":if repair {crate::horary_step::original_input(input)} else {input},"worksheet_contract":model_contract(stage, schema)});
+    if let Some(protocol) = native_output_protocol(schema) {
+        payload["native_output_protocol"] = json!(protocol);
+    }
     // Stable teaching and stable contract precede changing data. No whole chart
     // or conversation history is smuggled into this prefix.
-    if input.get("original_input").is_some() && input.get("native_validation_error").is_some() {
+    if repair {
         // Present repair as a rejected answer followed by native feedback.
         // Keeping the bad worksheet beside accepted input in one example-like
         // JSON object encouraged small models to copy the same mistake.
@@ -310,7 +379,7 @@ fn prompt_with_guide(stage: Stage, input: &Value, schema: &Value, fixed: String)
         // it in the correction can push a valid repair over the request budget.
         return json!([
             {"role":"system","content":fixed},
-            {"role":"user","content":json!({"input":crate::horary_step::original_input(input),"worksheet_contract":schema}).to_string()},
+            {"role":"user","content":payload.to_string()},
             {"role":"assistant","content":input["previous_worksheet"].to_string()},
             {"role":"user","content":json!({
                 "native_validation_error":input["native_validation_error"],
@@ -318,7 +387,8 @@ fn prompt_with_guide(stage: Stage, input: &Value, schema: &Value, fixed: String)
             }).to_string()}
         ]).to_string();
     }
-    json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string()
+    json!([{"role":"system","content":fixed},{"role":"user","content":payload.to_string()}])
+        .to_string()
 }
 
 pub fn guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
@@ -375,8 +445,11 @@ mod repair_message_tests {
     fn expanded_contract(presented: &Value) -> Value {
         fn expand(value: &Value, root: &Value) -> Value {
             if let Some(reference) = value.get("$ref").and_then(Value::as_str) {
-                assert_eq!(reference, "#/$defs/judgment_check");
-                return root["$defs"]["judgment_check"].clone();
+                assert!(matches!(
+                    reference,
+                    "#/$defs/judgment_check" | "#/$defs/judgment_evidence"
+                ));
+                return expand(root.pointer(&reference[1..]).unwrap(), root);
             }
             match value {
                 Value::Object(properties) => Value::Object(
@@ -415,6 +488,14 @@ mod repair_message_tests {
         (capture, input, schema, stage, matter)
     }
 
+    fn legacy_system_with_required_summary(legacy: &Value) -> Value {
+        let old = "answer, evidence, unknowns. answer is the visible interpretation.";
+        let new = "answer, evidence, summary, unknowns. answer is the visible interpretation.";
+        let content = legacy["content"].as_str().unwrap();
+        assert_eq!(content.matches(old).count(), 1);
+        json!({"role":"system","content":content.replacen(old, new, 1)})
+    }
+
     #[test]
     fn captured_judgment_repair_keeps_all_evidence_with_one_complete_schema() {
         let (capture, input, schema, stage, matter) = captured_repair();
@@ -422,7 +503,7 @@ mod repair_message_tests {
         let actual: Value =
             serde_json::from_str(&prompt(stage, matter, &input, &schema).unwrap()).unwrap();
         assert_eq!(actual.as_array().unwrap().len(), 4);
-        assert_eq!(actual[0], legacy[0]);
+        assert_eq!(actual[0], legacy_system_with_required_summary(&legacy[0]));
         assert_eq!(actual[2], legacy[2]);
         let first: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
         assert_eq!(first["input"], input["original_input"]);
@@ -462,7 +543,9 @@ mod repair_message_tests {
                 .unwrap() as usize
         );
         assert_eq!(
-            legacy.to_string().len() - actual.to_string().len(),
+            legacy.to_string().len() + actual[0].to_string().len()
+                - legacy[0].to_string().len()
+                - actual.to_string().len(),
             capture["expected_removed_serialized_prompt_utf8_bytes"]
                 .as_u64()
                 .unwrap() as usize
@@ -478,7 +561,10 @@ mod repair_message_tests {
             &prompt(stage, matter, &repair["original_input"], &schema).unwrap(),
         )
         .unwrap();
-        assert_eq!(actual[0], capture["legacy_messages"][0]);
+        assert_eq!(
+            actual[0],
+            legacy_system_with_required_summary(&capture["legacy_messages"][0])
+        );
         let body: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
         assert_eq!(body["input"], repair["original_input"]);
         assert_eq!(expanded_contract(&body["worksheet_contract"]), schema);
@@ -499,6 +585,96 @@ mod repair_message_tests {
             model_contract(Stage::Judgment, &different_limits),
             different_limits
         );
+    }
+
+    #[test]
+    fn judgment_evidence_factoring_preserves_exact_synthetic_contract_and_allowlist() {
+        let facts = (0..64)
+            .map(|index| Fact {
+                id: format!("synthetic-{index}"),
+                kind: "position".into(),
+                label: "Authored schema witness".into(),
+                detail: "No interpretation asserted.".into(),
+                planets: Vec::new(),
+                condition_facet: None,
+                event: None,
+                reception: None,
+            })
+            .collect::<Vec<_>>();
+        for wrapped in [false, true] {
+            let data = schema(Stage::Judgment, &facts);
+            let original = if wrapped {
+                json!({"oneOf":[data,crate::horary_step::request_schema(Stage::Judgment)]})
+            } else {
+                data
+            };
+            let presented = model_contract(Stage::Judgment, &original);
+            assert_eq!(expanded_contract(&presented), original);
+            let path = if wrapped {
+                "/oneOf/0/properties/evidence"
+            } else {
+                "/properties/evidence"
+            };
+            assert_eq!(
+                presented["$defs"]["judgment_evidence"],
+                *original.pointer(path).unwrap()
+            );
+            assert_eq!(
+                presented.pointer(path).unwrap(),
+                &json!({"$ref":"#/$defs/judgment_evidence"})
+            );
+            assert_eq!(presented["$defs"]["judgment_evidence"]["maxItems"], 6);
+            assert_eq!(
+                presented["$defs"]["judgment_evidence"]["items"]["enum"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                64
+            );
+            assert!(presented.to_string().len() < original.to_string().len());
+        }
+    }
+
+    #[test]
+    fn judgment_evidence_factoring_keeps_empty_and_different_limits_distinct() {
+        let empty = schema(Stage::Judgment, &[]);
+        let presented = model_contract(Stage::Judgment, &empty);
+        assert_eq!(expanded_contract(&presented), empty);
+        assert_eq!(presented["$defs"]["judgment_evidence"]["maxItems"], 0);
+        assert_eq!(
+            presented["$defs"]["judgment_evidence"]["items"],
+            json!({"type":"string","maxLength":1})
+        );
+        let mut different = empty;
+        different["properties"]["evidence"]["maxItems"] = json!(1);
+        let presented = model_contract(Stage::Judgment, &different);
+        assert_eq!(expanded_contract(&presented), different);
+        assert!(presented["$defs"].get("judgment_evidence").is_none());
+        assert_eq!(presented["properties"]["evidence"]["maxItems"], 1);
+        assert_eq!(
+            presented["$defs"]["judgment_check"]["properties"]["evidence"]["maxItems"],
+            0
+        );
+    }
+
+    #[test]
+    fn judgment_output_fields_declare_every_required_top_level_field() {
+        let lesson = include_str!("horary_prompts/judgment.md");
+        let fields = lesson
+            .split_once("<output_fields>")
+            .unwrap()
+            .1
+            .split_once('.')
+            .unwrap()
+            .0;
+        let declared = fields
+            .split(',')
+            .map(|field| field.split_whitespace().next().unwrap())
+            .collect::<Vec<_>>();
+        let contract = schema(Stage::Judgment, &[]);
+        for field in contract["required"].as_array().unwrap() {
+            assert!(declared.contains(&field.as_str().unwrap()), "{field}");
+        }
     }
 }
 
@@ -523,6 +699,284 @@ pub(crate) fn synthetic_teaching_program(
         rationale: "Offline guide identity regression".into(),
         evidence: vec![Evidence { case_id: "synthetic-training".into(), file: "synthetic.json".into(), json_pointer: "".into(), sha256: digest("synthetic-source") }],
         training_case_ids: vec!["synthetic-training".into()], holdout_case_ids: vec!["synthetic-holdout".into()],
+    }
+}
+
+#[cfg(test)]
+mod protected_output_protocol_tests {
+    use super::*;
+
+    fn messages(stage: Stage, input: &Value, schema: &Value) -> Value {
+        serde_json::from_str(&prompt(stage, Matter::Other, input, schema).unwrap()).unwrap()
+    }
+
+    fn first_payload(messages: &Value) -> Value {
+        serde_json::from_str(messages[1]["content"].as_str().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn actual_required_fields_and_direct_check_shape_are_compact_protected_context() {
+        let input = json!({"source_marker":"Synthetic input remains data"});
+        for stage in [
+            Stage::Condition,
+            Stage::Reception,
+            Stage::Contacts,
+            Stage::Location,
+            Stage::Timing,
+            Stage::Judgment,
+            Stage::Explanation,
+        ] {
+            let schema = crate::horary_step::response_schema_for(stage, Matter::Other, &input, &[]);
+            let before = schema.clone();
+            let actual = messages(stage, &input, &schema);
+            let payload = first_payload(&actual);
+            let protocol = payload["native_output_protocol"].as_str().unwrap();
+            let worksheet = if schema["oneOf"].is_array() {
+                &schema["oneOf"][0]
+            } else {
+                &schema
+            };
+            let required = worksheet["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|field| field.as_str().unwrap())
+                .collect::<Vec<_>>();
+            assert!(protocol.starts_with(&format!("Required:{}.", required.join(","))));
+            assert!(protocol.contains("state,evidence,finding"));
+            assert!(protocol.contains("finding is one string covering role differences"));
+            let control_allowed = schema["oneOf"].as_array().is_some_and(|branches| {
+                branches
+                    .iter()
+                    .any(|branch| branch["properties"]["request_input"].is_object())
+            });
+            assert_eq!(
+                protocol.contains("Allowed request_input replaces the worksheet"),
+                control_allowed
+            );
+            assert!(!protocol.contains("source_marker"));
+            assert!(!protocol.contains("likely_yes"));
+            assert_eq!(payload["input"], input);
+            assert_eq!(
+                payload["worksheet_contract"],
+                model_contract(stage, &schema)
+            );
+            assert_eq!(schema, before);
+            assert_eq!(
+                actual[0]["content"],
+                guide_for(stage, Matter::Other, &input).unwrap()
+            );
+            let old_payload =
+                json!({"input":input,"worksheet_contract":model_contract(stage,&schema)});
+            let added_bytes = payload.to_string().len() - old_payload.to_string().len();
+            assert!(
+                added_bytes <= 350,
+                "{}: {added_bytes} additional UTF-8 bytes",
+                stage.name()
+            );
+            println!("{} native protocol adds {added_bytes} UTF-8 bytes; tokenizer count is not measured", stage.name());
+            if stage == Stage::Judgment {
+                assert!(required.contains(&"summary"));
+                assert!(payload["worksheet_contract"]["$defs"].is_object());
+            }
+        }
+    }
+
+    #[test]
+    fn whole_or_edit_based_teaching_rewrites_cannot_remove_the_native_protocol() {
+        let original = json!({"source_marker":"Synthetic accepted input"});
+        let schema = crate::horary_step::response_schema_for(
+            Stage::Reception,
+            Matter::Other,
+            &original,
+            &[],
+        );
+        let base = base_guide_for(Stage::Reception, Matter::Other, &original).unwrap();
+        for edit in [false, true] {
+            let mut program =
+                synthetic_teaching_program(Stage::Reception, &original, "replacement");
+            if edit {
+                program.overrides[0].replacement_text.clear();
+                program.overrides[0].edits = vec![horary_prompt_program::Edit {
+                    old_text:"Return one JSON worksheet matching the supplied response schema, without fences or extra commentary.".into(),
+                    new_text:"Editorial teaching without that formatting sentence.".into(),
+                }];
+            } else {
+                program.overrides[0].replacement_text = format!(
+                    "Editorial teaching without the old format/completion prose. Preserve current source facts and express only what the supplied evidence warrants.\n{}",
+                    horary_prompt_program::guide_parts(&base)
+                        .unwrap()
+                        .quoted_source
+                        .join("")
+                );
+            }
+            for input in [
+                original.clone(),
+                json!({"original_input":original,
+                "previous_worksheet":{"rejected":true},"native_validation_error":"Synthetic shape rejection"}),
+            ] {
+                let baseline = messages(Stage::Reception, &input, &schema);
+                let (actual, applied) = prompt_with_program(
+                    Stage::Reception,
+                    Matter::Other,
+                    &input,
+                    &schema,
+                    Some(&program),
+                )
+                .unwrap();
+                let actual: Value = serde_json::from_str(&actual).unwrap();
+                assert_ne!(actual[0], baseline[0]);
+                assert_eq!(
+                    &actual.as_array().unwrap()[1..],
+                    &baseline.as_array().unwrap()[1..]
+                );
+                assert!(first_payload(&actual)["native_output_protocol"].is_string());
+                let (guide, receipt) =
+                    resolved_guide_for(Stage::Reception, Matter::Other, &input, Some(&program))
+                        .unwrap();
+                assert_eq!(applied, receipt);
+                assert_eq!(actual[0]["content"], guide);
+                let applied = applied.unwrap();
+                assert_eq!(applied.original_guide_sha256, lessons::digest(&base));
+                assert_eq!(applied.replacement_guide_sha256, lessons::digest(&guide));
+                let captured = json!({"prompt":actual,"prompt_program":applied,
+                    "guide_sha256":lessons::digest(&guide),"executor_guide_identity":horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE});
+                assert_eq!(
+                    horary_prompt_program::captured_record_guide_sha256(&captured, None).unwrap(),
+                    lessons::digest(&guide)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fresh_and_repair_requests_keep_one_schema_and_protocol_with_exact_original_material() {
+        let original = json!({"source_marker":"Unchanged synthetic original input"});
+        let rejected = json!({"checks":{"direction":{"unwanted_child":{"state":"unestablished"}}}});
+        let error = "Synthetic direct-check shape rejection";
+        let repair = json!({"original_input":original,"previous_worksheet":rejected,"native_validation_error":error});
+        let schema = crate::horary_step::response_schema_for(
+            Stage::Reception,
+            Matter::Other,
+            &original,
+            &[],
+        );
+        let fresh = messages(Stage::Reception, &original, &schema);
+        let actual = messages(Stage::Reception, &repair, &schema);
+        assert_eq!(actual.as_array().unwrap().len(), 4);
+        assert_eq!(actual[0], fresh[0]);
+        assert_eq!(actual[1], fresh[1]);
+        assert_eq!(actual[2]["role"], "assistant");
+        assert_eq!(actual[2]["content"], rejected.to_string());
+        let correction: Value =
+            serde_json::from_str(actual[3]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(correction["native_validation_error"], error);
+        assert_eq!(correction.as_object().unwrap().len(), 2);
+        assert!(correction.get("native_output_protocol").is_none());
+        assert!(correction.get("worksheet_contract").is_none());
+        let user_objects = actual
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|m| m["role"] == "user")
+            .map(|m| serde_json::from_str::<Value>(m["content"].as_str().unwrap()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            user_objects
+                .iter()
+                .filter(|v| v.get("worksheet_contract").is_some())
+                .count(),
+            1
+        );
+        assert_eq!(
+            user_objects
+                .iter()
+                .filter(|v| v.get("native_output_protocol").is_some())
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn noncheck_requests_keep_the_existing_first_user_and_system_bytes() {
+        let original =
+            json!({"recognition_phase":"classify_question","source_marker":"Unchanged input"});
+        for stage in [
+            Stage::Intake,
+            Stage::Conversation,
+            Stage::Place,
+            Stage::Moment,
+            Stage::Significators,
+        ] {
+            let schema = schema_for(stage, Matter::Other, &[]);
+            let expected = json!({"input":original,"worksheet_contract":schema}).to_string();
+            for input in [
+                original.clone(),
+                json!({"original_input":original,
+                "previous_worksheet":{"rejected":true},"native_validation_error":"Synthetic rejection"}),
+            ] {
+                let actual = messages(stage, &input, &schema);
+                assert_eq!(
+                    actual[0],
+                    json!({"role":"system","content":guide_for(stage,Matter::Other,&input).unwrap()})
+                );
+                assert_eq!(actual[1], json!({"role":"user","content":expected}));
+                assert!(native_output_protocol(&schema).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn schema_acceptance_and_allowed_control_alternatives_are_unchanged() {
+        let input = json!({"source_marker":"No chart facts or verdict in this shape test"});
+        let schema =
+            crate::horary_step::response_schema_for(Stage::Reception, Matter::Other, &input, &[]);
+        let mut checks = serde_json::Map::new();
+        for key in Stage::Reception.checks() {
+            checks.insert(
+                (*key).into(),
+                json!({"state":"not_relevant","evidence":[],"finding":"Synthetic shape only"}),
+            );
+        }
+        let value = json!({"checks":checks,"summary":"Synthetic shape only","unknowns":[]});
+        validate_shape(&value, &schema).unwrap();
+        let field = schema["oneOf"][1]["properties"]["request_input"]["properties"]["field"]
+            ["enum"][0]
+            .clone();
+        let request = json!({"request_input":{"field":field,"question":"Which circumstance matters?","reason":"Synthetic control-path shape witness"}});
+        validate_shape(&request, &schema).unwrap();
+        let mut invalid = value.clone();
+        invalid["checks"][Stage::Reception.checks()[0]] =
+            json!({"unwanted_child":value["checks"][Stage::Reception.checks()[0]]});
+        let before_error = validate_shape(&invalid, &schema).unwrap_err();
+        let actual = first_payload(&messages(Stage::Reception, &input, &schema));
+        assert_eq!(actual["worksheet_contract"], schema);
+        assert_eq!(validate_shape(&invalid, &schema).unwrap_err(), before_error);
+        validate_shape(&value, &schema).unwrap();
+        validate_shape(&request, &schema).unwrap();
+        let plain = schema_for(Stage::Reception, Matter::Other, &[]);
+        assert!(!native_output_protocol(&plain)
+            .unwrap()
+            .contains("request_input"));
+    }
+
+    #[test]
+    fn unsupported_check_or_required_metadata_has_no_invented_format_hint() {
+        let plain = schema_for(Stage::Reception, Matter::Other, &[]);
+        let mut wrong_fields = plain.clone();
+        let fields = wrong_fields["properties"]["checks"]["properties"]["direction"]["properties"]
+            .as_object_mut()
+            .unwrap();
+        let state = fields.remove("state").unwrap();
+        fields.insert("default".into(), state);
+        let mut wrong_type = plain.clone();
+        wrong_type["properties"]["checks"]["properties"]["direction"]["properties"]["finding"]
+            ["type"] = json!("object");
+        let mut wrong_required = plain.clone();
+        wrong_required["required"] = json!(["checks", 2]);
+        for schema in [wrong_fields, wrong_type, wrong_required] {
+            assert!(native_output_protocol(&schema).is_none());
+        }
     }
 }
 
