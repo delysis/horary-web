@@ -769,7 +769,7 @@ struct Body {
 fn schema() -> Value {
     json!({"type":"object","additionalProperties":false,"properties":{
         "selected_stage":{"type":"object","additionalProperties":false,"properties":{
-            "state":{"const":"scored"},"score":{"type":"integer","minimum":0,"maximum":2},
+            "state":{"type":"string","enum":["scored"]},"score":{"type":"integer","minimum":0,"maximum":2},
             "reason":{"type":"string"},"evidence_refs":{"type":"array","minItems":2,"maxItems":2,"items":{"type":"string"}}},
             "required":["state","score","reason","evidence_refs"]},
         "findings":{"type":"array","maxItems":3,"items":{"type":"object","additionalProperties":false,"properties":{
@@ -777,6 +777,76 @@ fn schema() -> Value {
             "evidence_refs":{"type":"array","minItems":1,"maxItems":2,"items":{"type":"string"}}},
             "required":["summary","repair_owner","evidence_refs"]}},"qualification":{"type":"string"}},
         "required":["selected_stage","findings","qualification"]})
+}
+
+/// Check every exposed definition before reserving a reviewer call. A legal
+/// JSON Schema such as an untyped `const` is insufficient for this strict wire
+/// contract; object fields and array items must have explicit supported types.
+fn strict_schema_preflight(schema: &Value, path: &str) -> Result<()> {
+    let definition = schema
+        .as_object()
+        .ok_or_else(|| format!("Component review schema is not an object at {path}"))?;
+    match definition.get("type").and_then(Value::as_str) {
+        Some("object") => {
+            let properties = definition
+                .get("properties")
+                .and_then(Value::as_object)
+                .ok_or_else(|| format!("Component review schema lacks properties at {path}"))?;
+            let required = definition
+                .get("required")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    format!("Component review schema lacks required fields at {path}")
+                })?;
+            let names = required
+                .iter()
+                .map(|field| {
+                    field
+                        .as_str()
+                        .ok_or_else(|| format!("Invalid component required field at {path}"))
+                })
+                .collect::<Result<BTreeSet<_>>>()?;
+            if definition.get("additionalProperties") != Some(&Value::Bool(false))
+                || names.len() != required.len()
+                || names != properties.keys().map(String::as_str).collect()
+            {
+                return Err(format!("Component review schema is not strict at {path}"));
+            }
+            for (name, field) in properties {
+                strict_schema_preflight(field, &format!("{path}/properties/{name}"))?;
+            }
+        }
+        Some("array") => strict_schema_preflight(
+            definition
+                .get("items")
+                .ok_or_else(|| format!("Component review schema lacks items at {path}"))?,
+            &format!("{path}/items"),
+        )?,
+        Some("string") => {
+            if let Some(choices) = definition.get("enum") {
+                let values = choices
+                    .as_array()
+                    .filter(|values| !values.is_empty() && values.iter().all(Value::is_string))
+                    .ok_or_else(|| format!("Invalid component string enum at {path}"))?;
+                if values
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    != values.len()
+                {
+                    return Err(format!("Repeated component string enum at {path}"));
+                }
+            }
+        }
+        Some("integer") => {}
+        _ => {
+            return Err(format!(
+                "Component review schema lacks a supported type at {path}"
+            ))
+        }
+    }
+    Ok(())
 }
 
 /// Exercise the emitted wire contract without judging a case or submitting work.
@@ -815,6 +885,7 @@ fn review_contract_probe() -> Result<(Packet, Value, Value)> {
 fn review_contract_preflight() -> Result<()> {
     let (packet, evaluation, mut wire) = review_contract_probe()?;
     let schema = schema();
+    strict_schema_preflight(&schema, "$")?;
     for (definition, object) in [
         (&schema, &wire),
         (
@@ -1242,6 +1313,104 @@ pub fn evaluate(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strict_review_schema_rejects_untyped_states_and_nested_definitions() {
+        review_contract_preflight().unwrap();
+        let emitted = schema();
+        assert_eq!(
+            emitted["properties"]["selected_stage"]["properties"]["state"],
+            json!({"type":"string","enum":["scored"]})
+        );
+        // This is the exact pre-inference failure shape; valid JSON Schema
+        // alone did not satisfy the provider's typed response contract.
+        let mut legacy = emitted.clone();
+        legacy["properties"]["selected_stage"]["properties"]["state"] = json!({"const":"scored"});
+        assert!(strict_schema_preflight(&legacy, "$")
+            .unwrap_err()
+            .contains("/selected_stage/properties/state"));
+        for pointer in [
+            "/properties/findings/items/properties/repair_owner",
+            "/properties/findings/items/properties/evidence_refs/items",
+            "/properties/selected_stage/properties/score",
+        ] {
+            let mut missing_type = emitted.clone();
+            missing_type
+                .pointer_mut(pointer)
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .remove("type");
+            assert!(strict_schema_preflight(&missing_type, "$").is_err());
+        }
+        for bad in [json!(true), json!(null), json!({"type":"null"})] {
+            let mut untyped_item = emitted.clone();
+            untyped_item["properties"]["findings"]["items"] = bad;
+            assert!(strict_schema_preflight(&untyped_item, "$").is_err());
+        }
+        let mut optional_output = emitted.clone();
+        optional_output["properties"]["selected_stage"]["required"] =
+            json!(["state", "score", "reason"]);
+        assert!(strict_schema_preflight(&optional_output, "$").is_err());
+        let mut extra_fields = emitted.clone();
+        extra_fields["properties"]["findings"]["items"]["additionalProperties"] = json!(true);
+        assert!(strict_schema_preflight(&extra_fields, "$").is_err());
+        let mut wrong_enum = emitted;
+        wrong_enum["properties"]["selected_stage"]["properties"]["state"]["enum"] =
+            json!(["scored", null]);
+        assert!(strict_schema_preflight(&wrong_enum, "$").is_err());
+    }
+
+    #[test]
+    fn accepted_repaired_and_rejected_condition_reviews_share_a_typed_contract() {
+        let mut plan = crate::tests::plan();
+        plan.training[0].id = "contract-probe".into();
+        let expected_schema = schema();
+        for (native_state, attempts, semantic_score, expected_merit) in [
+            ("accepted", 1, 2, 1.0),
+            ("accepted", 2, 1, 0.5),
+            ("native_rejected", 2, 0, 0.0),
+        ] {
+            let (packet, probe, mut wire) = review_contract_probe().unwrap();
+            let mut native = evaluation();
+            native["outcome"]["id"] = json!("contract-probe");
+            native["outcome"]["selected_stage"]["state"] = json!(native_state);
+            native["outcome"]["selected_stage"]["target_attempts"] = json!(attempts);
+            native["actual_function_calls"] = probe["actual_function_calls"].clone();
+            let original = native.clone();
+            wire["selected_stage"]["score"] = json!(semantic_score);
+            let (emitted, _, _) = review_material(&plan, &plan.training[0], &native, &packet);
+            assert_eq!(emitted, expected_schema);
+            strict_schema_preflight(&emitted, "$").unwrap();
+            packet.expand(&mut wire).unwrap();
+            let review = validate_expanded(&packet, &native, wire).unwrap();
+            assert_eq!(review["selected_stage"]["state"], "scored");
+            assert_eq!(review["selected_stage"]["score"], semantic_score);
+            assert_eq!(review["native_interpretation_observed"], false);
+            let measured = grade(&native, &review).unwrap();
+            assert_eq!(measured.score, expected_merit);
+            assert!(!measured.qualified);
+            assert_eq!(native, original);
+        }
+    }
+
+    #[test]
+    fn settled_component_review_cannot_claim_an_unobserved_or_native_state() {
+        for (state, score) in [
+            ("unobserved", Value::Null),
+            ("not_applicable", Value::Null),
+            ("accepted", json!(2)),
+            ("native_rejected", json!(0)),
+            ("scored", Value::Null),
+            ("scored", json!(3)),
+        ] {
+            let (packet, evaluation, mut wire) = review_contract_probe().unwrap();
+            wire["selected_stage"]["state"] = json!(state);
+            wire["selected_stage"]["score"] = score;
+            packet.expand(&mut wire).unwrap();
+            assert!(validate_expanded(&packet, &evaluation, wire).is_err());
+        }
+    }
 
     #[test]
     fn pinned_records_require_an_exact_actual_generation_and_input() {
