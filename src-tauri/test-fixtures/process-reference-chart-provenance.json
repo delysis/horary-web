@@ -13,11 +13,11 @@
   },
   "source_sha256": {
     "crates/horary-ai-core/src/astronomy.rs": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af",
-    "crates/horary-ai-core/src/book_method.rs": "c8b4dd03e652034e9e43b858a9136c54d73f5b51e59a755c4f9f30678a7c3abd",
+    "crates/horary-ai-core/src/book_method.rs": "d272bd599d0c7f16b9abe50fbd5975b579041ac4c480b5765c162fa622fd78bd",
     "crates/horary-ai-core/src/ephemeris_coefficients.rs": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c",
     "crates/horary-ai-core/src/events.rs": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a",
     "src-tauri/src/horary_pipeline.rs": "ec62f65b625465b18e51c88b3a588e1e3f40f5267a0dd65efe15f794f51d1dbe",
-    "src-tauri/src/process_reference.rs": "5029e1ee1713e1d3891c93d3dad5345850ab2813b93a1b97cbb9393e9ef55de1"
+    "src-tauri/src/process_reference.rs": "0d568180380a7e88cb50251fb5bf8ca61e81a251c388c4d5d764456d15c91313"
   },
   "chart_path": "src-tauri/test-fixtures/process-reference-chart.json",
   "chart_file_sha256": "83f06fd06c828d90efcd849aca92eaad70d02aa9c8f9c25258eddb91b7e99fbd",

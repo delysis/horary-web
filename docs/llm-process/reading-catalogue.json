@@ -18,7 +18,9 @@
       "facets": [
         "event",
         "situation",
-        "timing"
+        "timing",
+        "truth",
+        "location"
       ],
       "coverage": "Implemented",
       "roles": "Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.",
@@ -44,7 +46,8 @@
         "location",
         "event",
         "timing",
-        "description"
+        "description",
+        "truth"
       ],
       "coverage": "Implemented",
       "roles": "Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.",
@@ -70,7 +73,8 @@
         "location",
         "event",
         "timing",
-        "description"
+        "description",
+        "truth"
       ],
       "coverage": "Implemented",
       "roles": "Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.",
@@ -84,18 +88,20 @@
     {
       "method": "missing_person",
       "title": "Missing person",
-      "printed_pages": "146–153",
+      "printed_pages": "146–153, 182–188",
       "owner": "Required",
       "requirements": [],
       "facets": [
         "location",
         "event",
         "timing",
-        "description"
+        "description",
+        "truth",
+        "safety"
       ],
       "coverage": "Implemented",
       "roles": "Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.",
-      "judgment": "Consider recovery/contact and location separately. Retain reported circumstances as reports.",
+      "judgment": "Consider recovery/contact and location separately. Return alive additionally needs the book's safety/prognosis testimony, not a recovery aspect alone. Retain reported circumstances as reports.",
       "subject_kinds": [
         "person"
       ]
@@ -222,13 +228,14 @@
     {
       "method": "existing_job",
       "title": "Keeping a job or existing career",
-      "printed_pages": "224–226",
+      "printed_pages": "224–230",
       "owner": "Required",
       "requirements": [],
       "facets": [
         "event",
         "situation",
-        "timing"
+        "timing",
+        "description"
       ],
       "coverage": "Implemented",
       "roles": "Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.",
@@ -289,7 +296,8 @@
       "facets": [
         "event",
         "situation",
-        "timing"
+        "timing",
+        "choice"
       ],
       "coverage": "Implemented",
       "roles": "Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.",
@@ -340,13 +348,35 @@
     {
       "method": "rental",
       "title": "Rental agreement",
-      "printed_pages": "170",
+      "printed_pages": "170–171",
       "owner": "None",
       "requirements": [
         {
           "field": "deal_capacity",
           "guard": {
-            "condition": "always"
+            "condition": "answer_facet",
+            "facet": "event"
+          }
+        },
+        {
+          "field": "deal_capacity",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "situation"
+          }
+        },
+        {
+          "field": "deal_capacity",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "profit"
+          }
+        },
+        {
+          "field": "alternatives",
+          "guard": {
+            "condition": "answer_facet",
+            "facet": "choice"
           }
         },
         {
@@ -370,8 +400,8 @@
         "profit"
       ],
       "coverage": "Implemented",
-      "roles": "Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.",
-      "judgment": "An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one.",
+      "roles": "Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.",
+      "judgment": "An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one. The choice branch must not require the user to choose an action before its comparison.",
       "subject_kinds": [
         "property"
       ]
@@ -514,7 +544,7 @@
         "timing"
       ],
       "coverage": "ExpertReview",
-      "roles": "Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.",
+      "roles": "Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.",
       "judgment": "An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review.",
       "subject_kinds": [
         "person",
@@ -624,7 +654,7 @@
     {
       "method": "court_case",
       "title": "Civil trial or legal dispute",
-      "printed_pages": "208–209",
+      "printed_pages": "208–212",
       "owner": "Required",
       "requirements": [
         {
@@ -637,7 +667,8 @@
       "facets": [
         "event",
         "situation",
-        "timing"
+        "timing",
+        "choice"
       ],
       "coverage": "ExpertReview",
       "roles": "Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.",
@@ -783,11 +814,12 @@
         "event",
         "situation",
         "timing",
-        "quantity"
+        "quantity",
+        "description"
       ],
       "coverage": "ExpertReview",
-      "roles": "Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.",
-      "judgment": "The source's coarse childbirth count is specific to this recipe, not transferable to sales. Dedicated program awaits review.",
+      "roles": "Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.",
+      "judgment": "The source's coarse childbirth count is specific to this recipe, not transferable to sales. Description is traditional testimony, not a clinical determination. Dedicated program awaits review.",
       "subject_kinds": [
         "person",
         "movable",
@@ -1051,7 +1083,7 @@
     {
       "method": "education",
       "title": "School or university",
-      "printed_pages": "219–220",
+      "printed_pages": "219–221",
       "owner": "Required",
       "requirements": [
         {
@@ -1070,7 +1102,8 @@
       "facets": [
         "event",
         "situation",
-        "timing"
+        "timing",
+        "choice"
       ],
       "coverage": "ExpertReview",
       "roles": "Institution radical third/ninth, not blindly turned from a child.",

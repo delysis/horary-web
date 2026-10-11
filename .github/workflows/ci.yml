@@ -33,7 +33,7 @@ jobs:
           path: dist
 
   prompt-loop:
-    name: Prompt program and experiment loop
+    name: Prompt program, Rust DSPy and experiment loop
     runs-on: ubuntu-latest
     env:
       CARGO_INCREMENTAL: '0'
@@ -46,11 +46,12 @@ jobs:
       - name: Check the typed program and bounded loop without model credentials
         run: |
           set -euo pipefail
-          for manifest in crates/horary-prompt-program/Cargo.toml tools/horary-loop/Cargo.toml tools/horary-gepa/Cargo.toml; do
+          for manifest in crates/horary-prompt-program/Cargo.toml tools/horary-loop/Cargo.toml tools/horary-gepa/Cargo.toml tools/horary-dspy/Cargo.toml; do
             cargo fmt --manifest-path "$manifest" -- --check
             cargo test --manifest-path "$manifest" --locked
             cargo clippy --manifest-path "$manifest" --locked --all-targets -- -D warnings
           done
+          cargo run --manifest-path tools/horary-dspy/Cargo.toml --locked -- check --examples tools/horary-dspy/examples
 
   tauri:
     name: Tauri (${{ matrix.os }})

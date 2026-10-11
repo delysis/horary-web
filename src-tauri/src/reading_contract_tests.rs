@@ -1,6 +1,186 @@
 //! Authored domain/controller regressions, not model or astrologer qualification.
 use super::*;
 
+#[test]
+fn rental_comparison_retains_alternatives_without_a_preselected_future_action() {
+    let mut consultation = case(Method::Rental, "querent");
+    consultation.frame = resolved(Frame {
+        method: Method::Rental,
+        facet: Facet::Choice,
+    });
+    consultation
+        .facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    let open = consultation.plan(Some(&regression_anchor()));
+    assert!(open
+        .needs
+        .iter()
+        .any(|n| n.key == RequirementKey::Field(Field::Alternatives)));
+    assert!(!open
+        .needs
+        .iter()
+        .any(|n| n.key == RequirementKey::Field(Field::DealCapacity)));
+    consultation.facts.insert(
+        Field::Alternatives,
+        resolved("sell outright; keep letting".into()),
+    );
+    let compared = consultation.plan(Some(&regression_anchor()));
+    assert!(!compared.needs.iter().any(|n| matches!(
+        n.key,
+        RequirementKey::Field(Field::DealCapacity | Field::Alternatives)
+    )));
+    consultation.frame = resolved(Frame {
+        method: Method::Rental,
+        facet: Facet::Event,
+    });
+    assert!(consultation
+        .plan(Some(&regression_anchor()))
+        .needs
+        .iter()
+        .any(|n| n.key == RequirementKey::Field(Field::DealCapacity)));
+}
+
+#[test]
+fn source_defined_comparisons_and_descriptions_are_valid_facets() {
+    for (method, facet) in [
+        (Method::CourtCase, Facet::Choice),
+        (Method::Education, Facet::Choice),
+        (Method::ExistingJob, Facet::Description),
+        (Method::Relationship, Facet::Truth),
+        (Method::Relationship, Facet::Location),
+        (Method::LostObject, Facet::Truth),
+        (Method::LostAnimal, Facet::Truth),
+        (Method::Fertility, Facet::Description),
+        (Method::MissingPerson, Facet::Safety),
+        (Method::WorkPerson, Facet::Choice),
+    ] {
+        assert!(
+            contract(method).facets.contains(&facet),
+            "{method:?} must permit its source-defined {facet:?} branch"
+        );
+    }
+}
+
+#[test]
+fn fertility_first_child_description_keeps_scope_and_expert_review_boundary() {
+    let mut consultation = case(Method::Fertility, "querent");
+    consultation.question = resolved(
+        "If having a first child is indicated, what does the traditional sex testimony suggest?"
+            .into(),
+    );
+    consultation.frame = resolved(Frame {
+        method: Method::Fertility,
+        facet: Facet::Description,
+    });
+    let incomplete = consultation.plan(Some(&regression_anchor()));
+    assert!(incomplete
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::Field(Field::FertilityScope)));
+    assert_eq!(
+        incomplete
+            .limitation
+            .as_ref()
+            .map(|limit| limit.code.as_str()),
+        Some("judgment_program_needs_review"),
+        "Printed177 supports this branch; missing scope is not an unsupported facet"
+    );
+
+    consultation
+        .facts
+        .insert(Field::FertilityScope, resolved("lifetime".into()));
+    let complete = consultation.plan(Some(&regression_anchor()));
+    assert!(complete.needs.is_empty());
+    assert_eq!(
+        complete
+            .limitation
+            .as_ref()
+            .map(|limit| limit.code.as_str()),
+        Some("judgment_program_needs_review")
+    );
+    assert!(ReadyReading::prepare(&consultation, regression_anchor()).is_err());
+    assert_eq!(
+        consultation.frame.resolved().unwrap().facet,
+        Facet::Description
+    );
+    assert!(matches!(
+        contract(Method::Fertility).coverage,
+        Coverage::ExpertReview
+    ));
+}
+
+#[test]
+fn source_supported_child_counts_do_not_authorize_exact_sales_counts() {
+    let mut fertility = case(Method::Fertility, "querent");
+    fertility.frame = resolved(Frame {
+        method: Method::Fertility,
+        facet: Facet::Quantity,
+    });
+    fertility
+        .facts
+        .insert(Field::FertilityScope, resolved("lifetime".into()));
+    assert_eq!(
+        fertility
+            .plan(Some(&regression_anchor()))
+            .limitation
+            .as_ref()
+            .map(|limit| limit.code.as_str()),
+        Some("judgment_program_needs_review")
+    );
+
+    let mut sale = case(Method::MovableDeal, "querent");
+    sale.question = resolved("How many wooden buttons will I sell?".into());
+    sale.frame = resolved(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Quantity,
+    });
+    let plan = sale.plan(Some(&regression_anchor()));
+    assert_eq!(
+        plan.limitation.as_ref().map(|limit| limit.code.as_str()),
+        Some("unsupported_facet")
+    );
+    assert_eq!(sale.frame.resolved().unwrap().facet, Facet::Quantity);
+    assert!(ReadyReading::prepare(&sale, regression_anchor()).is_err());
+}
+
+#[test]
+fn pending_parcel_requires_sender_not_receivers_title_and_keeps_source_allocation() {
+    let mut consultation = case(Method::Parcel, "");
+    consultation.question = resolved(
+        "Will the book sent by the unrelated bookseller arrive? I have not received it.".into(),
+    );
+    let incomplete = consultation.plan(Some(&regression_anchor()));
+    assert!(incomplete
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::Field(Field::Sender)));
+    assert!(!incomplete
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::Owner));
+    consultation
+        .facts
+        .insert(Field::Sender, resolved("unrelated bookseller".into()));
+    let complete = consultation.plan(Some(&regression_anchor()));
+    assert!(complete.needs.is_empty());
+    assert_eq!(
+        complete
+            .limitation
+            .as_ref()
+            .map(|limit| limit.code.as_str()),
+        Some("judgment_program_needs_review")
+    );
+    assert!(consultation.subject.resolved().unwrap().owner_id.is_empty());
+    assert!(ReadyReading::prepare(&consultation, regression_anchor()).is_err());
+
+    // This contract is teaching for an unqualified dedicated program. Protect
+    // the printed165–166 allocation without claiming a model chose these roles.
+    let roles = contract(Method::Parcel).roles;
+    assert!(roles.contains("sender's third"));
+    assert!(roles.contains("radical ninth"));
+    assert!(roles.contains("receiver's second"));
+}
+
 fn resolved<T>(value: T) -> Slot<T> {
     Slot::Resolved {
         observation: Observation {

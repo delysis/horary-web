@@ -350,6 +350,20 @@ impl ConditionFacet {
     pub fn requires_context_review(self) -> bool {
         matches!(self, Self::SolarOpposition | Self::Retrograde)
     }
+
+    /// Primary rules needed to interpret this native testimony. Source packets
+    /// must resolve these IDs to their full page ranges, not just retain a
+    /// rendered citation. The exhaustive match keeps new facets from silently
+    /// inheriting an unrelated source witness.
+    pub fn source_passages(self) -> &'static [&'static str] {
+        match self {
+            Self::Essential => &["essential_quality"],
+            Self::HouseCapacity | Self::CuspAdvance => &["house_capacity"],
+            Self::Solar => &["solar_exceptions", "combustion_sign", "cazimi"],
+            Self::SolarOpposition => &["solar_opposition_context"],
+            Self::Retrograde => &["retrograde_context"],
+        }
+    }
 }
 
 pub struct ConditionTestimony {

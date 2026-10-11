@@ -6,12 +6,16 @@
       "sha256": "5f5367f7c325e3ab92d68d82f60172c829870f466357991516083409bb1fa0da"
     },
     {
+      "path": "crates/horary-ai-core/src/anchor_authority.rs",
+      "sha256": "6dbc504f43b79d687f7059dc7e44a61c5ae094f9138be0096c072bf95c6f178a"
+    },
+    {
       "path": "crates/horary-ai-core/src/astronomy.rs",
       "sha256": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af"
     },
     {
       "path": "crates/horary-ai-core/src/book_method.rs",
-      "sha256": "c8b4dd03e652034e9e43b858a9136c54d73f5b51e59a755c4f9f30678a7c3abd"
+      "sha256": "d272bd599d0c7f16b9abe50fbd5975b579041ac4c480b5765c162fa622fd78bd"
     },
     {
       "path": "crates/horary-ai-core/src/chart_input.rs",
@@ -131,7 +135,7 @@
     },
     {
       "path": "src-tauri/src/geocode.rs",
-      "sha256": "9dab309ac9f925312e2ec2a5babdb27fe0a037cea92644764fbfdd1e3d38ca13"
+      "sha256": "48f8b60fd1c767f41f334cb8dfa95a9e22cf1e5d416308cecb43dcbf370ccd2b"
     },
     {
       "path": "src-tauri/src/hf_cache.rs",
@@ -151,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_lessons.rs",
-      "sha256": "41531fb54e0573835b07537e69d68ba9d2027e7429a0398f24d873ecb04a9a8e"
+      "sha256": "a90905b5cdd4b1e1d5b2dbfba4b72a17cb1e529add018017af42862ce277bc34"
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
@@ -191,7 +195,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/passages.json",
-      "sha256": "2a61fc55471b3f0f6a6a85091e00910bb6231a4fd2bf2bf7c8f767b58116d47c"
+      "sha256": "b1802806d5ff83184f878c227fea488aaadaf8ba7ce7e6ec800956b792b1b7ad"
     },
     {
       "path": "src-tauri/src/horary_prompts/place.md",
@@ -287,7 +291,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "5029e1ee1713e1d3891c93d3dad5345850ab2813b93a1b97cbb9393e9ef55de1"
+      "sha256": "0d568180380a7e88cb50251fb5bf8ca61e81a251c388c4d5d764456d15c91313"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -295,11 +299,11 @@
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "516201a128d97875fe60a46f324a24a7aa320b6f689cbfd9721b661e6ba85eaf"
+      "sha256": "c86ee5f54097145ef1aaf3304066fe407505dac290d834815d3af91bb10877be"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
-      "sha256": "18cf1e859a52298fdd13b12760b6df19284dcaca7e65e9191204038ddcca395a"
+      "sha256": "9d9ea5ce57592845d18821e7266f328edaa7ab31694b5b3bebbd562c72bdd415"
     },
     {
       "path": "src-tauri/src/reading_eval.rs",
@@ -307,7 +311,7 @@
     },
     {
       "path": "src-tauri/src/reading_method.rs",
-      "sha256": "19d232e8f5080e7334186eeeff029fbfb2beddcd21940c5175256b1b60235f7b"
+      "sha256": "e65a06f76916a2992619f6799893284d4261ff4c392126c48395a43ccbf0d966"
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
@@ -371,7 +375,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "f72a21a9259ceade41c2d248f9cc16af39eb5ced1303a67a15f449e0d5941fe7"
+      "sha256": "ab8ba665b2e1000fedd5b9e6dee8eaba3a5929a74062d1641815c2337e29533f"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",

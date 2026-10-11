@@ -219,6 +219,7 @@ fn chart_parity(
 }
 
 const SOURCES: &[&str] = &[
+    "crates/horary-ai-core/src/anchor_authority.rs",
     ".gitattributes",
     "src-tauri/Cargo.toml",
     "src-tauri/Cargo.lock",

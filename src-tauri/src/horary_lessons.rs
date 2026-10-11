@@ -215,6 +215,8 @@ impl Stage {
                 "combustion_sign",
                 "cazimi",
                 "no_automatic_damage",
+                "solar_opposition_context",
+                "retrograde_context",
             ],
             Self::Reception if matches!(matter, Matter::LostObject | Matter::LostAnimal) => &[
                 "own_or_others_dignities",
@@ -353,6 +355,54 @@ pub fn digest(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_condition_context_uses_exact_primary_quotes_and_registered_facets() {
+        use horary_ai_core::book_method::ConditionFacet;
+        let cards = passages().unwrap();
+        for (id, printed, ocr, sha256) in [
+            (
+                "retrograde_context",
+                57,
+                66,
+                "e2dd5ecdea8ebfb184d24815246511d5759d5783a9fbede59831b9c39c9bb533",
+            ),
+            (
+                "solar_opposition_context",
+                61,
+                70,
+                "dd5ce0748cbe7589fc6a7b5092b88b3f440546b7f8f9e02af1fb692e78fa8475",
+            ),
+        ] {
+            let card = cards.iter().find(|card| card.id == id).unwrap();
+            assert_eq!((card.printed_first, card.printed_last), (printed, printed));
+            assert_eq!((card.ocr_first, card.ocr_last), (ocr, ocr));
+            assert_eq!(digest(&card.quote), sha256);
+            assert!(guide(Stage::Condition, Matter::Other)
+                .unwrap()
+                .contains(&card.quote));
+        }
+        let source = cards
+            .iter()
+            .find(|card| card.id == "retrograde_context")
+            .unwrap();
+        assert!(source
+            .quote
+            .contains("If there is no such favourable spin given by the context"));
+        assert!(source.quote.contains("the law of sufficient explanation"));
+        for facet in [
+            ConditionFacet::Essential,
+            ConditionFacet::HouseCapacity,
+            ConditionFacet::Solar,
+            ConditionFacet::SolarOpposition,
+            ConditionFacet::Retrograde,
+            ConditionFacet::CuspAdvance,
+        ] {
+            for id in facet.source_passages() {
+                assert_eq!(cards.iter().filter(|card| card.id == *id).count(), 1);
+                assert!(Stage::Condition.passages(Matter::Other).contains(id));
+            }
+        }
+    }
     #[test]
     fn lessons_are_complete_separate_tasks_and_object_rules_do_not_enter_relationship_roles() {
         let roles = guide(Stage::Significators, Matter::Relationship).unwrap();

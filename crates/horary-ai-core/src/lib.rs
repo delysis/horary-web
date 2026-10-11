@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod anchor_authority;
 pub mod astronomy;
 pub mod book_method;
 pub mod chart_input;

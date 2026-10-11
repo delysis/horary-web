@@ -6,6 +6,7 @@ use crate::{
     horary_lessons::Matter,
     horary_role_options::{Person, Subject},
 };
+use horary_ai_core::anchor_authority::historical_anchor_request;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -419,6 +420,7 @@ const LOST: &[Facet] = &[
     Facet::Event,
     Facet::Timing,
     Facet::Description,
+    Facet::Truth,
 ];
 
 macro_rules! card {
@@ -443,7 +445,7 @@ macro_rules! card {
 /// with an explicit expert boundary until their judgment programs are qualified.
 pub const CATALOGUE: &[Contract] = &[
     card!(Relationship, "Relationship, marriage and feelings", "140, 191–200", None,
-        &[required(Field::Baseline)], EVENT_STATE, Implemented,
+        &[required(Field::Baseline)], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Truth, Facet::Location], Implemented,
         "Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.",
         "Distinguish hoped-for formation, current feelings and an arranged wedding. An unnamed prospective partner is a role: do not claim an existing person currently loves the querent or has already met them. Directed reception describes chart testimony; event perfection is a separate question. No contact is not an automatic cancellation of an arranged wedding."),
     card!(LostObject, "Lost inanimate possession", "146–153, 244", Required,
@@ -454,9 +456,9 @@ pub const CATALOGUE: &[Contract] = &[
         &[required(Field::AnimalKind)], LOST, Implemented,
         "Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.",
         "Assess recovery and plausible whereabouts from supplied context, without exact GPS promises or automatic void-Moon rejection."),
-    card!(MissingPerson, "Missing person", "146–153", Required,
-        &[], LOST, Implemented, "Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.",
-        "Consider recovery/contact and location separately. Retain reported circumstances as reports."),
+    card!(MissingPerson, "Missing person", "146–153, 182–188", Required,
+        &[], &[Facet::Location, Facet::Event, Facet::Timing, Facet::Description, Facet::Truth, Facet::Safety], Implemented, "Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.",
+        "Consider recovery/contact and location separately. Return alive additionally needs the book's safety/prognosis testimony, not a recovery aspect alone. Retain reported circumstances as reports."),
     card!(MovableDeal, "Sale or purchase of movable goods", "156–161, 167–172", DealContext,
         &[required(Field::DealCapacity), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
         "Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.",
@@ -471,7 +473,7 @@ pub const CATALOGUE: &[Contract] = &[
         "Owned shares are the principal's second-house possessions, not automatically eighth-house money.", "Judge condition/value and scope. Do not promise an exact return or treat this as a payment-arrival question."),
     card!(NewJob, "Getting a new external job", "222–224", Required, &[], EVENT_STATE, Implemented,
         "Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.", "Establish getting the job, not merely contacting wages. An explicitly mentioned intermediary may matter; do not invent one."),
-    card!(ExistingJob, "Keeping a job or existing career", "224–226", Required, &[], EVENT_STATE, Implemented,
+    card!(ExistingJob, "Keeping a job or existing career", "224–230", Required, &[], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Description], Implemented,
         "Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.", "Default is an existing job: assess stability/disruption, not a compulsory acquisition aspect."),
     card!(ReturnToJob, "Returning to an old job", "225–226", Required, &[], EVENT_STATE, Implemented,
         "Principal and relevant job; keep the old-job re-entry context.", "Use re-entry testimony, not the generic get/keep assumption. State limitations of contact coverage."),
@@ -479,14 +481,14 @@ pub const CATALOGUE: &[Contract] = &[
         &[Facet::Situation, Facet::Choice, Facet::Profit], Implemented,
         "The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.", "Judge quality and stated priorities using their relevant roles. A pay priority needs wages testimony; a wages aspect does not prove job acquisition. Ask priorities only if the answer truly depends on what 'good' means."),
     card!(WorkPerson, "Boss, colleague or subordinate", "224–225", None,
-        &[required(Field::WorkCapacity)], EVENT_STATE, Implemented,
+        &[required(Field::WorkCapacity)], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Choice], Implemented,
         "Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.", "Address the actual work relationship; do not reclassify a friendly colleague as eleventh by habit."),
     card!(Property, "Buying or selling property", "167–171", DealContext,
         &[required(Field::DealCapacity), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
         "Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.", "Assess condition, price and completion separately. Opposition may complete a sale; don't apply this exception to an ongoing rental."),
-    card!(Rental, "Rental agreement", "170", None,
-        &[required(Field::DealCapacity), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
-        "Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.", "An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one."),
+    card!(Rental, "Rental agreement", "170–171", None,
+        &[for_facet(Field::DealCapacity, Facet::Event), for_facet(Field::DealCapacity, Facet::Situation), for_facet(Field::DealCapacity, Facet::Profit), for_facet(Field::Alternatives, Facet::Choice), required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, Implemented,
+        "Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.", "An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one. The choice branch must not require the user to choose an action before its comparison."),
     card!(BusinessProperty, "Property used for business", "170–171", None,
         &[required(Field::DealActor), for_facet(Field::DealBeneficiary, Facet::Profit)], DEAL, ExpertReview,
         "Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.", "Dedicated profit testimony and reviewed role allocation are required before this program can deliver a judgment."),
@@ -500,7 +502,7 @@ pub const CATALOGUE: &[Contract] = &[
         "The person takes their operative relationship house.", "Contact with the person differs from the arrival of their parcel. An expected contact and long-lost return have different defaults."),
     card!(Parcel, "Arrival of a letter or parcel", "165–166", None,
         &[required(Field::Sender)], EVENT_STATE, ExpertReview,
-        "Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.", "An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review."),
+        "Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.", "An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review."),
     card!(Visit, "Expected visit", "166", None,
         &[required(Field::Visitor), required(Field::Expected)], EVENT_STATE, ExpertReview,
         "Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.", "Use the naturally limited contextual scale. Do not request birth data or full street address by habit."),
@@ -510,8 +512,8 @@ pub const CATALOGUE: &[Contract] = &[
     card!(Bet, "Profit from a bet", "156–161, 203–204", Principal, &[],
         &[Facet::Profit, Facet::Situation], ExpertReview,
         "Money/profit question, not the team's us/them match recipe.", "Assess the principal's money and relevant gains without promising an exact payout."),
-    card!(CourtCase, "Civil trial or legal dispute", "208–209", Required,
-        &[required(Field::Claim)], EVENT_STATE, ExpertReview,
+    card!(CourtCase, "Civil trial or legal dispute", "208–212", Required,
+        &[required(Field::Claim)], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Choice], ExpertReview,
         "Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.",
         "Dedicated trial/perfection program awaits review; identify the actual party and issue without inferring a legal outcome from a generic deal."),
     card!(Vehicle, "Vehicle or journey safety", "142–143", Required, &[],
@@ -530,8 +532,8 @@ pub const CATALOGUE: &[Contract] = &[
         &[Facet::Situation], ExpertReview,
         "Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.", "Dedicated pregnancy/medical qualification is required; the chart is not a clinical test."),
     card!(Fertility, "Conception and fertility", "174–177", Required,
-        &[required(Field::FertilityScope)], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Quantity], ExpertReview,
-        "Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.", "The source's coarse childbirth count is specific to this recipe, not transferable to sales. Dedicated program awaits review."),
+        &[required(Field::FertilityScope)], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Quantity, Facet::Description], ExpertReview,
+        "Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.", "The source's coarse childbirth count is specific to this recipe, not transferable to sales. Description is traditional testimony, not a clinical determination. Dedicated program awaits review."),
     card!(Adoption, "Adoption", "177–178", Required,
         &[required(Field::AdoptionState), when(Field::BirthParent, Field::AdoptionState, "prospective_known_parent")], EVENT_STATE, ExpertReview,
         "Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.", "Do not erase adoption state. Dedicated role/testimony program awaits review."),
@@ -554,8 +556,8 @@ pub const CATALOGUE: &[Contract] = &[
     card!(Dream, "Dream meaning or prophetic truth", "219", None,
         &[required(Field::DreamTask), required(Field::DreamAccount)], &[Facet::Situation, Facet::Truth], ExpertReview,
         "Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.", "Chart the question's time, not the dream's time. Dedicated interpretation program awaits review."),
-    card!(Education, "School or university", "219–220", Required,
-        &[required(Field::SchoolLevel), required(Field::SchoolTask)], EVENT_STATE, ExpertReview,
+    card!(Education, "School or university", "219–221", Required,
+        &[required(Field::SchoolLevel), required(Field::SchoolTask)], &[Facet::Event, Facet::Situation, Facet::Timing, Facet::Choice], ExpertReview,
         "Institution radical third/ninth, not blindly turned from a child.", "Admission, enjoyment and quality are distinct. Dedicated education program awaits review."),
     card!(Wish, "An unspecified wish", "164–165, 231", None, &[],
         &[Facet::Event, Facet::Situation], ExpertReview,
@@ -2286,167 +2288,6 @@ pub fn control(intent: Intent) -> Turn {
     }
 }
 
-/// A standalone first-person declaration may follow the actual question.
-fn unquoted_sentence_starts(words: &str) -> Vec<usize> {
-    let mut starts = vec![0];
-    let mut quoted_until = None;
-    for (at, ch) in words.char_indices() {
-        let previous = words[..at].chars().next_back();
-        let next = words[at + ch.len_utf8()..].chars().next();
-        let apostrophe =
-            previous.is_some_and(char::is_alphanumeric) && next.is_some_and(char::is_alphanumeric);
-        if let Some(end) = quoted_until {
-            if ch == end && !(matches!(ch, '\'' | '’') && apostrophe) {
-                quoted_until = None;
-            }
-            continue;
-        }
-        match ch {
-            '"' => quoted_until = Some('"'),
-            '“' => quoted_until = Some('”'),
-            '‘' => quoted_until = Some('’'),
-            '\'' if !apostrophe && !previous.is_some_and(char::is_alphanumeric) => {
-                quoted_until = Some('\'')
-            }
-            '.' | '?' | '!' | '\n' => starts.push(at + ch.len_utf8()),
-            _ => {}
-        }
-    }
-    starts
-}
-
-/// A narrow source-defined obligation, independent of the model's worksheet.
-/// Direct question-anchor instructions differ from event places and dates.
-struct HistoricalAnchorRequest<'a> {
-    clause: &'a str,
-    supplied_place: bool,
-    supplied_time: bool,
-}
-
-fn historical_anchor_request(words: &str) -> Option<HistoricalAnchorRequest<'_>> {
-    let starts = unquoted_sentence_starts(words);
-    for (index, at) in starts.iter().enumerate() {
-        let before = &words[..*at];
-        let header = before
-            .rsplit("\n\n")
-            .next()
-            .unwrap_or(before)
-            .lines()
-            .rev()
-            .find(|line| !line.trim().is_empty())
-            .unwrap_or("")
-            .trim();
-        if header.ends_with(':')
-            && [
-                "said", "says", "asked", "asks", "wrote", "writes", "told", "reported",
-            ]
-            .iter()
-            .any(|cue| crate::horary_role_options::mentions(header, cue))
-        {
-            continue;
-        }
-        let end = starts.get(index + 1).copied().unwrap_or(words.len());
-        let clause = words[*at..end].trim();
-        let lower = clause.to_ascii_lowercase();
-        let imperative = lower.strip_prefix("please ").unwrap_or(&lower);
-        let prefixes = [
-            "use my earlier consultation",
-            "use the earlier consultation",
-            "use my original consultation",
-            "use the question i understood",
-            "use the question i first understood",
-        ];
-        let Some(prefix) = prefixes.iter().find(|prefix| {
-            imperative.starts_with(**prefix)
-                && imperative[prefix.len()..]
-                    .chars()
-                    .next()
-                    .is_none_or(|ch| !ch.is_alphanumeric())
-        }) else {
-            continue;
-        };
-        let tail = &imperative[prefix.len()..];
-        let months = [
-            "january",
-            "february",
-            "march",
-            "april",
-            "may",
-            "june",
-            "july",
-            "august",
-            "september",
-            "october",
-            "november",
-            "december",
-        ];
-        let supplied_place = [" in ", " from "].iter().any(|cue| {
-            tail.split_once(*cue).is_some_and(|(_, rest)| {
-                let rest = rest.trim();
-                let period = rest.trim_end_matches(['.', '?', '!']);
-                let date_words = period.split_whitespace().collect::<Vec<_>>();
-                let temporal_tail = date_words.first().is_some_and(|word|
-                    ["yesterday", "today", "tomorrow"].contains(word))
-                    || matches!(date_words.as_slice(), [month, year, ..]
-                        if months.contains(month) && year.trim_matches(|ch: char| !ch.is_ascii_digit()).len() == 4
-                            && year.trim_matches(|ch: char| !ch.is_ascii_digit()).chars().all(|ch| ch.is_ascii_digit()));
-                !temporal_tail
-                    && !rest.is_empty()
-                    && !rest.starts_with(char::is_numeric)
-                    && ![
-                        "the morning",
-                        "the afternoon",
-                        "the evening",
-                        "morning",
-                        "afternoon",
-                        "evening",
-                    ]
-                    .iter()
-                    .any(|period| rest.starts_with(period))
-            })
-        });
-        let has_clock = tail.split_whitespace().any(|word| {
-            let clock = word.trim_matches(|ch: char| !ch.is_ascii_digit() && ch != ':');
-            clock.split_once(':').is_some_and(|(hour, minute)| {
-                !hour.is_empty()
-                    && !minute.is_empty()
-                    && hour.chars().all(|ch| ch.is_ascii_digit())
-                    && minute.chars().all(|ch| ch.is_ascii_digit())
-            })
-        });
-        let tokens: Vec<_> = tail
-            .split(|ch: char| !ch.is_ascii_alphanumeric())
-            .filter(|word| !word.is_empty())
-            .collect();
-        let has_year = tokens
-            .iter()
-            .any(|part| part.len() == 4 && part.chars().all(|ch| ch.is_ascii_digit()));
-
-        let has_month_day = tokens.iter().enumerate().any(|(index, word)| {
-            months.contains(word)
-                && [index.checked_sub(1), index.checked_add(1)]
-                    .into_iter()
-                    .flatten()
-                    .any(|next| {
-                        tokens.get(next).is_some_and(|day| {
-                            day.parse::<u8>().is_ok_and(|day| (1..=31).contains(&day))
-                        })
-                    })
-        });
-        let has_iso_date = tail.split(|ch: char| !ch.is_ascii_digit() && ch != '-').any(|word| {
-            let parts: Vec<_> = word.split('-').collect();
-            matches!(parts.as_slice(), [year, month, day] if year.len() == 4 && month.len() == 2 && day.len() == 2
-                && parts.iter().all(|part| part.chars().all(|ch| ch.is_ascii_digit())))
-        });
-        return Some(HistoricalAnchorRequest {
-            clause,
-            supplied_place,
-            supplied_time: has_clock && ((has_year && has_month_day) || has_iso_date),
-        });
-    }
-    None
-}
-
 fn original_question_words(case: &Consultation) -> Option<&str> {
     match &case.question {
         Slot::Resolved { observation } | Slot::Proposed { observation } => {
@@ -2558,84 +2399,12 @@ fn record_anchor_obligation(case: &mut Consultation, words: &str) {
     }
 }
 
-/// Quoted speech and ambiguous compound declarations remain with recognition.
+/// Map the shared source declaration into the application's unchanged fact patch.
 pub fn reader_place_statement(words: &str) -> Option<Update> {
-    let words = words.trim();
-    let starts = unquoted_sentence_starts(words);
-    let prefixes = ["i'm asking from ", "i am asking from ", "i’m asking from "];
-    let declarations: Vec<_> = starts
-        .iter()
-        .filter_map(|at| {
-            let before = &words[..*at];
-            let paragraph = before.rsplit("\n\n").next().unwrap_or(before);
-            let header = paragraph.lines().next().unwrap_or("").trim();
-            if header.ends_with(':')
-                && [
-                    "said", "says", "asked", "asks", "wrote", "writes", "told", "reported",
-                ]
-                .iter()
-                .any(|cue| crate::horary_role_options::mentions(header, cue))
-            {
-                return None; // A colon-led report is somebody's words, not this reader's declaration.
-            }
-            let statement = words[*at..].trim();
-            let lower = statement.to_ascii_lowercase();
-            prefixes
-                .iter()
-                .find(|prefix| lower.starts_with(**prefix))
-                .map(|prefix| (statement, prefix.len()))
-        })
-        .collect();
-    let [(statement, prefix_len)] = declarations.as_slice() else {
-        return None;
-    };
-    let place = statement[*prefix_len..].trim().trim_end_matches(['.', '!']);
-    let lower = place.to_ascii_lowercase();
-    // Complete deictic phrases request the current device anchor, not a city
-    // named "here, now". Keep explicit names such as Hereford or Here, Kansas.
-    let deictic_words: Vec<_> = lower
-        .split(|ch: char| ch.is_whitespace() || ch == ',')
-        .filter(|word| !word.is_empty())
-        .collect();
-    let device = matches!(
-        deictic_words.as_slice(),
-        ["here"]
-            | ["here", "now"]
-            | ["right", "here"]
-            | ["right", "here", "now"]
-            | ["right", "here", "right", "now"]
-            | ["here", "at", "the", "moment"]
-            | ["where", "i", "am"]
-            | ["where", "i", "am", "now"]
-            | ["where", "i", "am", "right", "now"]
-            | ["where", "i", "currently", "am"]
-            | ["my", "present", "location"]
-    ) || crate::horary_role_options::mentions(place, "my device")
-        || crate::horary_role_options::mentions(place, "this device")
-        || crate::horary_role_options::mentions(place, "current location");
-    let extra_sentence = place.match_indices('.').any(|(at, _)| {
-        let suffix = &place[at + 1..];
-        let prefix_word = place[..at].split_whitespace().next_back().unwrap_or("");
-        !suffix.trim().is_empty()
-            && suffix.starts_with(char::is_whitespace)
-            && !matches!(
-                prefix_word.to_ascii_lowercase().as_str(),
-                "st" | "mt" | "ft" | "u" | "s"
-            )
-    });
-    if place.is_empty()
-        || place.len() > 700
-        || place.contains(['?', ';', '\n', '"', '“', '”', '‘'])
-        || place.ends_with(['\'', '’'])
-        || device
-        || extra_sentence
-    {
-        return None;
-    }
-    Some(Update {
+    horary_ai_core::anchor_authority::reader_place_statement(words).map(|declaration| Update {
         field: Field::ReaderPlace,
-        value: place.into(),
-        quote: (*statement).into(),
+        value: declaration.value.into(),
+        quote: declaration.quote.into(),
         mode: UpdateMode::Supply,
     })
 }

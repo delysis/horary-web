@@ -250,7 +250,17 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
                 host_planet: host.clone(),
                 qualities,
             });
-        add("reception",format!("{guest} → {host}"),format!("{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",meanings.join("; ")),vec![guest,host],None,reception);
+        add(
+            "reception",
+            format!("{guest} → {host}"),
+            format!(
+                "{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",
+                meanings.join("; ")
+            ),
+            vec![guest, host],
+            None,
+            reception,
+        );
     }
     // Bounded, compact event summaries avoid dumping the raw ephemeris into every prompt.
     // Attach typed sign-change data so the worksheet need not guess from prose.
@@ -322,9 +332,15 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
     };
     let moon = &chart["derived"]["voidOfCourseMoon"];
     let detail = match moon["isVoid"].as_bool() {
-        Some(true)=>"Hourly samples found no major lunar contact before sign exit. This is strict void-of-course testimony within this calculation, not an automatic verdict.",
-        Some(false)=>"Hourly samples found a lunar contact before sign exit. The Moon is not strictly void of course in this calculation; the contact still needs contextual judgment.",
-        None=>"The search does not establish the Moon's void-of-course status. Unknown coverage is not evidence of no contact.",
+        Some(true) => {
+            "Hourly samples found no major lunar contact before sign exit. This is strict void-of-course testimony within this calculation, not an automatic verdict."
+        }
+        Some(false) => {
+            "Hourly samples found a lunar contact before sign exit. The Moon is not strictly void of course in this calculation; the contact still needs contextual judgment."
+        }
+        None => {
+            "The search does not establish the Moon's void-of-course status. Unknown coverage is not evidence of no contact."
+        }
     };
     add(
         "moon",
@@ -475,7 +491,10 @@ mod tests {
         assert_eq!(generated[0].id, "e0");
         assert_eq!(generated[0].label, "Mars → Venus");
         assert_eq!(generated[0].planets, ["Mars", "Venus"]);
-        assert_eq!(generated[0].detail, "Mars regards Venus: negative reception by detriment (major); positive reception by term (minor). This describes Mars's regard for Venus, not the reverse.");
+        assert_eq!(
+            generated[0].detail,
+            "Mars regards Venus: negative reception by detriment (major); positive reception by term (minor). This describes Mars's regard for Venus, not the reverse."
+        );
         assert_eq!(
             serde_json::to_value(generated[0].reception.as_ref().unwrap()).unwrap(),
             serde_json::json!({"guestPlanet":"Mars","hostPlanet":"Venus","qualities":[
@@ -484,7 +503,10 @@ mod tests {
             ]})
         );
         assert_eq!(generated[1].id, "e1");
-        assert_eq!(generated[1].detail, "Venus regards Mars: positive reception by exaltation (major, potentially exaggerated). This describes Venus's regard for Mars, not the reverse.");
+        assert_eq!(
+            generated[1].detail,
+            "Venus regards Mars: positive reception by exaltation (major, potentially exaggerated). This describes Venus's regard for Mars, not the reverse."
+        );
         assert_eq!(
             generated[1].reception.as_ref().unwrap().guest_planet,
             "Venus"
@@ -521,7 +543,10 @@ mod tests {
                 {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"faceRuler","polarity":polarity}
             ]}});
             let generated = facts(Some(&chart));
-            assert_eq!(generated[0].detail, "Venus regards Mars: positive reception by domicile (major); positive reception by face (minor). This describes Venus's regard for Mars, not the reverse.");
+            assert_eq!(
+                generated[0].detail,
+                "Venus regards Mars: positive reception by domicile (major); positive reception by face (minor). This describes Venus's regard for Mars, not the reverse."
+            );
             assert!(generated[0].reception.is_none());
             assert!(serde_json::to_value(&generated[0])
                 .unwrap()

@@ -303,7 +303,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `5b9bb665d5d4f53c6c396c6a00280e9f278a62590a90a5cf5bc5cf53ca6f11ad`
+Guide SHA256: `ad69b15225334ca9da51cb419355558c9a2c18a238283e79f1a30ff17f46b985`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -323,32 +323,32 @@ CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
-missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
+missing_person: Missing person — printed pp. 146–153, 182–188. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.
 money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
-existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
+existing_job: Keeping a job or existing career — printed pp. 224–230. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
 job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.
-rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
+rental: Rental agreement — printed pp. 170–171. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
 business_property: Property used for business — printed pp. 170–171. Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.
 choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
 hiring: Hiring staff — printed pp. 189–190. Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.
 contact: Contact with someone — printed pp. 165–166. The person takes their operative relationship house.
-parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 visit: Expected visit — printed pp. 166. Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.
 contest: Sporting match or championship — printed pp. 203–208. Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.
 bet: Profit from a bet — printed pp. 156–161, 203–204. Money/profit question, not the team's us/them match recipe.
-court_case: Civil trial or legal dispute — printed pp. 208–209. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
+court_case: Civil trial or legal dispute — printed pp. 208–212. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 vehicle: Vehicle or journey safety — printed pp. 142–143. Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.
 person_description: Description of a person — printed pp. 143–145, 191, 196. An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.
 information: Whether information is true — printed pp. 164–165. A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.
 trust: Trustworthiness in a capacity — printed pp. 165. Judge the relevant person's condition, not a generic message-veracity house.
 pregnancy: Current pregnancy — printed pp. 173–174. Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.
-fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
+fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
 adoption: Adoption — printed pp. 177–178. Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.
 medical: Illness or treatment — printed pp. 179–189. Patient/capacity, diagnosis/prognosis/treatment differ. Lord 6 is not automatically the illness.
 politics: Political election — printed pp. 212–214. Incumbent/open contest and supporter/impartial citizen/foreign observer change assignment. Citizenship is not inferred from device location.
@@ -356,7 +356,7 @@ knowledge: Knowledge and its earnings — printed pp. 216–218. Knowledge ninth
 exam: Examination — printed pp. 218. Exam result/profit from knowledge is not just a ninth-house object.
 undertaking: Voyage, course or fair benefit — printed pp. 219. Undertaking quality differs from its profit; don't blindly reuse movable-goods sale roles.
 dream: Dream meaning or prophetic truth — printed pp. 219. Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.
-education: School or university — printed pp. 219–220. Institution radical third/ninth, not blindly turned from a child.
+education: School or university — printed pp. 219–221. Institution radical third/ninth, not blindly turned from a child.
 wish: An unspecified wish — printed pp. 164–165, 231. Specific matters use their own method; not every wish is eleventh.
 tax: Tax and assessment — printed pp. 231–232. Government tenth, its coffers eleventh, principal's money second.
 allegation: Reported harmful practice — printed pp. 233–234. Keep allegations as reported concerns. Special relationships matter only when supplied.
@@ -2705,7 +2705,7 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
 
 ### Condition and ability · condition
 
-Guide SHA256: `a8721f69f9b9358f10c2cdcc65cb2e0e1f5ffa4c6996714401af13910681fe26`
+Guide SHA256: `40ce004df854642d5216a1d6233eea01e6576be22de85a0bee5076113edb818c`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -2810,6 +2810,28 @@ likened to a man who is raised up to sit beside the king. If you are the king's 
 
 <extract id="no_automatic_damage" source="Frawley, The Horary Textbook, 2005" printed_pages="149–149" ocr_pages="158–158">
 Lilly says that if the object's significator is in its detriment or fall, the object will be damaged or only partly recovered. This is true on occasions, but I have not found it generally so.
+</extract>
+
+<extract id="solar_opposition_context" source="Frawley, The Horary Textbook, 2005" printed_pages="61–61" ocr_pages="70–70">
+## *Opposition to the Sun*
+
+The area of 8 degrees or so either side of exact opposition to the Sun is also a place of extreme affliction, not quite so serious as combustion, but not so far short of it. There is no equivalent of cazimi here.
+</extract>
+
+<extract id="retrograde_context" source="Frawley, The Horary Textbook, 2005" printed_pages="57–57" ocr_pages="66–66">
+*Retrograde*
+
+Except for the Sun and Moon, all the planets appear from time to time to be going backwards in the sky: they are retrograde. If a significator is retrograde, this must be considered. It may or may not be an affliction; if it is, it is a serious one.
+
+In many questions retrogradation is exactly what we hope to see: 'Will I get my old job back?' 'Can I get back with Britney?' 'Will the cat come home?' In any circumstance involving returning or going back over something, a significator being retrograde is entirely appropriate, so the retrogradation is not a debility. Even if return is not sought, but still makes sense in context: 'When will I meet a man?' and the aspect is to a planet that is retrograde: 'You'll get back with an ex'.
+
+This is an example of what I would call *the law of sufficient explanation*. If the context of an enquiry explains a debility, it is no debility.
+
+If there is no such favourable spin given by the context, retrogradation is a problem. The planet is going the wrong way: it is against nature. This is a powerful debility, and, being against nature, things are unlikely to turn out well. Consider: the planet has lots of essential dignity, so he's one of the good guys. He's on the Midheaven, so is strongly dignified by house: he has a gun and lots of ammunition. But he's retrograde: with the best will in the world, he's shooting in the wrong direction.
+
+If the planet has only recently turned retrograde, it can be important to consider what it has previously done and is now returning to do again, or what it was about to do but turned away from. Take a look at where it's been and at where it didn't go. But: in retrogradation a planet will either conjunct or oppose the Sun; if the planet you are considering is applying to conjunct or oppose the Sun, do not look at its actions beyond that.
+
+Being direct in motion is usually listed as a dignity. It isn't. This is the usual state of affairs, from which retrogradation is an aberration.
 </extract>
 </book_extracts>
 </stage>

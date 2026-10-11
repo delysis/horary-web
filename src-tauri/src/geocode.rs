@@ -307,10 +307,12 @@ fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate
     let city_query = parsed.city_query.as_str();
     if !city_query.is_empty() {
         for place in &records.places {
-            if let Some(state) = parsed.state.as_deref() {
-                if place.state != state {
-                    continue;
-                }
+            if parsed
+                .state
+                .as_deref()
+                .is_some_and(|state| place.state != state)
+            {
+                continue;
             }
 
             let city = normalize_location_text(&place.city);
@@ -336,10 +338,12 @@ fn search_us_locations(query: &str) -> GeocodeResult<Vec<(u16, LocationCandidate
         }
 
         for zip_record in records.zips.iter().filter(|_| !unqualified) {
-            if let Some(state) = parsed.state.as_deref() {
-                if zip_record.state != state {
-                    continue;
-                }
+            if parsed
+                .state
+                .as_deref()
+                .is_some_and(|state| zip_record.state != state)
+            {
+                continue;
             }
             let city = normalize_location_text(&zip_record.city);
             let rank = if city == city_query {

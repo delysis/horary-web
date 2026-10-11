@@ -78,7 +78,7 @@ The [complete process reference](LLM_PROCESS.md) includes actual scheduler reque
 ## Contracts
 ### Relationship, marriage and feelings (`relationship`)
 
-Frawley, *The Horary Textbook*, printed pp. 140, 191–200. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: event, situation, timing.
+Frawley, *The Horary Textbook*, printed pp. 140, 191–200. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: event, situation, timing, truth, location.
 
 Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 
@@ -90,7 +90,7 @@ Distinguish hoped-for formation, current feelings and an arranged wedding. An un
 
 ### Lost inanimate possession (`lost_object`)
 
-Frawley, *The Horary Textbook*, printed pp. 146–153, 244. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: location, event, timing, description.
+Frawley, *The Horary Textbook*, printed pp. 146–153, 244. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: location, event, timing, description, truth.
 
 Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 
@@ -102,7 +102,7 @@ Consider recovery before proposing a search. Angularity and clear whereabouts ca
 
 ### Lost animal (`lost_animal`)
 
-Frawley, *The Horary Textbook*, printed pp. 1–3, 146–153. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: location, event, timing, description.
+Frawley, *The Horary Textbook*, printed pp. 1–3, 146–153. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: location, event, timing, description, truth.
 
 Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
 
@@ -114,11 +114,11 @@ Assess recovery and plausible whereabouts from supplied context, without exact G
 
 ### Missing person (`missing_person`)
 
-Frawley, *The Horary Textbook*, printed pp. 146–153. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: location, event, timing, description.
+Frawley, *The Horary Textbook*, printed pp. 146–153, 182–188. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: location, event, timing, description, truth, safety.
 
 Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 
-Consider recovery/contact and location separately. Retain reported circumstances as reports.
+Consider recovery/contact and location separately. Return alive additionally needs the book's safety/prognosis testimony, not a recovery aspect alone. Retain reported circumstances as reports.
 
 ### Sale or purchase of movable goods (`movable_deal`)
 
@@ -166,7 +166,7 @@ Establish getting the job, not merely contacting wages. An explicitly mentioned 
 
 ### Keeping a job or existing career (`existing_job`)
 
-Frawley, *The Horary Textbook*, printed pp. 224–226. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: event, situation, timing.
+Frawley, *The Horary Textbook*, printed pp. 224–230. Coverage: `Implemented`. Owner requirement: `Required`. Allowed facets: event, situation, timing, description.
 
 Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 
@@ -190,7 +190,7 @@ Judge quality and stated priorities using their relevant roles. A pay priority n
 
 ### Boss, colleague or subordinate (`work_person`)
 
-Frawley, *The Horary Textbook*, printed pp. 224–225. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: event, situation, timing.
+Frawley, *The Horary Textbook*, printed pp. 224–225. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: event, situation, timing, choice.
 
 Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 
@@ -216,15 +216,18 @@ Assess condition, price and completion separately. Opposition may complete a sal
 
 ### Rental agreement (`rental`)
 
-Frawley, *The Horary Textbook*, printed pp. 170. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: event, situation, choice, profit.
+Frawley, *The Horary Textbook*, printed pp. 170–171. Coverage: `Implemented`. Owner requirement: `None`. Allowed facets: event, situation, choice, profit.
 
-Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
+Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
 
-An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one.
+An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one. The choice branch must not require the user to choose an action before its comparison.
 
 | Input | Applicability | Exact elicitation | Accepted labels |
 |---|---|---|---|
-| `deal_capacity` | `Always` | Are you buying, selling or renting? | buy, sell, rent |
+| `deal_capacity` | `AnswerFacet { facet: Event }` | Are you buying, selling or renting? | buy, sell, rent |
+| `deal_capacity` | `AnswerFacet { facet: Situation }` | Are you buying, selling or renting? | buy, sell, rent |
+| `deal_capacity` | `AnswerFacet { facet: Profit }` | Are you buying, selling or renting? | buy, sell, rent |
+| `alternatives` | `AnswerFacet { facet: Choice }` | What are the alternatives you are comparing? |  |
 | `deal_actor` | `Always` | Whose purchase, sale or rental agreement are we considering? |  |
 | `deal_beneficiary` | `AnswerFacet { facet: Profit }` | Whose financial benefit are you asking about? |  |
 
@@ -278,7 +281,7 @@ Contact with the person differs from the arrival of their parcel. An expected co
 
 Frawley, *The Horary Textbook*, printed pp. 165–166. Coverage: `ExpertReview`. Owner requirement: `None`. Allowed facets: event, situation, timing.
 
-Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 
 An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review.
 
@@ -322,7 +325,7 @@ Assess the principal's money and relevant gains without promising an exact payou
 
 ### Civil trial or legal dispute (`court_case`)
 
-Frawley, *The Horary Textbook*, printed pp. 208–209. Coverage: `ExpertReview`. Owner requirement: `Required`. Allowed facets: event, situation, timing.
+Frawley, *The Horary Textbook*, printed pp. 208–212. Coverage: `ExpertReview`. Owner requirement: `Required`. Allowed facets: event, situation, timing, choice.
 
 Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 
@@ -378,11 +381,11 @@ Dedicated pregnancy/medical qualification is required; the chart is not a clinic
 
 ### Conception and fertility (`fertility`)
 
-Frawley, *The Horary Textbook*, printed pp. 174–177. Coverage: `ExpertReview`. Owner requirement: `Required`. Allowed facets: event, situation, timing, quantity.
+Frawley, *The Horary Textbook*, printed pp. 174–177. Coverage: `ExpertReview`. Owner requirement: `Required`. Allowed facets: event, situation, timing, quantity, description.
 
-Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
+Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
 
-The source's coarse childbirth count is specific to this recipe, not transferable to sales. Dedicated program awaits review.
+The source's coarse childbirth count is specific to this recipe, not transferable to sales. Description is traditional testimony, not a clinical determination. Dedicated program awaits review.
 
 | Input | Applicability | Exact elicitation | Accepted labels |
 |---|---|---|---|
@@ -475,7 +478,7 @@ Chart the question's time, not the dream's time. Dedicated interpretation progra
 
 ### School or university (`education`)
 
-Frawley, *The Horary Textbook*, printed pp. 219–220. Coverage: `ExpertReview`. Owner requirement: `Required`. Allowed facets: event, situation, timing.
+Frawley, *The Horary Textbook*, printed pp. 219–221. Coverage: `ExpertReview`. Owner requirement: `Required`. Allowed facets: event, situation, timing, choice.
 
 Institution radical third/ninth, not blindly turned from a child.
 
@@ -641,32 +644,32 @@ CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
-missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
+missing_person: Missing person — printed pp. 146–153, 182–188. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.
 money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
-existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
+existing_job: Keeping a job or existing career — printed pp. 224–230. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
 job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.
-rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
+rental: Rental agreement — printed pp. 170–171. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
 business_property: Property used for business — printed pp. 170–171. Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.
 choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
 hiring: Hiring staff — printed pp. 189–190. Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.
 contact: Contact with someone — printed pp. 165–166. The person takes their operative relationship house.
-parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 visit: Expected visit — printed pp. 166. Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.
 contest: Sporting match or championship — printed pp. 203–208. Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.
 bet: Profit from a bet — printed pp. 156–161, 203–204. Money/profit question, not the team's us/them match recipe.
-court_case: Civil trial or legal dispute — printed pp. 208–209. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
+court_case: Civil trial or legal dispute — printed pp. 208–212. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 vehicle: Vehicle or journey safety — printed pp. 142–143. Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.
 person_description: Description of a person — printed pp. 143–145, 191, 196. An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.
 information: Whether information is true — printed pp. 164–165. A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.
 trust: Trustworthiness in a capacity — printed pp. 165. Judge the relevant person's condition, not a generic message-veracity house.
 pregnancy: Current pregnancy — printed pp. 173–174. Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.
-fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
+fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
 adoption: Adoption — printed pp. 177–178. Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.
 medical: Illness or treatment — printed pp. 179–189. Patient/capacity, diagnosis/prognosis/treatment differ. Lord 6 is not automatically the illness.
 politics: Political election — printed pp. 212–214. Incumbent/open contest and supporter/impartial citizen/foreign observer change assignment. Citizenship is not inferred from device location.
@@ -674,7 +677,7 @@ knowledge: Knowledge and its earnings — printed pp. 216–218. Knowledge ninth
 exam: Examination — printed pp. 218. Exam result/profit from knowledge is not just a ninth-house object.
 undertaking: Voyage, course or fair benefit — printed pp. 219. Undertaking quality differs from its profit; don't blindly reuse movable-goods sale roles.
 dream: Dream meaning or prophetic truth — printed pp. 219. Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.
-education: School or university — printed pp. 219–220. Institution radical third/ninth, not blindly turned from a child.
+education: School or university — printed pp. 219–221. Institution radical third/ninth, not blindly turned from a child.
 wish: An unspecified wish — printed pp. 164–165, 231. Specific matters use their own method; not every wish is eleventh.
 tax: Tax and assessment — printed pp. 231–232. Government tenth, its coffers eleventh, principal's money second.
 allegation: Reported harmful practice — printed pp. 233–234. Keep allegations as reported concerns. Special relationships matter only when supplied.
@@ -753,7 +756,7 @@ Role distinctions: Prospective partner is seventh even if no partner is named. U
 Method distinctions: Distinguish hoped-for formation, current feelings and an arranged wedding. An unnamed prospective partner is a role: do not claim an existing person currently loves the querent or has already met them. Directed reception describes chart testimony; event perfection is a separate question. No contact is not an automatic cancellation of an arranged wedding.
 
 Permitted subject kinds: ["person"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, truth, location. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - baseline: always. Is this about a hoped-for relationship, one already under way, or an arranged wedding? Accepted labels: hoped_for | ongoing | arranged_wedding.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -826,7 +829,7 @@ Role distinctions: Prospective partner is seventh even if no partner is named. U
 Method distinctions: Distinguish hoped-for formation, current feelings and an arranged wedding. An unnamed prospective partner is a role: do not claim an existing person currently loves the querent or has already met them. Directed reception describes chart testimony; event perfection is a separate question. No contact is not an automatic cancellation of an arranged wedding.
 
 Permitted subject kinds: ["person"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, truth, location. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - baseline: always. Is this about a hoped-for relationship, one already under way, or an arranged wedding? Accepted labels: hoped_for | ongoing | arranged_wedding.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -900,7 +903,7 @@ Role distinctions: Own lost object: compare Lords 2 and 4 with its supplied desc
 Method distinctions: Consider recovery before proposing a search. Angularity and clear whereabouts can support recovery without an applying aspect. Keep search reports fallible; no thief unless raised. A failed search revisits this chart.
 
 Permitted subject kinds: ["movable"].
-Judgment-supported facets: location, event, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: location, event, timing, description, truth. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - description: only if the principal owns the subject; unknown ownership is unresolved. What does the missing object look like—its colour, material or shape? Accepted labels: source-backed concise text.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -964,7 +967,7 @@ Role distinctions: Own lost object: compare Lords 2 and 4 with its supplied desc
 Method distinctions: Consider recovery before proposing a search. Angularity and clear whereabouts can support recovery without an applying aspect. Keep search reports fallible; no thief unless raised. A failed search revisits this chart.
 
 Permitted subject kinds: ["movable"].
-Judgment-supported facets: location, event, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: location, event, timing, description, truth. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - description: only if the principal owns the subject; unknown ownership is unresolved. What does the missing object look like—its colour, material or shape? Accepted labels: source-backed concise text.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -1031,7 +1034,7 @@ Role distinctions: Kind determines sixth (dog/cat) versus twelfth (horse), not m
 Method distinctions: Assess recovery and plausible whereabouts from supplied context, without exact GPS promises or automatic void-Moon rejection.
 
 Permitted subject kinds: ["small_animal", "large_animal", "animal"].
-Judgment-supported facets: location, event, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: location, event, timing, description, truth. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - animal_kind: always. What kind of animal is missing? Accepted labels: small_kind | large_kind.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -1102,7 +1105,7 @@ Role distinctions: Kind determines sixth (dog/cat) versus twelfth (horse), not m
 Method distinctions: Assess recovery and plausible whereabouts from supplied context, without exact GPS promises or automatic void-Moon rejection.
 
 Permitted subject kinds: ["small_animal", "large_animal", "animal"].
-Judgment-supported facets: location, event, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: location, event, timing, description, truth. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - animal_kind: always. What kind of animal is missing? Accepted labels: small_kind | large_kind.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -1169,12 +1172,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Missing person (missing_person)
-Source: Frawley, The Horary Textbook, printed pp. 146–153.
+Source: Frawley, The Horary Textbook, printed pp. 146–153, 182–188.
 Role distinctions: Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
-Method distinctions: Consider recovery/contact and location separately. Retain reported circumstances as reports.
+Method distinctions: Consider recovery/contact and location separately. Return alive additionally needs the book's safety/prognosis testimony, not a recovery aspect alone. Retain reported circumstances as reports.
 
 Permitted subject kinds: ["person"].
-Judgment-supported facets: location, event, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: location, event, timing, description, truth, safety. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
 
@@ -1231,12 +1234,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Missing person (missing_person)
-Source: Frawley, The Horary Textbook, printed pp. 146–153.
+Source: Frawley, The Horary Textbook, printed pp. 146–153, 182–188.
 Role distinctions: Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
-Method distinctions: Consider recovery/contact and location separately. Retain reported circumstances as reports.
+Method distinctions: Consider recovery/contact and location separately. Return alive additionally needs the book's safety/prognosis testimony, not a recovery aspect alone. Retain reported circumstances as reports.
 
 Permitted subject kinds: ["person"].
-Judgment-supported facets: location, event, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: location, event, timing, description, truth, safety. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
 
@@ -1821,12 +1824,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Keeping a job or existing career (existing_job)
-Source: Frawley, The Horary Textbook, printed pp. 224–226.
+Source: Frawley, The Horary Textbook, printed pp. 224–230.
 Role distinctions: Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 Method distinctions: Default is an existing job: assess stability/disruption, not a compulsory acquisition aspect.
 
 Permitted subject kinds: ["job"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
 
@@ -1883,12 +1886,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Keeping a job or existing career (existing_job)
-Source: Frawley, The Horary Textbook, printed pp. 224–226.
+Source: Frawley, The Horary Textbook, printed pp. 224–230.
 Role distinctions: Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 Method distinctions: Default is an existing job: assess stability/disruption, not a compulsory acquisition aspect.
 
 Permitted subject kinds: ["job"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
 
@@ -2205,7 +2208,7 @@ Role distinctions: Co-worker seventh, subordinate sixth, boss tenth when directl
 Method distinctions: Address the actual work relationship; do not reclassify a friendly colleague as eleventh by habit.
 
 Permitted subject kinds: ["person"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, choice. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - work_capacity: always. Is this person your boss, a colleague, or someone who works for you? Accepted labels: boss | colleague | subordinate.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -2269,7 +2272,7 @@ Role distinctions: Co-worker seventh, subordinate sixth, boss tenth when directl
 Method distinctions: Address the actual work relationship; do not reclassify a friendly colleague as eleventh by habit.
 
 Permitted subject kinds: ["person"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, choice. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - work_capacity: always. Is this person your boss, a colleague, or someone who works for you? Accepted labels: boss | colleague | subordinate.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -2466,14 +2469,17 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Rental agreement (rental)
-Source: Frawley, The Horary Textbook, printed pp. 170.
-Role distinctions: Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
-Method distinctions: An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one.
+Source: Frawley, The Horary Textbook, printed pp. 170–171.
+Role distinctions: Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
+Method distinctions: An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one. The choice branch must not require the user to choose an action before its comparison.
 
 Permitted subject kinds: ["property"].
 Judgment-supported facets: event, situation, choice, profit. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
-- deal_capacity: always. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- deal_capacity: only if the requested answer facet is event. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- deal_capacity: only if the requested answer facet is situation. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- deal_capacity: only if the requested answer facet is profit. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- alternatives: only if the requested answer facet is choice. What are the alternatives you are comparing? Accepted labels: source-backed concise text.
 - deal_actor: always. Whose purchase, sale or rental agreement are we considering? Accepted labels: source-backed concise text.
 - deal_beneficiary: only if the requested answer facet is profit. Whose financial benefit are you asking about? Accepted labels: source-backed concise text.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -2533,14 +2539,17 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Rental agreement (rental)
-Source: Frawley, The Horary Textbook, printed pp. 170.
-Role distinctions: Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
-Method distinctions: An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one.
+Source: Frawley, The Horary Textbook, printed pp. 170–171.
+Role distinctions: Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
+Method distinctions: An opposition can imply regret in this ongoing relationship. Distinguish an available tenancy's quality from finding one. The choice branch must not require the user to choose an action before its comparison.
 
 Permitted subject kinds: ["property"].
 Judgment-supported facets: event, situation, choice, profit. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
-- deal_capacity: always. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- deal_capacity: only if the requested answer facet is event. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- deal_capacity: only if the requested answer facet is situation. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- deal_capacity: only if the requested answer facet is profit. Are you buying, selling or renting? Accepted labels: buy | sell | rent.
+- alternatives: only if the requested answer facet is choice. What are the alternatives you are comparing? Accepted labels: source-backed concise text.
 - deal_actor: always. Whose purchase, sale or rental agreement are we considering? Accepted labels: source-backed concise text.
 - deal_beneficiary: only if the requested answer facet is profit. Whose financial benefit are you asking about? Accepted labels: source-backed concise text.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -3118,7 +3127,7 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Arrival of a letter or parcel (parcel)
 Source: Frawley, The Horary Textbook, printed pp. 165–166.
-Role distinctions: Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+Role distinctions: Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 Method distinctions: An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
@@ -3181,7 +3190,7 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Arrival of a letter or parcel (parcel)
 Source: Frawley, The Horary Textbook, printed pp. 165–166.
-Role distinctions: Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+Role distinctions: Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 Method distinctions: An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
@@ -3635,12 +3644,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Civil trial or legal dispute (court_case)
-Source: Frawley, The Horary Textbook, printed pp. 208–209.
+Source: Frawley, The Horary Textbook, printed pp. 208–212.
 Role distinctions: Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 Method distinctions: Dedicated trial/perfection program awaits review; identify the actual party and issue without inferring a legal outcome from a generic deal.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, choice. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - claim: always. What specific claim or concern would you like me to consider? Accepted labels: source-backed concise text.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -3698,12 +3707,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: Civil trial or legal dispute (court_case)
-Source: Frawley, The Horary Textbook, printed pp. 208–209.
+Source: Frawley, The Horary Textbook, printed pp. 208–212.
 Role distinctions: Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 Method distinctions: Dedicated trial/perfection program awaits review; identify the actual party and issue without inferring a legal outcome from a generic deal.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, choice. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - claim: always. What specific claim or concern would you like me to consider? Accepted labels: source-backed concise text.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -4403,11 +4412,11 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Conception and fertility (fertility)
 Source: Frawley, The Horary Textbook, printed pp. 174–177.
-Role distinctions: Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
-Method distinctions: The source's coarse childbirth count is specific to this recipe, not transferable to sales. Dedicated program awaits review.
+Role distinctions: Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
+Method distinctions: The source's coarse childbirth count is specific to this recipe, not transferable to sales. Description is traditional testimony, not a clinical determination. Dedicated program awaits review.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
-Judgment-supported facets: event, situation, timing, quantity. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, quantity, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - fertility_scope: always. Are you asking about conceiving soon, carrying a pregnancy, or ever having children? Accepted labels: conception | carrying_to_term | lifetime.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -4467,11 +4476,11 @@ The numbered steps and examples are editorial extraction instructions applying t
 
 SELECTED EXTRACTION PROGRAM: Conception and fertility (fertility)
 Source: Frawley, The Horary Textbook, printed pp. 174–177.
-Role distinctions: Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
-Method distinctions: The source's coarse childbirth count is specific to this recipe, not transferable to sales. Dedicated program awaits review.
+Role distinctions: Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
+Method distinctions: The source's coarse childbirth count is specific to this recipe, not transferable to sales. Description is traditional testimony, not a clinical determination. Dedicated program awaits review.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
-Judgment-supported facets: event, situation, timing, quantity. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, quantity, description. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - fertility_scope: always. Are you asking about conceiving soon, carrying a pregnancy, or ever having children? Accepted labels: conception | carrying_to_term | lifetime.
 A requirement already resolved in consultation needs no repeated update. A fact supplied in the words must be extracted now; do not leave it missing for the conversational reader to ask again. Conditional facts are required only in the named branch. A missing controlling fact remains missing, never false by assumption.
@@ -5451,12 +5460,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: School or university (education)
-Source: Frawley, The Horary Textbook, printed pp. 219–220.
+Source: Frawley, The Horary Textbook, printed pp. 219–221.
 Role distinctions: Institution radical third/ninth, not blindly turned from a child.
 Method distinctions: Admission, enjoyment and quality are distinct. Dedicated education program awaits review.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, choice. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - school_level: always. Is this a school or a university? Accepted labels: school | university.
 - school_task: always. Are you asking about admission, enjoyment, or the quality of the education? Accepted labels: admission | enjoyment | quality.
@@ -5517,12 +5526,12 @@ The historical input expressly identifies the original question's place/moment. 
 The numbered steps and examples are editorial extraction instructions applying the cited text. They are not additional quotations or proof that a prediction is empirically accurate.
 
 SELECTED EXTRACTION PROGRAM: School or university (education)
-Source: Frawley, The Horary Textbook, printed pp. 219–220.
+Source: Frawley, The Horary Textbook, printed pp. 219–221.
 Role distinctions: Institution radical third/ninth, not blindly turned from a child.
 Method distinctions: Admission, enjoyment and quality are distinct. Dedicated education program awaits review.
 
 Permitted subject kinds: ["person", "movable", "money", "property", "job", "small_animal", "large_animal", "other"].
-Judgment-supported facets: event, situation, timing. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
+Judgment-supported facets: event, situation, timing, choice. FIRST verify the tentative classifier label against the actual words and this lesson. A wrong tentative label is not a user fact or an instruction to preserve. Only after that verification preserve a genuinely unsupported requested goal, especially an explicit exact quantity; never rewrite the person's actual question merely to fit this list.
 The executable contract requires these facts when applicable:
 - school_level: always. Is this a school or a university? Accepted labels: school | university.
 - school_task: always. Are you asking about admission, enjoyment, or the quality of the education? Accepted labels: admission | enjoyment | quality.
@@ -5558,32 +5567,32 @@ CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
-missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
+missing_person: Missing person — printed pp. 146–153, 182–188. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.
 money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
-existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
+existing_job: Keeping a job or existing career — printed pp. 224–230. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
 job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.
-rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
+rental: Rental agreement — printed pp. 170–171. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
 business_property: Property used for business — printed pp. 170–171. Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.
 choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
 hiring: Hiring staff — printed pp. 189–190. Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.
 contact: Contact with someone — printed pp. 165–166. The person takes their operative relationship house.
-parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 visit: Expected visit — printed pp. 166. Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.
 contest: Sporting match or championship — printed pp. 203–208. Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.
 bet: Profit from a bet — printed pp. 156–161, 203–204. Money/profit question, not the team's us/them match recipe.
-court_case: Civil trial or legal dispute — printed pp. 208–209. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
+court_case: Civil trial or legal dispute — printed pp. 208–212. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 vehicle: Vehicle or journey safety — printed pp. 142–143. Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.
 person_description: Description of a person — printed pp. 143–145, 191, 196. An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.
 information: Whether information is true — printed pp. 164–165. A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.
 trust: Trustworthiness in a capacity — printed pp. 165. Judge the relevant person's condition, not a generic message-veracity house.
 pregnancy: Current pregnancy — printed pp. 173–174. Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.
-fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
+fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
 adoption: Adoption — printed pp. 177–178. Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.
 medical: Illness or treatment — printed pp. 179–189. Patient/capacity, diagnosis/prognosis/treatment differ. Lord 6 is not automatically the illness.
 politics: Political election — printed pp. 212–214. Incumbent/open contest and supporter/impartial citizen/foreign observer change assignment. Citizenship is not inferred from device location.
@@ -5591,7 +5600,7 @@ knowledge: Knowledge and its earnings — printed pp. 216–218. Knowledge ninth
 exam: Examination — printed pp. 218. Exam result/profit from knowledge is not just a ninth-house object.
 undertaking: Voyage, course or fair benefit — printed pp. 219. Undertaking quality differs from its profit; don't blindly reuse movable-goods sale roles.
 dream: Dream meaning or prophetic truth — printed pp. 219. Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.
-education: School or university — printed pp. 219–220. Institution radical third/ninth, not blindly turned from a child.
+education: School or university — printed pp. 219–221. Institution radical third/ninth, not blindly turned from a child.
 wish: An unspecified wish — printed pp. 164–165, 231. Specific matters use their own method; not every wish is eleventh.
 tax: Tax and assessment — printed pp. 231–232. Government tenth, its coffers eleventh, principal's money second.
 allegation: Reported harmful practice — printed pp. 233–234. Keep allegations as reported concerns. Special relationships matter only when supplied.
@@ -6288,32 +6297,32 @@ CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
-missing_person: Missing person — printed pp. 146–153. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
+missing_person: Missing person — printed pp. 146–153, 182–188. Use the person's actual operative relationship, not the movable-object recipe or an automatic seventh for every missing person.
 movable_deal: Sale or purchase of movable goods — printed pp. 156–161, 167–172. Transaction action and requested outcome are separate. For pure completion, use the actual contracting parties without demanding title ownership or an asset-condition role. An unspecified counterparty is the deal actor's seventh; an identified relative keeps their own operative house. For quality/profit, goods sold are the relevant owner's second; a buyer's potential goods are the buyer's second. Title owner, contracting party and intermediary are distinct.
 money: Payment, debt, gift or grant — printed pp. 156–161. Customers/spouse: eighth; job or government money: eleventh; known relative's money: their turned second. Preserve entitlement versus discretionary gift. For arrival, retain the recipient's own role and second-house pocket, plus Moon when the recipient is the effective principal and a house ruler does not already claim Moon (p. 158).
 investment: Shares and investments — printed pp. 156–161. Owned shares are the principal's second-house possessions, not automatically eighth-house money.
 new_job: Getting a new external job — printed pp. 222–224. Principal's own house and radical tenth for the external job, even for a third-party principal. If the person is themselves tenth-house, use their turned tenth. Wages are a separate role.
-existing_job: Keeping a job or existing career — printed pp. 224–226. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
+existing_job: Keeping a job or existing career — printed pp. 224–230. Current job/career/boss uses the relevant person's turned tenth. Distinguish co-worker seventh and subordinate sixth.
 return_to_job: Returning to an old job — printed pp. 225–226. Principal and relevant job; keep the old-job re-entry context.
 job_offer: Assessing an available job — printed pp. 224–226. The external job is radical tenth, except a tenth-house worker uses their turned tenth (seventh). Select job.wages when assessing pay: second from the bound job, normally eleventh, or eighth in that exception. Job, wages and worker's pocket are distinct roles (printed pp. 223–227). An offer already available is not a new acquisition.
 work_person: Boss, colleague or subordinate — printed pp. 224–225. Co-worker seventh, subordinate sixth, boss tenth when directly asked about. Job/boss collisions need a justified contextual allocation.
 property: Buying or selling property — printed pp. 167–171. Ordinary actual contracting parties are first/seventh; a specific relative may take their own house. A routine estate agent is not the contracting seller and does not acquire a turned seventh by handling the sale. Pure completion does not require deed ownership. For asset assessment, property fourth and price tenth in the relevant frame; the buyer's prospective interest is not current title. Profit is distinct.
-rental: Rental agreement — printed pp. 170. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant.
+rental: Rental agreement — printed pp. 170–171. Modern tenant/landlord deal: first/seventh, not an automatic sixth-house servant. A sell-versus-let comparison keeps both alternatives; an existing or contemplated rent capacity is context, never the selected future answer.
 business_property: Property used for business — printed pp. 170–171. Property to work on/in uses the book's business/property-profit distinction, not an indiscriminate ordinary home-price allocation.
 choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
 hiring: Hiring staff — printed pp. 189–190. Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.
 contact: Contact with someone — printed pp. 165–166. The person takes their operative relationship house.
-parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, the parcel is the sender's relevant possession; afterwards it is the receiver's.
+parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
 visit: Expected visit — printed pp. 166. Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.
 contest: Sporting match or championship — printed pp. 203–208. Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.
 bet: Profit from a bet — printed pp. 156–161, 203–204. Money/profit question, not the team's us/them match recipe.
-court_case: Civil trial or legal dispute — printed pp. 208–209. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
+court_case: Civil trial or legal dispute — printed pp. 208–212. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
 vehicle: Vehicle or journey safety — printed pp. 142–143. Ship I sail in is first in that capacity; movable possession is second. Presence aboard is not a prerequisite.
 person_description: Description of a person — printed pp. 143–145, 191, 196. An identified person uses kind=person and owner_id=their actual ID; their operative relationship fixes their ruler. An explicitly unnamed future marriage partner uses kind=person_role, name=Future marriage partner, and owner_id=the role's principal (querent or an identified participant). Derive that principal's seventh; never invent a spouse identity.
 information: Whether information is true — printed pp. 164–165. A substantive relationship/job/etc. question normally uses its underlying matter; superficial 'is it true' wording is not a new universal recipe.
 trust: Trustworthiness in a capacity — printed pp. 165. Judge the relevant person's condition, not a generic message-veracity house.
 pregnancy: Current pregnancy — printed pp. 173–174. Current state differs from future conception. Turning follows the principal and parenthood context; never infer paternity from a name.
-fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts.
+fertility: Conception and fertility — printed pp. 174–177. Conception, carrying to term and lifetime potential are different scopes; relevant parent roles need explicit facts. Printed177 separately describes coarse child counts and traditional first-child sex testimony after establishing children.
 adoption: Adoption — printed pp. 177–178. Prospective adoption is someone else's child; a completed adoption is one's own fifth-house child.
 medical: Illness or treatment — printed pp. 179–189. Patient/capacity, diagnosis/prognosis/treatment differ. Lord 6 is not automatically the illness.
 politics: Political election — printed pp. 212–214. Incumbent/open contest and supporter/impartial citizen/foreign observer change assignment. Citizenship is not inferred from device location.
@@ -6321,7 +6330,7 @@ knowledge: Knowledge and its earnings — printed pp. 216–218. Knowledge ninth
 exam: Examination — printed pp. 218. Exam result/profit from knowledge is not just a ninth-house object.
 undertaking: Voyage, course or fair benefit — printed pp. 219. Undertaking quality differs from its profit; don't blindly reuse movable-goods sale roles.
 dream: Dream meaning or prophetic truth — printed pp. 219. Dream meaning uses contextual ordinary roles; prophetic truth has its own ninth-house distinction.
-education: School or university — printed pp. 219–220. Institution radical third/ninth, not blindly turned from a child.
+education: School or university — printed pp. 219–221. Institution radical third/ninth, not blindly turned from a child.
 wish: An unspecified wish — printed pp. 164–165, 231. Specific matters use their own method; not every wish is eleventh.
 tax: Tax and assessment — printed pp. 231–232. Government tenth, its coffers eleventh, principal's money second.
 allegation: Reported harmful practice — printed pp. 233–234. Keep allegations as reported concerns. Special relationships matter only when supplied.
