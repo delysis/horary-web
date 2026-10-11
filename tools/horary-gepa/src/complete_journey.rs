@@ -3908,6 +3908,76 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Explicit saved original TRAIN reviews only; no reviewer/model invocation"]
+    fn saved_train_review_witnesses_preserve_exact_wire_judgments_and_partial_reading() {
+        let source = PathBuf::from(
+            std::env::var("HORARY_SAVED_FULL_REVIEW_STATE")
+                .expect("Explicit TRAIN saved review state required"),
+        );
+        let plan: PairPlan =
+            serde_json::from_value(load(&source.join("plan.json")).unwrap()).unwrap();
+        for sequence in 0..2 {
+            let directory = source.join(format!("operations/{sequence:05}"));
+            let recorded = load(&directory.join("request.json")).unwrap();
+            let request = &recorded["request"];
+            let case = plan
+                .cases
+                .iter()
+                .find(|case| request["case_id"] == case.id)
+                .unwrap();
+            assert_eq!(case.partition, "training");
+            let (name, side) = match request["side"].as_str().unwrap() {
+                "baseline" => ("baseline", &plan.baseline),
+                "candidate" => ("candidate", &plan.candidate),
+                _ => panic!("Unknown actual side"),
+            };
+            let captured = calls(side, &case.id).unwrap();
+            let observed = observation(side, &case.id, &captured).unwrap();
+            let packet = packet(&plan, side, case, &captured, &observed).unwrap();
+            assert_eq!(
+                packet.context,
+                load(&directory.join("packet.json")).unwrap()
+            );
+            let (schema, prompt, reconstructed) =
+                recorded_review_contract(&plan, name, case, &packet, &observed, request).unwrap();
+            assert_eq!(reconstructed, *request);
+            assert_eq!(schema, load(&directory.join("schema.json")).unwrap());
+            assert_eq!(
+                read(&directory.join("prompt.txt")).unwrap(),
+                prompt.as_bytes()
+            );
+            assert_eq!(load(&directory.join("exit.json")).unwrap()["code"], 0);
+            assert!(
+                horary_loop::review_events::inspect(&directory.join("events.jsonl"))
+                    .unwrap()
+                    .violation
+                    .is_none()
+            );
+            let bytes = read(&directory.join("answer.json")).unwrap();
+            let raw: Value = serde_json::from_slice(&bytes).unwrap();
+            let result = validate(&packet, &observed, raw.clone()).unwrap();
+            let mut expected = raw;
+            packet.expand(&mut expected).unwrap();
+            let mut body = result.clone();
+            for key in [
+                "version",
+                "case_id",
+                "native_observation_sha256",
+                "interpretation_observed",
+            ] {
+                body.as_object_mut().unwrap().remove(key);
+            }
+            assert_eq!(body, expected);
+            assert_eq!(revalidate(&packet, &observed, &result).unwrap(), result);
+            assert!(!accepted(&observed, &result));
+            if name == "candidate" {
+                assert_eq!(result["pipeline"]["reading"]["score"], 1);
+            }
+            assert_eq!(read(&directory.join("answer.json")).unwrap(), bytes);
+        }
+    }
+
+    #[test]
     fn paid_continuation_reuses_exact_answer_and_keeps_original_review_reservation() {
         let (fixture, original, source, owner) = stopped_paid_review();
         let state = fixture

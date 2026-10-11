@@ -316,6 +316,10 @@ pub struct Plan {
     /// An explicit fresh measurement stop; omission preserves legacy journals.
     #[serde(default, skip_serializing_if = "is_false")]
     pub selected_stage_observation: bool,
+    /// Explicit future reviewer protocol for the Judgment's own public answer.
+    /// Omission preserves every historical paid reviewer identity.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub judgment_answer_review: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_method: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -373,6 +377,14 @@ impl Plan {
             .collect())
     }
     pub fn validate(&self) -> Result<()> {
+        if self.judgment_answer_review
+            && (!self.selected_stage_observation
+                || self.target_stage != Some(ReadingStage::Judgment))
+        {
+            return Err(
+                "Judgment answer review requires an explicit Judgment component observation".into(),
+            );
+        }
         if self.selected_stage_observation
             && (self.function != Function::ReadingJourney
                 || self.objective != Objective::SelectedStageReliability
@@ -1246,6 +1258,7 @@ mod tests {
             initial_extractor_observation: false,
             supplying_extractor_observation: false,
             selected_stage_observation: false,
+            judgment_answer_review: false,
             target_method: None,
             target_stage: None,
             max_review_calls: 0,
@@ -1253,6 +1266,32 @@ mod tests {
             review_book: None,
             qualification: "component test".into(),
         }
+    }
+
+    #[test]
+    fn judgment_answer_review_is_explicit_and_cannot_change_another_function_objective() {
+        let mut p = plan();
+        assert!(!p.judgment_answer_review);
+        assert!(serde_json::to_value(&p)
+            .unwrap()
+            .get("judgment_answer_review")
+            .is_none());
+        p.judgment_answer_review = true;
+        for (observed, stage) in [
+            (false, Some(ReadingStage::Judgment)),
+            (true, Some(ReadingStage::Condition)),
+            (true, None),
+        ] {
+            p.selected_stage_observation = observed;
+            p.target_stage = stage;
+            assert!(p.validate().unwrap_err().contains("Judgment answer review"));
+        }
+        p.selected_stage_observation = true;
+        p.target_stage = Some(ReadingStage::Judgment);
+        assert!(p
+            .validate()
+            .unwrap_err()
+            .contains("Selected-stage observation"));
     }
     #[test]
     fn legacy_plan_omits_initial_extractor_scope_and_deserializes_unchanged() {

@@ -609,10 +609,75 @@ fn schema() -> Value {
     schema
 }
 
+fn outcome_native_witness(packet: &Packet, evidence: &Evidence) -> bool {
+    if evidence.file != "native-outcome.json" || !evidence.json_pointer.is_empty() {
+        return false;
+    }
+    let Some(outcome) = packet.sources.iter().find(|s| s.file == evidence.file) else {
+        return false;
+    };
+    let Some(final_state) = packet
+        .sources
+        .iter()
+        .find(|s| s.file == "native-final.json")
+    else {
+        return false;
+    };
+    let Some(final_ref) = packet
+        .refs
+        .values()
+        .find(|e| e.file == final_state.file && e.json_pointer == "/session/method/result")
+    else {
+        return false;
+    };
+    if packet.citation(&evidence.case_id, final_ref).is_err()
+        || serde_json::from_slice::<Value>(&outcome.bytes)
+            .ok()
+            .as_ref()
+            != Some(&outcome.value)
+        || serde_json::from_slice::<Value>(&final_state.bytes)
+            .ok()
+            .as_ref()
+            != Some(&final_state.value)
+    {
+        return false;
+    }
+    // This is an exact copy of a native payload, not a grade asserting that a
+    // reading passed. The ordinary complete-journey observation still proves
+    // the accepted current Judgment against its actual generation and record.
+    let actual = &outcome.value["grade"]["actual"];
+    let session = &final_state.value["session"];
+    let delivered = &session["method"]["result"];
+    let reply = session["messages"].as_array().and_then(|messages| {
+        let user = messages.iter().rposition(|m| m["role"] == "user")?;
+        messages[user + 1..].iter().rev().find(|m| {
+            m["role"] == "assistant" && m["text"].as_str().is_some_and(|s| !s.trim().is_empty())
+        })
+    });
+    outcome.value["id"] == evidence.case_id
+        && delivered["result"] == "judgment"
+        && actual["native_result"] == *delivered
+        && session["question"].as_str().is_some_and(|s| !s.is_empty())
+        && actual["question"] == session["question"]
+        && actual["consultation"].is_object()
+        && actual["consultation"] == session["method"]["consultation"]
+        && delivered["binding"].is_object()
+        && delivered["binding"]["question"] == session["question"]
+        && session["method"]["consultation"]["revision"]
+            .as_u64()
+            .is_some()
+        && delivered["binding"]["case_revision"] == session["method"]["consultation"]["revision"]
+        && actual["reading_handoff_binding"] == delivered["binding"]
+        && reply.is_some_and(|m| actual["reply"] == m["text"])
+}
+
 fn native_witness(packet: &Packet, evidence: &Evidence) -> bool {
     if evidence.file.starts_with("native-") && evidence.json_pointer.starts_with("/session/")
         || evidence.file.starts_with("calls/") && evidence.file.ends_with("-result.json")
     {
+        return true;
+    }
+    if outcome_native_witness(packet, evidence) {
         return true;
     }
     // This projection is issued by observed_packet, not by a model. Bind it
@@ -761,6 +826,18 @@ fn pipeline_dimension(
     {
         return Ok(());
     }
+    linguistic_extraction_provenance(
+        packet,
+        &value.evidence,
+        value.score.is_some_and(|score| score < 2),
+    )
+}
+
+fn linguistic_extraction_provenance(
+    packet: &Packet,
+    evidence: &[Evidence],
+    allow_rejected: bool,
+) -> Result<()> {
     // The source is the actual utterance and native consultation/output,
     // not evaluator gold. Rejected attempts can demonstrate partial or failed
     // extraction, but cannot establish complete extraction by themselves.
@@ -779,7 +856,7 @@ fn pipeline_dimension(
                 })
             })
     });
-    let output = value.evidence.iter().any(|e| {
+    let output = evidence.iter().any(|e| {
         let actual = packet
             .sources
             .iter()
@@ -795,7 +872,7 @@ fn pipeline_dimension(
                     e.file.as_str(),
                     "native-first-turn.json" | "native-final.json"
                 ) && e.json_pointer == "/session/method/records"
-                    && value.score.is_some_and(|score| score < 2)
+                    && allow_rejected
                     && actual.and_then(Value::as_array).is_some_and(|records| {
                         records.iter().any(|record| {
                             let input = &record["input"];
@@ -820,6 +897,19 @@ fn pipeline_dimension(
         return Err("Linguistic extraction requires actual user words and observed native consultation/output provenance; gold or an absent result is not extraction".into());
     }
     Ok(())
+}
+
+fn obligation_source_policy(id: &str, authored: &Value) -> PipelineSourcePolicy {
+    // This authored test copies distinct source-identified parties and title;
+    // it does not assign Horary houses or interpret their planetary roles.
+    // Other tests and all source/role/answer obligations keep the book gate.
+    if id == "test:extract.actor_title_counterparty"
+        && authored["id"] == "extract.actor_title_counterparty"
+    {
+        PipelineSourcePolicy::LinguisticExtraction
+    } else {
+        PipelineSourcePolicy::HorarySource
+    }
 }
 
 fn validate_expanded(packet: &Packet, evaluation: &Value, body: Value) -> Result<Value> {
@@ -1001,7 +1091,21 @@ pub(crate) fn validate_journey(
             );
         }
         let unobserved = matches!(obligation.state, ObligationState::Unobserved);
-        citations(packet, case, &obligation.evidence, !unobserved, !unobserved)?;
+        let policy = obligation_source_policy(&obligation.id, &expected[&obligation.id]);
+        citations(
+            packet,
+            case,
+            &obligation.evidence,
+            !unobserved,
+            !unobserved && matches!(policy, PipelineSourcePolicy::HorarySource),
+        )?;
+        if !unobserved && matches!(policy, PipelineSourcePolicy::LinguisticExtraction) {
+            linguistic_extraction_provenance(
+                packet,
+                &obligation.evidence,
+                matches!(obligation.state, ObligationState::Failed),
+            )?;
+        }
         if unobserved
             && obligation.id.starts_with("answer:")
             && !obligation
@@ -1443,6 +1547,322 @@ mod tests {
                 "{field}"
             );
         }
+    }
+
+    fn packet_with_delivered_outcome() -> Packet {
+        let old = packet_for_review();
+        let question = "Original question; I will be the seller";
+        let binding = json!({"question":question,"case_revision":2,"input_sha256":digest("Actual synthetic native input")});
+        let consultation = json!({"revision":2,"facts":{"deal_capacity":{"quote":"I will be the seller","source":"user","value":"sell"}}});
+        let delivered = json!({"result":"judgment","binding":binding,"answer":"Synthetic partial reading","worksheet":{"answer":"Synthetic partial reading"}});
+        let final_state = json!({"session":{"question":question,"revision":1,
+            "messages":[{"role":"user","text":question},{"role":"assistant","text":"Synthetic partial reading"}],
+            "method":{"result":delivered,"consultation":consultation}}});
+        let outcome = json!({"id":"synthetic","grade":{"semantic_pass":false,"actual":{
+            "question":question,"native_result":delivered,"consultation":consultation,
+            "reading_handoff_binding":binding,"reply":"Synthetic partial reading"}}});
+        packet_with_outcome_sources(&old, &final_state, &outcome)
+    }
+
+    fn packet_with_outcome_sources(old: &Packet, final_state: &Value, outcome: &Value) -> Packet {
+        let mut packet = Packet::new();
+        for source in &old.sources {
+            if source.file == "native-outcome.json" {
+                continue;
+            }
+            let mut pointers = old
+                .refs
+                .values()
+                .filter(|e| e.file == source.file)
+                .map(|e| e.json_pointer.as_str())
+                .collect::<Vec<_>>();
+            let bytes = if source.file == "native-final.json" {
+                if !pointers.contains(&"/session/method/result") {
+                    pointers.push("/session/method/result");
+                }
+                serde_json::to_vec(final_state).unwrap()
+            } else {
+                source.bytes.clone()
+            };
+            packet.source(&source.file, bytes, &pointers).unwrap();
+        }
+        packet
+            .source(
+                "native-outcome.json",
+                serde_json::to_vec(outcome).unwrap(),
+                &[""],
+            )
+            .unwrap();
+        for evidence in packet.refs.values_mut() {
+            evidence.case_id = "synthetic".into();
+        }
+        packet.context = old.context.clone();
+        packet
+    }
+
+    #[test]
+    fn exact_outcome_payload_is_a_native_witness_without_treating_a_grade_as_behavior() {
+        let packet = packet_with_delivered_outcome();
+        let outcome = packet
+            .refs
+            .values()
+            .find(|e| e.file == "native-outcome.json")
+            .unwrap();
+        let book = packet
+            .refs
+            .values()
+            .find(|e| e.file == "book-source.json")
+            .unwrap();
+        assert_ne!(
+            packet
+                .sources
+                .iter()
+                .find(|s| s.file == "native-final.json")
+                .unwrap()
+                .value["session"]["revision"],
+            packet
+                .sources
+                .iter()
+                .find(|s| s.file == "native-final.json")
+                .unwrap()
+                .value["session"]["method"]["consultation"]["revision"]
+        );
+        assert!(native_witness(&packet, outcome));
+        citations(
+            &packet,
+            "synthetic",
+            &[book.clone(), outcome.clone()],
+            true,
+            true,
+        )
+        .unwrap();
+        assert!(citations(
+            &packet,
+            "synthetic",
+            std::slice::from_ref(outcome),
+            true,
+            true
+        )
+        .unwrap_err()
+        .contains("textbook"));
+        let mut body = source_body(&packet);
+        for row in body["obligations"].as_array_mut().unwrap() {
+            row["evidence"] = json!([book, outcome]);
+        }
+        body["pipeline"]["reading"]["score"] = json!(1);
+        let raw = body.clone();
+        let validated = validate_expanded(&packet, &evaluation(), body).unwrap();
+        assert_eq!(validated["pipeline"]["reading"]["score"], 1);
+        assert_eq!(validated["obligations"], raw["obligations"]);
+        assert_eq!(
+            packet
+                .sources
+                .iter()
+                .find(|s| s.file == "native-outcome.json")
+                .unwrap()
+                .value["grade"]["semantic_pass"],
+            false
+        );
+    }
+
+    #[test]
+    fn outcome_summary_requires_the_exact_current_case_payload_and_hashes() {
+        let packet = packet_with_delivered_outcome();
+        let final_state = &packet
+            .sources
+            .iter()
+            .find(|s| s.file == "native-final.json")
+            .unwrap()
+            .value;
+        let original = &packet
+            .sources
+            .iter()
+            .find(|s| s.file == "native-outcome.json")
+            .unwrap()
+            .value;
+        for path in [
+            "/id",
+            "/grade/actual/native_result/answer",
+            "/grade/actual/question",
+            "/grade/actual/consultation",
+            "/grade/actual/reply",
+            "/grade/actual/reading_handoff_binding/input_sha256",
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(path).unwrap() = json!("Unrelated source");
+            let invalid = packet_with_outcome_sources(&packet, final_state, &changed);
+            let witness = invalid
+                .refs
+                .values()
+                .find(|e| e.file == "native-outcome.json")
+                .unwrap();
+            assert!(!native_witness(&invalid, witness), "{path}");
+            assert!(citations(
+                &invalid,
+                "synthetic",
+                std::slice::from_ref(witness),
+                true,
+                false
+            )
+            .is_err());
+        }
+        for value in [Value::Null, json!({"result":"judgment"})] {
+            let mut changed = original.clone();
+            changed["grade"]["actual"]["native_result"] = value;
+            changed["grade"]["semantic_pass"] = json!(true);
+            let invalid = packet_with_outcome_sources(&packet, final_state, &changed);
+            let witness = invalid
+                .refs
+                .values()
+                .find(|e| e.file == "native-outcome.json")
+                .unwrap();
+            assert!(!native_witness(&invalid, witness));
+        }
+        let mut stale = final_state.clone();
+        stale["session"]["method"]["consultation"]["revision"] = json!(3);
+        let mut stale_outcome = original.clone();
+        stale_outcome["grade"]["actual"]["consultation"] =
+            stale["session"]["method"]["consultation"].clone();
+        let invalid = packet_with_outcome_sources(&packet, &stale, &stale_outcome);
+        let witness = invalid
+            .refs
+            .values()
+            .find(|e| e.file == "native-outcome.json")
+            .unwrap();
+        assert!(!native_witness(&invalid, witness));
+        let mut foreign = witness.clone();
+        foreign.case_id = "foreign".into();
+        assert!(!native_witness(&invalid, &foreign));
+        let mut drift = packet_with_delivered_outcome();
+        let witness = drift
+            .refs
+            .values()
+            .find(|e| e.file == "native-outcome.json")
+            .unwrap()
+            .clone();
+        drift
+            .sources
+            .iter_mut()
+            .find(|s| s.file == "native-final.json")
+            .unwrap()
+            .bytes
+            .push(b' ');
+        assert!(!native_witness(&drift, &witness));
+        let mut invalid = witness;
+        invalid.sha256 = digest("Wrong outcome bytes");
+        assert!(citations(&packet, "synthetic", &[invalid], true, false).is_err());
+    }
+
+    #[test]
+    fn authored_party_copying_obligation_uses_actual_words_and_consultation_not_a_book() {
+        let mut packet = packet_for_review();
+        let id = "test:extract.actor_title_counterparty";
+        packet.context["reading_obligations"][id] = json!({"id":"extract.actor_title_counterparty",
+            "test":"Preserve source-identified actor, title and named counterparty separately"});
+        let mut body = source_body(&packet);
+        let words = packet
+            .refs
+            .values()
+            .find(|e| e.file == "native-first-turn.json" && e.json_pointer == "/session/messages")
+            .unwrap();
+        let consultation = packet
+            .refs
+            .values()
+            .find(|e| {
+                e.file == "native-first-turn.json"
+                    && e.json_pointer == "/session/method/consultation"
+            })
+            .unwrap();
+        body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|row| row["id"] == id)
+            .unwrap()["evidence"] = json!([words, consultation]);
+        let raw = body.clone();
+        let validated = validate_expanded(&packet, &evaluation(), body.clone()).unwrap();
+        assert_eq!(validated["obligations"], raw["obligations"]);
+        for witness in packet
+            .refs
+            .values()
+            .filter(|e| matches!(e.file.as_str(), "fixture.json" | "book-source.json"))
+        {
+            let mut invalid = body.clone();
+            invalid["obligations"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|row| row["id"] == id)
+                .unwrap()["evidence"] = json!([witness]);
+            assert!(validate_expanded(&packet, &evaluation(), invalid).is_err());
+        }
+        let mut drift = body.clone();
+        drift["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|row| row["id"] == id)
+            .unwrap()["evidence"][1]["sha256"] = json!(digest("Different consultation"));
+        assert!(validate_expanded(&packet, &evaluation(), drift).is_err());
+        packet.context["reading_obligations"][id]["id"] = json!("read.source_roles");
+        assert!(validate_expanded(&packet, &evaluation(), body)
+            .unwrap_err()
+            .contains("textbook"));
+    }
+
+    #[test]
+    fn party_copying_policy_does_not_exempt_other_source_tests_or_absent_native_words() {
+        let mut packet = packet_for_review();
+        let id = "test:extract.actor_title_counterparty";
+        packet.context["reading_obligations"][id] =
+            json!({"id":"extract.actor_title_counterparty"});
+        packet.context["reading_obligations"]["test:extract.action_not_goal"] =
+            json!({"id":"extract.action_not_goal"});
+        let consultation = packet
+            .refs
+            .values()
+            .find(|e| {
+                e.file == "native-first-turn.json"
+                    && e.json_pointer == "/session/method/consultation"
+            })
+            .unwrap()
+            .clone();
+        let mut body = source_body(&packet);
+        body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|row| row["id"] == id)
+            .unwrap()["evidence"] = json!([consultation]);
+        for other in [
+            "role:00",
+            "test:extract.action_not_goal",
+            "answer:must_address",
+        ] {
+            let mut invalid = body.clone();
+            invalid["obligations"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|row| row["id"] == other)
+                .unwrap()["evidence"] = json!([consultation]);
+            assert!(
+                validate_expanded(&packet, &evaluation(), invalid)
+                    .unwrap_err()
+                    .contains("textbook"),
+                "{other}"
+            );
+        }
+        for source in packet
+            .sources
+            .iter_mut()
+            .filter(|s| s.file.starts_with("native-"))
+        {
+            source.value["session"]["messages"] = json!([]);
+        }
+        assert!(validate_expanded(&packet, &evaluation(), body)
+            .unwrap_err()
+            .contains("user words"));
     }
 
     fn packet_with_extraction_records(records: Value) -> Packet {
