@@ -11,7 +11,7 @@ use crate::{
 };
 use fs2::FileExt;
 use horary_loop::types::{Finding, PipelineReview, Rubric, ScoreState};
-use horary_prompt_program::{digest, Program};
+use horary_prompt_program::{digest, Evidence, Program};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -1024,32 +1024,33 @@ fn paid_prefix_hashes(root: &Path, names: &[&str]) -> Result<BTreeMap<String, St
             "owner-exit.json",
             "review-owner-started.json",
         ] {
-            walk(root, file, &mut hashes)?;
+            if root.join(file).exists() {
+                walk(root, file, &mut hashes)?;
+            }
         }
     }
     Ok(hashes)
 }
 
 const PAID_PREFIX: &str = "complete-journey-two-paid-review-prefix-v1";
+const OUTER_PREFIX_CLOSURE: &str = "horary-outer-owned-complete-review-validation-closure-v1";
 
 fn prefix_source(root: &Path, owner: &Pin) -> Result<PairPlan> {
     owner.verify()?;
     let closure = load(&owner.file)?;
-    if closure["version"] != "horary-owned-complete-review-validation-closure-v1"
+    let outer_owned = closure["version"] == OUTER_PREFIX_CLOSURE;
+    if (!outer_owned && closure["version"] != "horary-owned-complete-review-validation-closure-v1")
         || closure["state"] != json!(root)
         || closure["exit_code"] != 1
         || closure["owner_pid_observed"] != true
         || closure["provider_resubmission_authorized"] != false
         || closure["predecessor_run_lock_must_be_exclusively_acquired"] != true
-        || closure["tool_session_id"].as_u64().is_none_or(|n| n == 0)
+        || (!outer_owned && closure["tool_session_id"].as_u64().is_none_or(|n| n == 0))
     {
         return Err("Two-review prefix requires the authentic stopped owned-review receipt".into());
     }
     let required = [
         "plan.json",
-        "owner-observed.json",
-        "owner-exit.json",
-        "review-owner-started.json",
         "operations/00001/submitted.json",
         "operations/00001/answer.json",
         "operations/00001/exit.json",
@@ -1061,31 +1062,6 @@ fn prefix_source(root: &Path, owner: &Pin) -> Result<PairPlan> {
             .and_then(Value::as_str)
             .ok_or("Owned closure omits a mandatory hash")?;
         crate::verify(&controls::ordinary(root, file)?, expected)?;
-    }
-    let observed = load(&root.join("owner-observed.json"))?;
-    let exited = load(&root.join("owner-exit.json"))?;
-    let started = load(&root.join("review-owner-started.json"))?;
-    let pids = controls::owner_pids(&observed)?;
-    if pids.len() != 2
-        || observed["state"] != json!(root)
-        || exited["state"] != json!(root)
-        || started["state"] != json!(root)
-        || closure["owner_pid"] != pids[0]
-        || closure["controller_pid"] != pids[1]
-        || exited["owner_pid"] != pids[0]
-        || exited["controller_pid"] != pids[1]
-        || exited["exit_code"] != 1
-        || !exited["signal"].is_null()
-        || started["owner_pid"] != pids[0]
-        || started["plan_sha256"] != digest(read(&root.join("plan.json"))?)
-        || started["controller"] != observed["controller"]
-        || started["automatic_resubmission"] != false
-        || exited["automatic_resubmission"] != false
-    {
-        return Err("Stopped owned-review identity/exit changed".into());
-    }
-    for pid in pids {
-        controls::absent(pid)?;
     }
     let operation = root.join("operations/00001");
     let child = load(&operation.join("submitted.json"))?["pid"]
@@ -1102,8 +1078,10 @@ fn prefix_source(root: &Path, owner: &Pin) -> Result<PairPlan> {
         return Err("Only the original one-import/one-paid stopped prefix is supported".into());
     }
     source.verify_sources()?;
-    if observed["controller"] != json!(source.controller.file) {
-        return Err("Stopped controller differs from its pinned plan".into());
+    if outer_owned {
+        verify_outer_prefix_owner(root, &source, &closure, child)?;
+    } else {
+        verify_local_prefix_owner(root, &source, &closure)?;
     }
     let _ = controls::sealed(root, "operations/00000")?;
     let request = load(&operation.join("request.json"))?;
@@ -1136,6 +1114,47 @@ fn prefix_source(root: &Path, owner: &Pin) -> Result<PairPlan> {
         return Err("Paid prefix requires exactly one completed second-review turn".into());
     }
     Ok(source)
+}
+
+fn verify_local_prefix_owner(root: &Path, source: &PairPlan, closure: &Value) -> Result<()> {
+    for file in [
+        "owner-observed.json",
+        "owner-exit.json",
+        "review-owner-started.json",
+    ] {
+        let expected = closure["files"]
+            .get(file)
+            .and_then(Value::as_str)
+            .ok_or("Owned closure omits a mandatory hash")?;
+        crate::verify(&controls::ordinary(root, file)?, expected)?;
+    }
+    let observed = load(&root.join("owner-observed.json"))?;
+    let exited = load(&root.join("owner-exit.json"))?;
+    let started = load(&root.join("review-owner-started.json"))?;
+    let pids = controls::owner_pids(&observed)?;
+    if pids.len() != 2
+        || observed["state"] != json!(root)
+        || exited["state"] != json!(root)
+        || started["state"] != json!(root)
+        || closure["owner_pid"] != pids[0]
+        || closure["controller_pid"] != pids[1]
+        || exited["owner_pid"] != pids[0]
+        || exited["controller_pid"] != pids[1]
+        || exited["exit_code"] != 1
+        || !exited["signal"].is_null()
+        || started["owner_pid"] != pids[0]
+        || started["plan_sha256"] != digest(read(&root.join("plan.json"))?)
+        || started["controller"] != observed["controller"]
+        || observed["controller"] != json!(source.controller.file)
+        || started["automatic_resubmission"] != false
+        || exited["automatic_resubmission"] != false
+    {
+        return Err("Stopped owned-review identity/exit changed".into());
+    }
+    for pid in pids {
+        controls::absent(pid)?;
+    }
+    Ok(())
 }
 
 fn verify_prefix(plan: &PairPlan) -> Result<PaidPrefix> {
@@ -1262,12 +1281,7 @@ fn successful_paid_source(root: &Path, owner: &Pin) -> Result<(PairPlan, Value)>
 
 const OWNED_FIRST_REVIEW_CLOSURE: &str = "horary-owned-first-complete-review-validation-closure-v1";
 
-fn verify_outer_first_review_owner(
-    root: &Path,
-    source: &PairPlan,
-    closure: &Value,
-    paid_pid: u32,
-) -> Result<()> {
+fn outer_review_owner(root: &Path, closure: &Value, paid_pid: u32) -> Result<(PathBuf, u32, u32)> {
     let outer = Path::new(
         closure["outer_state"]
             .as_str()
@@ -1276,21 +1290,6 @@ fn verify_outer_first_review_owner(
     if !outer.is_absolute() || root.parent() != Some(outer) || closure["owner_pid_observed"] != true
     {
         return Err("Owned first-review closure must retain its actual enclosing pair".into());
-    }
-    for file in [
-        "experiment-plan.json",
-        "run-once.mjs",
-        "queue-started.json",
-        "owner-observed.json",
-        "owner-exit.json",
-        "source-review.child.json",
-        "source-review.exit.json",
-    ] {
-        let hash = closure["files"]
-            .get(file)
-            .and_then(Value::as_str)
-            .ok_or("Owned first-review closure omits an outer ancestry hash")?;
-        crate::verify(&controls::ordinary(outer, file)?, hash)?;
     }
     let pid = |field: &str| {
         closure[field]
@@ -1306,6 +1305,31 @@ fn verify_outer_first_review_owner(
     }
     controls::absent(owner_pid)?;
     controls::absent(controller_pid)?;
+    Ok((outer.into(), owner_pid, controller_pid))
+}
+
+fn verify_outer_first_review_owner(
+    root: &Path,
+    source: &PairPlan,
+    closure: &Value,
+    paid_pid: u32,
+) -> Result<()> {
+    let (outer, owner_pid, controller_pid) = outer_review_owner(root, closure, paid_pid)?;
+    for file in [
+        "experiment-plan.json",
+        "run-once.mjs",
+        "queue-started.json",
+        "owner-observed.json",
+        "owner-exit.json",
+        "source-review.child.json",
+        "source-review.exit.json",
+    ] {
+        let hash = closure["files"]
+            .get(file)
+            .and_then(Value::as_str)
+            .ok_or("Owned first-review closure omits an outer ancestry hash")?;
+        crate::verify(&controls::ordinary(&outer, file)?, hash)?;
+    }
     let plan_hash = digest(read(&outer.join("experiment-plan.json"))?);
     let experiment = load(&outer.join("experiment-plan.json"))?;
     let queued = load(&outer.join("queue-started.json"))?;
@@ -1339,6 +1363,83 @@ fn verify_outer_first_review_owner(
             .any(|v| v["automatic_resubmission"] != false)
     {
         return Err("Owned first-review outer owner/helper/plan/exit ancestry changed".into());
+    }
+    Ok(())
+}
+
+fn verify_outer_prefix_owner(
+    root: &Path,
+    source: &PairPlan,
+    closure: &Value,
+    paid_pid: u32,
+) -> Result<()> {
+    let (outer, owner_pid, controller_pid) = outer_review_owner(root, closure, paid_pid)?;
+    for file in [
+        "launch-plan.json",
+        "run-once.mjs",
+        "queue-started.json",
+        "owner-observed.json",
+        "owner-exit.json",
+        "child.json",
+        "child-exit.json",
+    ] {
+        let hash = closure["outer_files"]
+            .get(file)
+            .and_then(Value::as_str)
+            .ok_or("Owned prefix closure omits an outer ancestry hash")?;
+        crate::verify(&controls::ordinary(&outer, file)?, hash)?;
+    }
+    let launch = load(&outer.join("launch-plan.json"))?;
+    let queued = load(&outer.join("queue-started.json"))?;
+    let observed = load(&outer.join("owner-observed.json"))?;
+    let exited = load(&outer.join("owner-exit.json"))?;
+    let child = load(&outer.join("child.json"))?;
+    let child_exit = load(&outer.join("child-exit.json"))?;
+    let prepared = load(&controls::ordinary(root, "prepared.json")?)?;
+    let inherited = verify_continuation(source)?;
+    let plan_hash = digest(read(&root.join("plan.json"))?);
+    if launch["version"] != "horary-owned-complete-review-continuation-launch-1"
+        || launch["state"] != json!(root)
+        || launch["controller"] != json!(source.controller)
+        || launch["plan_sha256"] != plan_hash
+        || launch["preparation_sha256"] != digest(read(&root.join("prepared.json"))?)
+        || launch["predecessor"] != json!(inherited.predecessor)
+        || launch["total_review_cap"] != source.max_review_calls
+        || launch["new_student_calls"] != 0
+        || launch["new_reflections"] != 0
+        || prepared["new_paid_calls"] != 0
+        || queued["pid"] != owner_pid
+        || observed["pid"] != owner_pid
+        || exited["pid"] != owner_pid
+        || exited["children"] != json!([controller_pid])
+        || child["owner_pid"] != owner_pid
+        || child["pid"] != controller_pid
+        || child_exit["pid"] != controller_pid
+        || observed["controller"] != json!(source.controller)
+        || observed["wrapper"] != format!("file://{}", outer.join("run-once.mjs").display())
+        || child["executable"] != json!(source.controller)
+        || child["args"] != json!(["verify-complete-journey", "--state", root])
+        || child["credentials"] != "absent"
+        || exited["code"] != 1
+        || child_exit["code"] != 1
+        || !exited.get("signal").is_some_and(Value::is_null)
+        || !child_exit.get("signal").is_some_and(Value::is_null)
+        || [&queued, &observed, &exited]
+            .iter()
+            .any(|v| v["plan_sha256"] != plan_hash)
+        || [&launch, &queued, &observed, &exited, &prepared]
+            .iter()
+            .any(|v| {
+                v["inherited_review_calls"] != 1
+                    || v["remaining_new_review_calls"] != source.max_review_calls - 1
+            })
+        || [&launch, &queued, &observed, &exited, &child, &child_exit]
+            .iter()
+            .any(|v| v["automatic_resubmission"] != false)
+    {
+        return Err(
+            "Owned prefix outer wrapper/controller/exit or inherited ledger changed".into(),
+        );
     }
     Ok(())
 }
@@ -1644,24 +1745,9 @@ fn observation(side: &Side, id: &str, captured: &[Value]) -> Result<Value> {
         .iter()
         .filter(|call| call["stage"] == "judgment" && call["provider_submitted"] == true)
         .filter(|call| {
-            let binding = &horary_prompt_program::original_input(&call["input"])["reading_request"]
-                ["binding"];
-            delivered["binding"]
-                .as_object()
-                .is_some_and(|b| !b.is_empty())
-                && *binding == delivered["binding"]
-                && records.iter().any(|record| {
-                    record["stage"] == "judgment"
-                        && record["validationError"].is_null()
-                        && record["revision"].as_u64().is_some()
-                        && record["revision"] == final_state["session"]["revision"]
-                        && record["input"] == call["input"]
-                        && record["guideSha256"] == call["expected_record_guide_sha256"]
-                        && record["generation"] == call["observed_generation"]
-                        && record["generation"]["content"].is_string()
-                        && record["raw"] == call["observed_generation"]["content"]
-                        && record["worksheet"] == delivered["worksheet"]
-                })
+            records
+                .iter()
+                .any(|record| accepted_judgment_record(&final_state, record, call))
         })
         .collect::<Vec<_>>();
     let interpretation = delivered["result"] == "judgment"
@@ -1686,6 +1772,106 @@ fn observation(side: &Side, id: &str, captured: &[Value]) -> Result<Value> {
         "extraction":phases.iter().any(|(s,p)|s=="intake"&&matches!(p.as_str(),"complete_selected_program"|"update_selected_program")),
         "elicitation":elicitation,"reading":interpretation},"judgment_result_files":judgment_calls.iter()
             .map(|call|call["source_result_file"].clone()).collect::<Vec<_>>(),"captured_calls":captured.len()}))
+}
+
+fn accepted_judgment_record(final_state: &Value, record: &Value, call: &Value) -> bool {
+    let delivered = &final_state["session"]["method"]["result"];
+    let binding =
+        &horary_prompt_program::original_input(&call["input"])["reading_request"]["binding"];
+    call["stage"] == "judgment"
+        && call["provider_submitted"] == true
+        && delivered["binding"]
+            .as_object()
+            .is_some_and(|b| !b.is_empty())
+        && *binding == delivered["binding"]
+        && record["stage"] == "judgment"
+        && record["validationError"].is_null()
+        && record["revision"].as_u64().is_some()
+        && record["revision"] == final_state["session"]["revision"]
+        && record["input"] == call["input"]
+        && record["guideSha256"] == call["expected_record_guide_sha256"]
+        && record["generation"] == call["observed_generation"]
+        && record["generation"]["content"].is_string()
+        && record["raw"] == call["observed_generation"]["content"]
+        && record["worksheet"] == delivered["worksheet"]
+}
+
+fn accepted_judgment_collection_witness(
+    packet: &Packet,
+    observed: &Value,
+    evidence: &Evidence,
+) -> Result<bool> {
+    if evidence.file != "native-final.json"
+        || !matches!(
+            evidence.json_pointer.as_str(),
+            "/session/method/records" | "/session/sections"
+        )
+        || observed["observed"]["reading"] != true
+    {
+        return Ok(false);
+    }
+    let final_state = &packet
+        .sources
+        .iter()
+        .find(|s| s.file == evidence.file)
+        .ok_or("Missing native final source")?
+        .value;
+    if *final_state != observed["final"] {
+        return Err("Judgment collection differs from the authenticated final snapshot".into());
+    }
+    let records = final_state["session"]["method"]["records"]
+        .as_array()
+        .ok_or("Missing accepted native record ledger")?;
+    for file in observed["judgment_result_files"]
+        .as_array()
+        .ok_or("Missing bound judgment generation files")?
+    {
+        let raw = &packet
+            .sources
+            .iter()
+            .find(|s| file.as_str() == Some(s.file.as_str()))
+            .ok_or("Missing bound judgment generation source")?
+            .value;
+        let request = &raw["request"];
+        let branches = request["tasks"].as_array().map_or(1, Vec::len);
+        for branch in 0..branches {
+            let index = request["tasks"].is_array().then_some(branch);
+            let mut call = reading::captured_task(request, index)?;
+            call["expected_record_guide_sha256"] = json!(
+                horary_prompt_program::captured_record_guide_sha256(request, index)?
+            );
+            call["provider_submitted"] = json!(if index.is_some() {
+                raw["provider_receipts"][branch]["submitted"] == true
+            } else {
+                raw["provider_receipt"]["submitted"] == true
+            });
+            call["observed_generation"] = if index.is_some() {
+                raw["result"]["Ok"][branch].clone()
+            } else {
+                raw["result"]["Ok"].clone()
+            };
+            for record in records {
+                if accepted_judgment_record(final_state, record, &call)
+                    && (evidence.json_pointer == "/session/method/records"
+                        || final_state["session"]["sections"]
+                            .as_array()
+                            .is_some_and(|sections| {
+                                sections.iter().any(|section| {
+                                    section["method_stage"] == "judgment"
+                                        && section["step"] == "judgment"
+                                        && section["revision"] == record["revision"]
+                                        && section["worksheet"] == record["worksheet"]
+                                        && section["body"]
+                                            == final_state["session"]["method"]["result"]["answer"]
+                                })
+                            }))
+                {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
 }
 
 fn packet(
@@ -1796,15 +1982,19 @@ fn bind(packet: &Packet, observed: &Value, body: Body) -> Result<Value> {
         },
         observed["observed"]["reading"] == true,
     )?;
-    if body.pipeline.reading.state == ScoreState::Scored
-        && !body.pipeline.reading.evidence.iter().any(|e| {
-            e.file == "native-final.json" && e.json_pointer == "/session/method/result"
+    if body.pipeline.reading.state == ScoreState::Scored {
+        let mut actual_judgment = false;
+        for evidence in &body.pipeline.reading.evidence {
+            actual_judgment |= evidence.file == "native-final.json"
+                && evidence.json_pointer == "/session/method/result"
                 || observed["judgment_result_files"]
                     .as_array()
-                    .is_some_and(|files| files.iter().any(|file| *file == e.file))
-        })
-    {
-        return Err("Interpretation grade lacks its actual accepted judgment or judgment generation witness".into());
+                    .is_some_and(|files| files.iter().any(|file| *file == evidence.file))
+                || accepted_judgment_collection_witness(packet, observed, evidence)?;
+        }
+        if !actual_judgment {
+            return Err("Interpretation grade lacks its actual accepted judgment or judgment generation witness".into());
+        }
     }
     let mut value = serde_json::to_value(body).map_err(|e| e.to_string())?;
     value["version"] = json!(VERSION);
@@ -2349,6 +2539,9 @@ mod tests {
                     "worksheet":worksheet,"sourcePassages":["synthetic-rule"]}]);
                 snapshot["session"]["method"]["result"] = json!({"result":"judgment","binding":binding,
                     "answer":worksheet["answer"],"verdict":worksheet["verdict"],"evidence":[],"worksheet":worksheet});
+                snapshot["session"]["sections"].as_array_mut().unwrap().push(json!({
+                    "method_stage":"judgment","step":"judgment","revision":1,
+                    "worksheet":worksheet,"body":worksheet["answer"],"rules":[{"id":"synthetic-rule"}]}));
                 write(&directory.join(name), &snapshot);
             }
             let mut outcome = load(&directory.join("outcome.json")).unwrap();
@@ -2865,6 +3058,30 @@ mod tests {
             "findings":[],"qualification":"Synthetic unobserved journey; no qualification"})
     }
 
+    fn calibrated_reading_body(packet: &Packet, reading_pointer: &str) -> Value {
+        let reference = |file: &str, pointer: &str| {
+            packet
+                .refs
+                .iter()
+                .find(|(_, e)| e.file == file && e.json_pointer == pointer)
+                .unwrap()
+                .0
+        };
+        let book = reference("book-source.json", "");
+        let native = reference("native-final.json", "/session/method/result");
+        let speech = reference("native-first-turn.json", "/session/messages");
+        let extraction = reference("calls/0003-result.json", "/result");
+        let judgment = reference("native-final.json", reading_pointer);
+        let good = json!({"state":"scored","score":2,"reason":"Controlled independent review calibration","evidence_refs":[book,native]});
+        let spoken = json!({"state":"scored","score":2,"reason":"Actual authored assistant witness","evidence_refs":[speech]});
+        let extracted = json!({"state":"scored","score":2,"reason":"Actual source-word output witness","evidence_refs":[extraction]});
+        let reading = json!({"state":"scored","score":1,"reason":"Controlled partial-reading witness calibration","evidence_refs":[book,judgment]});
+        json!({"first_turn":{"concern_actor":spoken,"evidence_honesty":spoken,"useful_inquiry":spoken,"natural_phrasing":spoken,"continuity":spoken},"follow_up":null,
+            "pipeline":{"classification":good,"elicitation":good,"extraction":extracted,"reading":reading},
+            "obligations":packet.context["reading_obligations"].as_object().unwrap().keys().map(|id|json!({"id":id,"state":"fulfilled","reason":"Controlled source-obligation witness","evidence_refs":[book,native]})).collect::<Vec<_>>(),
+            "findings":[],"qualification":"Calibration only; no model-quality or astrological correctness claim"})
+    }
+
     fn stopped_paid_review() -> (Fixture, PairPlan, PathBuf, PathBuf) {
         stopped_paid_review_with_version(VERSION)
     }
@@ -3113,6 +3330,91 @@ mod tests {
             "predecessor_run_lock_must_be_exclusively_acquired":true,"provider_resubmission_authorized":false}),
         );
         (fixture, plan, source, owner)
+    }
+
+    fn stopped_outer_owned_prefix() -> (Fixture, PairPlan, PathBuf, PathBuf) {
+        let (fixture, plan, state, local_owner) = stopped_owned_prefix();
+        let outer = state.parent().unwrap();
+        let old_closure = load(&local_owner).unwrap();
+        for file in [
+            "owner-observed.json",
+            "owner-exit.json",
+            "review-owner-started.json",
+        ] {
+            fs::remove_file(state.join(file)).unwrap();
+        }
+        let inherited = verify_continuation(&plan).unwrap();
+        let plan_hash = digest(read(&state.join("plan.json")).unwrap());
+        let owner_pid = &old_closure["owner_pid"];
+        let controller_pid = &old_closure["controller_pid"];
+        let header = json!({"pid":owner_pid,"plan_sha256":plan_hash,"inherited_review_calls":1,
+            "remaining_new_review_calls":plan.max_review_calls-1,"automatic_resubmission":false});
+        write(&outer.join("queue-started.json"), &header);
+        let mut observed = header.clone();
+        observed["controller"] = json!(plan.controller);
+        observed["wrapper"] = json!(format!("file://{}", outer.join("run-once.mjs").display()));
+        write(&outer.join("owner-observed.json"), &observed);
+        let mut exited = header;
+        exited["children"] = json!([controller_pid]);
+        exited["code"] = json!(1);
+        exited["signal"] = Value::Null;
+        write(&outer.join("owner-exit.json"), &exited);
+        fs::write(
+            outer.join("run-once.mjs"),
+            "Synthetic closed wrapper; never executed",
+        )
+        .unwrap();
+        write(
+            &outer.join("launch-plan.json"),
+            &json!({
+            "version":"horary-owned-complete-review-continuation-launch-1","state":state,
+            "controller":plan.controller,"plan_sha256":plan_hash,
+            "preparation_sha256":digest(read(&state.join("prepared.json")).unwrap()),
+            "predecessor":inherited.predecessor,"total_review_cap":plan.max_review_calls,
+            "inherited_review_calls":1,"remaining_new_review_calls":plan.max_review_calls-1,
+            "new_student_calls":0,"new_reflections":0,"automatic_resubmission":false}),
+        );
+        write(
+            &outer.join("child.json"),
+            &json!({"owner_pid":owner_pid,"pid":controller_pid,
+            "executable":plan.controller,"args":["verify-complete-journey","--state",state],
+            "credentials":"absent","automatic_resubmission":false}),
+        );
+        write(
+            &outer.join("child-exit.json"),
+            &json!({"pid":controller_pid,"code":1,
+            "signal":null,"automatic_resubmission":false}),
+        );
+        let mut inner_hashes = BTreeMap::new();
+        for file in [
+            "plan.json",
+            "operations/00001/submitted.json",
+            "operations/00001/answer.json",
+            "operations/00001/exit.json",
+            "operations/00001/validation-failure.json",
+        ] {
+            inner_hashes.insert(file, digest(read(&state.join(file)).unwrap()));
+        }
+        let mut outer_hashes = BTreeMap::new();
+        for file in [
+            "launch-plan.json",
+            "run-once.mjs",
+            "queue-started.json",
+            "owner-observed.json",
+            "owner-exit.json",
+            "child.json",
+            "child-exit.json",
+        ] {
+            outer_hashes.insert(file, digest(read(&outer.join(file)).unwrap()));
+        }
+        let closure = json!({"version":OUTER_PREFIX_CLOSURE,"state":state,"outer_state":outer,
+            "owner_pid_observed":true,"owner_pid":owner_pid,"controller_pid":controller_pid,
+            "recorded_child_pid":old_closure["recorded_child_pid"],"exit_code":1,
+            "predecessor_run_lock_must_be_exclusively_acquired":true,"provider_resubmission_authorized":false,
+            "files":inner_hashes,"outer_files":outer_hashes});
+        let owner = outer.join("outer-prefix-closure.json");
+        write(&owner, &closure);
+        (fixture, plan, state, owner)
     }
 
     #[test]
@@ -3425,6 +3727,90 @@ mod tests {
         changed["qualification"] = json!("Changed semantic wording");
         write(&source.join("operations/00001/answer.json"), &changed);
         assert!(plan.verify_sources().is_err());
+    }
+
+    #[test]
+    fn outer_owned_prefix_uses_actual_wrapper_without_fabricated_local_startup_files() {
+        let (fixture, original, source, owner) = stopped_outer_owned_prefix();
+        let raw_answers = (0..2)
+            .map(|i| read(&source.join(format!("operations/{i:05}/answer.json"))).unwrap())
+            .collect::<Vec<_>>();
+        let state = fixture
+            .source
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("outer-prefix-continuation");
+        let plan =
+            prepare_prefix_continuation(&source, &state, &owner, &std::env::current_exe().unwrap())
+                .unwrap();
+        assert_eq!(plan.max_review_calls, original.max_review_calls);
+        assert_eq!(verify_prefix(&plan).unwrap().inherited_review_calls, 2);
+        assert!(!source.join("review-owner-started.json").exists());
+        assert!(!source.join("operations/00001/completed.json").exists());
+        let mut journal = Journal::open_verification(&state, &plan, plan.max_review_calls).unwrap();
+        for (sequence, raw) in raw_answers.iter().enumerate() {
+            let request =
+                load(&state.join(format!("operations/{sequence:05}/request.json"))).unwrap();
+            assert!(matches!(
+                journal
+                    .begin_complete_journey_review(&request["request"])
+                    .unwrap(),
+                Operation::Reused(_)
+            ));
+            assert_eq!(
+                &read(&state.join(format!("operations/{sequence:05}/answer.json"))).unwrap(),
+                raw
+            );
+            assert_eq!(
+                &read(&source.join(format!("operations/{sequence:05}/answer.json"))).unwrap(),
+                raw
+            );
+            assert_eq!(
+                load(&state.join(format!("operations/{sequence:05}/reservation.json"))).unwrap()
+                    ["review_calls"],
+                1
+            );
+        }
+        assert!(journal
+            .begin_complete_journey_review(&json!({"unbudgeted_new_review":true}))
+            .is_err());
+        assert!(!state.join("operations/00002").exists());
+    }
+
+    #[test]
+    fn outer_owned_prefix_refuses_stale_launch_changed_argv_or_unknown_exit() {
+        let (_fixture, plan, source, owner) = stopped_outer_owned_prefix();
+        let closure = load(&owner).unwrap();
+        let paid_pid = closure["recorded_child_pid"].as_u64().unwrap() as u32;
+        verify_outer_prefix_owner(&source, &plan, &closure, paid_pid).unwrap();
+        let outer = source.parent().unwrap();
+        for (file, field, value) in [
+            ("launch-plan.json", "plan_sha256", json!("stale plan")),
+            ("launch-plan.json", "total_review_cap", json!(999)),
+            ("owner-observed.json", "controller", json!({"foreign":true})),
+            ("owner-exit.json", "children", json!([])),
+            ("child.json", "args", json!(["wrong verifier state"])),
+            ("child-exit.json", "code", Value::Null),
+            ("child-exit.json", "signal", json!("SIGKILL")),
+        ] {
+            let path = outer.join(file);
+            let bytes = read(&path).unwrap();
+            let mut changed = load(&path).unwrap();
+            changed[field] = value;
+            write(&path, &changed);
+            assert!(verify_outer_prefix_owner(&source, &plan, &closure, paid_pid).is_err());
+            let mut repinned = closure.clone();
+            repinned["outer_files"][file] = json!(digest(read(&path).unwrap()));
+            assert!(verify_outer_prefix_owner(&source, &plan, &repinned, paid_pid).is_err());
+            fs::write(path, bytes).unwrap();
+        }
+        let mut missing = closure;
+        missing["outer_files"]
+            .as_object_mut()
+            .unwrap()
+            .remove("run-once.mjs");
+        assert!(verify_outer_prefix_owner(&source, &plan, &missing, paid_pid).is_err());
     }
 
     #[test]
@@ -3773,6 +4159,99 @@ mod tests {
         assert_eq!(unknown["observed"]["classification"], false);
         assert_eq!(unknown["observed"]["extraction"], false);
         assert_eq!(unknown["observed"]["reading"], false);
+    }
+
+    #[test]
+    fn current_judgment_records_and_sections_are_accepted_generation_witnesses() {
+        let fixture = Fixture::build(true);
+        let plan = fixture.prepare();
+        let captured = calls(&plan.candidate, "a").unwrap();
+        let observed = observation(&plan.candidate, "a", &captured).unwrap();
+        let packet = packet(&plan, &plan.candidate, &plan.cases[0], &captured, &observed).unwrap();
+        for pointer in ["/session/method/records", "/session/sections"] {
+            let body = calibrated_reading_body(&packet, pointer);
+            let result = validate(&packet, &observed, body.clone()).unwrap();
+            assert_eq!(result["pipeline"]["reading"]["score"], 1);
+            assert_eq!(result["interpretation_observed"], true);
+            assert_eq!(revalidate(&packet, &observed, &result).unwrap(), result);
+            let mut without_book = body;
+            without_book["pipeline"]["reading"]["evidence_refs"]
+                .as_array_mut()
+                .unwrap()
+                .remove(0);
+            assert!(validate(&packet, &observed, without_book)
+                .unwrap_err()
+                .contains("textbook"));
+            let mut foreign = result;
+            foreign["pipeline"]["reading"]["evidence"][1]["sha256"] =
+                json!(digest("foreign native source"));
+            assert!(revalidate(&packet, &observed, &foreign).is_err());
+        }
+    }
+
+    #[test]
+    fn stale_rejected_or_nonjudgment_collections_cannot_score_reading() {
+        let fixture = Fixture::build(true);
+        let plan = fixture.prepare();
+        let captured = calls(&plan.candidate, "a").unwrap();
+        let file = plan.candidate.campaign.join("cases/a/final.json");
+        let original = load(&file).unwrap();
+        for defect in [
+            "section_revision",
+            "section_stage",
+            "section_step",
+            "section_worksheet",
+            "section_body",
+            "rejected_record",
+            "stale_record",
+            "different_generation",
+        ] {
+            let mut changed = original.clone();
+            let sections = changed["session"]["sections"].as_array_mut().unwrap();
+            let section = sections
+                .iter_mut()
+                .find(|s| s["method_stage"] == "judgment")
+                .unwrap();
+            match defect {
+                "section_revision" => section["revision"] = json!(0),
+                "section_stage" => section["method_stage"] = json!("condition"),
+                "section_step" => section["step"] = json!("testimony"),
+                "section_worksheet" => {
+                    section["worksheet"] = json!({"unrelated":"accepted other stage"})
+                }
+                "section_body" => section["body"] = json!("A different delivered answer"),
+                "rejected_record" => {
+                    changed["session"]["method"]["records"][0]["validationError"] =
+                        json!("Native rejection")
+                }
+                "stale_record" => changed["session"]["method"]["records"][0]["revision"] = json!(0),
+                "different_generation" => {
+                    changed["session"]["method"]["records"][0]["raw"] = json!("Foreign generation")
+                }
+                _ => unreachable!(),
+            }
+            write(&file, &changed);
+            let observed = observation(&plan.candidate, "a", &captured).unwrap();
+            let packet =
+                packet(&plan, &plan.candidate, &plan.cases[0], &captured, &observed).unwrap();
+            let body = calibrated_reading_body(&packet, "/session/sections");
+            assert!(validate(&packet, &observed, body).is_err(), "{defect}");
+            if matches!(
+                defect,
+                "rejected_record" | "stale_record" | "different_generation"
+            ) {
+                assert!(
+                    validate(
+                        &packet,
+                        &observed,
+                        calibrated_reading_body(&packet, "/session/method/records")
+                    )
+                    .is_err(),
+                    "{defect}"
+                );
+            }
+        }
+        write(&file, &original);
     }
 
     #[test]
