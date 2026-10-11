@@ -219,3 +219,27 @@ training case's actually used evidence. Reserved/private cases stay excluded.
 Memoized component results are never fresh complete-journey qualification:
 the separate verification pair and acceptance campaigns require no cache.
 Omitting this flag preserves older serialized plans/tasks and paid identities.
+
+Supplying extraction has its own selector: `intake/update_selected_program`.
+Prepare it with `--function input-journey --objective extractor-reliability
+--supplying-extractor-observation`, the normal explicit method, pools, source
+book and finite bounds. The corpus must contain a sealed supplying request
+following a genuine native inquiry and an authored supplying turn/after-state.
+Inspection uses that request only to obtain the current guide and contract;
+evaluation starts the original question, device context and clock afresh. The
+supplying words run only when the actual current requirement matches the
+fixture and a real inquiry was delivered. Absent or different needs, provider
+uncertainty and uninvoked targets remain unscored.
+
+The observer stops immediately after native acceptance of that update, or a
+fully settled native rejection. Its own attempts, sourced changes and
+preservation of prior facts determine component merit. Unchanged upstream
+failures remain in the original journey rather than vetoing the update. No
+later chart, reader reply or interpretation is executed or qualified by this
+observer. Adoption still requires a fresh full journey and source review.
+Optional `--fixed-program` with its exact hash can supply disjoint prerequisite
+teaching; its original bytes and frozen training/development membership guards
+remain enforced. The false/omitted supplying flag preserves old plans, tasks,
+logical requests and independent review identities. Supplying reviews have a
+separate protocol and reuse the existing immutable paid journal; status is
+read-only and verifies their native source bindings.

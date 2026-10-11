@@ -347,7 +347,7 @@ fn source_binding(plan: &Plan, evaluation: &Value) -> Result<Value> {
 // Native serde object order is preserved in its hashes. The controller's map
 // order differs, so require its exact original decoded input and recorded job
 // hash, not a recomputed sorted hash presented as native authority.
-fn native_original_hash(records: &[Value], record: &Value) -> Result<Value> {
+pub(crate) fn native_original_hash(records: &[Value], record: &Value) -> Result<Value> {
     let original = horary_prompt_program::original_input(&record["input"]);
     let hashes = records
         .iter()

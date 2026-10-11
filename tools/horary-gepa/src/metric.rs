@@ -335,17 +335,40 @@ fn initial_extractor_reliability(
     outcome: &Value,
     review: Option<&Value>,
 ) -> Result<Feedback, String> {
-    let observed = &outcome["initial_extractor"];
+    let supplying = outcome["scope"] == "supplying_extractor_function_only";
+    let key = if supplying {
+        "supplying_extractor"
+    } else {
+        "initial_extractor"
+    };
+    let observed = &outcome[key];
+    let observation_hash = if supplying {
+        "supplying_observation_sha256"
+    } else {
+        "initial_observation_sha256"
+    };
+    let native_hash = if supplying {
+        "native_supplying_pass"
+    } else {
+        "native_initial_pass"
+    };
+    let label = if supplying { "supplying" } else { "initial" };
     if outcome["id"].as_str().is_none_or(|id| id.is_empty())
-        || outcome["scope"] != "initial_extractor_function_only"
+        || outcome["scope"] != format!("{key}_function_only")
         || outcome["full_reading"] != false
-        || outcome["execution_status"] != "initial_extractor_observed"
+        || outcome["execution_status"] != format!("{key}_observed")
         || observed["version"] != 1
         || !matches!(
             observed["state"].as_str(),
             Some("accepted" | "native_rejected")
         )
-        || observed["recognition_phase"] != "complete_selected_program"
+        || observed["recognition_phase"]
+            != if supplying {
+                "update_selected_program"
+            } else {
+                "complete_selected_program"
+            }
+        || supplying && observed["bound_inquiry_observed"] != true
         || observed["all_provider_responses_settled"] != true
         || observed["request_result_pairs_complete"] != true
         || outcome["target_function_invoked"] != true
@@ -359,20 +382,28 @@ fn initial_extractor_reliability(
             "Uninvoked, uncertain or unobserved initial extraction has no component merit".into(),
         );
     }
-    let attempts = observed["initial_target_attempts"]
-        .as_u64()
-        .filter(|n| *n > 0)
-        .ok_or("No actual initial target attempts")?;
+    let attempts = observed[if supplying {
+        "supplying_target_attempts"
+    } else {
+        "initial_target_attempts"
+    }]
+    .as_u64()
+    .filter(|n| *n > 0)
+    .ok_or("No actual initial target attempts")?;
     let review = review.ok_or("Initial extraction correctness is independently unobserved")?;
     review_identity(outcome, review)?;
-    if review["protocol"] != crate::initial_extractor::VERSION
-        || review["initial_observation_sha256"]
-            != horary_prompt_program::digest(observed.to_string())
-        || review["source_binding_sha256"] != outcome["initial_extractor_source_binding_sha256"]
+    if review["protocol"]
+        != if supplying {
+            crate::supplying_extractor::VERSION
+        } else {
+            crate::initial_extractor::VERSION
+        }
+        || review[observation_hash] != horary_prompt_program::digest(observed.to_string())
+        || review["source_binding_sha256"] != outcome[format!("{key}_source_binding_sha256")]
         || review["source_binding_sha256"]
             .as_str()
             .is_none_or(|hash| hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()))
-        || review["native_initial_pass"] != observed["native_grade"]["semantic_pass"]
+        || review[native_hash] != observed["native_grade"]["semantic_pass"]
         || review["full_journey_qualified"] != false
     {
         return Err(
@@ -394,10 +425,10 @@ fn initial_extractor_reliability(
                     .into(),
             );
         }
-        return Ok(zero(format!("Fully settled initial extractor native rejection after {attempts} actual target attempts. {}. Exact raw outputs and paused native rejection remain available for reflection; no accepted input or reading is claimed.",assessment["reason"].as_str().unwrap_or(""))));
+        return Ok(zero(format!("Fully settled {label} extractor native rejection after {attempts} actual target attempts. {}. Exact raw outputs and paused native rejection remain available for reflection; no accepted input or reading is claimed.",assessment["reason"].as_str().unwrap_or(""))));
     }
     let initial = &observed["native_grade"];
-    if !native_pass(initial, "classification")?
+    if !supplying && !native_pass(initial, "classification")?
         || !native_pass(initial, "extraction")?
         || initial["semantic_pass"] != true
     {
@@ -409,7 +440,7 @@ fn initial_extractor_reliability(
         ));
     }
     Ok(measured((2.*f64::from(semantic)+1./attempts as f64)/5.,false,format!(
-        "Actual initial extractor correctness {semantic}/2; {attempts} initial target attempts. {}. Conversation, supplying turns, chart, source-correct reading and adoption remain unqualified.",assessment["reason"].as_str().unwrap_or(""))))
+        "Actual {label} extractor correctness {semantic}/2; {attempts} initial target attempts. {}. Conversation, supplying turns, chart, source-correct reading and adoption remain unqualified.",assessment["reason"].as_str().unwrap_or(""))))
 }
 
 fn initial_calibration_fixture() -> (Value, Value) {
@@ -498,6 +529,53 @@ pub fn initial_calibration() -> Result<Value, String> {
     )
 }
 
+pub fn supplying_calibration() -> Result<Value, String> {
+    let (mut o, mut r) = initial_calibration_fixture();
+    let mut observation = o["initial_extractor"].take();
+    observation["recognition_phase"] = serde_json::json!("update_selected_program");
+    observation["supplying_target_attempts"] = observation["initial_target_attempts"].take();
+    observation["bound_inquiry_observed"] = serde_json::json!(true);
+    observation["native_grade"]["hurdles"]["classification"]["status"] =
+        serde_json::json!("not_run");
+    o["supplying_extractor"] = observation;
+    o["scope"] = serde_json::json!("supplying_extractor_function_only");
+    o["execution_status"] = serde_json::json!("supplying_extractor_observed");
+    o["supplying_extractor_source_binding_sha256"] =
+        o["initial_extractor_source_binding_sha256"].take();
+    r["protocol"] = serde_json::json!(crate::supplying_extractor::VERSION);
+    r["supplying_observation_sha256"] = serde_json::json!(horary_prompt_program::digest(
+        o["supplying_extractor"].to_string()
+    ));
+    r["native_supplying_pass"] = r["native_initial_pass"].take();
+    let baseline = grade(&o, Some(&r), "extractor_reliability")?;
+    o["journey_outcome"] = serde_json::json!({"follow_up_pass":false,"hurdles":{"classification":{"status":"fail"},"elicitation":{"status":"fail"},"reading":{"status":"fail"}}});
+    let fixed = grade(&o, Some(&r), "extractor_reliability")?;
+    o["supplying_extractor"]["supplying_target_attempts"] = serde_json::json!(1);
+    r["supplying_observation_sha256"] = serde_json::json!(horary_prompt_program::digest(
+        o["supplying_extractor"].to_string()
+    ));
+    let faster = grade(&o, Some(&r), "extractor_reliability")?;
+    o["supplying_extractor"]["native_grade"]["semantic_pass"] = serde_json::json!(false);
+    r["native_supplying_pass"] = serde_json::json!(false);
+    r["supplying_observation_sha256"] = serde_json::json!(horary_prompt_program::digest(
+        o["supplying_extractor"].to_string()
+    ));
+    let wrong = grade(&o, Some(&r), "extractor_reliability")?;
+    o["supplying_extractor"]["bound_inquiry_observed"] = serde_json::json!(false);
+    let unbound_rejected = grade(&o, Some(&r), "extractor_reliability").is_err();
+    if baseline.score != fixed.score
+        || faster.score <= baseline.score
+        || wrong.score != 0.
+        || !unbound_rejected
+        || baseline.qualified
+    {
+        return Err("Supplying objective failed its bounded source/attribution calibration".into());
+    }
+    Ok(
+        serde_json::json!({"version":1,"scope":"supplying_extractor_function_only","passed":true,"baseline":baseline,"fixed_actor_failures":fixed,"fewer_target_repairs":faster,"wrong_target_fields":wrong,"unbound_rejected":unbound_rejected,"model_calls":0,"qualification":"Offline attribution only, no model or full-journey qualification"}),
+    )
+}
+
 /// Authored counterfactuals exercise the actual fitness before any paid search.
 /// These are instrumentation checks, never reviews of model-generated answers.
 pub fn calibration() -> Result<Value, String> {
@@ -568,7 +646,10 @@ pub fn grade(
     ) {
         return Err(format!("Unknown frozen optimization target: {target}"));
     }
-    if outcome["scope"] == "initial_extractor_function_only" {
+    if matches!(
+        outcome["scope"].as_str(),
+        Some("initial_extractor_function_only" | "supplying_extractor_function_only")
+    ) {
         if target != "extractor_reliability" {
             return Err(
                 "An initial extractor cannot stand in for a journey, conversation or reading"
@@ -1240,5 +1321,13 @@ mod tests {
         r = review();
         r["pipeline"]["extraction"]["score"] = json!(3);
         assert!(grade(&outcome(), Some(&r), "extraction").is_err());
+    }
+    #[test]
+    fn supplying_metric_isolated_from_fixed_actors_and_unbound_is_unscored() {
+        let calibration = supplying_calibration().unwrap();
+        assert_eq!(calibration["passed"], true);
+        assert_eq!(calibration["wrong_target_fields"]["score"], 0.);
+        assert_eq!(calibration["unbound_rejected"], true);
+        assert_eq!(calibration["baseline"]["qualified"], false);
     }
 }

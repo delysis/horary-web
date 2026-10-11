@@ -114,6 +114,9 @@ struct Preparation {
     objective: Objective,
     #[arg(long)]
     selected_stage_observation: bool,
+    /// Measure only an actual answer to a bound inquiry, before chart or guru.
+    #[arg(long)]
+    supplying_extractor_observation: bool,
     #[arg(long)]
     campaign: PathBuf,
     #[arg(long)]
@@ -343,6 +346,7 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             let Preparation {
                 objective,
                 selected_stage_observation,
+                supplying_extractor_observation,
                 campaign,
                 split,
                 native_executable,
@@ -398,9 +402,11 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
                 codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,component_curriculum:None,fixed_program,exact_response_memoization,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
-                function,objective,initial_extractor_observation:false,selected_stage_observation,target_method,target_stage,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
+                function,objective,initial_extractor_observation:false,supplying_extractor_observation,selected_stage_observation,target_method,target_stage,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
                 qualification:if function == Function::Classification {
                     "Training-only classification search; separate development selects candidates. No reading, reserved, on-device or deployment qualification. Fresh whole-journey/source/reserved gates required before promotion."
+                } else if supplying_extractor_observation {
+                    "Training-only supplying extractor search reached through fresh production inquiry. Only the bound update is optimized; upstream dialogue and full readings remain separately unqualified."
                 } else if function == Function::InputJourney {
                     "Training-only initial-extractor correctness and repair-reliability search. Fixed conversation and supplying stages are measured separately, not locally optimized. No reading generated or whole-journey, interpretation, reserved, on-device or deployment qualification. Fresh production reading/source/reserved gates required before promotion."
                 } else {

@@ -59,6 +59,9 @@ fn request_body(
     if plan.initial_extractor_observation {
         request["initial_extractor_observation"] = json!(true);
     }
+    if plan.supplying_extractor_observation {
+        request["supplying_extractor_observation"] = json!(true);
+    }
     if plan.selected_stage_observation {
         request["selected_stage_observation"] = json!(true);
     }
@@ -171,7 +174,7 @@ pub fn evaluate(
         {
             return Err("Cached measurement belongs to a different logical request".into());
         }
-        if plan.initial_extractor_observation {
+        if plan.initial_extractor_observation || plan.supplying_extractor_observation {
             crate::initial_extractor::verify_observation(plan, &response)?;
         }
         if plan.selected_stage_observation {
@@ -306,6 +309,16 @@ pub fn evaluate(
         if plan.initial_extractor_observation {
             task["initial_extractor_observation"] = json!(true);
         }
+        if plan.supplying_extractor_observation {
+            task["supplying_extractor_observation"] = json!(true);
+        }
+        if plan.supplying_extractor_observation {
+            if let Some(file) = &fixed_file {
+                task["fixed_program_file"] = json!(file);
+                task["fixed_program_sha256"] =
+                    json!(plan.fixed_program.as_ref().ok_or("No fixed source")?.sha256);
+            }
+        }
         if plan.function == Function::ReadingJourney {
             if let Some(pin) = &memo_pin {
                 task["exact_response_memoization"] = json!(pin);
@@ -369,14 +382,21 @@ pub fn evaluate(
     let focused = focused_calls(plan, &native_directory)?;
     if plan.function == Function::InputJourney {
         let first = load(&native_directory.join("first-turn.json"))?;
-        let invoked = input_invocation(
-            plan.target_method
-                .as_deref()
-                .ok_or("Missing input target method")?,
-            &outcome,
-            &first,
-            focused.len(),
-        )?;
+        let invoked = if plan.supplying_extractor_observation {
+            if outcome["target_signature_calls"].as_u64() != Some(focused.len() as u64) {
+                return Err("Supplying target invocation differs from actual calls".into());
+            }
+            !focused.is_empty()
+        } else {
+            input_invocation(
+                plan.target_method
+                    .as_deref()
+                    .ok_or("Missing input target method")?,
+                &outcome,
+                &first,
+                focused.len(),
+            )?
+        };
         outcome["target_function_invoked"] = json!(invoked);
         if !invoked {
             outcome["target_function_not_invoked_reason"] = json!("The observed upstream route did not select the optimized function; native grades are retained, but this target earns no fitness");
@@ -461,6 +481,8 @@ pub fn evaluate(
                 "state":response["outcome"]["initial_extractor"]["state"],
                 "consultation":response["outcome"]["initial_extractor"]["accepted_consultation"],
                 "scope":"Actual initial component boundary; rejected records contain no accepted consultation"});
+            crate::initial_extractor::bind(plan, &mut response)?;
+        } else if plan.supplying_extractor_observation {
             crate::initial_extractor::bind(plan, &mut response)?;
         }
     }
@@ -630,7 +652,7 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
                 horary_prompt_program::captured_record_guide_sha256(&call, None)?;
                 focused["executor_guide_identity"] = protocol.clone();
             }
-            if plan.initial_extractor_observation {
+            if plan.initial_extractor_observation || plan.supplying_extractor_observation {
                 focused["sequence"] = call["sequence"].clone();
                 focused["source_request_file"] = json!(format!("calls/{name}"));
                 focused["source_result_file"] = json!(format!(
@@ -667,6 +689,9 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
         task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
         if plan.initial_extractor_observation {
             task["initial_extractor_observation"] = json!(true);
+        }
+        if plan.supplying_extractor_observation {
+            task["supplying_extractor_observation"] = json!(true);
         }
         if plan.function == Function::ReadingJourney {
             task["target_stage"] = json!(plan.target_stage);

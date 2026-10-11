@@ -385,6 +385,18 @@ fn scripted_need_is_eligible(case: &Case, session: &Session) -> bool {
         })
 }
 
+fn supplying_script_is_eligible(case: &Case, session: &Session, target: Method) -> bool {
+    scripted_need_is_eligible(case, session)
+        && case.follow_up_expected.is_some()
+        && session
+            .method
+            .consultation
+            .as_ref()
+            .and_then(|c| c.method())
+            == Some(target)
+        && latest_reply_after_user(session).is_some()
+}
+
 fn grade_at_moment(
     case: &Case,
     session: &Session,
@@ -399,6 +411,50 @@ fn grade_at_moment(
 /// not run at this boundary and cannot be component failures or successes.
 fn grade_initial_extractor(case: &Case, session: &Session) -> Grade {
     grade_input_state(case, session, None, frozen_moment(), true)
+}
+
+/// Keep unchanged prerequisite failures in the full journey, not in this
+/// update's merit. Newly wrong or lost facts still fail at the real boundary.
+fn grade_supplying_extractor(
+    case: &Case,
+    before: &Session,
+    after: &Session,
+) -> Result<Grade, String> {
+    let expected = case
+        .follow_up_expected
+        .as_ref()
+        .ok_or("Supplying extractor lacks authored after-state expectations")?;
+    let prior = grade_initial_extractor(case, before);
+    let mut after_case = case.clone();
+    after_case.expected = expected.clone();
+    let mut grade = grade_initial_extractor(&after_case, after);
+    let mut failures = grade
+        .mismatches
+        .iter()
+        .filter(|failure| !prior.mismatches.contains(failure))
+        .cloned()
+        .collect::<Vec<_>>();
+    if before.question != after.question {
+        failures.push("The supplying extractor replaced the original question".into());
+    }
+    if before.candidate_moment_ms != after.candidate_moment_ms {
+        failures.push("The supplying extractor replaced the recorded question moment".into());
+    }
+    grade.actual["excluded_unchanged_upstream_failures"] = json!(prior
+        .mismatches
+        .iter()
+        .filter(|failure| grade.mismatches.contains(failure))
+        .collect::<Vec<_>>());
+    grade.mismatches = failures.clone();
+    grade.semantic_pass = failures.is_empty();
+    grade.hurdles.classification = crate::reading_eval::Gate {
+        status: crate::reading_eval::Status::NotRun,
+        failures: vec![],
+        basis: "Upstream classification is fixed; an update's changed frame is part of extraction"
+            .into(),
+    };
+    grade.hurdles.extraction = crate::reading_eval::Gate::checked(failures, "Actually accepted bound supplying update; unchanged upstream defects and later actors are excluded");
+    Ok(grade)
 }
 
 fn grade_input_state(
@@ -1295,6 +1351,7 @@ struct Reader<'a> {
     group: Option<usize>,
     program: Option<Arc<horary_prompt_program::Program>>,
     initial_extractor_target: Option<Method>,
+    supplying_extractor_target: Option<Method>,
     selected_stage_target: Option<Stage>,
 }
 
@@ -1499,6 +1556,7 @@ impl Drop for Deadline {
 struct CaseRun {
     full_reading: bool,
     initial_extractor_target: Option<Method>,
+    supplying_extractor_target: Option<Method>,
     selected_stage_target: Option<Stage>,
     seconds: u64,
     max_calls: u64,
@@ -1649,6 +1707,12 @@ impl Runtime for Reader<'_> {
     }
     fn initial_extractor_target(&self) -> Option<Method> {
         self.initial_extractor_target
+    }
+    fn supplying_extractor_target(&self) -> Option<Method> {
+        self.supplying_extractor_target
+    }
+    fn supplying_extractor_sequence(&self) -> Option<u64> {
+        Some(self.sequence.load(Ordering::Acquire))
     }
     fn initial_extractor_sequence(&self) -> Option<u64> {
         Some(self.sequence.load(Ordering::Acquire))
@@ -3475,6 +3539,13 @@ fn evaluate_case(
     let full_reading = config.full_reading;
     let seconds = config.seconds;
     let max_calls = config.max_calls;
+    if config.supplying_extractor_target.is_some()
+        && (config.full_reading
+            || config.initial_extractor_target.is_some()
+            || config.selected_stage_target.is_some())
+    {
+        return Err("A supplying extractor requires its separate real input-only boundary".into());
+    }
     if config.full_reading && config.initial_extractor_target.is_some() {
         return Err("A full reading cannot stop at an extractor component boundary".into());
     }
@@ -3525,6 +3596,7 @@ fn evaluate_case(
         group: config.group,
         program: config.program.clone(),
         initial_extractor_target: config.initial_extractor_target,
+        supplying_extractor_target: config.supplying_extractor_target,
         selected_stage_target: config.selected_stage_target,
     };
     let mut session = Session::default();
@@ -3598,7 +3670,10 @@ fn evaluate_case(
     {
         let bound_need = scripted_need_is_eligible(&case, &session);
         let proposal = proposal_is_eligible(&case, &first, &session);
-        if result.is_ok() && (bound_need || proposal) {
+        let supplying_bound = config
+            .supplying_extractor_target
+            .is_none_or(|target| supplying_script_is_eligible(&case, &session, target));
+        if result.is_ok() && (bound_need || proposal) && supplying_bound {
             let previous = session.clone();
             session.messages.push(Message {
                 role: "user".into(),
@@ -4282,6 +4357,7 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
     let config = CaseRun {
         full_reading,
         initial_extractor_target: None,
+        supplying_extractor_target: None,
         selected_stage_target: None,
         seconds,
         max_calls,
@@ -5239,6 +5315,7 @@ fn real_model_classification_function() -> Result<(), String> {
         group: None,
         program: program.map(Arc::new),
         initial_extractor_target: None,
+        supplying_extractor_target: None,
         selected_stage_target: None,
     };
     write_new(
@@ -5600,6 +5677,7 @@ fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
         group: None,
         program: None,
         initial_extractor_target: None,
+        supplying_extractor_target: None,
         selected_stage_target: None,
     };
     let runtime = ClassificationReplayRuntime {
@@ -5648,10 +5726,25 @@ struct InputJourneyTask {
     target_method: Method,
     #[serde(default, skip_serializing_if = "initial_observation_disabled")]
     initial_extractor_observation: bool,
+    #[serde(default, skip_serializing_if = "initial_observation_disabled")]
+    supplying_extractor_observation: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fixed_program_file: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fixed_program_sha256: Option<String>,
     #[serde(default)]
     program_file: Option<PathBuf>,
     #[serde(default)]
     inspect_prompt_only: bool,
+}
+impl InputJourneyTask {
+    fn phase(&self) -> &'static str {
+        if self.supplying_extractor_observation {
+            "update_selected_program"
+        } else {
+            "complete_selected_program"
+        }
+    }
 }
 
 /// Predict only the authored starting state for a pre-network identity check.
@@ -5685,6 +5778,14 @@ fn input_journey_source_scope(
     origin: &Value,
     request_name: &str,
 ) -> Result<(Matter, Value), String> {
+    if !task.supplying_extractor_observation
+        && (task.fixed_program_file.is_some() || task.fixed_program_sha256.is_some())
+    {
+        return Err(
+            "Fixed prerequisite teaching is only supported by the explicit supplying input scope"
+                .into(),
+        );
+    }
     if case.id != task.case_id
         || *fixture != serde_json::to_value(case).map_err(|error| error.to_string())?
         || *initial != input_journey_initial(case)
@@ -5718,6 +5819,62 @@ fn input_journey_source_scope(
     let signature = horary_prompt_program::signature("intake", &request["input"]);
     let input = crate::horary_step::original_input(&request["input"]);
     let state = &input["consultation_state"];
+    if task.supplying_extractor_observation {
+        if task.initial_extractor_observation || case.follow_up_expected.is_none() {
+            return Err("Supplying inspection requires a separate bound follow-up scope".into());
+        }
+        let hash = origin["files"]["first-turn.json"]
+            .as_str()
+            .ok_or("Unsealed original inquiry")?;
+        let bytes =
+            classification_source_bytes(&task.source_case_directory.join("first-turn.json"), hash)?;
+        let first: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let session: Session =
+            serde_json::from_value(first["session"].clone()).map_err(|e| e.to_string())?;
+        if request["stage"] != "intake"
+            || signature.recognition_phase != Some(task.phase())
+            || signature.method != Some(task.target_method.name())
+            || !request["prompt_program"].is_null()
+            || first["result"].get("Ok").is_none()
+            || !scripted_need_is_eligible(case, &session)
+            || latest_reply_after_user(&session).is_none()
+            || case.follow_up.as_deref() != input["latest_words"].as_str()
+            || input["consultation"]
+                != session
+                    .method
+                    .consultation
+                    .as_ref()
+                    .map_or(Value::Null, |c| json!(c.recognition_snapshot()))
+            || input["last_reader_question"].as_str() != latest_reply_after_user(&session)
+            || input["pending_requirement"]
+                != serde_json::to_value(
+                    session
+                        .method
+                        .consultation
+                        .as_ref()
+                        .and_then(|c| c.requested.as_ref()),
+                )
+                .map_err(|e| e.to_string())?
+            || input["chart_exists"] != false
+            || !state["chart"].is_null()
+            || state["interpretation_exists"] != false
+            || input.get("reading_request").is_some()
+            || input.get("stage_user_replies").is_some()
+        {
+            return Err("Supplying inspection is not an original-question inquiry followed by its genuinely bound authored answer".into());
+        }
+        if request["schema_sha256"] != horary_prompt_program::digest(request["schema"].to_string())
+            || request["prompt_sha256"]
+                != horary_prompt_program::digest(request["prompt"].to_string())
+            || !request["schema"].is_object()
+            || !request["prompt"].is_array()
+        {
+            return Err("Supplying source prompt or schema drift".into());
+        }
+        let matter = serde_json::from_value(request["matter"].clone())
+            .map_err(|e| format!("Supplying source matter: {e}"))?;
+        return Ok((matter, request["input"].clone()));
+    }
     if request["stage"] != "intake"
         || signature.recognition_phase != Some("complete_selected_program")
         || signature.method != Some(task.target_method.name())
@@ -5757,6 +5914,13 @@ fn input_journey_source_scope(
 }
 
 fn input_journey_source_fingerprint(origin: &Value, baseline: &Value) -> Result<Value, String> {
+    input_journey_source_fingerprint_scoped(origin, baseline, false)
+}
+fn input_journey_source_fingerprint_scoped(
+    origin: &Value,
+    baseline: &Value,
+    supplying: bool,
+) -> Result<Value, String> {
     let source_dir = PathBuf::from(
         origin["source_directory"]
             .as_str()
@@ -5774,8 +5938,8 @@ fn input_journey_source_fingerprint(origin: &Value, baseline: &Value) -> Result<
     let source: Value = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
     if !source["sources"].is_object()
         || !source["repository_sha"].is_string()
-        || !source["prompt_program"].is_null()
-        || !baseline["prompt_program"].is_null()
+        || !supplying
+            && (!source["prompt_program"].is_null() || !baseline["prompt_program"].is_null())
         || [
             "sources",
             "repository_sha",
@@ -5818,6 +5982,52 @@ fn input_journey_program(
     let program = bytes
         .map(horary_prompt_program::Program::parse)
         .transpose()?;
+    if task.supplying_extractor_observation {
+        let fixed = match (&task.fixed_program_file, &task.fixed_program_sha256) {
+            (None, None) => None,
+            (Some(file), Some(hash)) => Some(horary_prompt_program::Program::parse(
+                &classification_source_bytes(file, hash)?,
+            )?),
+            _ => return Err("Fixed input teaching requires exact file and hash together".into()),
+        };
+        let target = |o: &horary_prompt_program::Override| {
+            o.stage == "intake"
+                && o.recognition_phase.as_deref() == Some(task.phase())
+                && o.method.as_deref() == Some(task.target_method.name())
+        };
+        if let Some(fixed) = &fixed {
+            let mut probe = fixed.clone();
+            probe.overrides.push(horary_prompt_program::Override {
+                stage: "intake".into(),
+                recognition_phase: Some(task.phase().into()),
+                method: Some(task.target_method.name().into()),
+                expected_guide_sha256: horary_prompt_program::digest("probe"),
+                replacement_text: "Nonexecuting target overlap validation. ".repeat(4),
+                edits: vec![],
+            });
+            probe.validate()?;
+        }
+        if let Some(execution) = &program {
+            let others = execution
+                .overrides
+                .iter()
+                .filter(|o| !target(o))
+                .collect::<Vec<_>>();
+            if execution.baseline_manifest_sha256 != task.baseline_manifest_sha256
+                || execution.overrides.iter().filter(|o| target(o)).count() > 1
+                || others
+                    != fixed
+                        .as_ref()
+                        .map(|p| p.overrides.iter().collect::<Vec<_>>())
+                        .unwrap_or_default()
+            {
+                return Err("Supplying execution program changes its target or exact fixed prerequisite teaching".into());
+            }
+        } else if fixed.is_some() {
+            return Err("Fixed prerequisite teaching lacks its execution program".into());
+        }
+        return Ok(program);
+    }
     if program.as_ref().is_some_and(|program| {
         !program
             .baseline_manifest_sha256
@@ -6080,6 +6290,146 @@ fn input_journey_measurement(
         "deadline_cancelled":raw["deadline_cancelled"],"provider_stop":raw["provider_stop"],
         "decoder_mode":"hosted_unconstrained_text","reading_semantic_review":"not attempted; input journey only"}),
     )
+}
+
+fn supplying_extractor_measurement(
+    case: &Case,
+    target: Method,
+    raw: &Value,
+    snapshots: (&Value, &Value),
+    calls: &[Value],
+    complete: bool,
+    run_error: Option<&str>,
+) -> Result<Value, String> {
+    let (first, final_state) = snapshots;
+    let (groups, providers) = input_journey_call_counts(calls)?;
+    let focused: Vec<_> = calls
+        .iter()
+        .filter(|call| {
+            let scope = horary_prompt_program::signature("intake", &call["request"]["input"]);
+            call["request"]["stage"] == "intake"
+                && scope.recognition_phase == Some("update_selected_program")
+                && scope.method == Some(target.name())
+        })
+        .collect();
+    let before: Option<Session> = serde_json::from_value(first["session"].clone()).ok();
+    let after: Option<Session> = serde_json::from_value(final_state["session"].clone()).ok();
+    let bound = before.as_ref().is_some_and(|before| {
+        first["result"].get("Ok").is_some()
+            && scripted_need_is_eligible(case, before)
+            && latest_reply_after_user(before).is_some()
+            && before.method.consultation.as_ref().and_then(|c| c.method()) == Some(target)
+    });
+    let boundary = final_state["session"]["audit"]
+        .as_array()
+        .and_then(|events| {
+            events
+                .iter()
+                .rev()
+                .find(|e| e["event"] == "supplying_extractor_boundary")
+        });
+    let settled = bound
+        && complete
+        && run_error.is_none()
+        && reading::provider_responses_settled(calls)
+        && raw["full_reading"] == false
+        && raw["deadline_cancelled"] == false
+        && raw["group_cancelled"] == false
+        && raw["infrastructure_error"].is_null()
+        && raw["provider_stop"].is_null();
+    let mut accepted = Value::Null;
+    let mut native_grade = Value::Null;
+    let mut abort = Value::Null;
+    let state = if let Some(boundary) =
+        boundary.filter(|_| settled && final_state["follow_up"]["result"].get("Ok").is_some())
+    {
+        let before = before
+            .as_ref()
+            .ok_or("Supplying boundary lacks original inquiry")?;
+        let after = after
+            .as_ref()
+            .ok_or("Supplying boundary lacks its actual session")?;
+        let index = boundary["record_index"]
+            .as_u64()
+            .ok_or("No supplying record index")? as usize;
+        let records = final_state["session"]["method"]["records"]
+            .as_array()
+            .ok_or("No supplying records")?;
+        let record = records.get(index).ok_or("Supplying record is absent")?;
+        let original = crate::horary_step::original_input(&record["input"]);
+        if index + 1 != records.len()
+            || boundary["version"] != 1
+            || boundary["target_method"] != json!(target)
+            || boundary["recognition_phase"] != "update_selected_program"
+            || boundary["after_message"].as_u64() != Some(after.messages.len() as u64)
+            || boundary["last_sequence"].as_u64() != Some(groups)
+            || boundary["revision"] != final_state["session"]["revision"]
+            || boundary["record_input_sha256"] != record["inputSha256"]
+            || record["stage"] != "intake"
+            || !record["validationError"].is_null()
+            || boundary["before_consultation"] != first["session"]["method"]["consultation"]
+            || boundary["bound_requirement"] != original["pending_requirement"]
+            || boundary["accepted_consultation"] != final_state["session"]["method"]["consultation"]
+            || boundary["later_chart_executed"] != false
+            || boundary["later_conversation_executed"] != false
+            || after.chart.is_some()
+            || focused.is_empty()
+            || !final_state["session"]["method"]["flow"]["jobs"]
+                .as_array()
+                .is_some_and(|jobs| {
+                    jobs.iter().any(|job| {
+                        job == &boundary["native_job"]
+                            && job["phase"]["state"] == "complete"
+                            && job["phase"]["record_index"].as_u64() == Some(index as u64)
+                    })
+                })
+        {
+            return Err(
+                "Supplying acceptance is not the exact actual post-apply native boundary".into(),
+            );
+        }
+        native_grade = serde_json::to_value(grade_supplying_extractor(case, before, after)?)
+            .map_err(|e| e.to_string())?;
+        accepted = boundary["accepted_consultation"].clone();
+        "accepted"
+    } else if settled {
+        if let Some(witness) =
+            reading::semantic_abort(raw, snapshots, calls, complete).filter(|w| {
+                let scope = horary_prompt_program::signature("intake", &w["original_input"]);
+                w["stage"] == "intake"
+                    && w["snapshot"] == "final.json"
+                    && scope.recognition_phase == Some("update_selected_program")
+                    && scope.method == Some(target.name())
+                    && !focused.is_empty()
+            })
+        {
+            abort = witness;
+            "native_rejected"
+        } else {
+            "unobserved"
+        }
+    } else {
+        "unobserved"
+    };
+    Ok(json!({"id":case.id,"method":case.method,"mode":case.mode,
+        "scope":"supplying_extractor_function_only","full_reading":false,
+        "execution_status":if state=="unobserved" {"supplying_extractor_unobserved"}else{"supplying_extractor_observed"},
+        "supplying_extractor":{"version":1,"state":state,"target_method":target,"recognition_phase":"update_selected_program",
+            "boundary":boundary,"accepted_consultation":accepted,"native_grade":native_grade,
+            "supplying_target_attempts":focused.len(),"last_sequence":groups,
+            "all_provider_responses_settled":settled,"request_result_pairs_complete":complete,"bound_inquiry_observed":bound},
+        "target_function_invoked":!focused.is_empty(),"target_signature_calls":focused.len(),
+        "known_native_semantic_abort":state=="native_rejected","semantic_abort_witness":abort,
+        "journey_outcome":raw,"grade":raw["grade"],"hurdles":raw["hurdles"],
+        "first_turn_execution_completed":raw["first_turn_execution_completed"],
+        "follow_up_execution_completed":raw["follow_up_execution_completed"],"follow_up_scripted":case.follow_up.is_some(),"follow_up_pass":null,
+        "input_journey_observed":false,"input_journey_pass":null,
+        "physical_generation_attempts":input_journey_generation_attempts(calls),"physical_generation_attempts_complete":complete,
+        "logical_call_groups":groups,"logical_provider_calls":providers,"model_calls":providers,
+        "provider_stop":raw["provider_stop"],"deadline_cancelled":raw["deadline_cancelled"],"group_cancelled":raw["group_cancelled"],
+        "infrastructure_error":run_error.map(str::to_owned).map_or_else(||raw["infrastructure_error"].clone(),Value::String),
+        "execution_error":final_state["follow_up"]["result"]["Err"],"decoder_mode":"hosted_unconstrained_text",
+        "reading_semantic_review":"unobserved; only the bound supplying extractor was measured"}))
 }
 
 fn initial_extractor_measurement(
@@ -6362,7 +6712,11 @@ fn real_model_input_journey_function() -> Result<(), String> {
     if fresh_bytes != initial_bytes {
         return Err("Current authored fresh initial serialization differs from the sealed source initial; no hosted call made".into());
     }
-    let provenance = input_journey_source_fingerprint(&origin, &baseline)?;
+    let provenance = input_journey_source_fingerprint_scoped(
+        &origin,
+        &baseline,
+        task.supplying_extractor_observation,
+    )?;
     let program_bytes = task
         .program_file
         .as_ref()
@@ -6403,7 +6757,7 @@ fn real_model_input_journey_function() -> Result<(), String> {
         write_new(
             &dir.join("inspection.json"),
             &json!({"scope":"input_journey_prompt_inspection_only",
-            "case_id":case.id,"target_method":task.target_method,"stage":"intake","recognition_phase":"complete_selected_program",
+            "case_id":case.id,"target_method":task.target_method,"stage":"intake","recognition_phase":task.phase(),
             "task_sha256":horary_prompt_program::digest(&task_bytes),"prompt":messages,"schema":schema,"input":input,
             "guide_sha256":horary_prompt_program::digest(messages[0]["content"].as_str().ok_or("No focused native guide")?),
             "prompt_sha256":horary_prompt_program::digest(&prompt),"schema_sha256":horary_prompt_program::digest(schema.to_string()),
@@ -6463,7 +6817,7 @@ fn real_model_input_journey_function() -> Result<(), String> {
         "logical_call_group_cap":max_calls,"logical_provider_call_cap":limits["logical_provider_call_cap"],
         "physical_generation_attempt_reservation":limits["physical_generation_attempt_reservation"],
         "case_seconds":seconds,"program_sha256":program_bytes.as_ref().map(horary_prompt_program::digest),
-        "target_signature":{"stage":"intake","recognition_phase":"complete_selected_program","method":task.target_method},
+        "target_signature":{"stage":"intake","recognition_phase":task.phase(),"method":task.target_method},
         "inspected_current_target_program":applied,"entry_point":"evaluate_case -> horary_pipeline::run_elicitation",
         "fresh_initial_verified_before_network":true,"captured_checkpoint_reused":false,
         "fresh_upstream_and_supplying_calls":true,"full_reading":false});
@@ -6474,6 +6828,10 @@ fn real_model_input_journey_function() -> Result<(), String> {
         manifest["fresh_supplying_calls"] = json!(false);
         manifest["stop_boundary"] =
             json!("initial_extractor_acceptance_or_settled_native_rejection");
+    }
+    if task.supplying_extractor_observation {
+        manifest["scope"] = json!("supplying_extractor_function_only");
+        manifest["stop_boundary"] = json!("bound_supplying_acceptance_or_settled_native_rejection");
     }
     write_new(&dir.join("manifest.json"), &manifest)?;
     fs::create_dir(dir.join("cases")).map_err(|error| error.to_string())?;
@@ -6488,6 +6846,9 @@ fn real_model_input_journey_function() -> Result<(), String> {
             response_memo: None,
             initial_extractor_target: task
                 .initial_extractor_observation
+                .then_some(task.target_method),
+            supplying_extractor_target: task
+                .supplying_extractor_observation
                 .then_some(task.target_method),
             selected_stage_target: None,
             seconds,
@@ -6533,6 +6894,16 @@ fn real_model_input_journey_function() -> Result<(), String> {
             calls_complete,
             run_error.as_deref(),
         )?
+    } else if task.supplying_extractor_observation {
+        supplying_extractor_measurement(
+            &case,
+            task.target_method,
+            &raw,
+            (&first, &final_state),
+            &calls,
+            calls_complete,
+            run_error.as_deref(),
+        )?
     } else {
         input_journey_measurement(
             &case,
@@ -6570,7 +6941,13 @@ fn real_model_input_journey_function() -> Result<(), String> {
         )
         .map_err(|error| retain_execution_error(error, run_error.as_deref()))?;
     }
-    if !task.initial_extractor_observation {
+    if task.supplying_extractor_observation {
+        write_new(
+            &case_dir.join("supplying-extractor-observation.json"),
+            &outcome["supplying_extractor"],
+        )?;
+    }
+    if !task.initial_extractor_observation && !task.supplying_extractor_observation {
         outcome["target_signature_calls"] = json!(calls
             .iter()
             .filter(|call| {
@@ -6590,6 +6967,8 @@ fn real_model_input_journey_function() -> Result<(), String> {
     }
     final_copy["scope"] = json!(if task.initial_extractor_observation {
         "initial_extractor_function_only"
+    } else if task.supplying_extractor_observation {
+        "supplying_extractor_function_only"
     } else {
         "input_journey_function_only"
     });
@@ -6642,6 +7021,9 @@ fn input_journey_source_test_fixture() -> (Case, InputJourneyTask, Value, Value,
         baseline_manifest_sha256: "1".repeat(64),
         target_method: Method::Contact,
         initial_extractor_observation: false,
+        supplying_extractor_observation: false,
+        fixed_program_file: None,
+        fixed_program_sha256: None,
         program_file: None,
         inspect_prompt_only: false,
     };
@@ -6963,4 +7345,136 @@ fn input_journey_program_cannot_change_upstream_or_another_methods_teaching() {
     let mut unbound = program;
     unbound.baseline_manifest_sha256 = "2".repeat(64);
     assert!(parse(&unbound).is_err());
+}
+
+#[test]
+fn supplying_extractor_grades_only_the_real_update_and_withholds_other_needs() {
+    let words = "Would selling these books be profitable for me on Thursday?";
+    let case:Case=serde_json::from_value(json!({"id":"offline-supply","method":"movable_deal","mode":"missing","device_available":true,
+        "words":words,"follow_up":"These books are mine","source_pages":"Authored offline attribution only","rationale":"No model measurement",
+        "expected":{"ready":false,"facet":"profit","needs":[{"kind":"owner"}],"facts":[{"field":"event_time","contains":"Friday"}]},
+        "follow_up_expected":{"ready":true,"facet":"profit","owner":"querent","facts":[{"field":"event_time","contains":"Friday"}]}})).unwrap();
+    let turn:reading_contracts::Turn=serde_json::from_value(json!({"intent":"read","question":words,"frame":{"method":"movable_deal","facet":"situation"},
+        "people":[],"subject":{"name":"books","kind":"movable","owner_id":"","source_quote":"these books"},
+        "updates":[{"field":"event_time","value":"Thursday","quote":"Thursday","mode":"supply"}],
+        "heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})).unwrap();
+    let mut consultation = reading_contracts::Consultation::default();
+    consultation.apply(&turn, 1, words, false).unwrap();
+    consultation.requested = Some(RequirementKey::Owner);
+    let mut before = Session {
+        question: words.into(),
+        candidate_moment_ms: Some(frozen_moment()),
+        ..Session::default()
+    };
+    before.method.consultation = Some(consultation);
+    before.messages = vec![
+        Message {
+            role: "user".into(),
+            text: words.into(),
+        },
+        Message {
+            role: "assistant".into(),
+            text: "Who owns the books?".into(),
+        },
+    ];
+    assert!(supplying_script_is_eligible(
+        &case,
+        &before,
+        Method::MovableDeal
+    ));
+    let mut no_need = before.clone();
+    no_need.method.consultation.as_mut().unwrap().requested = None;
+    assert!(!supplying_script_is_eligible(
+        &case,
+        &no_need,
+        Method::MovableDeal
+    ));
+    let mut wrong_need = before.clone();
+    wrong_need.method.consultation.as_mut().unwrap().requested = Some(RequirementKey::Frame);
+    assert!(!supplying_script_is_eligible(
+        &case,
+        &wrong_need,
+        Method::MovableDeal
+    ));
+    assert!(!supplying_script_is_eligible(
+        &case,
+        &before,
+        Method::Contact
+    ));
+    let patch:reading_contracts::Turn=serde_json::from_value(json!({"intent":"clarify","question":null,"frame":null,"people":[],
+        "subject":{"name":"books","kind":"movable","owner_id":"querent","source_quote":"These books are mine"},"updates":[],
+        "heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})).unwrap();
+    let mut after = before.clone();
+    after.messages.push(Message {
+        role: "user".into(),
+        text: case.follow_up.clone().unwrap(),
+    });
+    after
+        .method
+        .consultation
+        .as_mut()
+        .unwrap()
+        .apply(&patch, 3, "These books are mine", false)
+        .unwrap();
+    let target = grade_supplying_extractor(&case, &before, &after).unwrap();
+    assert!(target.semantic_pass, "{:?}", target.mismatches);
+    assert!(
+        !grade_initial_extractor(&case, &before).semantic_pass,
+        "The original upstream errors must remain real"
+    );
+    assert!(
+        !grade(&case, &after, None).semantic_pass,
+        "This component cannot qualify the full journey"
+    );
+    assert!(
+        target.actual["excluded_unchanged_upstream_failures"]
+            .as_array()
+            .unwrap()
+            .len()
+            >= 2
+    );
+    let mut wrong = after.clone();
+    wrong.method.consultation.as_mut().unwrap().subject = reading_contracts::Slot::Missing;
+    assert!(
+        !grade_supplying_extractor(&case, &before, &wrong)
+            .unwrap()
+            .semantic_pass
+    );
+    let mut lost = after.clone();
+    lost.method
+        .consultation
+        .as_mut()
+        .unwrap()
+        .facts
+        .remove(&Field::EventTime);
+    assert!(
+        !grade_supplying_extractor(&case, &before, &lost)
+            .unwrap()
+            .semantic_pass,
+        "Erasing a prior source fact creates a new target failure"
+    );
+    let mut question = after;
+    question.question = "A different question".into();
+    assert!(
+        !grade_supplying_extractor(&case, &before, &question)
+            .unwrap()
+            .semantic_pass
+    );
+}
+
+#[test]
+fn supplying_extractor_task_flag_is_omitted_from_legacy_paid_task_bytes() {
+    let (_, task, _, _, _, _) = input_journey_source_test_fixture();
+    let bytes = serde_json::to_vec(&task).unwrap();
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    for key in [
+        "supplying_extractor_observation",
+        "fixed_program_file",
+        "fixed_program_sha256",
+    ] {
+        assert!(v.get(key).is_none(), "{key}");
+    }
+    let decoded: InputJourneyTask = serde_json::from_slice(&bytes).unwrap();
+    assert!(!decoded.supplying_extractor_observation);
+    assert_eq!(serde_json::to_vec(&decoded).unwrap(), bytes);
 }

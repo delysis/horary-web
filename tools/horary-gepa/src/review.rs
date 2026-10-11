@@ -647,7 +647,7 @@ pub fn evaluate(
     example: &Example,
     evaluation: &Value,
 ) -> Result<Value> {
-    if plan.initial_extractor_observation {
+    if plan.initial_extractor_observation || plan.supplying_extractor_observation {
         return crate::initial_extractor::evaluate(plan, journal, example, evaluation);
     }
     if !plan

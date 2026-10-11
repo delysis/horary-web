@@ -299,6 +299,7 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/src/journal.rs",
     "tools/horary-gepa/src/native.rs",
     "tools/horary-gepa/src/initial_extractor.rs",
+    "tools/horary-gepa/src/supplying_extractor.rs",
     "tools/horary-gepa/src/teacher.rs",
     "tools/horary-gepa/src/metric.rs",
     "tools/horary-gepa/src/review.rs",

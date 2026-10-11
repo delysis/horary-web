@@ -799,6 +799,7 @@ fn real_model_reading_function() -> Result<(), String> {
         CaseRun {
             full_reading: true,
             initial_extractor_target: None,
+            supplying_extractor_target: None,
             selected_stage_target: task.selected_stage_observation.then_some(task.target_stage),
             seconds,
             max_calls,

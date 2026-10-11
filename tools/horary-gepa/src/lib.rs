@@ -17,6 +17,7 @@ pub mod recovery;
 pub mod review;
 pub mod selected_stage;
 pub mod status;
+pub mod supplying_extractor;
 pub mod teacher;
 
 use gepa::{Candidate, EvalBatch, GepaAdapter, GepaEngine};
@@ -309,6 +310,9 @@ pub struct Plan {
     /// historical paid request/review identities and recovery semantics intact.
     #[serde(default, skip_serializing_if = "is_false")]
     pub initial_extractor_observation: bool,
+    /// A distinct real update extractor, reached only through a bound inquiry.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub supplying_extractor_observation: bool,
     /// An explicit fresh measurement stop; omission preserves legacy journals.
     #[serde(default, skip_serializing_if = "is_false")]
     pub selected_stage_observation: bool,
@@ -326,6 +330,13 @@ pub struct Plan {
 }
 
 impl Plan {
+    pub fn extractor_phase(&self) -> &'static str {
+        if self.supplying_extractor_observation {
+            "update_selected_program"
+        } else {
+            self.function.phase()
+        }
+    }
     pub fn metric(&self) -> &'static str {
         match self.objective {
             Objective::WholeFunction => self.function.metric(),
@@ -337,7 +348,7 @@ impl Plan {
         horary_prompt_program::Signature {
             stage: self.target_stage.map_or("intake", ReadingStage::name),
             recognition_phase: (self.function != Function::ReadingJourney)
-                .then_some(self.function.phase()),
+                .then_some(self.extractor_phase()),
             method: self.target_method.as_deref(),
         }
     }
@@ -349,7 +360,7 @@ impl Plan {
             .unwrap_or_default();
         let phase = self
             .target_stage
-            .map_or(self.function.phase(), ReadingStage::name);
+            .map_or(self.extractor_phase(), ReadingStage::name);
         format!("{phase}{method}.region.{index:03}")
     }
     fn seed_for_guide(&self) -> Result<Candidate> {
@@ -367,6 +378,7 @@ impl Plan {
                 || self.objective != Objective::SelectedStageReliability
                 || self.control_mode != ControlMode::FreshHosted
                 || self.initial_extractor_observation
+                || self.supplying_extractor_observation
                 || self.recovery.is_some())
         {
             return Err("Selected-stage observation requires an explicit fresh hosted reading component round".into());
@@ -374,9 +386,19 @@ impl Plan {
         if self.initial_extractor_observation
             && (self.function != Function::InputJourney
                 || self.objective != Objective::ExtractorReliability
+                || self.supplying_extractor_observation
                 || self.recovery.is_some())
         {
             return Err("Initial extractor observation requires a fresh extractor component round without legacy recovery".into());
+        }
+        if self.supplying_extractor_observation
+            && (self.function != Function::InputJourney
+                || self.objective != Objective::ExtractorReliability
+                || self.control_mode != ControlMode::FreshHosted
+                || self.initial_extractor_observation
+                || self.recovery.is_some())
+        {
+            return Err("Supplying extractor observation requires a fresh bound input component round without legacy recovery".into());
         }
         if self.objective == Objective::ExtractorReliability
             && self.function != Function::InputJourney
@@ -670,7 +692,9 @@ impl Plan {
 
 pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -> Result<Plan> {
     memo::validate(&plan)?;
-    if plan.function == Function::InputJourney && plan.objective == Objective::ExtractorReliability
+    if plan.function == Function::InputJourney
+        && plan.objective == Objective::ExtractorReliability
+        && !plan.supplying_extractor_observation
     {
         plan.initial_extractor_observation = true;
     }
@@ -685,7 +709,9 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
         return Err("The editable initial extractor cannot optimize a whole input conversation. Prepare an explicit extractor-reliability objective; keep whole-journey qualification separate.".into());
     }
     if plan.objective == Objective::ExtractorReliability {
-        let calibration = if plan.initial_extractor_observation {
+        let calibration = if plan.supplying_extractor_observation {
+            metric::supplying_calibration()?
+        } else if plan.initial_extractor_observation {
             metric::initial_calibration()?
         } else {
             metric::calibration()?
@@ -1193,6 +1219,7 @@ mod tests {
             function: Function::Classification,
             objective: Objective::WholeFunction,
             initial_extractor_observation: false,
+            supplying_extractor_observation: false,
             selected_stage_observation: false,
             target_method: None,
             target_stage: None,
@@ -1452,5 +1479,26 @@ mod tests {
         assert_eq!(result.best["classifier"], "improved");
         assert_eq!(result.candidates.len(), 2);
         assert_eq!(result.parents[1], vec![0]);
+    }
+    #[test]
+    fn supplying_plan_is_explicit_disjoint_and_legacy_serialization_omits_it() {
+        let legacy = plan();
+        let serialized = serde_json::to_value(&legacy).unwrap();
+        assert!(serialized.get("supplying_extractor_observation").is_none());
+        let decoded: Plan = serde_json::from_value(serialized.clone()).unwrap();
+        assert!(!decoded.supplying_extractor_observation);
+        assert_eq!(serde_json::to_value(decoded).unwrap(), serialized);
+        let mut p = legacy;
+        p.supplying_extractor_observation = true;
+        p.function = Function::InputJourney;
+        p.objective = Objective::ExtractorReliability;
+        p.target_method = Some("movable_deal".into());
+        assert_eq!(
+            p.signature().recognition_phase,
+            Some("update_selected_program")
+        );
+        assert!(p.region_key(0).starts_with("update_selected_program."));
+        p.initial_extractor_observation = true;
+        assert!(p.validate().unwrap_err().contains("Initial extractor"));
     }
 }

@@ -77,6 +77,14 @@ pub trait Runtime: Sync {
     fn initial_extractor_sequence(&self) -> Option<u64> {
         None
     }
+    #[cfg(test)]
+    fn supplying_extractor_target(&self) -> Option<crate::reading_contracts::Method> {
+        None
+    }
+    #[cfg(test)]
+    fn supplying_extractor_sequence(&self) -> Option<u64> {
+        None
+    }
     /// Measurement-only stop at a real accepted-input reading stage. No
     /// production caller or full-journey campaign enables this test hook.
     #[cfg(test)]
@@ -776,6 +784,10 @@ pub(crate) fn run_elicitation(
                     "reading_executed":false,"conversation_executed":false}));
                 runtime.publish(session)?;
             } else if runtime.initial_extractor_target().is_none()
+                && !session
+                    .audit
+                    .iter()
+                    .any(|event| event["event"] == "supplying_extractor_boundary")
                 && session.method.brief.intent != "pause"
             {
                 crate::horary_conversation::respond(session, runtime)?;
@@ -916,6 +928,38 @@ fn prepare_reading(
         .consultation
         .get_or_insert_with(contracts::Consultation::default)
         .apply(&turn, session.messages.len(), &words, audio.is_some())?;
+    #[cfg(test)]
+    if let Some(target) = runtime.supplying_extractor_target() {
+        let record_index = session.method.records.len().checked_sub(1);
+        if let Some(record_index) = record_index {
+            let record = &session.method.records[record_index];
+            let original = crate::horary_step::original_input(&record.input);
+            let signature = horary_prompt_program::signature("intake", original);
+            if signature.recognition_phase == Some("update_selected_program")
+                && signature.method == Some(target.name())
+                && previous
+                    .method
+                    .consultation
+                    .as_ref()
+                    .is_some_and(|c| c.requested.is_some())
+            {
+                let job = session.method.flow.jobs.iter().find(|job| {
+                    matches!(job.phase(), step::Phase::Complete { record_index: index } if *index == record_index)
+                }).ok_or("Supplying extractor acceptance lacks its completed native job")?;
+                session.audit.push(json!({"event":"supplying_extractor_boundary","version":1,
+                    "target_method":target,"recognition_phase":"update_selected_program",
+                    "after_message":session.messages.len(),"record_index":record_index,
+                    "last_sequence":runtime.supplying_extractor_sequence().ok_or("Supplying extractor observation lacks its actual sequence")?,
+                    "revision":session.revision,"record_input_sha256":record.input_sha256,
+                    "native_job":job,"before_consultation":previous.method.consultation,
+                    "bound_requirement":previous.method.consultation.as_ref().and_then(|c|c.requested.as_ref()),
+                    "accepted_consultation":session.method.consultation,
+                    "later_chart_executed":false,"later_conversation_executed":false}));
+                runtime.publish(session)?;
+                return Ok(None);
+            }
+        }
+    }
     // Direct audio has no text until recognition. Its checked meaning summary
     // can supply the same literal fact even if the model omitted the update.
     capture_declared_reader_place(session, &words, audio.is_some())?;
@@ -4096,6 +4140,215 @@ mod initial_extractor_tests {
         assert_eq!(
             event["accepted_consultation"]["frame"]["observation"]["value"]["method"],
             "contact"
+        );
+    }
+}
+
+#[cfg(test)]
+mod supplying_extractor_tests {
+    use super::*;
+    use crate::reading_contracts::{Method, RequirementKey};
+    use std::sync::Mutex;
+    struct Reader {
+        dir: tempfile::TempDir,
+        calls: Mutex<Vec<(Stage, Value)>>,
+        repair: bool,
+    }
+    impl Runtime for Reader {
+        fn supplying_extractor_target(&self) -> Option<Method> {
+            Some(Method::MovableDeal)
+        }
+        fn supplying_extractor_sequence(&self) -> Option<u64> {
+            Some(self.calls.lock().unwrap().len() as u64)
+        }
+        fn generate(
+            &self,
+            stage: Stage,
+            _matter: Matter,
+            input: &Value,
+            _schema: &Value,
+            _audio: Option<&[u8]>,
+        ) -> Result<NativeGenerationResult, String> {
+            let mut calls = self.calls.lock().unwrap();
+            let updates = calls
+                .iter()
+                .filter(|(stage, input)| {
+                    *stage == Stage::Intake
+                        && crate::horary_step::original_input(input)["recognition_phase"]
+                            == "update_selected_program"
+                })
+                .count();
+            calls.push((stage, input.clone()));
+            let original = crate::horary_step::original_input(input);
+            let phase = original["recognition_phase"].as_str();
+            if input.get("native_validation_error").is_some() {
+                println!(
+                    "Offline synthetic repair: {}",
+                    input["native_validation_error"]
+                );
+            }
+            let mut answer = json!({"intent":"clarify","question":null,"frame":null,"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null});
+            match (stage, phase) {
+                (Stage::Intake, Some("classify_question")) => {
+                    answer["intent"] = json!("read");
+                    answer["question"] = original["latest_words"].clone();
+                    answer["frame"] = json!({"method":"movable_deal","facet":"profit"});
+                }
+                (Stage::Intake, Some("complete_selected_program")) => {
+                    answer["subject"] = json!({"name":"books","kind":"movable","owner_id":"","source_quote":"these books"});
+                    answer["updates"] = json!([{"field":"deal_capacity","value":"sell","quote":"selling","mode":"supply"},{"field":"deal_actor","value":"querent","quote":"I am selling","mode":"supply"},{"field":"deal_beneficiary","value":"querent","quote":"me","mode":"supply"}]);
+                }
+                (Stage::Intake, Some("update_selected_program")) => {
+                    assert_eq!(
+                        original["pending_requirement"],
+                        json!(RequirementKey::Owner)
+                    );
+                    if self.repair && updates == 0 {
+                        answer["updates"] = json!([{"field":"subject","value":"querent","quote":"mine","mode":"supply"}]);
+                    } else {
+                        answer["subject"] = json!({"name":"books","kind":"movable","owner_id":"querent","source_quote":"These books are mine"});
+                    }
+                }
+                (Stage::Conversation, _) => {
+                    assert_eq!(
+                        updates, 0,
+                        "No later guru may execute after supplying acceptance"
+                    );
+                    let reminder = input["reminders"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|r| r["key"] == json!(RequirementKey::Owner))
+                        .unwrap();
+                    answer = json!({"reply":"Who owns these books?","ask":reminder["id"]});
+                }
+                _ => panic!("No chart or later fixed actor belongs to this component: {stage:?}"),
+            }
+            Ok(NativeGenerationResult {
+                content: answer.to_string(),
+                prompt_tokens: 0,
+                generated_tokens: 0,
+                elapsed_ms: 0,
+                total_wall_ms: None,
+                batch_size: None,
+                lesson_bank_hit: None,
+                lesson_prepare_ms: None,
+                tokens_per_second: 0.,
+                prompt_cache_hit: false,
+                cached_prompt_tokens: 0,
+                prefilled_prompt_tokens: 0,
+                first_token_ms: None,
+                cold_cache_bytes: None,
+            })
+        }
+        fn generate_batch(
+            &self,
+            _tasks: &[(Stage, Matter, Value, Value)],
+        ) -> Result<Vec<NativeGenerationResult>, String> {
+            panic!("No fixed batch should execute")
+        }
+        fn publish(&self, _s: &mut Session) -> Result<(), String> {
+            Ok(())
+        }
+        fn check(&self) -> Result<(), String> {
+            if self.calls.lock().unwrap().len() < 8 {
+                Ok(())
+            } else {
+                Err("Authored offline call cap".into())
+            }
+        }
+        fn directory(&self) -> &Path {
+            self.dir.path()
+        }
+    }
+    #[test]
+    fn supplying_original_question_reaches_real_inquiry_then_repairs_and_stops_before_later_guru() {
+        let reader = Reader {
+            dir: tempfile::tempdir().unwrap(),
+            calls: Mutex::new(vec![]),
+            repair: true,
+        };
+        let mut session = Session::default();
+        let initial = session.clone();
+        session.messages.push(Message {
+            role: "user".into(),
+            text: "I am selling these books. Would the sale be profitable for me?".into(),
+        });
+        run_elicitation(
+            &mut session,
+            &reader,
+            &GeocodeState::default(),
+            1789387200000.,
+            None,
+            &initial,
+        )
+        .unwrap();
+        assert_eq!(
+            session.method.consultation.as_ref().unwrap().requested,
+            Some(RequirementKey::Owner)
+        );
+        assert!(!session
+            .audit
+            .iter()
+            .any(|e| e["event"] == "supplying_extractor_boundary"));
+        let before = session.clone();
+        session.messages.push(Message {
+            role: "user".into(),
+            text: "These books are mine".into(),
+        });
+        run_elicitation(
+            &mut session,
+            &reader,
+            &GeocodeState::default(),
+            1789387260000.,
+            None,
+            &before,
+        )
+        .unwrap();
+        assert!(session.chart.is_none());
+        assert_eq!(session.question, before.question);
+        assert_eq!(session.candidate_moment_ms, before.candidate_moment_ms);
+        assert_eq!(
+            session
+                .method
+                .consultation
+                .as_ref()
+                .unwrap()
+                .subject
+                .resolved()
+                .unwrap()
+                .owner_id,
+            "querent"
+        );
+        let event = session
+            .audit
+            .iter()
+            .find(|e| e["event"] == "supplying_extractor_boundary")
+            .unwrap();
+        let index = event["record_index"].as_u64().unwrap() as usize;
+        assert_eq!(event["native_job"]["phase"]["record_index"], index);
+        assert_eq!(
+            event["before_consultation"],
+            json!(before.method.consultation)
+        );
+        assert!(session.method.records[index - 1].validation_error.is_some());
+        assert!(session.method.records[index].validation_error.is_none());
+        let calls = reader.calls.lock().unwrap();
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|(stage, _)| *stage == Stage::Conversation)
+                .count(),
+            1
+        );
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|(stage, input)| *stage == Stage::Intake
+                    && crate::horary_step::original_input(input)["recognition_phase"]
+                        == "update_selected_program")
+                .count(),
+            2
         );
     }
 }

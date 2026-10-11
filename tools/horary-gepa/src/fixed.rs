@@ -54,7 +54,7 @@ pub(crate) fn validate_scope(plan: &Plan) -> Result<Option<Program>> {
     let Some(source) = &plan.fixed_program else {
         return Ok(None);
     };
-    if plan.function != Function::ReadingJourney
+    if !(plan.function == Function::ReadingJourney || plan.supplying_extractor_observation)
         || plan.control_mode != ControlMode::FreshHosted
         || plan.recovery.is_some()
     {
@@ -495,5 +495,35 @@ mod tests {
         plan.function = Function::ReadingJourney;
         plan.control_mode = ControlMode::ArchivedCapture;
         assert!(validate_scope(&plan).is_err());
+    }
+    #[test]
+    fn supplying_fixed_initial_lesson_preserves_target_disjointness_and_split_guards() {
+        let (dir, mut plan, mut original) = setup();
+        plan.function = Function::InputJourney;
+        plan.supplying_extractor_observation = true;
+        plan.target_stage = None;
+        plan.objective = Objective::ExtractorReliability;
+        plan.seed = plan.seed_for_guide().unwrap();
+        assert!(validate_scope(&plan).unwrap().is_some());
+        let split = crate::load(&plan.split_file).unwrap();
+        verify_membership(&plan, &split, &["development".into()]).unwrap();
+        original.training_case_ids = vec!["development".into()];
+        pin(&mut plan, &original, dir.path());
+        assert!(verify_membership(&plan, &split, &["development".into()]).is_err());
+        original.training_case_ids = vec!["reserved".into()];
+        pin(&mut plan, &original, dir.path());
+        assert!(validate_scope(&plan).is_err());
+        original.training_case_ids = vec!["prior-training".into()];
+        original.overrides[0].recognition_phase = Some("update_selected_program".into());
+        pin(&mut plan, &original, dir.path());
+        assert!(validate_scope(&plan).unwrap_err().contains("conflicts"));
+        original.overrides[0].recognition_phase = Some("complete_selected_program".into());
+        pin(&mut plan, &original, dir.path());
+        fs::write(
+            &plan.fixed_program.as_ref().unwrap().file,
+            b"changed original lesson",
+        )
+        .unwrap();
+        assert!(validate_scope(&plan).unwrap_err().contains("changed"));
     }
 }

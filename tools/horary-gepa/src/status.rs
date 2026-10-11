@@ -101,6 +101,12 @@ fn review_scores(value: &Value) -> Value {
             project(&value["extractor"], &["state", "score"]),
         );
     }
+    if value["protocol"] == crate::supplying_extractor::VERSION {
+        scores.insert(
+            "supplying_extractor".into(),
+            project(&value["extractor"], &["state", "score"]),
+        );
+    }
     Value::Object(scores)
 }
 
@@ -275,7 +281,10 @@ pub fn inspect(root: &Path) -> Result<Value> {
             None
         };
         if let Some(settled) = &response {
-            if plan["initial_extractor_observation"] == true && kind == Some("input_journey") {
+            if (plan["initial_extractor_observation"] == true
+                || plan["supplying_extractor_observation"] == true)
+                && kind == Some("input_journey")
+            {
                 let check = serde_json::from_value::<crate::Plan>(plan.clone())
                     .map_err(|e| e.to_string())
                     .and_then(|p| {

@@ -90,7 +90,22 @@ pub(crate) fn prepare(
         let mut inputs = json!({"case_id":example.id,"source_request_sha256":example.source_request_sha256,
             "actual_application_input":horary_prompt_program::original_input(&call["input"]),
             "output_contract":call["schema"]});
-        let generated = if plan.initial_extractor_observation {
+        let generated = if plan.supplying_extractor_observation {
+            let actual = &evaluation["evaluation"];
+            crate::initial_extractor::verify_observation(plan, actual)?;
+            crate::initial_extractor::verify_review(
+                plan,
+                example,
+                actual,
+                &evaluation["independent_review"],
+            )?;
+            let calls = actual["actual_function_calls"]
+                .as_array()
+                .filter(|c| !c.is_empty())
+                .ok_or("Supplying reflection lacks actual target attempts")?;
+            inputs = json!({"case_id":example.id,"scope":"supplying_extractor_only","actual_bound_update_inputs":calls.iter().map(|call|json!({"input":call["input"],"schema":call["schema"],"source_request_sha256":call["source_request_sha256"]})).collect::<Vec<_>>()});
+            json!({"supplying_observation":actual["outcome"]["supplying_extractor"],"actual_target_outputs":calls.iter().map(|call|json!({"result":call["result"],"source_result_sha256":call["source_result_sha256"]})).collect::<Vec<_>>(),"native_rejection":actual["outcome"]["semantic_abort_witness"]})
+        } else if plan.initial_extractor_observation {
             let actual = &evaluation["evaluation"];
             crate::initial_extractor::verify_observation(plan, actual)?;
             crate::initial_extractor::verify_review(
@@ -143,11 +158,20 @@ pub(crate) fn prepare(
             );
         }
         let mut feedback = json!({"fitness":evaluation["fitness"],"authored_target_expectations":example.expected,
-                "objective":plan.objective,"editable_signature":{"stage":"intake","recognition_phase":plan.function.phase(),"method":plan.target_method},
+                "objective":plan.objective,"editable_signature":{"stage":"intake","recognition_phase":plan.extractor_phase(),"method":plan.target_method},
                 "actual_native_gates":evaluation["evaluation"]["outcome"]["hurdles"],
                 "validated_independent_input_review":evaluation["independent_review"],
                 "actual_focused_calls":evaluation["evaluation"]["actual_function_calls"]});
-        if plan.initial_extractor_observation {
+        if plan.supplying_extractor_observation {
+            feedback["actual_native_gates"] =
+                evaluation["evaluation"]["outcome"]["supplying_extractor"]["native_grade"].clone();
+            feedback["validated_supplying_extractor_review"] =
+                evaluation["independent_review"].clone();
+            feedback
+                .as_object_mut()
+                .ok_or("Invalid supplying feedback")?
+                .remove("validated_independent_input_review");
+        } else if plan.initial_extractor_observation {
             feedback["actual_native_gates"] =
                 evaluation["evaluation"]["outcome"]["initial_extractor"]["native_grade"].clone();
             feedback["validated_initial_extractor_review"] =
@@ -195,6 +219,8 @@ pub(crate) fn prepare(
     let reflection = gepa::render_prompt(current, &samples, None);
     let scope = if plan.function == Function::ReadingJourney {
         "Change only the named reading-stage component. Apply the supplied Frawley method in explicit steps to the actual accepted native facts and roles; improve the observed selected stage and its repairs. Immutable per-case rubrics and independently cited failures are TRAINING evaluation data, never student input or permission to invent testimony. Preserve direction of reception, applying contacts/event order, Moon treatment, conditional role selection and uncertainty. Explain the contextual answer only within the selected stage's actual authority. Full-journey and conversation failures remain separate; do not invent native features, change the question, bypass input/evidence guards or claim deployment qualification."
+    } else if plan.supplying_extractor_observation {
+        "Change only update_selected_program, the real supplying extractor after a bound native inquiry. Extract supplied USER facts into the existing Turn contract, preserving original question and sourced observations. Do not reinterpret the textbook, repair fixed initial classification/extraction or guru conversation, invent missing ownership, force a target inquiry, or claim a full reading. Improve only actual observed target outputs/rejections and reduce its own repairs. Keep exact user quotes and required field/value types; no extra maps, fences, tools, or changed limits."
     } else {
         SCOPE_HINT
     };
