@@ -1593,6 +1593,62 @@ impl Consultation {
         })
     }
 
+    /// The other contracting party is a view over accepted facts, not another
+    /// observation the model must repeat. A sourced seller in a buy identifies
+    /// that party; title ownership, a helper or a name alone does not.
+    fn deal_party_observation(&self) -> Option<(Field, &Observation<String>)> {
+        if !self.is_deal() {
+            return None;
+        }
+        match self.facts.get(&Field::DealParty) {
+            Some(Slot::Resolved { observation }) => {
+                return Some((Field::DealParty, observation));
+            }
+            None | Some(Slot::Missing) => {}
+            // An unresolved explicit account cannot be bypassed by an alias.
+            Some(_) => return None,
+        }
+        if !matches!(self.method(), Some(Method::MovableDeal | Method::Property))
+            || self.text(Field::DealCapacity) != Some("buy")
+        {
+            return None;
+        }
+        let buyer = self.text(Field::DealActor)?;
+        let Slot::Resolved { observation } = self.facts.get(&Field::Seller)? else {
+            return None;
+        };
+        (!self.same_deal_participant(&observation.value, buyer))
+            .then_some((Field::Seller, observation))
+    }
+
+    fn same_deal_participant(&self, left: &str, right: &str) -> bool {
+        if left == right {
+            return true;
+        }
+        // The reserved querent and the genuine relay principal receive the
+        // same first-house role. Preserve raw IDs; do not count those aliases
+        // as opposite parties in one contract.
+        self.text(Field::PrincipalMode) == Some("relay")
+            && self.text(Field::PrincipalId).is_some_and(|principal| {
+                (left == "querent" && right == principal)
+                    || (right == "querent" && left == principal)
+            })
+    }
+
+    pub fn deal_party(&self) -> Option<&str> {
+        self.deal_party_observation()
+            .map(|(_, observation)| observation.value.as_str())
+    }
+
+    pub fn deal_party_binding(&self) -> Option<DealPartyBinding> {
+        self.deal_party_observation()
+            .map(|(source_field, observation)| DealPartyBinding {
+                person_id: observation.value.clone(),
+                source_field,
+                evidence: observation.evidence.clone(),
+            })
+    }
+
     pub fn needs_title_owner(&self) -> bool {
         self.method()
             .is_some_and(|method| match contract(method).owner {
@@ -1695,6 +1751,38 @@ impl Consultation {
                 "missing",
                 "A relay must identify the person whose own question this is.",
             );
+        }
+        if self.is_deal() {
+            if let Some(slot) = self.facts.get(&Field::DealParty) {
+                if !matches!(slot, Slot::Missing | Slot::Resolved { .. }) {
+                    need(RequirementKey::Field(Field::DealParty), slot.reason(), "The explicitly described other party is unresolved; do not substitute an anonymous party or a seller alias.");
+                }
+            }
+            if matches!(frame.method, Method::MovableDeal | Method::Property)
+                && self.text(Field::DealCapacity) == Some("buy")
+            {
+                if let Some(slot) = self.facts.get(&Field::Seller) {
+                    if !matches!(slot, Slot::Missing | Slot::Resolved { .. }) {
+                        need(RequirementKey::Field(Field::Seller), slot.reason(), "The described seller is unresolved; preserve the conflicting or unavailable source account.");
+                    }
+                }
+                if let (Some(seller), Some(party)) =
+                    (self.text(Field::Seller), self.text(Field::DealParty))
+                {
+                    if !self.same_deal_participant(seller, party) {
+                        need(RequirementKey::Field(Field::DealParty), "conflicting_parties", "The named seller and the named other contracting party differ. Clarify their actual roles before assigning one party's house.");
+                    }
+                }
+                if self.deal_actor().is_some_and(|buyer| {
+                    self.text(Field::Seller)
+                        .is_some_and(|seller| self.same_deal_participant(buyer, seller))
+                        || self
+                            .deal_party()
+                            .is_some_and(|party| self.same_deal_participant(buyer, party))
+                }) {
+                    need(RequirementKey::Field(Field::DealParty), "conflicting_actor_roles", "The buyer and seller have been assigned to the same person. Clarify the actual opposite contracting party.");
+                }
+            }
         }
         for field in [
             Field::PrincipalId,
@@ -1811,6 +1899,7 @@ impl Consultation {
             let satisfied = match &extra.key {
                 RequirementKey::Field(field) => {
                     self.text(*field).is_some()
+                        || (*field == Field::DealParty && self.deal_party().is_some())
                         || (*field == Field::ReaderPlace && self.device_reader_place)
                 }
                 RequirementKey::Owner => self
@@ -1883,6 +1972,15 @@ pub struct Binding {
     pub input_sha256: String,
 }
 
+/// A canonical participant retains the field and evidence that established
+/// them. This never writes an inferred DealParty observation into the case.
+#[derive(Clone, Debug, Serialize)]
+pub struct DealPartyBinding {
+    pub person_id: String,
+    pub source_field: Field,
+    pub evidence: Evidence,
+}
+
 /// There is no Deserialize or public constructor for this permit. Every handoff
 /// is re-evaluated against the catalogue and frozen before a worker receives it.
 #[derive(Clone, Serialize)]
@@ -1892,6 +1990,8 @@ pub struct ReadyReading {
     subject: Subject,
     people: BTreeMap<String, Person>,
     inputs: BTreeMap<Field, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canonical_deal_party: Option<DealPartyBinding>,
     method: &'static Contract,
 }
 impl ReadyReading {
@@ -1940,7 +2040,12 @@ impl ReadyReading {
             })
             .map(|(id, person)| (id.clone(), person.clone()))
             .collect();
-        let hash = crate::horary_lessons::digest(&json!({"version":VERSION,"question":question,"frame":frame,"subject":subject,"people":people,"inputs":inputs,"anchor":anchor}).to_string());
+        let canonical_deal_party = case.deal_party_binding();
+        let mut bound = json!({"version":VERSION,"question":question,"frame":frame,"subject":subject,"people":people,"inputs":inputs,"anchor":anchor});
+        if let Some(party) = &canonical_deal_party {
+            bound["canonical_deal_party"] = json!(party);
+        }
+        let hash = crate::horary_lessons::digest(&bound.to_string());
         Ok(Self {
             binding: Binding {
                 catalogue_version: VERSION.into(),
@@ -1953,6 +2058,7 @@ impl ReadyReading {
             subject,
             people,
             inputs,
+            canonical_deal_party,
             method: contract(frame.method),
         })
     }

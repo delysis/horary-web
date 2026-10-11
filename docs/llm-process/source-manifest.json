@@ -119,7 +119,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "63fce37d01653d2cfd3092568aca1adaa5eec9b7a49ae547cfdc46bf046dcf09"
+      "sha256": "2e5bd63a76728e132711ea802aaf841386e9ad01ae03c030f82592a984a18f01"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "41821361e592bf8550190b9d2909049522dc626a64dd29d21a21a3c1fb6507c0"
+      "sha256": "36197b4ec4a5ba8a9b16b927355810c37dc8d5741e7c9e4b598407d83cd01eb2"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
@@ -283,15 +283,15 @@
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
-      "sha256": "746d98b33ab846046a4e5086740a29380626f546571f1d26137ffd1fcdfc42de"
+      "sha256": "59b538c4eb712241836640d895c896f240db37700ad7618d9d783f7aa39e85a4"
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "b164b0e4e8b664351b25a4461c5617c6ab98dc875d45ef06cc81037a704f4d4a"
+      "sha256": "516201a128d97875fe60a46f324a24a7aa320b6f689cbfd9721b661e6ba85eaf"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
-      "sha256": "84dc40d50454287733ddb671c49b5dc6da200866cf5ce45b4966b3fe2d370b94"
+      "sha256": "18cf1e859a52298fdd13b12760b6df19284dcaca7e65e9191204038ddcca395a"
     },
     {
       "path": "src-tauri/src/reading_eval.rs",
@@ -399,7 +399,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "621589d2bdf0fcb68504a9c8311aa94cd233a781d15a628d92e7d1e3afe40f0a"
+      "sha256": "00356ae5b4a77d2868e8e9288c39c15188e481d6a1328dd98dae639dacf1158f"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -411,7 +411,7 @@
     },
     {
       "path": "tools/horary-gepa/src/corpus.rs",
-      "sha256": "4781c768a3c370855aef6350bd13105c0e555f7008fb56e92b0fa88a3707cc8d"
+      "sha256": "bd7f13e924b357f03bc993c714bc98b747549a5dba3c84f699d24deda8ca5d93"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",

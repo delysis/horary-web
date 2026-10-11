@@ -449,7 +449,13 @@ fn grade_input_state(
     }
     let facts_start = mismatches.len();
     for fact in &case.expected.facts {
-        let actual = consultation.and_then(|c| c.text(fact.field));
+        let actual = consultation.and_then(|c| {
+            if fact.field == Field::DealParty {
+                c.deal_party()
+            } else {
+                c.text(fact.field)
+            }
+        });
         let actor_field = matches!(
             fact.field,
             Field::PrincipalId | Field::Seller | Field::DealParty
@@ -505,7 +511,13 @@ fn grade_input_state(
         let RequirementKey::Field(field) = need else {
             continue;
         };
-        if let Some(value) = consultation.and_then(|c| c.text(*field)) {
+        if let Some(value) = consultation.and_then(|c| {
+            if *field == Field::DealParty {
+                c.deal_party()
+            } else {
+                c.text(*field)
+            }
+        }) {
             mismatches.push(format!(
                 "Genuinely missing {} must remain unresolved; actual resolved {value:?}",
                 field.name()
@@ -710,6 +722,7 @@ fn grade_input_state(
         actual: json!({"frame":frame,"question":session.question,"needs":needs,
             "requested":requested,"ready":ready,"plan":plan,"chart":session.chart,
             "reader_place":session.place,"anchor":anchor,"consultation":consultation,
+            "canonical_deal_party":consultation.and_then(|c| c.deal_party_binding()),
             "reply":reply,"conversation_reply_observed":!reply.trim().is_empty(),
             "input_handoff_boundary":input_handoff,"input_handoff_binding":input_binding,
             "native_result":session.method.result}),
@@ -3077,6 +3090,90 @@ fn actor_fact_grade_resolves_the_participant_instead_of_matching_id_spelling() {
         .mismatches
         .iter()
         .any(|m| m.starts_with("Resolved seller")));
+}
+
+#[test]
+fn initial_counterparty_grade_uses_the_same_sourced_view_as_role_compilation() {
+    use reading_contracts::{Evidence, Frame, Intent, Slot, Update, UpdateMode};
+    let case = catalogue()
+        .unwrap()
+        .into_iter()
+        .find(|case| case.id == "deal10-movable-explicit-buy-relative")
+        .unwrap();
+    let mut patch = reading_contracts::control(Intent::Read);
+    patch.question = Some(case.words.clone());
+    patch.frame = Some(Frame {
+        method: Method::MovableDeal,
+        facet: reading_contracts::Facet::Situation,
+    });
+    patch.people.push(crate::horary_role_options::Person {
+        id: "p1".into(),
+        label: "Vivian".into(),
+        relationship: "sibling".into(),
+        source_quote: "my sister Vivian".into(),
+    });
+    patch.subject = Some(crate::horary_role_options::Subject {
+        name: "used cello".into(),
+        kind: "movable".into(),
+        owner_id: "p1".into(),
+        source_quote: "Vivian owns the cello".into(),
+    });
+    patch.updates = [
+        (Field::DealCapacity, "buy", "buying a used cello"),
+        (Field::DealActor, "querent", "I am considering buying"),
+        (
+            Field::Seller,
+            "p1",
+            "Vivian owns the cello and is the seller",
+        ),
+    ]
+    .into_iter()
+    .map(|(field, value, quote)| Update {
+        field,
+        value: value.into(),
+        quote: quote.into(),
+        mode: UpdateMode::Supply,
+    })
+    .collect();
+    let mut native = reading_contracts::Consultation::default();
+    native.apply(&patch, 1, &case.words, false).unwrap();
+    let before = serde_json::to_value(&native).unwrap();
+    let mut session = Session {
+        question: case.words.clone(),
+        ..Default::default()
+    };
+    session.method.consultation = Some(native);
+    let graded = grade_initial_extractor(&case, &session);
+    assert!(graded.semantic_pass, "{:?}", graded.mismatches);
+    assert_eq!(graded.actual["canonical_deal_party"]["person_id"], "p1");
+    assert_eq!(
+        graded.actual["canonical_deal_party"]["source_field"],
+        "seller"
+    );
+    assert_eq!(
+        graded.actual["canonical_deal_party"]["evidence"]["quote"],
+        "Vivian owns the cello and is the seller"
+    );
+    let native = session.method.consultation.as_mut().unwrap();
+    assert_eq!(serde_json::to_value(&*native).unwrap(), before);
+    assert_eq!(native.text(Field::DealParty), None);
+    native.facts.insert(
+        Field::DealParty,
+        Slot::Unavailable {
+            reason: "That party is not established".into(),
+            evidence: Evidence::User {
+                turn: 2,
+                quote: "That party is not established".into(),
+            },
+        },
+    );
+    let rejected = grade_initial_extractor(&case, &session);
+    assert!(!rejected.semantic_pass);
+    assert!(rejected
+        .mismatches
+        .iter()
+        .any(|m| m.starts_with("Resolved deal_party")));
+    assert!(rejected.actual["canonical_deal_party"].is_null());
 }
 
 #[test]

@@ -1107,6 +1107,326 @@ fn named_counterparty_retains_its_specific_house_in_pure_completion() {
         .any(|choice| choice.id == "mother.self" && choice.house == Some(10)));
 }
 
+fn buying_from_sibling() -> Consultation {
+    let words = "I am considering buying a used cello for myself from my sister Vivian. Vivian owns the cello and is the seller. Is the cello sound enough to be a good purchase? This is my own question, asked here now.";
+    let mut patch = control(Intent::Read);
+    patch.question = Some(words.into());
+    patch.frame = Some(Frame {
+        method: Method::MovableDeal,
+        facet: Facet::Situation,
+    });
+    patch.people.push(Person {
+        id: "vivian".into(),
+        label: "Vivian".into(),
+        relationship: "sibling".into(),
+        source_quote: "my sister Vivian".into(),
+    });
+    patch.subject = Some(Subject {
+        name: "used cello".into(),
+        kind: "movable".into(),
+        owner_id: "vivian".into(),
+        source_quote: "Vivian owns the cello".into(),
+    });
+    patch.updates = [
+        (Field::DealCapacity, "buy", "buying a used cello"),
+        (Field::DealActor, "querent", "I am considering buying"),
+        (
+            Field::Seller,
+            "vivian",
+            "Vivian owns the cello and is the seller",
+        ),
+    ]
+    .into_iter()
+    .map(|(field, value, quote)| Update {
+        field,
+        value: value.into(),
+        quote: quote.into(),
+        mode: UpdateMode::Supply,
+    })
+    .collect();
+    let mut purchase = Consultation::default();
+    purchase.apply(&patch, 1, words, false).unwrap();
+    purchase
+}
+
+#[test]
+fn known_buy_seller_supplies_one_counterparty_with_original_provenance() {
+    let purchase = buying_from_sibling();
+    let before = serde_json::to_value(&purchase).unwrap();
+    assert_eq!(purchase.deal_party(), Some("vivian"));
+    assert_eq!(purchase.text(Field::DealParty), None, "Raw fields stay raw");
+    let roles = options(&purchase);
+    assert_eq!(
+        roles
+            .choices
+            .iter()
+            .filter(|role| role.id == "vivian.self")
+            .count(),
+        1
+    );
+    assert!(roles
+        .choices
+        .iter()
+        .any(|role| role.id == "vivian.self" && role.house == Some(3)));
+    assert!(!roles
+        .choices
+        .iter()
+        .any(|role| role.id == "deal.counterparty"));
+    assert_eq!(primary(&purchase), Some(2));
+    let ready = ReadyReading::prepare(&purchase, regression_anchor()).unwrap();
+    let witness = &ready.input()["canonical_deal_party"];
+    assert_eq!(witness["person_id"], "vivian");
+    assert_eq!(witness["source_field"], "seller");
+    assert_eq!(
+        witness["evidence"]["quote"],
+        "Vivian owns the cello and is the seller"
+    );
+    assert_eq!(ready.inputs[&Field::Seller], "vivian");
+    assert!(!ready.inputs.contains_key(&Field::DealParty));
+    assert_eq!(ready.subject.owner_id, "vivian");
+    assert_eq!(serde_json::to_value(&purchase).unwrap(), before);
+
+    let mut explicit = purchase.clone();
+    explicit
+        .facts
+        .insert(Field::DealParty, resolved("vivian".into()));
+    assert_eq!(
+        serde_json::to_value(options(&explicit)).unwrap(),
+        serde_json::to_value(roles).unwrap()
+    );
+    assert_eq!(
+        explicit.deal_party_binding().unwrap().source_field,
+        Field::DealParty
+    );
+    assert!(
+        ready.validate_current(&explicit).is_err(),
+        "A changed participant source must invalidate the old handoff"
+    );
+}
+
+#[test]
+fn known_buy_seller_completes_parties_without_fabricating_title_or_reasking() {
+    for method in [Method::MovableDeal, Method::Property] {
+        let mut purchase = buying_from_sibling();
+        purchase.frame = resolved(Frame {
+            method,
+            facet: Facet::Event,
+        });
+        let Slot::Resolved { observation } = &mut purchase.subject else {
+            panic!("fixture subject")
+        };
+        observation.value.owner_id.clear();
+        purchase.require_information(
+            RequirementKey::Field(Field::DealParty),
+            "Who is the other party?".into(),
+        );
+        let ready = ReadyReading::prepare(&purchase, regression_anchor()).unwrap();
+        assert!(ready.subject.owner_id.is_empty());
+        let roles = options(&purchase);
+        assert!(roles
+            .choices
+            .iter()
+            .any(|role| role.id == "vivian.self" && role.house == Some(3)));
+        assert!(!roles
+            .choices
+            .iter()
+            .any(|role| role.id == "deal.counterparty" || role.id.starts_with("subject.")));
+    }
+}
+
+#[test]
+fn seller_counterparty_alias_never_comes_from_title_a_sale_or_unresolved_buyer() {
+    let mut purchase = buying_from_sibling();
+    purchase.facts.remove(&Field::Seller);
+    assert_eq!(
+        purchase.deal_party(),
+        None,
+        "Title owner is not necessarily the seller"
+    );
+    assert!(options(&purchase)
+        .choices
+        .iter()
+        .any(|role| role.id == "deal.counterparty"));
+    purchase = buying_from_sibling();
+    purchase
+        .facts
+        .insert(Field::DealCapacity, resolved("sell".into()));
+    purchase
+        .facts
+        .insert(Field::DealActor, resolved("vivian".into()));
+    assert_eq!(
+        purchase.deal_party(),
+        None,
+        "A seller does not identify the buyer"
+    );
+    assert!(options(&purchase)
+        .choices
+        .iter()
+        .any(|role| role.id == "deal.counterparty" && role.house == Some(9)));
+    purchase = buying_from_sibling();
+    purchase.facts.remove(&Field::DealActor);
+    assert_eq!(purchase.deal_party(), None);
+    assert!(ReadyReading::prepare(&purchase, regression_anchor()).is_err());
+}
+
+#[test]
+fn seller_counterparty_alias_never_bypasses_unsettled_facts() {
+    let observation = Observation {
+        value: "vivian".into(),
+        evidence: Evidence::User {
+            turn: 1,
+            quote: "my sister Vivian".into(),
+        },
+    };
+    for field in [Field::DealParty, Field::Seller] {
+        for unresolved in [
+            Slot::Proposed {
+                observation: observation.clone(),
+            },
+            Slot::Conflicting {
+                observations: vec![
+                    observation.clone(),
+                    Observation {
+                        value: "querent".into(),
+                        evidence: Evidence::User {
+                            turn: 2,
+                            quote: "I am the seller".into(),
+                        },
+                    },
+                ],
+            },
+            Slot::Unavailable {
+                reason: "I don't know".into(),
+                evidence: Evidence::User {
+                    turn: 2,
+                    quote: "I don't know".into(),
+                },
+            },
+        ] {
+            let mut purchase = buying_from_sibling();
+            purchase.facts.insert(field, unresolved);
+            assert_eq!(purchase.deal_party(), None);
+            assert!(purchase
+                .plan(Some(&regression_anchor()))
+                .needs
+                .iter()
+                .any(|need| need.key == RequirementKey::Field(field)));
+            assert!(ReadyReading::prepare(&purchase, regression_anchor()).is_err());
+            assert!(!options(&purchase)
+                .choices
+                .iter()
+                .any(|role| role.id == "deal.counterparty"));
+        }
+    }
+}
+
+#[test]
+fn seller_counterparty_contradictions_require_clarification() {
+    let mut purchase = buying_from_sibling();
+    purchase
+        .facts
+        .insert(Field::DealParty, resolved("querent".into()));
+    assert_eq!(
+        purchase.deal_party(),
+        Some("querent"),
+        "The explicit account is preserved, never replaced by the seller alias"
+    );
+    assert!(purchase
+        .plan(Some(&regression_anchor()))
+        .needs
+        .iter()
+        .any(|need| need.key == RequirementKey::Field(Field::DealParty)
+            && need.state == "conflicting_parties"));
+    assert!(ReadyReading::prepare(&purchase, regression_anchor()).is_err());
+    purchase.facts.remove(&Field::DealParty);
+    purchase
+        .facts
+        .insert(Field::Seller, resolved("querent".into()));
+    assert_eq!(purchase.deal_party(), None);
+    assert!(purchase
+        .plan(Some(&regression_anchor()))
+        .needs
+        .iter()
+        .any(|need| need.state == "conflicting_actor_roles"));
+    assert!(ReadyReading::prepare(&purchase, regression_anchor()).is_err());
+    purchase = buying_from_sibling();
+    purchase.facts.remove(&Field::Seller);
+    purchase
+        .facts
+        .insert(Field::DealParty, resolved("querent".into()));
+    assert_eq!(purchase.deal_party(), Some("querent"));
+    assert!(purchase
+        .plan(Some(&regression_anchor()))
+        .needs
+        .iter()
+        .any(|need| need.state == "conflicting_actor_roles"));
+    assert!(ReadyReading::prepare(&purchase, regression_anchor()).is_err());
+}
+
+#[test]
+fn relay_principal_alias_is_one_contracting_party_not_both_sides() {
+    for explicit in [false, true] {
+        let mut purchase = buying_from_sibling();
+        purchase
+            .facts
+            .insert(Field::PrincipalMode, resolved("relay".into()));
+        purchase
+            .facts
+            .insert(Field::PrincipalId, resolved("vivian".into()));
+        purchase
+            .facts
+            .insert(Field::DealActor, resolved("vivian".into()));
+        if explicit {
+            purchase.facts.remove(&Field::Seller);
+            purchase
+                .facts
+                .insert(Field::DealParty, resolved("querent".into()));
+        } else {
+            purchase
+                .facts
+                .insert(Field::Seller, resolved("querent".into()));
+            assert_eq!(purchase.deal_party(), None);
+        }
+        assert!(purchase
+            .plan(Some(&regression_anchor()))
+            .needs
+            .iter()
+            .any(|need| need.state == "conflicting_actor_roles"));
+        assert!(ReadyReading::prepare(&purchase, regression_anchor()).is_err());
+    }
+    let mut purchase = buying_from_sibling();
+    purchase.people.insert(
+        "noor".into(),
+        Person {
+            id: "noor".into(),
+            label: "Noor".into(),
+            relationship: "friend".into(),
+            source_quote: "my friend Noor".into(),
+        },
+    );
+    purchase
+        .facts
+        .insert(Field::PrincipalMode, resolved("relay".into()));
+    purchase
+        .facts
+        .insert(Field::PrincipalId, resolved("vivian".into()));
+    purchase
+        .facts
+        .insert(Field::DealActor, resolved("noor".into()));
+    purchase
+        .facts
+        .insert(Field::Seller, resolved("querent".into()));
+    purchase
+        .facts
+        .insert(Field::DealParty, resolved("vivian".into()));
+    assert!(!purchase
+        .plan(Some(&regression_anchor()))
+        .needs
+        .iter()
+        .any(|need| need.state == "conflicting_parties"));
+    ReadyReading::prepare(&purchase, regression_anchor()).unwrap();
+}
+
 #[test]
 fn catalogue_upgrade_preserves_sources_and_reopens_ambiguous_legacy_deal_records() {
     let mut deal = case(Method::Property, "querent");

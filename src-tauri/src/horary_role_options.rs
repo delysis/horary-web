@@ -825,7 +825,7 @@ pub fn build_for(
                 ) && (Some(p.id.as_str()) == case.deal_actor()
                     || Some(p.id.as_str()) == case.text(Field::DealBeneficiary)
                     || Some(p.id.as_str()) == case.text(Field::Seller)
-                    || Some(p.id.as_str()) == case.text(Field::DealParty)))
+                    || Some(p.id.as_str()) == case.deal_party()))
                 || (method == Some(Method::Money)
                     && Some(p.id.as_str()) == case.text(Field::Sender))
         })
@@ -1124,12 +1124,20 @@ pub fn build_for(
         }
     };
     let actor_house = participant_house(actor);
+    let party_issue = case.plan(None).needs.into_iter().find(|need| {
+        matches!(
+            need.key,
+            crate::reading_contracts::RequirementKey::Field(Field::DealParty | Field::Seller)
+        )
+    });
     if matches!(
         method,
         Some(Method::MovableDeal | Method::Property | Method::Rental)
-    ) && case.text(Field::DealParty).is_none()
+    ) && case.deal_party().is_none()
     {
-        if let Some(actor_house) = actor_house {
+        if let Some(issue) = party_issue {
+            options.missing.push(issue.reason);
+        } else if let Some(actor_house) = actor_house {
             let house = turn(actor_house, 7);
             options.choices.push(Choice {
                 id: "deal.counterparty".into(),
@@ -1154,7 +1162,7 @@ pub fn build_for(
             .resolved()
             .is_some_and(|frame| frame.facet == crate::reading_contracts::Facet::Profit)
     {
-        let customer_house = match case.text(Field::DealParty) {
+        let customer_house = match case.deal_party() {
             Some(id) if id == "querent" || id == principal => Some(1),
             Some(id) => relevant
                 .iter()
