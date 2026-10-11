@@ -761,8 +761,10 @@ fn pipeline_dimension(
     {
         return Ok(());
     }
-    // The source is the actual utterance and post-apply consultation/output,
-    // not evaluator gold. Book-dependent decisions are graded separately.
+    // The source is the actual utterance and native consultation/output,
+    // not evaluator gold. Rejected attempts can demonstrate partial or failed
+    // extraction, but cannot establish complete extraction by themselves.
+    // Book-dependent decisions are graded separately.
     let words = packet.sources.iter().any(|source| {
         matches!(
             source.file.as_str(),
@@ -789,6 +791,28 @@ fn pipeline_dimension(
                 "native-first-turn.json" | "native-final.json"
             ) && e.json_pointer == "/session/method/consultation"
                 && actual.is_some_and(Value::is_object)
+                || matches!(
+                    e.file.as_str(),
+                    "native-first-turn.json" | "native-final.json"
+                ) && e.json_pointer == "/session/method/records"
+                    && value.score.is_some_and(|score| score < 2)
+                    && actual.and_then(Value::as_array).is_some_and(|records| {
+                        records.iter().any(|record| {
+                            let input = &record["input"];
+                            let phase = input["recognition_phase"]
+                                .as_str()
+                                .or_else(|| input["original_input"]["recognition_phase"].as_str());
+                            record["stage"] == "intake"
+                                && matches!(
+                                    phase,
+                                    Some("complete_selected_program" | "update_selected_program")
+                                )
+                                && record["raw"].as_str().is_some_and(|raw| {
+                                    !raw.trim().is_empty()
+                                        && record["generation"]["content"].as_str() == Some(raw)
+                                })
+                        })
+                    })
                 || e.file.starts_with("permit-") && native_witness(packet, e)
                 || e.file.starts_with("calls/") && e.file.ends_with("-result.json"))
     });
@@ -1419,6 +1443,132 @@ mod tests {
                 "{field}"
             );
         }
+    }
+
+    fn packet_with_extraction_records(records: Value) -> Packet {
+        let old = packet_for_review();
+        let mut packet = Packet::new();
+        for source in &old.sources {
+            let mut value = source.value.clone();
+            let mut pointers = old
+                .refs
+                .values()
+                .filter(|e| e.file == source.file)
+                .map(|e| e.json_pointer.as_str())
+                .collect::<Vec<_>>();
+            if source.file == "native-final.json" {
+                value["session"]["method"] = json!({"records": records});
+                pointers.push("/session/method/records");
+            }
+            packet
+                .source(&source.file, serde_json::to_vec(&value).unwrap(), &pointers)
+                .unwrap();
+        }
+        for evidence in packet.refs.values_mut() {
+            evidence.case_id = "synthetic".into();
+        }
+        packet.context = old.context;
+        packet
+    }
+
+    fn extraction_record() -> Value {
+        json!({"stage":"intake", "input":{"recognition_phase":"complete_selected_program"},
+            "raw":"A rejected extraction proposal", "generation":{"content":"A rejected extraction proposal"},
+            "validationError":"The ownership quote is insufficient"})
+    }
+
+    fn extraction_records_dimension(packet: &Packet, score: u8) -> Dimension {
+        let witness = packet
+            .refs
+            .values()
+            .find(|e| e.file == "native-final.json" && e.json_pointer == "/session/method/records")
+            .unwrap();
+        serde_json::from_value(json!({"state":"scored", "score":score,
+            "reason":"The observed extractor proposed information but native validation rejected it",
+            "evidence":[witness]})).unwrap()
+    }
+
+    #[test]
+    fn rejected_extraction_records_support_failed_or_partial_but_not_complete_extraction() {
+        for phase in ["complete_selected_program", "update_selected_program"] {
+            for repair in [false, true] {
+                let mut record = extraction_record();
+                record["input"] = if repair {
+                    json!({"original_input":{"recognition_phase":phase}, "validation_error":"Insufficient quote"})
+                } else {
+                    json!({"recognition_phase":phase})
+                };
+                let packet = packet_with_extraction_records(json!([record]));
+                for score in [0, 1] {
+                    pipeline_dimension(
+                        &packet,
+                        "synthetic",
+                        &extraction_records_dimension(&packet, score),
+                        false,
+                        PipelineSourcePolicy::LinguisticExtraction,
+                    )
+                    .unwrap();
+                }
+                assert!(pipeline_dimension(
+                    &packet,
+                    "synthetic",
+                    &extraction_records_dimension(&packet, 2),
+                    false,
+                    PipelineSourcePolicy::LinguisticExtraction
+                )
+                .unwrap_err()
+                .contains("observed native"));
+            }
+        }
+    }
+
+    #[test]
+    fn extraction_records_require_a_real_matching_extractor_generation() {
+        let record = extraction_record();
+        let mut classifier = record.clone();
+        classifier["input"]["recognition_phase"] = json!("classify_question");
+        let mut other_stage = record.clone();
+        other_stage["stage"] = json!("condition");
+        let mut no_phase = record.clone();
+        no_phase["input"] = json!({});
+        let mut no_raw = record.clone();
+        no_raw["raw"] = Value::Null;
+        let mut empty = record.clone();
+        empty["raw"] = json!("  ");
+        empty["generation"]["content"] = json!("  ");
+        let mut mismatch = record;
+        mismatch["generation"]["content"] = json!("Different output");
+        for records in [
+            json!([]),
+            Value::Null,
+            json!([classifier]),
+            json!([other_stage]),
+            json!([no_phase]),
+            json!([no_raw]),
+            json!([empty]),
+            json!([mismatch]),
+        ] {
+            let packet = packet_with_extraction_records(records);
+            assert!(pipeline_dimension(
+                &packet,
+                "synthetic",
+                &extraction_records_dimension(&packet, 1),
+                false,
+                PipelineSourcePolicy::LinguisticExtraction
+            )
+            .is_err());
+        }
+        let packet = packet_with_extraction_records(json!([extraction_record()]));
+        let mut dimension = extraction_records_dimension(&packet, 1);
+        dimension.evidence[0].sha256 = digest("Unrelated output");
+        assert!(pipeline_dimension(
+            &packet,
+            "synthetic",
+            &dimension,
+            false,
+            PipelineSourcePolicy::LinguisticExtraction
+        )
+        .is_err());
     }
 
     #[test]

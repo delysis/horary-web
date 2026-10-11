@@ -22,6 +22,8 @@ use std::{
 };
 
 pub const VERSION: &str = "horary-complete-journey-verification-2026-10-11.1";
+const SOURCE_POLICY_REVIEW_VERSION: &str =
+    "horary-complete-journey-review-source-policy-2026-10-11.2";
 const PASSAGES: &str = "src-tauri/src/horary_prompts/passages.json";
 
 /// Complete readings need their method and invoked generic rules together.
@@ -1173,8 +1175,10 @@ fn verify_prefix(plan: &PairPlan) -> Result<PaidPrefix> {
 fn successful_paid_source(root: &Path, owner: &Pin) -> Result<(PairPlan, Value)> {
     owner.verify()?;
     let owner_value = load(&owner.file)?;
-    if owner_value["version"] != "horary-direct-tool-review-closure-v1"
-        || owner_value["state"] != json!(root)
+    if !matches!(
+        owner_value["version"].as_str(),
+        Some("horary-direct-tool-review-closure-v1" | OWNED_FIRST_REVIEW_CLOSURE)
+    ) || owner_value["state"] != json!(root)
         || owner_value["exit_code"] != 1
         || owner_value["predecessor_run_lock_must_be_exclusively_acquired"] != true
         || owner_value["provider_resubmission_authorized"] != false
@@ -1211,11 +1215,16 @@ fn successful_paid_source(root: &Path, owner: &Pin) -> Result<(PairPlan, Value)>
             ));
         }
     }
-    if owner_value["owner_pid_observed"] != false
-        || owner_value["tool_session_id"]
-            .as_u64()
-            .is_none_or(|id| id == 0)
+    if owner_value["tool_session_id"]
+        .as_u64()
+        .is_none_or(|id| id == 0)
         || owner_value["recorded_child_pid"].as_u64() != Some(u64::from(pid))
+    {
+        return Err("Paid closure changed its recorded child/session".into());
+    }
+    if owner_value["version"] == OWNED_FIRST_REVIEW_CLOSURE {
+        verify_outer_first_review_owner(root, &source, &owner_value, pid)?;
+    } else if owner_value["owner_pid_observed"] != false
         || owner_value.get("owner_pid").is_some()
         || owner_value.get("children").is_some()
     {
@@ -1249,6 +1258,89 @@ fn successful_paid_source(root: &Path, owner: &Pin) -> Result<(PairPlan, Value)>
     }
     let _ = load(&operation.join("answer.json"))?;
     Ok((source, request["request"].clone()))
+}
+
+const OWNED_FIRST_REVIEW_CLOSURE: &str = "horary-owned-first-complete-review-validation-closure-v1";
+
+fn verify_outer_first_review_owner(
+    root: &Path,
+    source: &PairPlan,
+    closure: &Value,
+    paid_pid: u32,
+) -> Result<()> {
+    let outer = Path::new(
+        closure["outer_state"]
+            .as_str()
+            .ok_or("Owned first-review closure lacks its outer pair state")?,
+    );
+    if !outer.is_absolute() || root.parent() != Some(outer) || closure["owner_pid_observed"] != true
+    {
+        return Err("Owned first-review closure must retain its actual enclosing pair".into());
+    }
+    for file in [
+        "experiment-plan.json",
+        "run-once.mjs",
+        "queue-started.json",
+        "owner-observed.json",
+        "owner-exit.json",
+        "source-review.child.json",
+        "source-review.exit.json",
+    ] {
+        let hash = closure["files"]
+            .get(file)
+            .and_then(Value::as_str)
+            .ok_or("Owned first-review closure omits an outer ancestry hash")?;
+        crate::verify(&controls::ordinary(outer, file)?, hash)?;
+    }
+    let pid = |field: &str| {
+        closure[field]
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .filter(|n| *n > 1)
+            .ok_or_else(|| format!("Owned first-review closure lacks a valid {field}"))
+    };
+    let owner_pid = pid("owner_pid")?;
+    let controller_pid = pid("controller_pid")?;
+    if owner_pid == controller_pid || [owner_pid, controller_pid].contains(&paid_pid) {
+        return Err("Owned first-review process identities must remain distinct".into());
+    }
+    controls::absent(owner_pid)?;
+    controls::absent(controller_pid)?;
+    let plan_hash = digest(read(&outer.join("experiment-plan.json"))?);
+    let experiment = load(&outer.join("experiment-plan.json"))?;
+    let queued = load(&outer.join("queue-started.json"))?;
+    let observed = load(&outer.join("owner-observed.json"))?;
+    let exited = load(&outer.join("owner-exit.json"))?;
+    let child = load(&outer.join("source-review.child.json"))?;
+    let child_exit = load(&outer.join("source-review.exit.json"))?;
+    if queued["pid"] != owner_pid
+        || observed["pid"] != owner_pid
+        || exited["pid"] != owner_pid
+        || child["owner_pid"] != owner_pid
+        || child["pid"] != controller_pid
+        || child_exit["pid"] != controller_pid
+        || queued["plan_sha256"] != plan_hash
+        || observed["plan_sha256"] != plan_hash
+        || exited["plan_sha256"] != plan_hash
+        || queued["paid_bounds"] != experiment["bounds"]
+        || experiment["bounds"]["new_independent_review_calls"] != source.max_review_calls
+        || experiment["cases"] != json!(source.cases.iter().map(|c| &c.id).collect::<Vec<_>>())
+        || experiment["helper"] != json!(source.controller)
+        || child["executable"] != json!(source.controller)
+        || child["args"] != json!(["verify-complete-journey", "--state", root])
+        || child["credentials"] != "absent"
+        || observed["wrapper"] != format!("file://{}", outer.join("run-once.mjs").display())
+        || exited["code"] != 1
+        || exited["last_step"] != "source-review"
+        || child_exit["code"] != 1
+        || !child_exit.get("signal").is_some_and(Value::is_null)
+        || [&queued, &observed, &exited, &child, &child_exit]
+            .iter()
+            .any(|v| v["automatic_resubmission"] != false)
+    {
+        return Err("Owned first-review outer owner/helper/plan/exit ancestry changed".into());
+    }
+    Ok(())
 }
 
 fn verify_continuation(plan: &PairPlan) -> Result<PaidContinuation> {
@@ -1315,7 +1407,7 @@ pub fn prepare_continuation(
     let observed = observation(&plan.baseline, &case.id, &captured)?;
     let packet = packet(&plan, &plan.baseline, case, &captured, &observed)?;
     let (schema, prompt, reconstructed) =
-        legacy_review_contract(&plan, "baseline", case, &packet, &observed);
+        recorded_review_contract(&plan, "baseline", case, &packet, &observed, &request)?;
     let operation = source.join("operations/00000");
     let prepared = load(&operation.join("prepared.json"))?;
     if prepared["executable"] != json!(plan.codex)
@@ -1426,7 +1518,7 @@ pub fn prepare_prefix_continuation(
         let observed = observation(side, &case.id, &captured)?;
         let packet = packet(&plan, side, case, &captured, &observed)?;
         let (schema, prompt, request) =
-            legacy_review_contract(&plan, name, case, &packet, &observed);
+            recorded_review_contract(&plan, name, case, &packet, &observed, &original["request"])?;
         if original["kind"] != "codex_complete_journey_review"
             || original["sequence"] != sequence
             || original["plan_sha256"] != digest(read(&source.join("plan.json"))?)
@@ -1770,9 +1862,32 @@ fn review_contract(
         legacy_review_contract(plan, side_name, case, packet, observed);
     let prompt = prompt.replace("cite actual native outputs and the textbook for every scored pipeline dimension.",
         "For scored classification, elicitation and interpretation cite actual native outputs and the textbook. Linguistic extraction requires actual user words and native consultation/output provenance; textbook citation is optional for copying/normalization. Horary rules and every observed source obligation still require textbook plus native witnesses.");
-    request["version"] = json!("horary-complete-journey-review-source-policy-2026-10-11.2");
+    request["version"] = json!(SOURCE_POLICY_REVIEW_VERSION);
     request["prompt_sha256"] = json!(digest(&prompt));
     (schema, prompt, request)
+}
+
+fn recorded_review_contract(
+    plan: &PairPlan,
+    side_name: &str,
+    case: &Case,
+    packet: &Packet,
+    observed: &Value,
+    recorded: &Value,
+) -> Result<(Value, String, Value)> {
+    let contract = match recorded["version"].as_str() {
+        Some(VERSION) => legacy_review_contract(plan, side_name, case, packet, observed),
+        Some(SOURCE_POLICY_REVIEW_VERSION) => {
+            review_contract(plan, side_name, case, packet, observed)
+        }
+        _ => return Err("Unknown recorded complete-review protocol; no paid replay".into()),
+    };
+    if contract.2 != *recorded {
+        return Err(
+            "Recorded complete-review request changed under exact source reconstruction".into(),
+        );
+    }
+    Ok(contract)
 }
 
 fn review(
@@ -1783,20 +1898,22 @@ fn review(
     packet: &Packet,
     observed: &Value,
 ) -> Result<Value> {
-    let old_import = if plan.paid_prefix.is_some() {
+    let imported_request = if plan.paid_prefix.is_some() {
         let prefix = verify_prefix(plan)?;
         prefix
             .imports
-            .iter()
-            .any(|i| i.request["side"] == side_name && i.request["case_id"] == case.id)
+            .into_iter()
+            .find(|i| i.request["side"] == side_name && i.request["case_id"] == case.id)
+            .map(|i| i.request)
     } else if plan.continuation.is_some() {
         let receipt = verify_continuation(plan)?;
-        receipt.request["side"] == side_name && receipt.request["case_id"] == case.id
+        (receipt.request["side"] == side_name && receipt.request["case_id"] == case.id)
+            .then_some(receipt.request)
     } else {
-        false
+        None
     };
-    let (schema, prompt, request) = if old_import {
-        legacy_review_contract(plan, side_name, case, packet, observed)
+    let (schema, prompt, request) = if let Some(recorded) = imported_request {
+        recorded_review_contract(plan, side_name, case, packet, observed, &recorded)?
     } else {
         review_contract(plan, side_name, case, packet, observed)
     };
@@ -2749,6 +2866,10 @@ mod tests {
     }
 
     fn stopped_paid_review() -> (Fixture, PairPlan, PathBuf, PathBuf) {
+        stopped_paid_review_with_version(VERSION)
+    }
+
+    fn stopped_paid_review_with_version(version: &str) -> (Fixture, PairPlan, PathBuf, PathBuf) {
         let fixture = Fixture::new();
         let plan = fixture.prepare();
         let state = fixture
@@ -2760,8 +2881,15 @@ mod tests {
         let captured = calls(&plan.baseline, "a").unwrap();
         let observed = observation(&plan.baseline, "a", &captured).unwrap();
         let packet = packet(&plan, &plan.baseline, &plan.cases[0], &captured, &observed).unwrap();
-        let (schema, prompt, request) =
-            legacy_review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed);
+        let (schema, prompt, request) = match version {
+            VERSION => {
+                legacy_review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed)
+            }
+            SOURCE_POLICY_REVIEW_VERSION => {
+                review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed)
+            }
+            _ => panic!("Synthetic fixture requires a known review version"),
+        };
         let mut journal = Journal::open_verification(&state, &plan, 2).unwrap();
         let Operation::Fresh(operation) = journal.begin_complete_journey_review(&request).unwrap()
         else {
@@ -2818,6 +2946,71 @@ mod tests {
                 "raw_answer_sha256":digest(read(&operation.join("answer.json")).unwrap()),"submitted_sha256":digest(read(&operation.join("submitted.json")).unwrap()),
                 "validation_failure_sha256":digest(read(&operation.join("validation-failure.json")).unwrap())}),
         );
+        (fixture, plan, state, owner)
+    }
+
+    fn stopped_outer_owned_first_review() -> (Fixture, PairPlan, PathBuf, PathBuf) {
+        let (fixture, plan, state, direct_owner) =
+            stopped_paid_review_with_version(SOURCE_POLICY_REVIEW_VERSION);
+        let outer = fixture.source.path().canonicalize().unwrap();
+        let mut pids = Vec::new();
+        for _ in 0..2 {
+            let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+            pids.push(child.id());
+            child.wait().unwrap();
+        }
+        let bounds = json!({"new_independent_review_calls":plan.max_review_calls});
+        write(
+            &outer.join("experiment-plan.json"),
+            &json!({"helper":plan.controller,"cases":plan.cases.iter().map(|c| &c.id).collect::<Vec<_>>(),"bounds":bounds}),
+        );
+        fs::write(
+            outer.join("run-once.mjs"),
+            "Synthetic wrapper, never executed",
+        )
+        .unwrap();
+        let plan_hash = digest(read(&outer.join("experiment-plan.json")).unwrap());
+        write(
+            &outer.join("queue-started.json"),
+            &json!({"pid":pids[0],"plan_sha256":plan_hash,"paid_bounds":bounds,"automatic_resubmission":false}),
+        );
+        write(
+            &outer.join("owner-observed.json"),
+            &json!({"pid":pids[0],"plan_sha256":plan_hash,"wrapper":format!("file://{}",outer.join("run-once.mjs").display()),"automatic_resubmission":false}),
+        );
+        write(
+            &outer.join("owner-exit.json"),
+            &json!({"pid":pids[0],"plan_sha256":plan_hash,"code":1,"last_step":"source-review","automatic_resubmission":false}),
+        );
+        write(
+            &outer.join("source-review.child.json"),
+            &json!({"owner_pid":pids[0],"pid":pids[1],"executable":plan.controller,"args":["verify-complete-journey","--state",state],"credentials":"absent","automatic_resubmission":false}),
+        );
+        write(
+            &outer.join("source-review.exit.json"),
+            &json!({"pid":pids[1],"code":1,"signal":null,"automatic_resubmission":false}),
+        );
+        let mut hashes = BTreeMap::new();
+        for file in [
+            "experiment-plan.json",
+            "run-once.mjs",
+            "queue-started.json",
+            "owner-observed.json",
+            "owner-exit.json",
+            "source-review.child.json",
+            "source-review.exit.json",
+        ] {
+            hashes.insert(file, digest(read(&outer.join(file)).unwrap()));
+        }
+        let mut closure = load(&direct_owner).unwrap();
+        closure["version"] = json!(OWNED_FIRST_REVIEW_CLOSURE);
+        closure["outer_state"] = json!(outer);
+        closure["owner_pid_observed"] = json!(true);
+        closure["owner_pid"] = json!(pids[0]);
+        closure["controller_pid"] = json!(pids[1]);
+        closure["files"] = json!(hashes);
+        let owner = outer.join("owned-first-review-closure.json");
+        write(&owner, &closure);
         (fixture, plan, state, owner)
     }
 
@@ -2943,6 +3136,244 @@ mod tests {
         assert_ne!(old_request["version"], new_request["version"]);
         assert_ne!(old_request["prompt_sha256"], new_request["prompt_sha256"]);
         assert_eq!(old_request["context_sha256"], new_request["context_sha256"]);
+    }
+
+    #[test]
+    fn recorded_review_version_reconstructs_exact_legacy_and_current_contracts() {
+        let fixture = Fixture::new();
+        let plan = fixture.prepare();
+        let captured = calls(&plan.baseline, "a").unwrap();
+        let observed = observation(&plan.baseline, "a", &captured).unwrap();
+        let packet = packet(&plan, &plan.baseline, &plan.cases[0], &captured, &observed).unwrap();
+        for original in [
+            legacy_review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed),
+            review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed),
+        ] {
+            assert_eq!(
+                recorded_review_contract(
+                    &plan,
+                    "baseline",
+                    &plan.cases[0],
+                    &packet,
+                    &observed,
+                    &original.2,
+                )
+                .unwrap(),
+                original
+            );
+        }
+    }
+
+    #[test]
+    fn recorded_review_version_refuses_unknown_protocol_and_source_drift() {
+        let fixture = Fixture::new();
+        let plan = fixture.prepare();
+        let captured = calls(&plan.baseline, "a").unwrap();
+        let observed = observation(&plan.baseline, "a", &captured).unwrap();
+        let mut packet =
+            packet(&plan, &plan.baseline, &plan.cases[0], &captured, &observed).unwrap();
+        for (_, _, request) in [
+            legacy_review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed),
+            review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed),
+        ] {
+            for version in [Value::Null, json!("unknown-review-version")] {
+                let mut changed = request.clone();
+                changed["version"] = version;
+                assert!(recorded_review_contract(
+                    &plan,
+                    "baseline",
+                    &plan.cases[0],
+                    &packet,
+                    &observed,
+                    &changed,
+                )
+                .unwrap_err()
+                .contains("Unknown recorded"));
+            }
+            for field in [
+                "side",
+                "case_id",
+                "native_observation_sha256",
+                "context_sha256",
+                "prompt_sha256",
+                "schema_sha256",
+                "codex_sha256",
+            ] {
+                let mut changed = request.clone();
+                changed[field] = json!("changed bound source");
+                assert!(recorded_review_contract(
+                    &plan,
+                    "baseline",
+                    &plan.cases[0],
+                    &packet,
+                    &observed,
+                    &changed,
+                )
+                .unwrap_err()
+                .contains("exact source reconstruction"));
+            }
+            let original_context = packet.context.clone();
+            packet.context["qualification"] = json!("Changed source context");
+            assert!(recorded_review_contract(
+                &plan,
+                "baseline",
+                &plan.cases[0],
+                &packet,
+                &observed,
+                &request,
+            )
+            .is_err());
+            packet.context = original_context;
+            let mut changed_observed = observed.clone();
+            changed_observed["changed_observation"] = json!(true);
+            assert!(recorded_review_contract(
+                &plan,
+                "baseline",
+                &plan.cases[0],
+                &packet,
+                &changed_observed,
+                &request,
+            )
+            .is_err());
+        }
+    }
+
+    #[test]
+    fn paid_continuation_replays_each_exact_recorded_version_without_new_review() {
+        for version in [VERSION, SOURCE_POLICY_REVIEW_VERSION] {
+            let (fixture, _, source, owner) = stopped_paid_review_with_version(version);
+            let original_request = read(&source.join("operations/00000/request.json")).unwrap();
+            let original_prompt = read(&source.join("operations/00000/prompt.txt")).unwrap();
+            let original_answer = read(&source.join("operations/00000/answer.json")).unwrap();
+            let state = fixture.source.path().canonicalize().unwrap().join("replay");
+            let plan =
+                prepare_continuation(&source, &state, &owner, &std::env::current_exe().unwrap())
+                    .unwrap();
+            let saved = load(&state.join("operations/00000/response.json")).unwrap();
+            let captured = calls(&plan.baseline, "a").unwrap();
+            let observed = observation(&plan.baseline, "a", &captured).unwrap();
+            let packet =
+                packet(&plan, &plan.baseline, &plan.cases[0], &captured, &observed).unwrap();
+            let mut journal =
+                Journal::open_verification(&state, &plan, plan.max_review_calls).unwrap();
+            assert_eq!(
+                review(
+                    &plan,
+                    &mut journal,
+                    "baseline",
+                    &plan.cases[0],
+                    &packet,
+                    &observed
+                )
+                .unwrap(),
+                saved
+            );
+            assert_eq!(
+                load(&state.join("operations/00000/request.json")).unwrap()["request"],
+                load(&source.join("operations/00000/request.json")).unwrap()["request"]
+            );
+            assert_eq!(
+                load(&state.join("operations/00000/request.json")).unwrap()["request"]["version"],
+                version
+            );
+            assert_eq!(
+                load(&state.join("operations/00000/reservation.json")).unwrap()["review_calls"],
+                1
+            );
+            assert!(!state.join("operations/00001").exists());
+            for (file, bytes) in [
+                ("request.json", original_request),
+                ("prompt.txt", original_prompt),
+                ("answer.json", original_answer.clone()),
+            ] {
+                assert_eq!(
+                    read(&source.join("operations/00000").join(file)).unwrap(),
+                    bytes
+                );
+            }
+            assert_eq!(
+                read(&state.join("operations/00000/answer.json")).unwrap(),
+                original_answer
+            );
+            assert_eq!(saved["interpretation_observed"], false);
+        }
+    }
+
+    #[test]
+    fn owned_first_review_continuation_binds_outer_processes_and_retains_paid_budget() {
+        let (fixture, original, source, owner) = stopped_outer_owned_first_review();
+        let raw_answer = read(&source.join("operations/00000/answer.json")).unwrap();
+        let state = fixture
+            .source
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("continuation");
+        let plan = prepare_continuation(&source, &state, &owner, &std::env::current_exe().unwrap())
+            .unwrap();
+        assert_eq!(plan.max_review_calls, original.max_review_calls);
+        let receipt = verify_continuation(&plan).unwrap();
+        assert_eq!(receipt.inherited_review_calls, 1);
+        assert_eq!(receipt.request["version"], SOURCE_POLICY_REVIEW_VERSION);
+        assert_eq!(
+            read(&state.join("operations/00000/answer.json")).unwrap(),
+            raw_answer
+        );
+        assert_eq!(
+            read(&source.join("operations/00000/answer.json")).unwrap(),
+            raw_answer
+        );
+        assert!(!source.join("operations/00000/completed.json").exists());
+        assert!(!state.join("operations/00001").exists());
+        assert_eq!(
+            load(&state.join("operations/00000/reservation.json")).unwrap()["review_calls"],
+            1
+        );
+    }
+
+    #[test]
+    fn owned_first_review_refuses_changed_outer_binding_and_unknown_child_exit() {
+        let (_fixture, plan, source, owner) = stopped_outer_owned_first_review();
+        let closure = load(&owner).unwrap();
+        let pid = closure["recorded_child_pid"].as_u64().unwrap() as u32;
+        verify_outer_first_review_owner(&source, &plan, &closure, pid).unwrap();
+        for field in [
+            "outer_state",
+            "owner_pid",
+            "controller_pid",
+            "owner_pid_observed",
+        ] {
+            let mut changed = closure.clone();
+            changed[field] = Value::Null;
+            assert!(verify_outer_first_review_owner(&source, &plan, &changed, pid).is_err());
+        }
+        let mut no_hash = closure.clone();
+        no_hash["files"]
+            .as_object_mut()
+            .unwrap()
+            .remove("run-once.mjs");
+        assert!(verify_outer_first_review_owner(&source, &plan, &no_hash, pid).is_err());
+        let outer = source.parent().unwrap();
+        for (file, field, value) in [
+            ("queue-started.json", "pid", json!(null)),
+            ("owner-observed.json", "wrapper", json!("foreign wrapper")),
+            ("owner-exit.json", "code", json!(0)),
+            ("source-review.child.json", "args", json!(["wrong-state"])),
+            ("source-review.exit.json", "code", json!(null)),
+            ("source-review.exit.json", "signal", json!("SIGKILL")),
+        ] {
+            let path = outer.join(file);
+            let original = read(&path).unwrap();
+            let mut changed_file = load(&path).unwrap();
+            changed_file[field] = value;
+            write(&path, &changed_file);
+            assert!(verify_outer_first_review_owner(&source, &plan, &closure, pid).is_err());
+            let mut repinned = closure.clone();
+            repinned["files"][file] = json!(digest(read(&path).unwrap()));
+            assert!(verify_outer_first_review_owner(&source, &plan, &repinned, pid).is_err());
+            fs::write(path, original).unwrap();
+        }
+        verify_outer_first_review_owner(&source, &plan, &closure, pid).unwrap();
     }
 
     #[test]

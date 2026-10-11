@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 pub enum Operation {
@@ -21,10 +22,22 @@ pub struct Journal {
     max_review: u64,
     max_physical: u64,
     _lock: fs::File,
+    ownership_retained: AtomicBool,
+}
+impl Drop for Journal {
+    fn drop(&mut self) {
+        // A pre-exec child can briefly inherit this open-file description.
+        // Only an explicit lease may extend ownership beyond this journal.
+        if !self.ownership_retained.load(Ordering::Relaxed) {
+            let _ = FileExt::unlock(&self._lock);
+        }
+    }
 }
 impl Journal {
     pub fn retain_ownership(&self) -> Result<fs::File> {
-        self._lock.try_clone().map_err(|error| error.to_string())
+        let lease = self._lock.try_clone().map_err(|error| error.to_string())?;
+        self.ownership_retained.store(true, Ordering::Relaxed);
+        Ok(lease)
     }
     pub fn open(root: &Path, plan: &Plan) -> Result<Self> {
         Self::open_bounded(
@@ -68,6 +81,7 @@ impl Journal {
             max_review,
             max_physical,
             _lock: lock,
+            ownership_retained: AtomicBool::new(false),
         })
     }
     pub fn begin(
@@ -265,6 +279,51 @@ impl Journal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn journal_drop_releases_an_accidental_duplicate_descriptor() {
+        let root = tempfile::tempdir().unwrap();
+        let plan = json!({"synthetic":"journal lifetime"});
+        let journal = Journal::open_verification(root.path(), &plan, 1).unwrap();
+        // Deterministic equivalent of an inherited pre-exec descriptor; no fork.
+        let inherited = journal._lock.try_clone().unwrap();
+        assert!(Journal::open_verification(root.path(), &plan, 1).is_err());
+        drop(journal);
+        let reopened = Journal::open_verification(root.path(), &plan, 1).unwrap();
+        assert!(inherited.metadata().is_ok());
+        drop(reopened);
+        drop(inherited);
+    }
+
+    #[test]
+    fn explicit_retained_ownership_survives_journal_drop() {
+        let root = tempfile::tempdir().unwrap();
+        let plan = json!({"synthetic":"deliberate owner lease"});
+        let journal = Journal::open_verification(root.path(), &plan, 1).unwrap();
+        let lease = journal.retain_ownership().unwrap();
+        assert!(Journal::open_verification(root.path(), &plan, 1).is_err());
+        drop(journal);
+        assert!(Journal::open_verification(root.path(), &plan, 1).is_err());
+        FileExt::unlock(&lease).unwrap();
+        let reopened = Journal::open_verification(root.path(), &plan, 1).unwrap();
+        drop(reopened);
+        drop(lease);
+    }
+
+    #[test]
+    fn live_journal_blocks_a_second_owner_until_it_ends() {
+        let root = tempfile::tempdir().unwrap();
+        let plan = json!({"synthetic":"live owner exclusion"});
+        let journal = Journal::open_verification(root.path(), &plan, 1).unwrap();
+        assert!(Journal::open_verification(root.path(), &plan, 1)
+            .err()
+            .unwrap()
+            .contains("Another process owns"));
+        drop(journal);
+        let reopened = Journal::open_verification(root.path(), &plan, 1).unwrap();
+        drop(reopened);
+    }
+
     #[test]
     fn independent_reviewer_reservations_are_hard_and_reuse_costs_nothing() {
         let root = tempfile::tempdir().unwrap();
@@ -277,6 +336,7 @@ mod tests {
             max_review: 1,
             max_physical: 9,
             _lock: fs::File::create(root.path().join("run.lock")).unwrap(),
+            ownership_retained: AtomicBool::new(false),
         };
         let request = json!({"native_trace_sha":"case-a"});
         let Operation::Fresh(d) = j.begin_review(&request, true).unwrap() else {
@@ -327,6 +387,7 @@ mod tests {
             max_review: 1,
             max_physical: 9,
             _lock: lock,
+            ownership_retained: AtomicBool::new(false),
         };
         let request = json!({"candidate":"c"});
         let Operation::Fresh(directory) = journal.begin("student", &request, 0, 9).unwrap() else {
@@ -376,6 +437,7 @@ mod tests {
             max_review: 1,
             max_physical: 9,
             _lock: fs::File::create(root.path().join("run.lock")).unwrap(),
+            ownership_retained: AtomicBool::new(false),
         };
         let request = json!({"case":"case-a","candidate":"fixed"});
         let Operation::Fresh(directory) = journal.begin("classification", &request, 0, 9).unwrap()
