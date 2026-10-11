@@ -48,3 +48,13 @@ The app appears under `src-tauri/target/debug/bundle/macos/Horary.app`. macOS 13
 - Structured model output is validated. This does not establish the truth of its prose or the correctness of its astrological judgment.
 
 See [architecture](docs/ARCHITECTURE.md), [privacy](docs/PRIVACY.md), [AI policy](docs/AI_POLICY.md), and [verification](docs/VERIFICATION.md).
+
+
+### Development build caches
+
+On this Mac, WASM builds, `check:ai-core`, `check:tauri`, `check:all` and
+`tauri:build:release` automatically queue compiler-cache cleanup when their
+whole sequence finishes. Cleanup runs quietly in the background; build status,
+generated WASM/JS, app products and test receipts remain. Busy caches retry
+hourly. No agent cleanup step is needed. Machines without the installed macOS
+janitor retain their existing behavior.
