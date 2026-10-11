@@ -148,21 +148,10 @@ fn program(
         .map(horary_prompt_program::Program::parse)
         .transpose()?;
     if let Some((_, fixed)) = fixed_source(task)? {
+        verify_fixed_scope(task, &fixed)?;
         let execution = program
             .as_ref()
             .ok_or("Fixed teaching requires an execution program")?;
-        let mut probe = fixed.clone();
-        probe.overrides.push(horary_prompt_program::Override {
-            stage: task.target_stage.name().into(),
-            recognition_phase: None,
-            method: Some(task.target_method.name().into()),
-            expected_guide_sha256: horary_prompt_program::digest("scope probe"),
-            replacement_text: "Nonexecuting target-selector overlap validation. ".repeat(3),
-            edits: vec![],
-        });
-        probe
-            .validate()
-            .map_err(|e| format!("Fixed teaching conflicts with the mutable target: {e}"))?;
         let target = |r: &horary_prompt_program::Override| {
             r.stage == task.target_stage.name()
                 && r.recognition_phase.is_none()
@@ -205,6 +194,76 @@ fn program(
         );
     }
     Ok(program)
+}
+
+fn verify_fixed_scope(task: &Task, fixed: &horary_prompt_program::Program) -> Result<(), String> {
+    // Reuse the Program validator's wildcard/overlap rules. This probe is
+    // neither an execution program nor part of any model request.
+    let mut probe = fixed.clone();
+    probe.overrides.push(horary_prompt_program::Override {
+        stage: task.target_stage.name().into(),
+        recognition_phase: None,
+        method: Some(task.target_method.name().into()),
+        expected_guide_sha256: horary_prompt_program::digest("scope probe"),
+        replacement_text: "Nonexecuting target-selector overlap validation. ".repeat(3),
+        edits: vec![],
+    });
+    probe
+        .validate()
+        .map_err(|e| format!("Fixed teaching conflicts with the mutable target: {e}"))
+}
+
+/// A corpus may have needed teaching in other functions to reach this one.
+/// Authenticate that teaching separately; the selected capture must still be
+/// unmodified and its accepted state is never used for live execution.
+fn source_fingerprint(task: &Task, origin: &Value, baseline: &Value) -> Result<Value, String> {
+    if origin["source_manifest_sha256"].as_str() != Some(task.baseline_manifest_sha256.as_str()) {
+        return Err("Reading source origin belongs to another corpus manifest".into());
+    }
+    if baseline["prompt_program"].is_null() {
+        return input_journey_source_fingerprint(origin, baseline);
+    }
+    let (bytes, fixed) = fixed_source(task)?
+        .ok_or("A taught reading corpus requires its exact fixed source program")?;
+    verify_fixed_scope(task, &fixed)?;
+    let expected = json!({"id":fixed.id,"sha256":horary_prompt_program::digest(&bytes),
+        "file":"prompt-program.json","baseline_manifest_sha256":fixed.baseline_manifest_sha256,
+        "overrides":fixed.overrides.iter().map(|entry| json!({"stage":entry.stage,
+            "recognition_phase":entry.recognition_phase,"method":entry.method})).collect::<Vec<_>>()});
+    if baseline["prompt_program"] != expected {
+        return Err("Reading corpus teaching differs from the pinned prerequisite source".into());
+    }
+    let source = PathBuf::from(
+        origin["source_directory"]
+            .as_str()
+            .ok_or("Reading source has no original case directory")?,
+    );
+    let corpus = source
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("Reading source has no original corpus directory")?;
+    if classification_source_bytes(
+        &corpus.join("prompt-program.json"),
+        &horary_prompt_program::digest(&bytes),
+    )? != bytes
+    {
+        return Err("Reading corpus teaching bytes differ from the pinned source".into());
+    }
+    // All native, model, book and source comparisons remain unchanged. Only
+    // the already authenticated prerequisite teaching may be non-null.
+    let mut provenance = input_journey_source_fingerprint_scoped(origin, baseline, true)?;
+    provenance["source_fixed_teaching"] = expected;
+    Ok(provenance)
+}
+
+fn inspection_program(task: &Task) -> Result<(), String> {
+    if task.program_file.is_some() {
+        return Err("Reading inspection cannot apply a candidate or execution program".into());
+    }
+    if let Some((_, fixed)) = fixed_source(task)? {
+        verify_fixed_scope(task, &fixed)?;
+    }
+    Ok(())
 }
 
 fn fixed_source(task: &Task) -> Result<Option<(Vec<u8>, horary_prompt_program::Program)>, String> {
@@ -651,14 +710,19 @@ fn real_model_reading_function() -> Result<(), String> {
     {
         return Err("Reading rubric identity/method differs from the source task".into());
     }
-    let provenance = input_journey_source_fingerprint(&values[3], &values[5])?;
+    let provenance = source_fingerprint(&task, &values[3], &values[5])?;
     let program_bytes = task
         .program_file
         .as_ref()
         .map(fs::read)
         .transpose()
         .map_err(|e| e.to_string())?;
-    let program = program(&task, program_bytes.as_deref())?;
+    let program = if task.inspect_prompt_only {
+        inspection_program(&task)?;
+        None
+    } else {
+        program(&task, program_bytes.as_deref())?
+    };
     let response_memo = task.exact_response_memoization.as_ref().map(|pin| {
         let index:horary_prompt_program::response_memo::Index=serde_json::from_slice(&pin.bytes()?).map_err(|e|e.to_string())?;
         if index.case_id!=case.id || index.fixture_sha256!=task.source_fixture_sha256
@@ -1072,6 +1136,98 @@ fn legacy_reading_program_absence_keeps_exact_single_target_rule() {
     let fixed = synthetic_program("intake", Some("complete_selected_program"));
     target.overrides.extend(fixed.overrides);
     assert!(program(&task, Some(&serde_json::to_vec(&target).unwrap())).is_err());
+}
+
+fn taught_source_fixture() -> (tempfile::TempDir, Task, Value, Value) {
+    let dir = tempfile::tempdir().unwrap();
+    let fixed = synthetic_program("intake", Some("complete_selected_program"));
+    let bytes = serde_json::to_vec_pretty(&fixed).unwrap();
+    let file = dir.path().join("fixed.json");
+    fs::write(&file, &bytes).unwrap();
+    fs::write(dir.path().join("prompt-program.json"), &bytes).unwrap();
+    let mut task = synthetic_task();
+    task.fixed_program_file = Some(file);
+    task.fixed_program_sha256 = Some(horary_prompt_program::digest(&bytes));
+    let baseline = json!({"sources":{"native":"synthetic-hash"},
+        "repository_sha":"synthetic-revision","working_diff_sha256":null,
+        "catalogue_version":"synthetic","book_ocr_sha256":"synthetic-book",
+        "model":{"id":"gemma-4-26b-a4b-it","provider":"google_gemini_api",
+            "temperature":0,"seed":0,"thinking_level":"minimal","local_inference":false},
+        "prompt_program":{"id":fixed.id,"sha256":task.fixed_program_sha256,
+            "file":"prompt-program.json","baseline_manifest_sha256":fixed.baseline_manifest_sha256,
+            "overrides":[{"stage":"intake","recognition_phase":"complete_selected_program",
+                "method":"movable_deal"}]}});
+    let mut origin = json!({"source_directory":dir.path().join("cases/synthetic")});
+    seal_source_fixture(dir.path(), &mut task, &mut origin, &baseline);
+    (dir, task, origin, baseline)
+}
+
+fn seal_source_fixture(dir: &Path, task: &mut Task, origin: &mut Value, baseline: &Value) {
+    let bytes = serde_json::to_vec_pretty(baseline).unwrap();
+    fs::write(dir.join("manifest.json"), &bytes).unwrap();
+    task.baseline_manifest_sha256 = horary_prompt_program::digest(&bytes);
+    origin["source_manifest_sha256"] = json!(task.baseline_manifest_sha256);
+}
+
+#[test]
+fn taught_corpus_authenticates_exact_prerequisites_without_applying_them_to_inspection() {
+    let (_dir, mut task, origin, baseline) = taught_source_fixture();
+    // The ordinary initial-extractor boundary still rejects taught corpora.
+    assert!(input_journey_source_fingerprint(&origin, &baseline).is_err());
+    let proof = source_fingerprint(&task, &origin, &baseline).unwrap();
+    assert_eq!(proof["source_fixed_teaching"], baseline["prompt_program"]);
+    assert!(inspection_program(&task).is_ok());
+    assert!(program(&task, None).is_err());
+    task.program_file = Some(PathBuf::from("candidate.json"));
+    assert!(inspection_program(&task).is_err());
+}
+
+#[test]
+fn taught_corpus_rejects_missing_pins_manifest_drift_and_changed_program_bytes() {
+    let (dir, task, origin, baseline) = taught_source_fixture();
+    let mut no_pin = synthetic_task();
+    no_pin.baseline_manifest_sha256 = task.baseline_manifest_sha256.clone();
+    assert!(source_fingerprint(&no_pin, &origin, &baseline).is_err());
+    for field in [
+        "id",
+        "sha256",
+        "file",
+        "baseline_manifest_sha256",
+        "overrides",
+    ] {
+        let mut changed = baseline.clone();
+        changed["prompt_program"][field] = json!("different-source");
+        let mut changed_task = synthetic_task();
+        changed_task.fixed_program_file = task.fixed_program_file.clone();
+        changed_task.fixed_program_sha256 = task.fixed_program_sha256.clone();
+        let mut origin = origin.clone();
+        seal_source_fixture(dir.path(), &mut changed_task, &mut origin, &changed);
+        assert!(
+            source_fingerprint(&changed_task, &origin, &changed).is_err(),
+            "{field}"
+        );
+    }
+    let mut task = task;
+    let mut origin = origin;
+    seal_source_fixture(dir.path(), &mut task, &mut origin, &baseline);
+    fs::write(
+        dir.path().join("prompt-program.json"),
+        b"changed corpus teaching",
+    )
+    .unwrap();
+    assert!(source_fingerprint(&task, &origin, &baseline).is_err());
+}
+
+#[test]
+fn taught_corpus_rejects_target_overlap_and_foreign_manifest_ancestry() {
+    let (_dir, mut task, origin, baseline) = taught_source_fixture();
+    task.target_stage = Stage::Intake;
+    // The wildcard target probe also conflicts with a phased Intake override.
+    assert!(source_fingerprint(&task, &origin, &baseline).is_err());
+    task.target_stage = Stage::Condition;
+    let mut foreign = origin;
+    foreign["source_manifest_sha256"] = json!("another-corpus");
+    assert!(source_fingerprint(&task, &foreign, &baseline).is_err());
 }
 
 #[test]

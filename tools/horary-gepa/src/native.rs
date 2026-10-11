@@ -679,26 +679,7 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
         .map_err(|error| format!("Native inspection must be fresh: {error}"))?;
     let evidence = directory.join("native");
     let task_file = directory.join("task.json");
-    let mut task = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
-        "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
-        "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":digest(read(&plan.campaign.join("manifest.json"))?),
-        "inspect_prompt_only":true});
-    if plan.function != Function::Classification {
-        task["target_method"] = json!(plan.target_method);
-        task["source_origin_sha256"] = json!(example.source_origin_sha256);
-        task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
-        if plan.initial_extractor_observation {
-            task["initial_extractor_observation"] = json!(true);
-        }
-        if plan.supplying_extractor_observation {
-            task["supplying_extractor_observation"] = json!(true);
-        }
-        if plan.function == Function::ReadingJourney {
-            task["target_stage"] = json!(plan.target_stage);
-            task["source_branch"] = json!(example.source_branch);
-            task["source_rubric_sha256"] = json!(example.source_rubric_sha256);
-        }
-    }
+    let task = inspection_task(plan, example, &directory)?;
     keep(&task_file, &task)?;
     let mut command = Command::new(&plan.native_executable);
     command
@@ -723,6 +704,37 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
         return Err("Native prompt inspection has an invalid execution boundary".into());
     }
     Ok(file)
+}
+
+fn inspection_task(plan: &Plan, example: &Example, directory: &Path) -> Result<Value> {
+    let mut task = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
+        "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
+        "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":digest(read(&plan.campaign.join("manifest.json"))?),
+        "inspect_prompt_only":true});
+    if plan.function != Function::Classification {
+        task["target_method"] = json!(plan.target_method);
+        task["source_origin_sha256"] = json!(example.source_origin_sha256);
+        task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+        if plan.initial_extractor_observation {
+            task["initial_extractor_observation"] = json!(true);
+        }
+        if plan.supplying_extractor_observation {
+            task["supplying_extractor_observation"] = json!(true);
+        }
+        if plan.function == Function::ReadingJourney {
+            task["target_stage"] = json!(plan.target_stage);
+            task["source_branch"] = json!(example.source_branch);
+            task["source_rubric_sha256"] = json!(example.source_rubric_sha256);
+            if let Some(source) = &plan.fixed_program {
+                crate::fixed::validate_scope(plan)?;
+                // Authenticate the captured prerequisites, without composing
+                // or executing teaching for this unchanged target inspection.
+                task["fixed_program_file"] = json!(crate::fixed::write_source(plan, directory)?);
+                task["fixed_program_sha256"] = json!(source.sha256);
+            }
+        }
+    }
+    Ok(task)
 }
 
 /// Reserve and retain submission identity before spawning. An interrupted
@@ -861,6 +873,147 @@ fn abort_owned_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn inspection_setup() -> (tempfile::TempDir, Plan) {
+        let dir = tempfile::tempdir().unwrap();
+        let mut plan = crate::tests::plan();
+        plan.campaign = dir.path().to_owned();
+        keep(&plan.campaign.join("manifest.json"), &json!({"version":1})).unwrap();
+        (dir, plan)
+    }
+
+    fn pin_inspection_program(plan: &mut Plan, stage: &str) -> Vec<u8> {
+        use horary_prompt_program::{Evidence, Override, Program};
+        let source = Program {
+            version: 1,
+            id: "pinned-prerequisite".into(),
+            baseline_manifest_sha256: digest("prior campaign"),
+            overrides: vec![Override {
+                stage: stage.into(),
+                recognition_phase: (stage == "intake").then(|| "complete_selected_program".into()),
+                method: Some("movable_deal".into()),
+                expected_guide_sha256: digest("prior guide"),
+                replacement_text: "Immutable prerequisite teaching, never the inspected target. "
+                    .repeat(3),
+                edits: vec![],
+            }],
+            rationale: "Synthetic source authentication test.".into(),
+            evidence: vec![Evidence {
+                case_id: "prior-training".into(),
+                file: "cases/prior-training/calls/0001-result.json".into(),
+                json_pointer: "/result".into(),
+                sha256: digest("prior observation"),
+            }],
+            training_case_ids: vec!["prior-training".into()],
+            holdout_case_ids: vec!["reserved".into()],
+        };
+        let mut bytes = serde_json::to_vec_pretty(&source).unwrap();
+        bytes.push(b'\n');
+        let file = plan.campaign.join("pinned-source.json");
+        fs::write(&file, &bytes).unwrap();
+        plan.fixed_program = Some(crate::fixed::Source {
+            file,
+            sha256: digest(&bytes),
+        });
+        bytes
+    }
+
+    #[test]
+    fn inspection_without_fixed_source_retains_legacy_task_bytes() {
+        let (dir, mut plan) = inspection_setup();
+        let example = plan.training[0].clone();
+        for (function, initial, supplying) in [
+            (Function::Classification, false, false),
+            (Function::InputJourney, true, false),
+            (Function::InputJourney, false, true),
+            (Function::ReadingJourney, false, false),
+        ] {
+            plan.function = function;
+            plan.initial_extractor_observation = initial;
+            plan.supplying_extractor_observation = supplying;
+            plan.target_method = Some("movable_deal".into());
+            plan.target_stage = Some(crate::ReadingStage::Contacts);
+            let mut legacy = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
+                "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
+                "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":digest(read(&plan.campaign.join("manifest.json")).unwrap()),
+                "inspect_prompt_only":true});
+            if function != Function::Classification {
+                legacy["target_method"] = json!(plan.target_method);
+                legacy["source_origin_sha256"] = json!(example.source_origin_sha256);
+                legacy["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+                if initial {
+                    legacy["initial_extractor_observation"] = json!(true);
+                }
+                if supplying {
+                    legacy["supplying_extractor_observation"] = json!(true);
+                }
+                if function == Function::ReadingJourney {
+                    legacy["target_stage"] = json!(plan.target_stage);
+                    legacy["source_branch"] = json!(example.source_branch);
+                    legacy["source_rubric_sha256"] = json!(example.source_rubric_sha256);
+                }
+            }
+            let task = inspection_task(&plan, &example, dir.path()).unwrap();
+            assert_eq!(
+                serde_json::to_vec_pretty(&task).unwrap(),
+                serde_json::to_vec_pretty(&legacy).unwrap()
+            );
+            assert!(!dir.path().join("fixed-program-source.json").exists());
+        }
+    }
+
+    #[test]
+    fn inspection_pins_prerequisite_bytes_without_an_execution_program() {
+        let (dir, mut plan) = inspection_setup();
+        plan.function = Function::ReadingJourney;
+        plan.control_mode = ControlMode::FreshHosted;
+        plan.target_stage = Some(crate::ReadingStage::Contacts);
+        plan.target_method = Some("movable_deal".into());
+        let bytes = pin_inspection_program(&mut plan, "intake");
+        let task = inspection_task(&plan, &plan.training[0], dir.path()).unwrap();
+        let file = dir.path().join("fixed-program-source.json");
+        assert_eq!(read(&file).unwrap(), bytes);
+        assert_eq!(task["fixed_program_file"], json!(file));
+        assert_eq!(task["fixed_program_sha256"], digest(&bytes));
+        assert_eq!(task["inspect_prompt_only"], true);
+        assert_eq!(task["target_stage"], "contacts");
+        assert!(task.get("program_file").is_none());
+        assert!(task.get("prompt_program").is_none());
+        assert!(!dir.path().join("program.json").exists());
+        assert!(!dir.path().join("fixed-program-composition.json").exists());
+        assert!(!dir.path().join("submitted.json").exists());
+        assert!(!dir.path().join("native").exists());
+        assert!(inspection_task(&plan, &plan.training[0], dir.path()).is_err());
+        assert_eq!(read(&file).unwrap(), bytes);
+    }
+
+    #[test]
+    fn inspection_rejects_changed_or_target_overlapping_prerequisites_before_execution() {
+        for overlap in [false, true] {
+            let (dir, mut plan) = inspection_setup();
+            plan.function = Function::ReadingJourney;
+            plan.control_mode = ControlMode::FreshHosted;
+            plan.target_stage = Some(crate::ReadingStage::Contacts);
+            plan.target_method = Some("movable_deal".into());
+            pin_inspection_program(&mut plan, if overlap { "contacts" } else { "intake" });
+            if !overlap {
+                fs::write(&plan.fixed_program.as_ref().unwrap().file, "source drift").unwrap();
+            }
+            let error = inspection_task(&plan, &plan.training[0], dir.path()).unwrap_err();
+            assert!(
+                error.contains(if overlap {
+                    "conflicts with the mutable target"
+                } else {
+                    "Fixed program source changed"
+                }),
+                "{error}"
+            );
+            assert!(!dir.path().join("fixed-program-source.json").exists());
+            assert!(!dir.path().join("submitted.json").exists());
+            assert!(!dir.path().join("native").exists());
+        }
+    }
+
     #[test]
     fn later_component_cache_reuse_rechecks_original_closure_pins() {
         let source = tempfile::tempdir().unwrap();

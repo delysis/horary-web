@@ -311,7 +311,7 @@
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
-      "sha256": "952f74b2e0cf8610b0211e3a01a5177d9b3cafce99bf02865cfebd89519776b3"
+      "sha256": "edd87f1baf5a095907d409164c4e3100519f70af028c77ef48be3ed47c4956a4"
     },
     {
       "path": "src-tauri/src/reading_store.rs",
@@ -415,7 +415,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "b2ce622318d7ff0880dd3166ed0693fef133e6f2ea06836883841a1bca882b8f"
+      "sha256": "afecc2e530a9dc0ec0563604aa18946b7d014dd706e08d5ded6ae39a545826bb"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -471,7 +471,7 @@
     },
     {
       "path": "tools/horary-gepa/src/native.rs",
-      "sha256": "427db51c43a742082efebf4bc3e52c0c93fb0e1423a3041eec0e102bb22affca"
+      "sha256": "bf712fcdb9d2a4a3fef10e179fb59f99146cc2eba5f0299e1d9202cab1dff5e5"
     },
     {
       "path": "tools/horary-gepa/src/reading.rs",
