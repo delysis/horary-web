@@ -8123,6 +8123,7 @@ pub fn check(
         if let Err(error) =
             horary_contract::validate_shape(value, &horary_contract::condition_schema(input, facts))
         {
+            let error = analytical_check_shape_feedback(stage, value, error);
             let repair = condition_coverage(value, input, facts)
                 .err()
                 .unwrap_or_else(|| condition_repair_limits(input, facts));
@@ -8131,6 +8132,7 @@ pub fn check(
     }
     if stage != Stage::Significators {
         horary_contract::validate_for(stage, matter, value, facts).map_err(|error| {
+            let error = analytical_check_shape_feedback(stage, value, error);
             if stage == Stage::Condition {
                 let repair = condition_coverage(value, input, facts)
                     .err()
@@ -8241,6 +8243,28 @@ pub fn check(
     }))
 }
 
+/// Explain a rejected nested check without changing or accepting its shape.
+fn analytical_check_shape_feedback(stage: Stage, value: &Value, error: String) -> String {
+    const FIELDS: [&str; 3] = ["state", "evidence", "finding"];
+    for key in stage.checks() {
+        if !error.starts_with(&format!("$.checks.{key}: missing fields ")) {
+            continue;
+        }
+        let nested_check = value["checks"][key].as_object().is_some_and(|record| {
+            record.iter().any(|(field, child)| {
+                !FIELDS.contains(&field.as_str())
+                    && child
+                        .as_object()
+                        .is_some_and(|fields| FIELDS.iter().all(|name| fields.contains_key(*name)))
+            })
+        });
+        if nested_check {
+            return format!("{error}\nRepair checks.{key}: this check is ONE direct state/evidence/finding object. Combine role-specific distinctions in its existing finding string, with actual allowed IDs in the evidence array; do not add per-role child maps. Shape illustration only, with placeholders rather than a verdict or supplied fact IDs: {{\"state\":\"<allowed state>\",\"evidence\":[\"<actual allowed ID>\"],\"finding\":\"<combine role-specific distinctions here>\"}}. Preserve every required check and repair the whole rejected worksheet.");
+        }
+    }
+    error
+}
+
 /// Require coverage of supplied native testimony, not a particular verdict or
 /// an assertion that the model's interpretation of that testimony is correct.
 fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<(), String> {
@@ -8331,6 +8355,130 @@ fn condition_repair_limits(input: &Value, facts: &[Fact]) -> String {
 #[cfg(test)]
 #[path = "horary_step_tests.rs"]
 mod invariants;
+
+#[cfg(test)]
+mod analytical_shape_repair_tests {
+    use super::*;
+
+    fn reception() -> (Value, Value, Vec<Fact>) {
+        let facts = crate::reading_method::facts(Some(&json!({
+            "derived":{"receptions":[
+                {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"domicile","polarity":"positive"}
+            ]}
+        })));
+        let id = &facts
+            .iter()
+            .find(|fact| fact.kind == "reception")
+            .unwrap()
+            .id;
+        let input = json!({"roles":[
+            {"label":"First synthetic party","planet":"Venus","house":null},
+            {"label":"Second synthetic party","planet":"Mars","house":null}
+        ],"facts":facts});
+        let value = json!({"checks":{
+            "direction":{"state":"supported","evidence":[id],"finding":"The supplied fact gives Venus's regard for Mars; the reverse is not supplied."},
+            "strength_and_quality":{"state":"supported","evidence":[id],"finding":"The supplied domicile quality gives positive regard in this direction."},
+            "contextual_motive":{"state":"unestablished","evidence":[],"finding":"No motive follows from this synthetic fact alone."}
+        },"summary":"Synthetic directed-reception worksheet; no event prediction.","unknowns":[]});
+        (input, value, facts)
+    }
+
+    #[test]
+    fn nested_reception_check_is_rejected_with_direct_record_repair_guidance() {
+        let (input, corrected, facts) = reception();
+        let mut malformed = corrected.clone();
+        malformed["checks"]["direction"] = json!({"role_a_to_b":corrected["checks"]["direction"]});
+        let before = malformed.clone();
+        let original =
+            horary_contract::validate_for(Stage::Reception, Matter::Other, &malformed, &facts)
+                .unwrap_err();
+        let error = check(Stage::Reception, Matter::Other, &malformed, &input, &facts)
+            .err()
+            .unwrap();
+        assert!(error.starts_with(&original));
+        assert!(error.contains("$.checks.direction: missing fields"));
+        assert!(error.contains("Repair checks.direction"));
+        assert!(error.contains("ONE direct state/evidence/finding object"));
+        assert!(error.contains("existing finding string"));
+        assert!(error.contains("actual allowed IDs in the evidence array"));
+        assert!(error.contains("do not add per-role child maps"));
+        assert!(error.contains("Shape illustration only"));
+        assert!(error.contains("\"state\":\"<allowed state>\""));
+        assert!(!error.contains("\"supported\""));
+        assert!(!error.contains(&format!("\"{}\"", facts[0].id)));
+        assert_eq!(
+            malformed, before,
+            "A rejection must never normalize the map"
+        );
+        let Checked::Data(data) =
+            check(Stage::Reception, Matter::Other, &corrected, &input, &facts).unwrap()
+        else {
+            panic!("The existing direct contract must still complete the step");
+        };
+        assert_eq!(data.worksheet(), &corrected);
+        // Merely adding the direct fields cannot make a per-role child legal.
+        malformed = corrected.clone();
+        malformed["checks"]["direction"]["role_a_to_b"] = corrected["checks"]["direction"].clone();
+        assert!(check(Stage::Reception, Matter::Other, &malformed, &input, &facts).is_err());
+    }
+
+    #[test]
+    fn unrelated_reception_errors_keep_their_exact_existing_feedback() {
+        let (input, corrected, facts) = reception();
+        let mut cases = Vec::new();
+        let mut missing = corrected.clone();
+        missing["checks"]["direction"]
+            .as_object_mut()
+            .unwrap()
+            .remove("finding");
+        cases.push(missing);
+        let mut extra = corrected.clone();
+        extra["checks"]["direction"]["metadata"] = json!({"note":"Unrelated extra object"});
+        cases.push(extra);
+        let mut wrong_state = corrected.clone();
+        wrong_state["checks"]["direction"]["state"] = json!("strong");
+        cases.push(wrong_state);
+        let mut foreign = corrected.clone();
+        foreign["checks"]["direction"]["evidence"] = json!(["not-supplied"]);
+        cases.push(foreign);
+        let mut other_path = corrected.clone();
+        other_path["checks"]["direction"] = json!({"role_a_to_b":corrected["checks"]["direction"]});
+        other_path.as_object_mut().unwrap().remove("summary");
+        cases.push(other_path);
+        let mut oversized = corrected.clone();
+        oversized["checks"]["direction"] = json!({"role_a_to_b":corrected["checks"]["direction"]});
+        oversized["checks"]["strength_and_quality"]["finding"] = json!("a".repeat(8001));
+        cases.push(oversized);
+        for value in cases {
+            let original =
+                horary_contract::validate_for(Stage::Reception, Matter::Other, &value, &facts)
+                    .unwrap_err();
+            assert_eq!(
+                check(Stage::Reception, Matter::Other, &value, &input, &facts)
+                    .err()
+                    .unwrap(),
+                original
+            );
+        }
+        let mut unsupported = corrected;
+        unsupported["checks"]["direction"]["evidence"] = json!([]);
+        let original =
+            horary_contract::validate_for(Stage::Reception, Matter::Other, &unsupported, &facts)
+                .unwrap_err();
+        assert_eq!(
+            check(
+                Stage::Reception,
+                Matter::Other,
+                &unsupported,
+                &input,
+                &facts
+            )
+            .err()
+            .unwrap(),
+            original
+        );
+    }
+}
 
 #[cfg(test)]
 mod recognition_boundaries {

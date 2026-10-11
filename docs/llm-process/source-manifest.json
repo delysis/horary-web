@@ -231,7 +231,7 @@
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "cf9374dff4a8e719e5c21e938715c5114611952bbf8e9c7e987a249fe4e71ab2"
+      "sha256": "752906e0033d17c342c6f780399f5e09337bf9029bae4b6334f82664983b4f79"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
