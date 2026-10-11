@@ -117,6 +117,10 @@ struct Preparation {
     target_method: Option<String>,
     #[arg(long, value_enum)]
     target_stage: Option<ReadingStage>,
+    #[arg(long, requires = "fixed_program_sha256")]
+    fixed_program: Option<PathBuf>,
+    #[arg(long, requires = "fixed_program")]
+    fixed_program_sha256: Option<String>,
     #[arg(long, default_value_t = 0)]
     max_review_calls: u64,
     #[arg(long, default_value_t = 600)]
@@ -261,11 +265,26 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 function,
                 target_method,
                 target_stage,
+                fixed_program,
+                fixed_program_sha256,
                 max_review_calls,
                 review_seconds,
                 book_source,
                 book_ocr_pages,
             } = *options;
+            let fixed_program = match (fixed_program, fixed_program_sha256) {
+                (Some(file), Some(sha256)) => Some(horary_gepa::fixed::Source {
+                    file: std::fs::canonicalize(file).map_err(|e| e.to_string())?,
+                    sha256,
+                }),
+                (None, None) => None,
+                _ => {
+                    return Err(
+                        "--fixed-program and --fixed-program-sha256 must be supplied together"
+                            .into(),
+                    )
+                }
+            };
             let review_book = book_source
                 .map(|p| {
                     let file = std::fs::canonicalize(p).map_err(|error| error.to_string())?;
@@ -279,7 +298,7 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             let plan=Plan {version:match function {Function::Classification=>1,Function::InputJourney=>2,Function::ReadingJourney=>3},engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
                 manifest_sha256:String::new(),split_file:std::fs::canonicalize(split).map_err(|error|error.to_string())?,split_sha256:String::new(),
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
-                codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
+                codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,fixed_program,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
                 function,objective,initial_extractor_observation:false,target_method,target_stage,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
                 qualification:if function == Function::Classification {
@@ -335,6 +354,48 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preparation_fixed_program_pin_is_optional_but_requires_both_fields() {
+        let args = [
+            "horary-gepa",
+            "prepare",
+            "--campaign",
+            "/synthetic/campaign",
+            "--split",
+            "/synthetic/split.json",
+            "--native-executable",
+            "/synthetic/native",
+            "--codex",
+            "/synthetic/codex",
+            "--state",
+            "/synthetic/state",
+        ];
+        let baseline = Cli::try_parse_from(args).unwrap();
+        let Action::Prepare(p) = baseline.action else {
+            panic!("Wrong action")
+        };
+        assert!(p.fixed_program.is_none());
+        assert!(p.fixed_program_sha256.is_none());
+        let mut only_path = args.to_vec();
+        only_path.extend(["--fixed-program", "/synthetic/prior.json"]);
+        assert!(Cli::try_parse_from(&only_path).is_err());
+        let mut only_hash = args.to_vec();
+        only_hash.extend([
+            "--fixed-program-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ]);
+        assert!(Cli::try_parse_from(&only_hash).is_err());
+        only_path.extend([
+            "--fixed-program-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ]);
+        let Action::Prepare(parsed) = Cli::try_parse_from(&only_path).unwrap().action else {
+            panic!("Wrong action")
+        };
+        assert!(parsed.fixed_program.is_some());
+        assert!(parsed.fixed_program_sha256.is_some());
+    }
 
     #[test]
     fn campaign_program_and_hash_are_an_explicit_pair_and_baseline_stays_optional() {

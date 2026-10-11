@@ -5,6 +5,7 @@ pub mod complete_journey;
 pub mod controls;
 pub mod corpus;
 pub mod executable;
+pub mod fixed;
 pub mod initial_extractor;
 pub mod journal;
 pub mod metric;
@@ -276,6 +277,8 @@ pub struct Plan {
     pub codex_snapshot: Option<executable::Support>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovery: Option<recovery::Recovery>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_program: Option<fixed::Source>,
     pub guide: String,
     pub guide_sha256: String,
     pub seed: Candidate,
@@ -453,6 +456,7 @@ impl Plan {
             }
         }
         self.reconstruct(&self.seed)?;
+        fixed::validate_scope(self)?;
         Ok(())
     }
 
@@ -484,7 +488,7 @@ impl Plan {
 
     pub fn program(&self, candidate: &Candidate) -> Result<Option<Program>> {
         if candidate == &self.seed {
-            return Ok(None);
+            return fixed::compose(self, None);
         }
         let replacement = self.reconstruct(candidate)?;
         let program = Program {
@@ -532,7 +536,7 @@ impl Plan {
         program
             .apply(self.signature(), &self.guide)?
             .ok_or("Candidate failed to apply to its actual native signature")?;
-        Ok(Some(program))
+        fixed::compose(self, Some(program))
     }
 
     pub fn verify_sources(&self) -> Result<()> {
@@ -541,6 +545,15 @@ impl Plan {
         verify(&self.split_file, &self.split_sha256)?;
         let split = load(&self.split_file)?;
         self.verify_split(&split)?;
+        fixed::verify_membership(
+            self,
+            &split,
+            &self
+                .development
+                .iter()
+                .map(|e| e.id.clone())
+                .collect::<Vec<_>>(),
+        )?;
         verify(&self.native_executable, &self.native_executable_sha256)?;
         verify(
             &self.controller_executable,
@@ -684,6 +697,7 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
                 .ok_or("Invalid reserved ID".to_owned())
         })
         .collect::<Result<_>>()?;
+    fixed::verify_membership(&plan, &split, dev)?;
     let mut examples = Vec::new();
     for id in train.iter().chain(dev) {
         let row = rows
@@ -1115,6 +1129,7 @@ mod tests {
             codex_executable_sha256: digest("codex"),
             codex_snapshot: None,
             recovery: None,
+            fixed_program: None,
             guide_sha256: digest(&guide),
             guide,
             seed,

@@ -20,6 +20,10 @@ struct Task {
     target_stage: Stage,
     #[serde(default)]
     program_file: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fixed_program_file: Option<PathBuf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fixed_program_sha256: Option<String>,
     #[serde(default)]
     inspect_prompt_only: bool,
 }
@@ -139,6 +143,50 @@ fn program(
     let program = bytes
         .map(horary_prompt_program::Program::parse)
         .transpose()?;
+    if let Some((_, fixed)) = fixed_source(task)? {
+        let execution = program
+            .as_ref()
+            .ok_or("Fixed teaching requires an execution program")?;
+        let mut probe = fixed.clone();
+        probe.overrides.push(horary_prompt_program::Override {
+            stage: task.target_stage.name().into(),
+            recognition_phase: None,
+            method: Some(task.target_method.name().into()),
+            expected_guide_sha256: horary_prompt_program::digest("scope probe"),
+            replacement_text: "Nonexecuting target-selector overlap validation. ".repeat(3),
+            edits: vec![],
+        });
+        probe
+            .validate()
+            .map_err(|e| format!("Fixed teaching conflicts with the mutable target: {e}"))?;
+        let target = |r: &horary_prompt_program::Override| {
+            r.stage == task.target_stage.name()
+                && r.recognition_phase.is_none()
+                && r.method.as_deref() == Some(task.target_method.name())
+        };
+        let others: Vec<_> = execution.overrides.iter().filter(|r| !target(r)).collect();
+        if !execution
+            .baseline_manifest_sha256
+            .eq_ignore_ascii_case(&task.baseline_manifest_sha256)
+            || others != fixed.overrides.iter().collect::<Vec<_>>()
+            || execution.overrides.iter().filter(|r| target(r)).count() > 1
+            || fixed
+                .training_case_ids
+                .iter()
+                .any(|id| !execution.training_case_ids.contains(id))
+            || fixed
+                .holdout_case_ids
+                .iter()
+                .any(|id| !execution.holdout_case_ids.contains(id))
+            || fixed
+                .evidence
+                .iter()
+                .any(|e| !execution.evidence.contains(e))
+        {
+            return Err("Reading composition changed pinned prerequisite teaching/evidence or its current corpus binding".into());
+        }
+        return Ok(program);
+    }
     if program.as_ref().is_some_and(|p| {
         !p.baseline_manifest_sha256
             .eq_ignore_ascii_case(&task.baseline_manifest_sha256)
@@ -153,6 +201,25 @@ fn program(
         );
     }
     Ok(program)
+}
+
+fn fixed_source(task: &Task) -> Result<Option<(Vec<u8>, horary_prompt_program::Program)>, String> {
+    match (&task.fixed_program_file, &task.fixed_program_sha256) {
+        (None, None) => Ok(None),
+        (Some(file), Some(sha)) => {
+            if !file.is_absolute()
+                || !fs::symlink_metadata(file)
+                    .map_err(|e| e.to_string())?
+                    .is_file()
+            {
+                return Err("Fixed teaching must be an ordinary absolute file".into());
+            }
+            let bytes = classification_source_bytes(file, sha)?;
+            let parsed = horary_prompt_program::Program::parse(&bytes)?;
+            Ok(Some((bytes, parsed)))
+        }
+        _ => Err("Fixed program file and SHA must be supplied together".into()),
+    }
 }
 
 fn counts(calls: &[Value]) -> Result<(u64, u64), String> {
@@ -498,6 +565,15 @@ fn real_model_reading_function() -> Result<(), String> {
         .transpose()
         .map_err(|e| e.to_string())?;
     let program = program(&task, program_bytes.as_deref())?;
+    let fixed = fixed_source(&task)?;
+    let fixed_provenance = fixed.as_ref().map(|(_, original)| json!({
+        "source_sha256":task.fixed_program_sha256,
+        "original_program_id":original.id,
+        "original_baseline_manifest_sha256":original.baseline_manifest_sha256,
+        "current_corpus_manifest_sha256":task.baseline_manifest_sha256,
+        "execution_program_id":program.as_ref().map(|p|&p.id),
+        "execution_program_sha256":program_bytes.as_ref().map(horary_prompt_program::digest),
+        "qualification":"Pinned teaching only. Corpus metadata rebinding does not qualify source correctness; no facts or checkpoint are supplied."}));
     let schema = crate::horary_step::response_schema_for(task.target_stage, matter, &input, &[]);
     let (prompt, applied) =
         trial_prompt(task.target_stage, matter, &input, &schema, program.as_ref())?;
@@ -516,6 +592,17 @@ fn real_model_reading_function() -> Result<(), String> {
         atomic_evidence_file(&dir.join(name), true, |file| {
             file.write_all(source).map_err(|e| e.to_string())
         })?;
+    }
+    if let Some((source, _)) = &fixed {
+        atomic_evidence_file(&dir.join("fixed-program-source.json"), true, |file| {
+            file.write_all(source).map_err(|e| e.to_string())
+        })?;
+        write_new(
+            &dir.join("fixed-program-provenance.json"),
+            fixed_provenance
+                .as_ref()
+                .ok_or("No fixed source provenance")?,
+        )?;
     }
     if task.inspect_prompt_only {
         if task.program_file.is_some() {
@@ -563,17 +650,18 @@ fn real_model_reading_function() -> Result<(), String> {
         return Err("Keep hosted credential outside source checkout".into());
     }
     let hosted = Arc::new(crate::hosted_gemma_eval::Client::from_file(&keyfile, 1)?);
-    write_new(
-        &dir.join("manifest.json"),
-        &json!({"version":EVALUATOR_VERSION,
+    let mut manifest = json!({"version":EVALUATOR_VERSION,
         "scope":"reading_journey_function_only","task_sha256":horary_prompt_program::digest(task_bytes),
         "source_provenance":provenance,"sources":source_hashes(&root)?,"model":hosted.metadata(),
         "max_provider_calls_per_group":4,"physical_generation_attempt_reservation":reservation,
         "logical_call_group_cap":max_calls,"logical_provider_call_cap":provider_cap,"case_seconds":seconds,
         "target_stage":task.target_stage,"target_method":task.target_method,"inspected_current_target_program":applied,
         "entry_point":"evaluate_case -> horary_pipeline::run","fresh_initial_verified_before_network":true,
-        "captured_checkpoint_reused":false,"full_reading":true,"rubric_supplied_to_student":false}),
-    )?;
+        "captured_checkpoint_reused":false,"full_reading":true,"rubric_supplied_to_student":false});
+    if let Some(provenance) = &fixed_provenance {
+        manifest["fixed_program"] = provenance.clone();
+    }
+    write_new(&dir.join("manifest.json"), &manifest)?;
     if let Some(source) = &program_bytes {
         atomic_evidence_file(&dir.join("prompt-program.json"), true, |file| {
             file.write_all(source).map_err(|e| e.to_string())
@@ -727,4 +815,133 @@ fn settled_native_rejection_is_loopable_but_uncertain_or_successful_cap_is_not()
     let mut cancelled = raw;
     cancelled["deadline_cancelled"] = json!(true);
     assert!(semantic_abort(&cancelled, (&snapshot, &Value::Null), &calls, true).is_none());
+}
+
+fn synthetic_program(stage: &str, phase: Option<&str>) -> horary_prompt_program::Program {
+    use horary_prompt_program::{digest, Evidence, Override, Program};
+    Program {
+        version: 1,
+        id: "synthetic-teaching".into(),
+        baseline_manifest_sha256: digest("prior corpus"),
+        overrides: vec![Override {
+            stage: stage.into(),
+            recognition_phase: phase.map(str::to_owned),
+            method: Some("movable_deal".into()),
+            expected_guide_sha256: digest("actual source guide"),
+            replacement_text: "Synthetic teaching for the named function only. ".repeat(4),
+            edits: vec![],
+        }],
+        rationale: "Offline compatibility fixture only".into(),
+        evidence: vec![Evidence {
+            case_id: "prior-training".into(),
+            file: "calls/0002-result.json".into(),
+            json_pointer: "/result".into(),
+            sha256: digest("prior source witness"),
+        }],
+        training_case_ids: vec!["prior-training".into()],
+        holdout_case_ids: vec!["reserved".into()],
+    }
+}
+
+fn synthetic_task() -> Task {
+    Task {
+        case_id: "synthetic".into(),
+        source_case_directory: "source".into(),
+        source_request_file: "calls/0002-request.json".into(),
+        source_request_sha256: "1".repeat(64),
+        source_initial_sha256: "2".repeat(64),
+        source_fixture_sha256: "3".repeat(64),
+        source_origin_sha256: "4".repeat(64),
+        source_rubric_sha256: "5".repeat(64),
+        source_branch: None,
+        baseline_manifest_sha256: horary_prompt_program::digest("current corpus"),
+        target_method: Method::MovableDeal,
+        target_stage: Stage::Condition,
+        program_file: None,
+        fixed_program_file: None,
+        fixed_program_sha256: None,
+        inspect_prompt_only: false,
+    }
+}
+
+#[test]
+fn legacy_reading_program_absence_keeps_exact_single_target_rule() {
+    let task = synthetic_task();
+    let encoded = serde_json::to_value(&task).unwrap();
+    assert!(encoded.get("fixed_program_file").is_none());
+    assert!(encoded.get("fixed_program_sha256").is_none());
+    let decoded: Task = serde_json::from_value(encoded.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), encoded);
+    assert!(program(&task, None).unwrap().is_none());
+    let mut target = synthetic_program("condition", None);
+    target.baseline_manifest_sha256 = task.baseline_manifest_sha256.clone();
+    assert!(program(&task, Some(&serde_json::to_vec(&target).unwrap())).is_ok());
+    let fixed = synthetic_program("intake", Some("complete_selected_program"));
+    target.overrides.extend(fixed.overrides);
+    assert!(program(&task, Some(&serde_json::to_vec(&target).unwrap())).is_err());
+}
+
+#[test]
+fn pinned_reading_seed_and_composed_target_preserve_exact_other_teaching() {
+    let dir = tempfile::tempdir().unwrap();
+    let original = synthetic_program("intake", Some("complete_selected_program"));
+    let source = serde_json::to_vec_pretty(&original).unwrap();
+    let file = dir.path().join("fixed.json");
+    fs::write(&file, &source).unwrap();
+    let mut task = synthetic_task();
+    task.fixed_program_file = Some(file.clone());
+    task.fixed_program_sha256 = Some(horary_prompt_program::digest(&source));
+    let mut seed = original.clone();
+    seed.baseline_manifest_sha256 = task.baseline_manifest_sha256.clone();
+    let accepted = program(&task, Some(&serde_json::to_vec(&seed).unwrap()))
+        .unwrap()
+        .unwrap();
+    assert_eq!(accepted.overrides, original.overrides);
+    assert!(program(&task, None).is_err());
+    let target = synthetic_program("condition", None);
+    seed.overrides.extend(target.overrides);
+    assert!(program(&task, Some(&serde_json::to_vec(&seed).unwrap())).is_ok());
+    let mut changed = seed.clone();
+    changed.overrides[0]
+        .replacement_text
+        .push_str(" Mutated prerequisite.");
+    assert!(program(&task, Some(&serde_json::to_vec(&changed).unwrap())).is_err());
+    changed = seed.clone();
+    changed.evidence.clear();
+    assert!(program(&task, Some(&serde_json::to_vec(&changed).unwrap())).is_err());
+    changed = seed.clone();
+    changed.baseline_manifest_sha256 = original.baseline_manifest_sha256;
+    assert!(program(&task, Some(&serde_json::to_vec(&changed).unwrap())).is_err());
+    fs::write(file, "changed source").unwrap();
+    assert!(program(&task, Some(&serde_json::to_vec(&seed).unwrap())).is_err());
+}
+
+#[test]
+fn fixed_reading_target_overlap_pin_half_and_input_injection_are_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut original = synthetic_program("condition", None);
+    original.overrides[0].method = None;
+    let bytes = serde_json::to_vec_pretty(&original).unwrap();
+    let file = dir.path().join("fixed.json");
+    fs::write(&file, &bytes).unwrap();
+    let mut task = synthetic_task();
+    task.fixed_program_file = Some(file);
+    assert!(program(&task, Some(&bytes)).is_err());
+    task.fixed_program_sha256 = Some(horary_prompt_program::digest(&bytes));
+    original.baseline_manifest_sha256 = task.baseline_manifest_sha256.clone();
+    assert!(
+        program(&task, Some(&serde_json::to_vec(&original).unwrap()))
+            .unwrap_err()
+            .contains("conflicts")
+    );
+    for field in ["accepted_checkpoint", "expected_facts", "ready_reading"] {
+        let mut encoded = serde_json::to_value(synthetic_task()).unwrap();
+        encoded[field] = json!({"fabricated":"state"});
+        assert!(serde_json::from_value::<Task>(encoded).is_err());
+        let mut encoded = serde_json::to_value(synthetic_program("condition", None)).unwrap();
+        encoded[field] = json!({"fabricated":"state"});
+        assert!(
+            horary_prompt_program::Program::parse(&serde_json::to_vec(&encoded).unwrap()).is_err()
+        );
+    }
 }

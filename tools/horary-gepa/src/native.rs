@@ -26,9 +26,24 @@ pub fn evaluate(
 ) -> Result<Value> {
     let program = plan.program(candidate)?;
     let archival = program.is_none() && plan.control_mode == ControlMode::ArchivedCapture;
+    let fixed_receipt = plan
+        .fixed_program
+        .as_ref()
+        .map(|_| {
+            crate::fixed::receipt(
+                plan,
+                program
+                    .as_ref()
+                    .ok_or("Fixed teaching has no execution program")?,
+            )
+        })
+        .transpose()?;
     let mut request = json!({"case":example,"candidate":candidate,"native_executable_sha256":plan.native_executable_sha256,
         "manifest_sha256":plan.manifest_sha256,"function":plan.function,"target_method":plan.target_method,
         "scope":plan.function.metric(),"archival_control":archival});
+    if let Some(receipt) = &fixed_receipt {
+        request["fixed_program"] = receipt.clone();
+    }
     if plan.objective == Objective::ExtractorReliability {
         request["objective"] = json!(plan.objective);
     }
@@ -169,6 +184,12 @@ pub fn evaluate(
     if let Some(program) = &program {
         keep(program_file.as_ref().ok_or("No program path")?, program)?;
     }
+    let fixed_file = if let Some(receipt) = &fixed_receipt {
+        keep(&directory.join("fixed-program-composition.json"), receipt)?;
+        Some(crate::fixed::write_source(plan, &directory)?)
+    } else {
+        None
+    };
     let mut task = json!({"case_id":example.id,"source_case_directory":example.source_case_directory,
         "source_request_file":example.source_request_file,"source_request_sha256":example.source_request_sha256,
         "source_initial_sha256":example.source_initial_sha256,"baseline_manifest_sha256":plan.manifest_sha256,
@@ -187,6 +208,11 @@ pub fn evaluate(
             task["target_stage"] = json!(plan.target_stage);
             task["source_branch"] = json!(example.source_branch);
             task["source_rubric_sha256"] = json!(example.source_rubric_sha256);
+            if let Some(file) = &fixed_file {
+                task["fixed_program_file"] = json!(file);
+                task["fixed_program_sha256"] =
+                    json!(plan.fixed_program.as_ref().ok_or("No fixed source")?.sha256);
+            }
         }
     }
     let task_file = directory.join("task.json");
@@ -250,14 +276,22 @@ pub fn evaluate(
     } else if plan.function == Function::ReadingJourney {
         crate::reading::verify_invocation(plan, &outcome, &focused)?;
     }
+    let mut fixed_invocations = None;
     if let Some(program) = &program {
         let mut applied = 0;
+        let mut target_applied = 0;
         for entry in
             fs::read_dir(native_directory.join("calls")).map_err(|error| error.to_string())?
         {
             let path = entry.map_err(|error| error.to_string())?.path();
             if path.to_string_lossy().ends_with("-request.json") {
                 let call = load(&path)?;
+                if plan.fixed_program.is_some() {
+                    let (all, target) = applied_branches(&call, &program.id, plan.signature());
+                    applied += all;
+                    target_applied += target;
+                    continue;
+                }
                 if call["prompt_program"]["candidate_id"] == program.id
                     || call["prompt_program"].as_array().is_some_and(|branches| {
                         branches
@@ -269,7 +303,18 @@ pub fn evaluate(
                 }
             }
         }
-        if applied == 0 {
+        if plan.fixed_program.is_some() {
+            if candidate != &plan.seed && target_applied == 0 {
+                return Err("Changed target teaching was not applied; prerequisite application cannot substitute for it".into());
+            }
+            let receipt = json!({"version":1,"execution_program_id":program.id,
+                "fixed_applied_branches":applied-target_applied,
+                "mutable_target_applied_branches":target_applied,
+                "mutable_target_changed":candidate != &plan.seed,
+                "qualification":"Observed application counts only; unused prerequisites and target semantic correctness are not inferred."});
+            keep(&directory.join("fixed-program-invocations.json"), &receipt)?;
+            fixed_invocations = Some(receipt);
+        } else if applied == 0 {
             // An observed upstream misclassification cannot be fixed by
             // injecting gold to force the requested extraction method.
             if plan.function == Function::Classification
@@ -286,6 +331,11 @@ pub fn evaluate(
         "native_evidence_directory":native_directory,
         "actual_function_calls":focused,
         "archival_control":archival,"cache_identity":cache_key});
+    if let Some(receipt) = fixed_invocations {
+        response["fixed_program_invocations"] = receipt;
+        response["fixed_program_composition"] =
+            fixed_receipt.ok_or("No fixed composition witness")?;
+    }
     if plan.objective == Objective::ExtractorReliability {
         response["objective"] = json!(plan.objective);
         let first = load(&native_directory.join("first-turn.json"))?;
@@ -311,6 +361,64 @@ pub fn evaluate(
         &json!({"operation":directory.strip_prefix(&journal.root).map_err(|error|error.to_string())?,"completed_sha256":digest(read(&directory.join("completed.json"))?)}),
     )?;
     Ok(response)
+}
+
+fn applied_branches(
+    call: &Value,
+    id: &str,
+    target: horary_prompt_program::Signature<'_>,
+) -> (u64, u64) {
+    let branches: Vec<_> = call["prompt_program"].as_array().map_or_else(
+        || vec![&call["prompt_program"]],
+        |branches| branches.iter().collect(),
+    );
+    let mut all = 0;
+    let mut mutable = 0;
+    for branch in branches {
+        if branch["candidate_id"] != id {
+            continue;
+        }
+        all += 1;
+        if branch["selector"]["stage"] == target.stage
+            && branch["selector"]["recognition_phase"].as_str() == target.recognition_phase
+            && branch["selector"]["method"].as_str() == target.method
+        {
+            mutable += 1;
+        }
+    }
+    (all, mutable)
+}
+
+#[cfg(test)]
+mod fixed_program_tests {
+    use super::*;
+    #[test]
+    fn prerequisite_application_cannot_masquerade_as_mutable_target_application() {
+        let target = horary_prompt_program::Signature {
+            stage: "condition",
+            recognition_phase: None,
+            method: Some("movable_deal"),
+        };
+        let fixed = json!({"candidate_id":"combined","selector":{"stage":"intake","recognition_phase":"complete_selected_program","method":"movable_deal"}});
+        let changed = json!({"candidate_id":"combined","selector":{"stage":"condition","recognition_phase":null,"method":"movable_deal"}});
+        let other = json!({"candidate_id":"another-program","selector":{"stage":"condition","recognition_phase":null,"method":"movable_deal"}});
+        assert_eq!(
+            applied_branches(&json!({"prompt_program":fixed}), "combined", target),
+            (1, 0)
+        );
+        assert_eq!(
+            applied_branches(
+                &json!({"prompt_program":[fixed,changed,other,null]}),
+                "combined",
+                target
+            ),
+            (2, 1)
+        );
+        assert_eq!(
+            applied_branches(&json!({"prompt_program":null}), "combined", target),
+            (0, 0)
+        );
+    }
 }
 
 fn input_invocation(target: &str, outcome: &Value, first: &Value, count: usize) -> Result<bool> {

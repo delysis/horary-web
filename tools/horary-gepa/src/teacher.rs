@@ -71,6 +71,10 @@ pub(crate) fn prepare(
         );
     }
     let component = &components[0];
+    plan.reconstruct(candidate)?;
+    if !plan.seed.contains_key(component) {
+        return Err("Reflection component is outside the mutable target".into());
+    }
     let current = candidate
         .get(component)
         .ok_or("Unknown reflection component")?;

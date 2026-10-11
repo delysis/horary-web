@@ -3950,7 +3950,7 @@
       "chartInputSha256": "eb0feab95c20699ee7d836971c218e313f45e5e0f9ef57fc9bd7d87df67cb149",
       "nativeChartInputSha256": "eb0feab95c20699ee7d836971c218e313f45e5e0f9ef57fc9bd7d87df67cb149",
       "provenance": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "provenanceSha256": "c1025f52a8249763515c4af159637f962185db8825ce5c99e553a6b04cdc2af3",
+      "provenanceSha256": "c01b9cd9ea9214ea94ba855a4ac0af71504a160414eac6ddcf9467b7b0b21160",
       "anchor": {
         "timestamp_ms": 1789387200000.0,
         "latitude": 38.657,
@@ -3963,7 +3963,7 @@
         "crates/horary-ai-core/src/ephemeris_coefficients.rs": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c",
         "crates/horary-ai-core/src/events.rs": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a",
         "src-tauri/src/horary_pipeline.rs": "3a8912ea4e0cecbf482807e72b7e7599d91b2b1b491fae36ccddb077f3032441",
-        "src-tauri/src/process_reference.rs": "738d2e26dee49e315273a7a9d7bfcbc91e0f68bc810d919fcf015f07ce6b85ec"
+        "src-tauri/src/process_reference.rs": "a960827f0907b19252e00e6cc45aad8819c16094f31bc38fe3510ef8db63f811"
       },
       "generator": "process_reference::tests::capture_documentation_chart_fixture",
       "capturedOs": "macos",
