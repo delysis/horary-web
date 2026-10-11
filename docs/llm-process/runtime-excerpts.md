@@ -4489,7 +4489,7 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
                 } else {
                     evidence.clone()
                 };
-                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":check_evidence,"finding":{"type":"string","minLength":1,"maxLength":220,"description":"A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."}})));
+                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":check_evidence,"finding":{"type":"string","minLength":1,"description":"Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."}})));
             }
             let mut fields = serde_json::Map::from_iter([
                 ("checks".into(), object(Value::Object(checks))),
@@ -5209,6 +5209,72 @@ pub(crate) fn validate_shape(value: &Value, schema: &Value) -> Result<(), String
     validate_shape_at(value, schema, "$")
 }
 
+/// Narrow diagnostics only; all alternatives have already been validated.
+fn tagged_alternative_feedback(
+    value: &Value,
+    alternatives: &[Value],
+    attempts: &[Result<(), String>],
+    path: &str,
+) -> Option<String> {
+    let object = value.as_object()?;
+    let first = alternatives.first()?;
+    if alternatives
+        .iter()
+        .any(|branch| branch["type"] != "object" || !branch["properties"].is_object())
+    {
+        return None;
+    }
+    let tags = first["properties"]
+        .as_object()?
+        .keys()
+        .filter(|key| {
+            alternatives.iter().all(|branch| {
+                let property = &branch["properties"][key.as_str()];
+                property["type"] == "string"
+                    && property["enum"].as_array().is_some_and(|values| {
+                        !values.is_empty() && values.iter().all(Value::is_string)
+                    })
+            })
+        })
+        .map(|key| Some((key.as_str(), object.get(key)?.as_str()?)))
+        .collect::<Option<Vec<_>>>()?;
+    if tags.is_empty() {
+        return None;
+    }
+    let mut unsupported = Vec::new();
+    for (key, supplied) in &tags {
+        let allowed = alternatives
+            .iter()
+            .flat_map(|branch| branch["properties"][*key]["enum"].as_array())
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect::<std::collections::BTreeSet<_>>();
+        if !allowed.contains(supplied) {
+            unsupported.push(format!(
+                "{path}.{key}: unexpected value {}; allowed values are {}.",
+                json!(supplied),
+                json!(allowed)
+            ));
+        }
+    }
+    if !unsupported.is_empty() {
+        return Some(unsupported.join("; "));
+    }
+    let errors = alternatives
+        .iter()
+        .zip(attempts)
+        .filter(|(branch, _)| {
+            tags.iter().all(|(key, supplied)| {
+                branch["properties"][*key]["enum"]
+                    .as_array()
+                    .is_some_and(|values| values.iter().any(|v| v.as_str() == Some(*supplied)))
+            })
+        })
+        .filter_map(|(_, result)| result.as_ref().err().map(String::as_str))
+        .collect::<Vec<_>>();
+    (!errors.is_empty()).then(|| errors.join("; "))
+}
+
 /// Preserve the worksheet's strict acceptance rules while giving a repair
 /// worker the field, index and exact constraint that rejected its proposal.
 fn validate_shape_at(value: &Value, schema: &Value, path: &str) -> Result<(), String> {
@@ -5221,14 +5287,20 @@ fn validate_shape_at(value: &Value, schema: &Value, path: &str) -> Result<(), St
         if matches == 1 {
             return Ok(());
         }
+        let details = (matches == 0)
+            .then(|| tagged_alternative_feedback(value, alternatives, &attempts, path))
+            .flatten()
+            .unwrap_or_else(|| {
+                attempts
+                    .into_iter()
+                    .filter_map(Result::err)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            });
         return Err(format!(
             "{path}: must match exactly one response alternative; matched {matches} of {}. {}",
             alternatives.len(),
-            attempts
-                .into_iter()
-                .filter_map(Result::err)
-                .collect::<Vec<_>>()
-                .join("; ")
+            details
         ));
     }
     if let Some(allowed) = schema["enum"].as_array() {
@@ -5344,6 +5416,329 @@ fn validate_shape_at(value: &Value, schema: &Value, path: &str) -> Result<(), St
 #[cfg(test)]
 mod shape_feedback_tests {
     use super::*;
+
+    fn production_update_schema() -> Value {
+        let turn = crate::reading_contracts::turn_schema(None);
+        json!({"type":"object","properties":{"updates":turn["properties"]["updates"]}})
+    }
+
+    fn all_alternative_errors(value: &Value, schema: &Value, path: &str) -> String {
+        let alternatives = schema["oneOf"].as_array().unwrap();
+        let attempts = alternatives
+            .iter()
+            .map(|branch| validate_shape_at(value, branch, path))
+            .collect::<Vec<_>>();
+        let matches = attempts.iter().filter(|result| result.is_ok()).count();
+        format!(
+            "{path}: must match exactly one response alternative; matched {matches} of {}. {}",
+            alternatives.len(),
+            attempts
+                .into_iter()
+                .filter_map(Result::err)
+                .collect::<Vec<_>>()
+                .join("; ")
+        )
+    }
+
+    #[test]
+    fn unknown_update_field_reports_the_union_once_without_relaxing_validation() {
+        let schema = production_update_schema();
+        let value = json!({"updates":[{"field":"subject","mode":"supply","value":"the vase","quote":"the vase"}]});
+        let before = value.clone();
+        let error = validate_shape(&value, &schema).unwrap_err();
+        let count = schema["properties"]["updates"]["items"]["oneOf"]
+            .as_array()
+            .unwrap()
+            .len();
+        assert!(error.contains(&format!("matched 0 of {count}")), "{error}");
+        assert_eq!(error.matches("$.updates[0].field").count(), 1, "{error}");
+        assert!(
+            error.contains("unexpected value \"subject\"; allowed values are ["),
+            "{error}"
+        );
+        assert!(error.contains("\"deal_capacity\""), "{error}");
+        assert!(!error.contains("$.updates[0].mode"), "{error}");
+        assert!(crate::reading_contracts::turn_schema(None)["properties"]
+            .get("subject")
+            .is_some());
+        assert_eq!(value, before);
+        let mut unknown_mode = value;
+        unknown_mode["updates"][0]["field"] = json!("deal_capacity");
+        unknown_mode["updates"][0]["mode"] = json!("guess");
+        let error = validate_shape(&unknown_mode, &schema).unwrap_err();
+        assert_eq!(error.matches("$.updates[0].mode").count(), 1, "{error}");
+        assert!(!error.contains("$.updates[0].field:"), "{error}");
+    }
+
+    #[test]
+    fn known_update_tags_report_only_their_full_branch_failure() {
+        let schema = production_update_schema();
+        let value = json!({"updates":[{"field":"deal_capacity","mode":"supply","value":"profit","quote":"profit"}]});
+        let error = validate_shape(&value, &schema).unwrap_err();
+        assert_eq!(error.matches("$.updates[0].value").count(), 1, "{error}");
+        assert!(
+            error.contains("allowed values are [\"buy\",\"sell\",\"rent\"]"),
+            "{error}"
+        );
+        assert!(!error.contains("$.updates[0].field:"), "{error}");
+        assert!(!error.contains("$.updates[0].mode:"), "{error}");
+        let mut valid = value;
+        valid["updates"][0]["value"] = json!("sell");
+        validate_shape(&valid, &schema).unwrap();
+    }
+
+    #[test]
+    fn joint_field_and_mode_tags_keep_unavailable_reason_validation() {
+        let schema = production_update_schema();
+        let mut value = json!({"updates":[{"field":"deal_capacity","mode":"unavailable","value":"I do not know the transaction yet.","quote":"I do not know"}]});
+        validate_shape(&value, &schema).unwrap();
+        for (invalid, constraint) in [
+            (json!(null), "wrong value type null; expected string"),
+            (
+                json!("x".repeat(701)),
+                "string has 701 characters; maximum is 700",
+            ),
+        ] {
+            value["updates"][0]["value"] = invalid;
+            let error = validate_shape(&value, &schema).unwrap_err();
+            assert!(
+                error.contains(&format!("$.updates[0].value: {constraint}")),
+                "{error}"
+            );
+            assert!(!error.contains("allowed values are [\"buy\""), "{error}");
+            assert!(!error.contains("$.updates[0].mode:"), "{error}");
+        }
+    }
+
+    #[test]
+    fn missing_nonstring_and_incompatible_tags_keep_complete_feedback() {
+        let schema =
+            crate::reading_contracts::turn_schema(None)["properties"]["updates"]["items"].clone();
+        for value in [
+            json!({"field":"deal_capacity","value":"sell","quote":"sell"}),
+            json!({"field":null,"mode":"supply","value":"sell","quote":"sell"}),
+            json!({"field":"deal_capacity","mode":2,"value":"sell","quote":"sell"}),
+        ] {
+            assert_eq!(
+                validate_shape(&value, &schema).unwrap_err(),
+                all_alternative_errors(&value, &schema, "$")
+            );
+        }
+        let incompatible = json!({"oneOf":[
+            {"type":"object","properties":{"field":{"type":"string","enum":["a"]},"mode":{"type":"string","enum":["x"]}}},
+            {"type":"object","properties":{"field":{"type":"string","enum":["b"]},"mode":{"type":"string","enum":["y"]}}}
+        ]});
+        let value = json!({"field":"a","mode":"y"});
+        assert_eq!(
+            validate_shape(&value, &incompatible).unwrap_err(),
+            all_alternative_errors(&value, &incompatible, "$")
+        );
+    }
+
+    #[test]
+    fn mixed_or_malformed_tag_schemas_keep_complete_feedback() {
+        for schema in [
+            json!({"oneOf":[{"type":"null"},{"type":"object","properties":{"field":{"type":"string","enum":["a"]}}}]}),
+            json!({"oneOf":[{"type":"object","properties":{"field":{"type":"string","enum":["a"]}}},{"type":"object","properties":{"field":{"type":"string","enum":[2]}}}]}),
+            json!({"oneOf":[{"type":"object","properties":{"field":{"type":"string","enum":["a"]}}},{"type":"object","properties":{"field":{"type":"string","enum":[]}}}]}),
+        ] {
+            let value = json!({"field":"other"});
+            assert_eq!(
+                validate_shape(&value, &schema).unwrap_err(),
+                all_alternative_errors(&value, &schema, "$")
+            );
+        }
+    }
+
+    #[test]
+    fn tagged_feedback_preserves_full_validation_and_exactly_one_cardinality() {
+        let production =
+            crate::reading_contracts::turn_schema(None)["properties"]["updates"]["items"].clone();
+        let branch = json!({"type":"object","properties":{
+            "field":{"type":"string","enum":["a"]},
+            "mode":{"type":"string","enum":["supply"]},
+            "value":{"type":"string","maxLength":3}
+        }});
+        let overlap = json!({"oneOf":[branch.clone(),branch]});
+        for (schema, values) in [
+            (
+                production,
+                vec![
+                    json!({"field":"deal_capacity","mode":"supply","value":"buy","quote":"buy"}),
+                    json!({"field":"deal_capacity","mode":"unavailable","value":"unknown","quote":"unknown"}),
+                    json!({"field":"deal_capacity","mode":"supply","value":"profit","quote":"profit"}),
+                    json!({"field":"deal_capacity","mode":"supply","value":false,"quote":"buy"}),
+                    json!({"field":"deal_capacity","mode":"supply","value":"buy"}),
+                    json!({"field":"deal_capacity","mode":"supply","value":"buy","quote":"buy","extra":true}),
+                    json!({"field":"subject","mode":"supply","value":"vase","quote":"vase"}),
+                ],
+            ),
+            (
+                overlap,
+                vec![
+                    json!({"field":"a","mode":"supply","value":"yes"}),
+                    json!({"field":"a","mode":"supply","value":"long"}),
+                    json!({"field":"a","mode":"supply","value":null}),
+                ],
+            ),
+        ] {
+            for value in values {
+                let count = schema["oneOf"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|branch| validate_shape(&value, branch).is_ok())
+                    .count();
+                assert_eq!(
+                    validate_shape(&value, &schema).is_ok(),
+                    count == 1,
+                    "{value}"
+                );
+                if count > 1 {
+                    assert_eq!(
+                        validate_shape(&value, &schema).unwrap_err(),
+                        all_alternative_errors(&value, &schema, "$")
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn captured_training_reception_prose_is_not_a_formatting_rejection() {
+        // The closed TRAIN sale-profit proposal was rejected at this field's
+        // 220-character limit. Exercise formatting only: its interpretation,
+        // including the contradictory direction claim, is not certified here.
+        let value = json!({"checks":{
+            "direction":{"state":"unestablished","evidence":[],"finding":"No directed receptions between the relevant parties (Jupiter, Saturn, Mercury, Moon) are supplied."},
+            "strength_and_quality":{"state":"supported","evidence":["e43","e47","e49","e51","e52"],"finding":"Jupiter (You) negatively regards Saturn (the bowls) by detriment; Mercury (customers) has minor term regard for Jupiter; Mercury negatively regards Moon (buyers' money) by fall; Moon (buyers' money) negatively regards Jupiter by detriment, but strongly loves Mercury (customers) by domicile and exaltation."},
+            "contextual_motive":{"state":"supported","evidence":["e43","e47","e49","e51","e52"],"finding":"The buyers' money (Moon) is strongly drawn to the customers (Mercury), while you (Jupiter) appear to have a negative view of the bowls (Saturn). The customers (Mercury) show little interest in the money (Moon) they are providing."}
+        },"summary":"There is significant tension: you (Jupiter) seem to regard the bowls (Saturn) negatively, and the money from customers (Moon) is strongly directed toward the customers themselves (Mercury) rather than you. While customers (Mercury) have a minor inclination toward you, they show a major negative regard for the money (Moon) involved in the transaction.",
+        "unknowns":["The customers' regard for the bowls (Saturn) is not established.","The bowls' (Saturn) regard for you or the customers is not established.","The buyers' money's (Moon) regard for the bowls (Saturn) is not established."]});
+        let facts = ["e43", "e47", "e49", "e51", "e52"].map(|id| Fact {
+            id: id.into(),
+            kind: "reception".into(),
+            label: "Offline known-ID witness".into(),
+            detail: "No semantic assessment in this formatting test".into(),
+            planets: Vec::new(),
+            condition_facet: None,
+            event: None,
+        });
+        let before = value.clone();
+        assert_eq!(
+            value["checks"]["strength_and_quality"]["finding"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count(),
+            306
+        );
+        let contract = schema(Stage::Reception, &facts);
+        assert_eq!(
+            contract["properties"]["checks"]["properties"]["strength_and_quality"]["properties"]
+                ["finding"]["type"],
+            "string"
+        );
+        assert_eq!(
+            contract["properties"]["checks"]["properties"]["strength_and_quality"]["properties"]
+                ["finding"]["minLength"],
+            1
+        );
+        assert!(
+            contract["properties"]["checks"]["properties"]["strength_and_quality"]["properties"]
+                ["finding"]
+                .get("maxLength")
+                .is_none()
+        );
+        validate_shape(&value, &contract).unwrap();
+        assert_eq!(value, before); // No shortening or altered historical data.
+    }
+
+    fn synthetic_reception() -> (Value, Vec<Fact>) {
+        let facts = vec![Fact {
+            id: "e0".into(),
+            kind: "reception".into(),
+            label: "Venus → Mars".into(),
+            detail: "Venus regards Mars positively by domicile; the reverse is not supplied."
+                .into(),
+            planets: vec!["Venus".into(), "Mars".into()],
+            condition_facet: None,
+            event: None,
+        }];
+        let value = json!({"checks":{
+            "direction":{"state":"supported","evidence":["e0"],"finding":"Venus regards Mars; this fact does not establish the reverse direction."},
+            "strength_and_quality":{"state":"supported","evidence":["e0"],"finding":"The supplied domicile reception indicates strong positive regard."},
+            "contextual_motive":{"state":"unestablished","evidence":[],"finding":"The fixture supplies no context for a motive assessment."}
+        },"summary":"An observed directed regard is not a prediction of an event.","unknowns":[]});
+        (value, facts)
+    }
+
+    #[test]
+    fn longer_findings_keep_nonempty_type_and_resource_guards() {
+        let (value, facts) = synthetic_reception();
+        let field = "/checks/strength_and_quality/finding";
+        let mut longer = value.clone();
+        longer["checks"]["strength_and_quality"]["finding"] =
+            json!(format!("{} {}", value.pointer(field).unwrap().as_str().unwrap(),
+                "Each direction belongs to the guest's role. The native fact does not establish reciprocity, the recipient's ability, a contact or an event. The supplied domicile quality must remain distinct from the planet's own essential condition."));
+        assert!(
+            longer
+                .pointer(field)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .chars()
+                .count()
+                > 220
+        );
+        validate_for(Stage::Reception, Matter::Other, &longer, &facts).unwrap();
+        for invalid in [json!(""), json!("  \n"), json!(null), json!(2)] {
+            let mut rejected = value.clone();
+            rejected["checks"]["strength_and_quality"]["finding"] = invalid;
+            assert!(validate_for(Stage::Reception, Matter::Other, &rejected, &facts).is_err());
+        }
+        for overflow in ["a".repeat(8001), "é".repeat(4001), "<image>".into()] {
+            let mut rejected = value.clone();
+            rejected["checks"]["strength_and_quality"]["finding"] = json!(overflow);
+            assert_eq!(
+                validate_for(Stage::Reception, Matter::Other, &rejected, &facts).unwrap_err(),
+                "Worksheet exceeds its bounds."
+            );
+        }
+    }
+
+    #[test]
+    fn advisory_brevity_keeps_foreign_evidence_and_native_reception_checks() {
+        let (value, facts) = synthetic_reception();
+        let mut foreign = value.clone();
+        foreign["checks"]["direction"]["evidence"] = json!(["not-supplied"]);
+        assert!(
+            validate_for(Stage::Reception, Matter::Other, &foreign, &facts)
+                .unwrap_err()
+                .contains("allowed values")
+        );
+        let mut missing = value.clone();
+        missing["checks"]["direction"]["evidence"] = json!([]);
+        validate_shape(&missing, &schema(Stage::Reception, &facts)).unwrap();
+        assert!(
+            validate_for(Stage::Reception, Matter::Other, &missing, &facts)
+                .unwrap_err()
+                .contains("needs supplied evidence")
+        );
+        let mut positions = facts.clone();
+        positions[0].kind = "position".into();
+        validate_shape(&value, &schema(Stage::Reception, &positions)).unwrap();
+        assert_eq!(
+            validate_for(Stage::Reception, Matter::Other, &value, &positions).unwrap_err(),
+            "Reception requires a directed reception fact."
+        );
+        let mut unknown_state = value.clone();
+        unknown_state["checks"]["direction"]["state"] = json!("strong");
+        assert!(validate_for(Stage::Reception, Matter::Other, &unknown_state, &facts).is_err());
+        let mut extra = value;
+        extra["checks"]["direction"]["invented"] = json!("Another field");
+        assert!(validate_for(Stage::Reception, Matter::Other, &extra, &facts).is_err());
+    }
 
     #[test]
     fn irrelevant_checks_still_require_an_explanation_in_the_public_contract() {

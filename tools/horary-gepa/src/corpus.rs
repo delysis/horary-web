@@ -1139,7 +1139,15 @@ fn case(
         matches!(
             outcome["execution_status"].as_str(),
             Some("execution_error" | "observed_native_no_progress")
-        )
+        ) || outcome["execution_status"] == "completed"
+            // The legacy status describes the first turn. Its success cannot
+            // erase a proved later supplying-turn rejection or mean a reading passed.
+            && first_completed
+            && supplying
+            && *follow_completed == false
+            && follow_stop
+                .as_ref()
+                .is_some_and(|stop| stop["stop_kind"] == "no_progress")
     } else {
         matches!(
             outcome["execution_status"].as_str(),
@@ -1888,6 +1896,48 @@ pub(crate) mod tests {
             campaign
         }
 
+        fn no_progress_after_supply() -> Self {
+            let campaign = Self::no_progress(None, false);
+            let directory = campaign.root.join("cases/a");
+            let mut fixture = load(&directory.join("fixture.json")).unwrap();
+            fixture["follow_up"] = json!("I am the buyer.");
+            write(&directory.join("fixture.json"), &fixture);
+            write(&campaign.root.join("fixtures.json"), &json!([fixture]));
+            let mut manifest = load(&campaign.root.join("manifest.json")).unwrap();
+            manifest["fixture_sha256"] =
+                json!(compact_hash(&campaign.root.join("fixtures.json")).unwrap());
+            write(&campaign.root.join("manifest.json"), &manifest);
+            let mut report = load(&campaign.root.join("report.json")).unwrap();
+            report["manifest"] = manifest;
+            write(&campaign.root.join("report.json"), &report);
+            let mut first = load(&directory.join("initial.json")).unwrap();
+            first["result"] = json!({"Ok":null});
+            write(&directory.join("first-turn.json"), &first);
+            let mut final_state = load(&directory.join("final.json")).unwrap();
+            final_state["session"]["messages"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"role":"user","text":fixture["follow_up"]}));
+            let follow = json!({"status":"executed after matching elicitation","words":fixture["follow_up"],
+                "result":{"Err":horary_prompt_program::rejection_cycle::STOP}});
+            final_state["follow_up"] = follow.clone();
+            final_state["hurdles"]["reading"] =
+                json!({"status":"fail","failures":[horary_prompt_program::rejection_cycle::STOP]});
+            write(&directory.join("final.json"), &final_state);
+            let mut outcome = load(&directory.join("outcome.json")).unwrap();
+            outcome["grade"]["semantic_pass"] = json!(true); // Original first-turn grade only.
+            outcome["first_turn_execution_completed"] = json!(true);
+            outcome["follow_up_execution_completed"] = json!(false);
+            outcome["follow_up_scripted"] = json!(true);
+            outcome["follow_up_pass"] = json!(false);
+            outcome["follow_up"] = follow;
+            outcome["hurdles"] = final_state["hurdles"].clone();
+            outcome["execution_status"] = json!("completed"); // Original first-turn status only.
+            campaign.outcome(&outcome);
+            campaign.close();
+            campaign
+        }
+
         // The final intake attempt was counted by the native runtime, but
         // Google generation was never submitted. Earlier answers are settled
         // native rejections of this same original task, not a completed result.
@@ -2137,6 +2187,75 @@ pub(crate) mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn legacy_first_turn_completion_preserves_a_proved_failed_supplying_reading() {
+        let campaign = Campaign::no_progress_after_supply();
+        let directory = campaign.root.join("cases/a");
+        let before = tree(&directory).unwrap();
+        let outcome = load(&directory.join("outcome.json")).unwrap();
+        assert_eq!(outcome["execution_status"], "completed");
+        assert_eq!(outcome["first_turn_execution_completed"], true);
+        assert_eq!(outcome["follow_up_execution_completed"], false);
+        assert_eq!(outcome["follow_up_pass"], false);
+        assert_eq!(outcome["hurdles"]["reading"]["status"], "fail");
+        seal(&campaign.root, &campaign.closure).unwrap();
+        assert_eq!(tree(&directory).unwrap(), before);
+        assert_eq!(load(&directory.join("outcome.json")).unwrap(), outcome);
+        assert_eq!(
+            seal(&campaign.root, &campaign.closure).unwrap()["new_provider_calls"],
+            0
+        );
+    }
+
+    #[test]
+    fn legacy_completed_status_cannot_hide_unknown_or_unobserved_follow_up_work() {
+        for defect in [
+            "first_failed",
+            "follow_unknown",
+            "follow_success",
+            "unknown_error",
+            "no_proof",
+            "uncertain_http",
+            "no_supply",
+        ] {
+            let campaign = Campaign::no_progress_after_supply();
+            let directory = campaign.root.join("cases/a");
+            let mut outcome = load(&directory.join("outcome.json")).unwrap();
+            let mut final_state = load(&directory.join("final.json")).unwrap();
+            match defect {
+                "first_failed" => outcome["first_turn_execution_completed"] = json!(false),
+                "follow_unknown" => outcome["follow_up_execution_completed"] = Value::Null,
+                "follow_success" => outcome["follow_up_execution_completed"] = json!(true),
+                "unknown_error" => {
+                    final_state["follow_up"]["result"] =
+                        json!({"Err":"Unknown transport completion"})
+                }
+                "no_proof" => final_state["session"]["audit"] = json!([]),
+                "uncertain_http" => {
+                    let path = directory.join("calls/0003-result.json");
+                    let mut result = load(&path).unwrap();
+                    result["provider_receipt"]["generation_attempts"][0]["error"] =
+                        json!("Uncertain transport");
+                    write(&path, &result);
+                }
+                "no_supply" => final_state["follow_up"]["status"] = json!("not scripted"),
+                _ => unreachable!(),
+            }
+            outcome["follow_up"] = final_state["follow_up"].clone();
+            write(&directory.join("final.json"), &final_state);
+            campaign.outcome(&outcome);
+            campaign.close();
+            assert!(seal(&campaign.root, &campaign.closure).is_err(), "{defect}");
+            assert!(!campaign.root.join("case-origins").exists(), "{defect}");
+        }
+        let campaign = Campaign::no_progress(None, false);
+        let mut outcome = load(&campaign.root.join("cases/a/outcome.json")).unwrap();
+        outcome["execution_status"] = json!("completed");
+        campaign.outcome(&outcome);
+        campaign.close();
+        assert!(seal(&campaign.root, &campaign.closure).is_err());
     }
 
     #[test]

@@ -31,6 +31,8 @@ pub struct CompleteReadingBook {
     pub file: PathBuf,
     pub sha256: String,
     pub ocr_pages: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_witnesses: Option<Pin>,
 }
 impl CompleteReadingBook {
     fn excerpts(&self) -> Result<Value> {
@@ -79,6 +81,179 @@ impl CompleteReadingBook {
             "page_numbering":"OCR page identifiers; printed page labels remain in the exact source text",
             "pages":excerpts,"scope":"complete_reading_source_review","max_pages":48,"max_bytes":160_000}))
     }
+
+    fn printed_mappings(&self, passages: &[Passage]) -> Result<BTreeMap<usize, usize>> {
+        let Some(pin) = &self.page_witnesses else {
+            return Ok(BTreeMap::new());
+        };
+        pin.verify()?;
+        let bytes = read(&pin.file)?;
+        if digest(&bytes) != pin.sha256 {
+            return Err("Printed-page witness file changed while being read".into());
+        }
+        let map: PrintedPageMap = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if map.version != 1
+            || map.book_sha256 != self.sha256
+            || map.pages.is_empty()
+            || map.pages.len() > 48
+            || map.provenance.len() > 8
+        {
+            return Err("Printed-page witnesses have another book or invalid bounds".into());
+        }
+        let bytes = read(&self.file)?;
+        if digest(&bytes) != self.sha256 {
+            return Err("Printed-page witness book changed".into());
+        }
+        let source = std::str::from_utf8(&bytes).map_err(|e| e.to_string())?;
+        let mut provenance = Vec::new();
+        for pin in &map.provenance {
+            pin.verify()?;
+            let bytes = read(&pin.file)?;
+            if digest(&bytes) != pin.sha256 {
+                return Err("Printed-page authoring provenance changed while being read".into());
+            }
+            let value: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+            let book = value.get("source").unwrap_or(&value);
+            if !matches!(
+                value["partition"].as_str(),
+                Some("training" | "authored_training")
+            ) || book["book_sha256"] != self.sha256
+            {
+                return Err("Printed-page provenance is not the pinned training book".into());
+            }
+            provenance.push(book.clone());
+        }
+        let mut mappings = BTreeMap::new();
+        let mut ocr_seen = BTreeSet::new();
+        for witness in map.pages {
+            if witness.printed_page == 0
+                || witness.printed_page > 10_000
+                || !self.ocr_pages.contains(&witness.ocr_page)
+                || !ocr_seen.insert(witness.ocr_page)
+                || mappings
+                    .insert(witness.printed_page, witness.ocr_page)
+                    .is_some()
+                || digest(page_window(source, witness.ocr_page)?) != witness.sha256
+            {
+                return Err(
+                    "Printed-page witness is duplicated, omitted or differs from exact book bytes"
+                        .into(),
+                );
+            }
+            let indexed = passages
+                .iter()
+                .filter(|p| {
+                    p.printed_first <= witness.printed_page
+                        && witness.printed_page <= p.printed_last
+                })
+                .map(|p| p.ocr_first + witness.printed_page - p.printed_first)
+                .collect::<BTreeSet<_>>();
+            if !indexed.is_empty() && indexed != BTreeSet::from([witness.ocr_page]) {
+                return Err("Printed-page witness conflicts with the native quote index".into());
+            }
+            match (
+                witness.provenance_index,
+                witness.lower_rule,
+                witness.upper_rule,
+            ) {
+                (Some(index), None, None) => {
+                    let pages = provenance
+                        .get(index)
+                        .and_then(|v| v["page_witnesses"].as_array())
+                        .ok_or("Printed-page witness lacks pinned authoring provenance")?;
+                    if pages
+                        .iter()
+                        .filter(|v| {
+                            v["printed_page"] == witness.printed_page
+                                && v["ocr_page"] == witness.ocr_page
+                                && v["sha256"] == witness.sha256
+                        })
+                        .count()
+                        != 1
+                    {
+                        return Err(
+                            "Printed-page witness differs from its authored source mapping".into(),
+                        );
+                    }
+                }
+                (None, Some(lower), Some(upper)) => {
+                    let find = |id: &str| -> Result<&Passage> {
+                        let matching = passages.iter().filter(|p| p.id == id).collect::<Vec<_>>();
+                        if matching.len() != 1 {
+                            return Err(
+                                "Printed-page mapping lacks unique native bracket witnesses".into(),
+                            );
+                        }
+                        Ok(matching[0])
+                    };
+                    let lower = find(&lower)?;
+                    let upper = find(&upper)?;
+                    if !(lower.printed_last < witness.printed_page
+                        && witness.printed_page < upper.printed_first)
+                        || upper.ocr_first.checked_sub(lower.ocr_last)
+                            != upper.printed_first.checked_sub(lower.printed_last)
+                        || lower
+                            .ocr_last
+                            .checked_add(witness.printed_page - lower.printed_last)
+                            != Some(witness.ocr_page)
+                    {
+                        return Err(
+                            "Printed-page mapping is not within consistent native book brackets"
+                                .into(),
+                        );
+                    }
+                    for page in lower.ocr_last..=upper.ocr_first {
+                        let _ = page_window(source, page)?;
+                    }
+                }
+                _ => {
+                    return Err(
+                        "Printed-page mapping needs one explicit authored or bracket authority"
+                            .into(),
+                    )
+                }
+            }
+        }
+        Ok(mappings)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrintedPageMap {
+    version: u32,
+    book_sha256: String,
+    provenance: Vec<Pin>,
+    pages: Vec<PrintedPageWitness>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrintedPageWitness {
+    printed_page: usize,
+    ocr_page: usize,
+    sha256: String,
+    #[serde(default)]
+    provenance_index: Option<usize>,
+    #[serde(default)]
+    lower_rule: Option<String>,
+    #[serde(default)]
+    upper_rule: Option<String>,
+}
+
+// Authored page fingerprints include the delimiter newline before the next
+// marker. The legacy excerpt representation deliberately remains unchanged.
+fn page_window(source: &str, page: usize) -> Result<&str> {
+    let marker = format!("<!-- page:{page:04} -->");
+    if page == 0 || page > 10_000 || source.matches(&marker).count() != 1 {
+        return Err("Printed-page witness lacks a unique exact book marker".into());
+    }
+    let start = source.find(&marker).ok_or("Missing printed-page marker")?;
+    let tail = &source[start..];
+    let end = tail[marker.len()..]
+        .find("<!-- page:")
+        .map_or(tail.len(), |offset| marker.len() + offset);
+    Ok(&tail[..end])
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -550,6 +725,7 @@ fn source_coverage(plan: &PairPlan, program: &Program) -> Result<()> {
     {
         return Err("Source index has invalid or ambiguous printed/OCR mapping".into());
     }
+    let printed_mappings = plan.book.printed_mappings(&passages)?;
     let selected = plan.book.ocr_pages.iter().copied().collect::<BTreeSet<_>>();
     for side in [&plan.baseline, &plan.candidate] {
         let manifest = load(&side.campaign.join("manifest.json"))?;
@@ -595,7 +771,7 @@ fn source_coverage(plan: &PairPlan, program: &Program) -> Result<()> {
                     .as_str()
                     .ok_or("No rubric printed pages")?,
             )? {
-                let mapped = passages
+                let mut mapped = passages
                     .iter()
                     .filter(|p| {
                         p.printed_first <= printed
@@ -604,6 +780,9 @@ fn source_coverage(plan: &PairPlan, program: &Program) -> Result<()> {
                     })
                     .map(|p| p.ocr_first + printed - p.printed_first)
                     .collect::<BTreeSet<_>>();
+                if mapped.is_empty() {
+                    mapped.extend(printed_mappings.get(&printed).copied());
+                }
                 if mapped.len() != 1 {
                     return Err(format!(
                         "Printed rubric page {printed} lacks a unique pinned OCR mapping"
@@ -822,7 +1001,7 @@ fn packet(
         directory: &directory,
         fixture: &directory.join("fixture.json"),
         rubric: &directory.join("reading-rubric.json"),
-        book: plan.book.excerpts()?,
+        book: reviewer_book(plan)?,
         outcome: &observed["outcome"],
         focused: &focused,
         include_records: true,
@@ -847,6 +1026,28 @@ fn packet(
         );
     }
     Ok(packet)
+}
+
+fn reviewer_book(plan: &PairPlan) -> Result<Value> {
+    let mut book = plan.book.excerpts()?;
+    if let Some(pin) = &plan.book.page_witnesses {
+        let passages: Vec<Passage> =
+            serde_json::from_value(load(&plan.passages.file)?).map_err(|e| e.to_string())?;
+        let mappings = plan.book.printed_mappings(&passages)?;
+        for page in book["pages"]
+            .as_array_mut()
+            .ok_or("No reviewer book pages")?
+        {
+            for (printed, ocr) in &mappings {
+                if page["ocr_page"] == *ocr {
+                    page["printed_page"] = json!(printed);
+                }
+            }
+        }
+        book["printed_page_witnesses"] = json!({"file":pin.file,"sha256":pin.sha256,
+            "printed_to_ocr":mappings,"authority":"Exact pinned book pages plus training authoring provenance or explicit consistent native page brackets; no inferred offset fallback"});
+    }
+    Ok(book)
 }
 
 fn validate(packet: &Packet, observed: &Value, mut answer: Value) -> Result<Value> {
@@ -1128,6 +1329,7 @@ mod tests {
                 file: book_file.clone(),
                 sha256: digest(read(&book_file).unwrap()),
                 ocr_pages: vec![1],
+                page_witnesses: None,
             };
             let passages = root.join("passages.json");
             write(
@@ -1366,6 +1568,250 @@ mod tests {
     }
 
     #[test]
+    fn legacy_complete_book_and_packet_omit_optional_page_mapping() {
+        let f = Fixture::new();
+        let plan = f.prepare();
+        let value = serde_json::to_value(&plan.book).unwrap();
+        assert_eq!(
+            value,
+            json!({"file":plan.book.file,"sha256":plan.book.sha256,
+            "ocr_pages":plan.book.ocr_pages})
+        );
+        let decoded: CompleteReadingBook = serde_json::from_value(value.clone()).unwrap();
+        assert!(decoded.page_witnesses.is_none());
+        assert_eq!(serde_json::to_value(decoded).unwrap(), value);
+        assert_eq!(reviewer_book(&plan).unwrap(), plan.book.excerpts().unwrap());
+    }
+
+    fn synthetic_page_map(book: &CompleteReadingBook, root: &Path, provenance: bool) -> Pin {
+        let source = fs::read_to_string(&book.file).unwrap();
+        let fingerprint = digest(page_window(&source, 1).unwrap());
+        let mut sources = vec![];
+        if provenance {
+            let file = root.join("authored-page-provenance.json");
+            write(
+                &file,
+                &json!({"partition":"training","book_sha256":book.sha256,
+                "page_witnesses":[{"printed_page":11,"ocr_page":1,"sha256":fingerprint}]}),
+            );
+            sources.push(Pin::capture(&file).unwrap());
+        }
+        let file = root.join("printed-page-map.json");
+        let authority = if provenance {
+            json!({"provenance_index":0})
+        } else {
+            json!({"lower_rule":"before","upper_rule":"after"})
+        };
+        let mut page = json!({"printed_page":11,"ocr_page":1,"sha256":fingerprint});
+        page.as_object_mut()
+            .unwrap()
+            .extend(authority.as_object().unwrap().clone());
+        write(
+            &file,
+            &json!({"version":1,"book_sha256":book.sha256,"provenance":sources,"pages":[page]}),
+        );
+        Pin::capture(&file).unwrap()
+    }
+
+    #[test]
+    fn authored_page_mapping_covers_a_partial_index_without_erasing_native_rules() {
+        let f = Fixture::new();
+        let mut plan = f.prepare();
+        for side in [&plan.baseline, &plan.candidate] {
+            let file = side.campaign.join("cases/a/reading-rubric.json");
+            let mut rubric = load(&file).unwrap();
+            rubric["source"]["printed_pages"] = json!("11");
+            write(&file, &rubric);
+        }
+        let program = Program::parse(&read(&f.program).unwrap()).unwrap();
+        assert!(source_coverage(&plan, &program)
+            .unwrap_err()
+            .contains("Printed rubric page 11"));
+        plan.book.page_witnesses = Some(synthetic_page_map(&plan.book, f.source.path(), true));
+        source_coverage(&plan, &program).unwrap();
+        let book = reviewer_book(&plan).unwrap();
+        assert_eq!(book["pages"][0]["printed_page"], 11);
+        assert_eq!(
+            book["pages"][0]["text"],
+            plan.book.excerpts().unwrap()["pages"][0]["text"]
+        );
+        let file = plan.candidate.campaign.join("cases/a/final.json");
+        let mut state = load(&file).unwrap();
+        state["session"]["method"]["records"] =
+            json!([{"stage":"condition","sourcePassages":["unknown-native-rule"]}]);
+        write(&file, &state);
+        assert!(source_coverage(&plan, &program)
+            .unwrap_err()
+            .contains("no unique pinned passage"));
+    }
+
+    #[test]
+    fn page_mapping_requires_exact_authored_source_book_bytes_and_native_consistency() {
+        let f = Fixture::new();
+        let mut book = f.book.clone();
+        let base = synthetic_page_map(&book, f.source.path(), true);
+        let original = load(&base.file).unwrap();
+        for defect in [
+            "book",
+            "bytes",
+            "duplicate",
+            "authority",
+            "omitted",
+            "conflict",
+        ] {
+            let mut value = original.clone();
+            let mut passages = vec![Passage {
+                id: "native".into(),
+                printed_first: 11,
+                printed_last: 11,
+                ocr_first: 1,
+                ocr_last: 1,
+            }];
+            match defect {
+                "book" => value["book_sha256"] = json!(digest("another book")),
+                "bytes" => value["pages"][0]["sha256"] = json!(digest("altered source")),
+                "duplicate" => {
+                    let row = value["pages"][0].clone();
+                    value["pages"].as_array_mut().unwrap().push(row);
+                }
+                "authority" => {
+                    value["pages"][0]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("provenance_index");
+                }
+                "omitted" => book.ocr_pages.clear(),
+                "conflict" => passages[0].ocr_first = 2,
+                _ => unreachable!(),
+            }
+            write(&base.file, &value);
+            book.page_witnesses = Some(Pin::capture(&base.file).unwrap());
+            assert!(book.printed_mappings(&passages).is_err(), "{defect}");
+            book.ocr_pages = vec![1];
+        }
+        write(&base.file, &original);
+        book.page_witnesses = Some(Pin::capture(&base.file).unwrap());
+        let provenance = f.source.path().join("authored-page-provenance.json");
+        let mut value = load(&provenance).unwrap();
+        value["partition"] = json!("reserved_validation");
+        write(&provenance, &value);
+        assert!(book
+            .printed_mappings(&[])
+            .unwrap_err()
+            .contains("source changed"));
+        let mut map = original;
+        map["provenance"][0]["sha256"] = json!(digest(read(&provenance).unwrap()));
+        write(&base.file, &map);
+        book.page_witnesses = Some(Pin::capture(&base.file).unwrap());
+        assert!(book
+            .printed_mappings(&[])
+            .unwrap_err()
+            .contains("pinned training book"));
+    }
+
+    #[test]
+    fn bracketed_mapping_is_explicit_contiguous_and_never_an_offset_fallback() {
+        let root = tempfile::tempdir().unwrap();
+        let source = (1..=4)
+            .map(|p| format!("<!-- page:{p:04} -->\nExact authored source {p}.\n"))
+            .collect::<String>();
+        let file = root.path().join("book.md");
+        fs::write(&file, &source).unwrap();
+        let mut book = CompleteReadingBook {
+            file,
+            sha256: digest(&source),
+            ocr_pages: vec![2],
+            page_witnesses: None,
+        };
+        let map_file = root.path().join("mapping.json");
+        let value = json!({"version":1,"book_sha256":book.sha256,"provenance":[],
+            "pages":[{"printed_page":11,"ocr_page":2,"sha256":digest(page_window(&source,2).unwrap()),
+                "lower_rule":"before","upper_rule":"after"}]});
+        write(&map_file, &value);
+        book.page_witnesses = Some(Pin::capture(&map_file).unwrap());
+        let mut cards = vec![
+            Passage {
+                id: "before".into(),
+                printed_first: 10,
+                printed_last: 10,
+                ocr_first: 1,
+                ocr_last: 1,
+            },
+            Passage {
+                id: "after".into(),
+                printed_first: 13,
+                printed_last: 13,
+                ocr_first: 4,
+                ocr_last: 4,
+            },
+        ];
+        assert_eq!(
+            book.printed_mappings(&cards).unwrap(),
+            BTreeMap::from([(11, 2)])
+        );
+        assert!(book.printed_mappings(&cards[..1]).is_err());
+        cards[1].printed_first = 14;
+        assert!(book
+            .printed_mappings(&cards)
+            .unwrap_err()
+            .contains("consistent native book brackets"));
+        cards[1].printed_first = 13;
+        fs::write(
+            &book.file,
+            source.replace("<!-- page:0003 -->", "missing marker"),
+        )
+        .unwrap();
+        book.sha256 = digest(read(&book.file).unwrap());
+        let mut changed = value;
+        changed["book_sha256"] = json!(book.sha256);
+        changed["pages"][0]["sha256"] = json!(digest(
+            page_window(&fs::read_to_string(&book.file).unwrap(), 2).unwrap()
+        ));
+        write(&map_file, &changed);
+        book.page_witnesses = Some(Pin::capture(&map_file).unwrap());
+        assert!(book
+            .printed_mappings(&cards)
+            .unwrap_err()
+            .contains("unique exact book marker"));
+    }
+
+    #[test]
+    fn complete_review_schema_excludes_selected_stage_and_types_enum_constants() {
+        fn check(value: &Value) {
+            match value {
+                Value::Object(fields) => {
+                    if fields.contains_key("enum") || fields.contains_key("const") {
+                        assert!(fields
+                            .get("type")
+                            .is_some_and(|v| v.is_string() || v.is_array()));
+                    }
+                    for value in fields.values() {
+                        check(value);
+                    }
+                }
+                Value::Array(values) => {
+                    for value in values {
+                        check(value);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let schema = reading::journey_schema();
+        assert!(schema["properties"].get("selected_stage").is_none());
+        assert!(!schema["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "selected_stage"));
+        assert_eq!(
+            schema["properties"]["obligations"]["items"]["properties"]["state"]["type"],
+            "string"
+        );
+        check(&schema);
+    }
+
+    #[test]
     fn full_source_capacity_is_bounded_without_changing_legacy_book_context() {
         let root = tempfile::tempdir().unwrap();
         let file = root.path().canonicalize().unwrap().join("book.md");
@@ -1377,6 +1823,7 @@ mod tests {
             file: file.clone(),
             sha256: digest(&source),
             ocr_pages: (1..=48).collect(),
+            page_witnesses: None,
         };
         assert_eq!(
             book.excerpts().unwrap()["pages"].as_array().unwrap().len(),

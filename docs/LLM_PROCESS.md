@@ -2842,8 +2842,7 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -2876,8 +2875,7 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -2910,8 +2908,7 @@ Lilly says that if the object's significator is in its detriment or fall, the ob
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3128,8 +3125,7 @@ Each of the different significators shows a different facet of that person:
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3162,8 +3158,7 @@ Each of the different significators shows a different facet of that person:
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3196,8 +3191,7 @@ Each of the different significators shows a different facet of that person:
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3430,8 +3424,7 @@ It is common when the person signified by the retrograde planet is coming back, 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3464,8 +3457,7 @@ It is common when the person signified by the retrograde planet is coming back, 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3498,8 +3490,7 @@ It is common when the person signified by the retrograde planet is coming back, 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3532,8 +3523,7 @@ It is common when the person signified by the retrograde planet is coming back, 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3566,8 +3556,7 @@ It is common when the person signified by the retrograde planet is coming back, 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3853,8 +3842,7 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3887,8 +3875,7 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3921,8 +3908,7 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3955,8 +3941,7 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -3989,8 +3974,7 @@ I strongly suggest that you do not invoke a thief unless the querent raises the 
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4204,8 +4188,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             "finding": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 220,
-              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+              "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
             }
           },
           "required": [
@@ -4238,8 +4221,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             "finding": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 220,
-              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+              "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
             }
           },
           "required": [
@@ -4272,8 +4254,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             "finding": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 220,
-              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+              "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
             }
           },
           "required": [
@@ -4306,8 +4287,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             "finding": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 220,
-              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+              "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
             }
           },
           "required": [
@@ -4340,8 +4320,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             "finding": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 220,
-              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+              "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
             }
           },
           "required": [
@@ -4374,8 +4353,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
             "finding": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 220,
-              "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+              "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
             }
           },
           "required": [
@@ -4575,8 +4553,7 @@ Sometimes the context supports the idea that the separating aspect has put event
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4609,8 +4586,7 @@ Sometimes the context supports the idea that the separating aspect has put event
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4643,8 +4619,7 @@ Sometimes the context supports the idea that the separating aspect has put event
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4677,8 +4652,7 @@ Sometimes the context supports the idea that the separating aspect has put event
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4711,8 +4685,7 @@ Sometimes the context supports the idea that the separating aspect has put event
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4931,8 +4904,7 @@ Cast the chart for the moment the astrologer understands the question. In the pa
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4965,8 +4937,7 @@ Cast the chart for the moment the astrologer understands the question. In the pa
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [
@@ -4999,8 +4970,7 @@ Cast the chart for the moment the astrologer understands the question. In the pa
                 "finding": {
                   "type": "string",
                   "minLength": 1,
-                  "maxLength": 220,
-                  "description": "A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."
+                  "description": "Briefly explain the check using the relevant roles and evidence, including why it is not relevant or unestablished. Preserve necessary distinctions; an empty string cannot finish a check."
                 }
               },
               "required": [

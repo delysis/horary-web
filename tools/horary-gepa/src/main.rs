@@ -178,6 +178,9 @@ struct CompletePreparation {
     book_source: PathBuf,
     #[arg(long, value_delimiter = ',')]
     book_ocr_pages: Vec<usize>,
+    /// Exact page-map provenance when the native quotation index is partial.
+    #[arg(long)]
+    book_page_witnesses: Option<PathBuf>,
     #[arg(long)]
     codex: PathBuf,
     #[arg(long)]
@@ -250,6 +253,15 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 sha256: horary_prompt_program::digest(read(&options.book_source)?),
                 file: options.book_source,
                 ocr_pages: options.book_ocr_pages,
+                page_witnesses: options
+                    .book_page_witnesses
+                    .map(|file| {
+                        read(&file).map(|bytes| horary_gepa::complete_journey::Pin {
+                            sha256: horary_prompt_program::digest(bytes),
+                            file,
+                        })
+                    })
+                    .transpose()?,
             };
             let plan = horary_gepa::complete_journey::prepare(
                 horary_gepa::complete_journey::Preparation {
@@ -415,6 +427,57 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn complete_reading_page_witness_option_preserves_legacy_arguments() {
+        let args = [
+            "horary-gepa",
+            "prepare-complete-journey",
+            "--state",
+            "/synthetic/review",
+            "--baseline",
+            "/synthetic/baseline",
+            "--baseline-closure",
+            "/synthetic/baseline/closure.json",
+            "--candidate",
+            "/synthetic/candidate",
+            "--candidate-closure",
+            "/synthetic/candidate/closure.json",
+            "--program",
+            "/synthetic/program.json",
+            "--program-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--split",
+            "/synthetic/split.json",
+            "--passages",
+            "/synthetic/passages.json",
+            "--book-source",
+            "/synthetic/book.md",
+            "--book-ocr-pages",
+            "1,2",
+            "--codex",
+            "/synthetic/codex",
+            "--max-review-calls",
+            "6",
+        ];
+        let Action::PrepareCompleteJourney(legacy) = Cli::try_parse_from(args).unwrap().action
+        else {
+            panic!("Wrong action")
+        };
+        assert!(legacy.book_page_witnesses.is_none());
+        let mut explicit = args.to_vec();
+        explicit.extend(["--book-page-witnesses", "/synthetic/page-map.json"]);
+        let Action::PrepareCompleteJourney(mapped) = Cli::try_parse_from(explicit).unwrap().action
+        else {
+            panic!("Wrong action")
+        };
+        assert_eq!(
+            mapped.book_page_witnesses,
+            Some(PathBuf::from("/synthetic/page-map.json"))
+        );
+        assert_eq!(mapped.book_ocr_pages, vec![1, 2]);
+        assert_eq!(mapped.max_review_calls, legacy.max_review_calls);
+    }
 
     #[test]
     fn preparation_fixed_program_pin_is_optional_but_requires_both_fields() {

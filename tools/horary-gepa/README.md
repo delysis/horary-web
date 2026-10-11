@@ -80,6 +80,8 @@ A matching program manifest proves which teaching was supplied, not that its sel
 
 `prepare-complete-journey` pins an already closed, sealed baseline/candidate pair for independent review. Both sides must use the same native executable, original questions, device context, clock, rubrics, sources and call bounds. The candidate's exact program and actual applied calls are checked separately. Preparation makes no model calls and cannot publish missing case origins. Its primary-text packet must cover the rubric's printed pages and every invoked native source rule; only this complete-reading packet permits up to 48 explicit OCR pages and 160KB. Existing input and specialist review bounds remain unchanged.
 
+If the native quotation index omits a required printed page, `--book-page-witnesses` supplies an explicit pinned mapping to the exact OCR page. Each mapping needs the same book hash, exact page bytes and either training authoring provenance or consistent native page brackets. Conflicting or missing witnesses fail before review; this never removes a rubric obligation or changes native evidence. Omitting the option preserves earlier plan and packet identities.
+
 ```sh
 /absolute/copied/horary-gepa prepare-complete-journey \
   --state /absolute/fresh-pair-review \
