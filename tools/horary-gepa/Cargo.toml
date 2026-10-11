@@ -10,7 +10,7 @@ dsrust-gepa = { git = "https://github.com/getlatentic/dsrust", rev = "f24adde08c
 clap = { version = "4.6", features = ["derive"] }
 fs2 = "0.4"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt", "macros"] }
 horary-prompt-program = { path = "../../crates/horary-prompt-program" }

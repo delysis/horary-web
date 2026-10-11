@@ -1109,6 +1109,31 @@ pub async fn run(plan: Plan, state: PathBuf) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn native_numeric_load_keeps_exact_roundtrip_astronomy_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = r#"{"facts":[{"event":{"astronomicalHours":107.77218518861261}},{"event":{"astronomicalHours":109.97288162256923}}]}"#;
+        let file = directory.path().join("native-outcome.json");
+        std::fs::write(&file, source).unwrap();
+        let value = super::load(&file).unwrap();
+        for (index, number) in [107.77218518861261_f64, 109.97288162256923_f64]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(
+                value["facts"][index]["event"]["astronomicalHours"]
+                    .as_f64()
+                    .unwrap()
+                    .to_bits(),
+                number.to_bits()
+            );
+        }
+        let serialized = serde_json::to_vec(&value).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&serialized).unwrap(),
+            value
+        );
+    }
     use super::*;
 
     #[test]

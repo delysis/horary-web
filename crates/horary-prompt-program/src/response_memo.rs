@@ -461,14 +461,7 @@ fn maps(source: &Source, id: &str) -> Result<(BTreeMap<String, String>, String)>
                 );
             }
             if response["outcome"]["semantic_abort_witness"]["stop_kind"] == "no_progress" {
-                let witness = &response["outcome"]["semantic_abort_witness"];
-                let name = witness["snapshot"]
-                    .as_str()
-                    .filter(|name| matches!(*name, "first-turn.json" | "final.json"))
-                    .ok_or("No-progress memo source lacks its snapshot")?;
-                let snapshot =
-                    pinned(source, &files, &format!("native/cases/{id}/{name}"))?.value()?;
-                crate::rejection_cycle::verify_stop(&snapshot, witness)?;
+                verify_native_stop_source(source, &files, id, &response["outcome"])?;
             }
             (files, format!("native/cases/{id}"))
         }
@@ -484,6 +477,91 @@ fn maps(source: &Source, id: &str) -> Result<(BTreeMap<String, String>, String)>
         .bytes()?;
     }
     Ok((files, prefix))
+}
+
+// Legacy controllers parsed astronomy floats without float_roundtrip before
+// serializing response.json. That projection is reporting, never cache truth.
+// Bind its non-input stop metadata exactly; the independently sealed native
+// envelope and snapshot retain strict original-input equality in verify_stop.
+fn reported_stop_metadata(witness: &Value) -> Result<Value> {
+    let mut metadata = witness
+        .as_object()
+        .ok_or("No reported native stop object")?
+        .clone();
+    if !metadata
+        .remove("original_input")
+        .is_some_and(|input| input.is_object())
+    {
+        return Err("No reported original-input object".into());
+    }
+    Ok(Value::Object(metadata))
+}
+
+fn verify_native_stop_source(
+    source: &Source,
+    files: &BTreeMap<String, String>,
+    id: &str,
+    report: &Value,
+) -> Result<()> {
+    let native = pinned(source, files, "native/outcome.json")?.value()?;
+    if !native_outcome_is_settled(&native)
+        || [
+            "id",
+            "scope",
+            "full_reading",
+            "execution_status",
+            "selected_stage_observation",
+            "target_function_invoked",
+            "target_stage_authentic_inputs",
+            "target_stage",
+            "target_method",
+            "target_signature_calls",
+            "known_native_semantic_abort",
+            "execution_error",
+            "first_turn_execution_completed",
+            "follow_up_execution_completed",
+            "captured_checkpoint_reused",
+            "fresh_initial_sha256_verified",
+            "physical_generation_attempts",
+            "physical_generation_attempt_reservation",
+            "physical_generation_attempts_complete",
+            "logical_call_groups",
+            "logical_provider_calls",
+            "model_calls",
+            "hosted_http_requests",
+            "exact_response_memoization",
+            "deadline_cancelled",
+            "group_cancelled",
+            "infrastructure_error",
+            "provider_stop",
+        ]
+        .iter()
+        .any(|field| report.get(*field) != native.get(*field))
+        || reported_stop_metadata(&report["semantic_abort_witness"])?
+            != reported_stop_metadata(&native["semantic_abort_witness"])?
+    {
+        return Err("Reported no-progress metadata differs from its sealed native outcome".into());
+    }
+    let observation_metadata = |value: &Value| -> Result<Value> {
+        let mut observation = value.clone();
+        if let Some(rejection) = observation.get_mut("rejection") {
+            *rejection = reported_stop_metadata(rejection)?;
+        }
+        Ok(observation)
+    };
+    if observation_metadata(&report["selected_stage"])?
+        != observation_metadata(&native["selected_stage"])?
+    {
+        return Err("Reported selected-stage stop differs from its native observation".into());
+    }
+    let witness = &native["semantic_abort_witness"];
+    let name = witness["snapshot"]
+        .as_str()
+        .filter(|name| matches!(*name, "first-turn.json" | "final.json"))
+        .ok_or("No-progress memo source lacks its snapshot")?;
+    let snapshot = pinned(source, files, &format!("native/cases/{id}/{name}"))?.value()?;
+    crate::rejection_cycle::verify_stop(&snapshot, witness)?;
+    Ok(())
 }
 
 fn pinned(source: &Source, files: &BTreeMap<String, String>, relative: &str) -> Result<Pin> {
@@ -914,6 +992,7 @@ mod tests {
             &directory.0.join("response.json"),
             &json!({"outcome":outcome}),
         );
+        write(&directory.0.join("native/outcome.json"), &outcome);
         let source = seal(&directory.0);
         assert!(native_outcome_is_settled(&outcome));
         maps(&source, "synthetic").unwrap();
@@ -929,6 +1008,138 @@ mod tests {
         let mut bad = outcome;
         bad["deadline_cancelled"] = json!(true);
         assert!(!native_outcome_is_settled(&bad));
+    }
+    fn numeric_stop(root: &Path) -> (Value, Value) {
+        let _ = source(root, vec![]);
+        let (mut session, mut event) = crate::rejection_cycle::tests::session();
+        let input: Value = serde_json::from_str(r#"{"facts":[{"event":{"astronomicalHours":107.77218518861261}},{"event":{"astronomicalHours":109.97288162256923}}]}"#).unwrap();
+        let input_hash = digest(input.to_string());
+        for (index, record) in session["method"]["records"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            record["input"] = if index == 0 {
+                input.clone()
+            } else {
+                json!({"original_input":input})
+            };
+            record["inputSha256"] = json!(digest(record["input"].to_string()));
+        }
+        event["inputSha256"] = json!(input_hash);
+        session["audit"][2] = event.clone();
+        session["method"]["flow"]["jobs"][0]["inputSha256"] = event["inputSha256"].clone();
+        let record = &session["method"]["records"][2];
+        let witness = json!({"snapshot":"first-turn.json","record_index":2,"stage":"condition","revision":7,
+            "input_sha256":event["inputSha256"],"original_input":crate::original_input(&record["input"]),
+            "validation_error":record["validationError"],"stop":crate::rejection_cycle::STOP,"stop_kind":"no_progress",
+            "paused_job":session["method"]["flow"]["jobs"][0],"no_progress":event,
+            "all_provider_responses_settled":true,"request_result_pairs_complete":true});
+        let mut native = observed_outcome(true);
+        native["execution_error"] = json!(crate::rejection_cycle::STOP);
+        native["semantic_abort_witness"] = witness.clone();
+        native["selected_stage"]["rejection"] = witness;
+        native["target_stage"] = json!("condition");
+        native["target_method"] = json!("movable_deal");
+        let snapshot = json!({"result":{"Err":crate::rejection_cycle::STOP},"session":session});
+        write(
+            &root.join("native/cases/synthetic/first-turn.json"),
+            &snapshot,
+        );
+        write(&root.join("native/outcome.json"), &native);
+        write(&root.join("response.json"), &json!({"outcome":native}));
+        (native, snapshot)
+    }
+    #[test]
+    fn numeric_no_progress_uses_sealed_native_witness_not_legacy_report_projection() {
+        let directory = Directory::new();
+        let (native, _) = numeric_stop(&directory.0);
+        maps(&seal(&directory.0), "synthetic").unwrap();
+        let mut report = native.clone();
+        for pointer in [
+            "/semantic_abort_witness/original_input",
+            "/selected_stage/rejection/original_input",
+        ] {
+            let projected = report.pointer_mut(pointer).unwrap();
+            projected["facts"][0]["event"]["astronomicalHours"] = json!(107.7721851886126);
+            projected["facts"][1]["event"]["astronomicalHours"] = json!(109.97288162256925);
+        }
+        write(
+            &directory.0.join("response.json"),
+            &json!({"outcome":report}),
+        );
+        maps(&seal(&directory.0), "synthetic").unwrap();
+        assert_eq!(
+            Pin {
+                file: directory.0.join("native/outcome.json"),
+                sha256: digest(fs::read(directory.0.join("native/outcome.json")).unwrap())
+            }
+            .value()
+            .unwrap(),
+            native
+        );
+        report["semantic_abort_witness"]["revision"] = json!(8);
+        write(
+            &directory.0.join("response.json"),
+            &json!({"outcome":report}),
+        );
+        assert!(maps(&seal(&directory.0), "synthetic")
+            .unwrap_err()
+            .contains("metadata"));
+        let mut report = native;
+        report["target_stage"] = json!("judgment");
+        write(
+            &directory.0.join("response.json"),
+            &json!({"outcome":report}),
+        );
+        assert!(maps(&seal(&directory.0), "synthetic").is_err());
+    }
+    #[test]
+    fn numeric_no_progress_rejects_changed_native_input_and_missing_raw_seal() {
+        let directory = Directory::new();
+        let (mut native, _) = numeric_stop(&directory.0);
+        native["semantic_abort_witness"]["original_input"]["facts"][0]["event"]
+            ["astronomicalHours"] = json!(107.7721851886126);
+        write(&directory.0.join("native/outcome.json"), &native);
+        assert!(maps(&seal(&directory.0), "synthetic")
+            .unwrap_err()
+            .contains("actual native witness"));
+        numeric_stop(&directory.0);
+        let mut source = seal(&directory.0);
+        let mut completion = source.seal.value().unwrap();
+        completion["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|a| a["file"] != "native/outcome.json");
+        source.seal = write(&directory.0.join("completed.json"), &completion);
+        assert!(maps(&source, "synthetic")
+            .unwrap_err()
+            .contains("Unsealed memo witness native/outcome.json"));
+    }
+    #[test]
+    fn numeric_native_values_roundtrip_without_one_ulp_projection_changes() {
+        let source = r#"{"hours":[107.77218518861261,109.97288162256923],"speed":0.9866550281440141,"longitude":218.62318308734282}"#;
+        let value: Value = serde_json::from_str(source).unwrap();
+        assert_eq!(
+            value["hours"][0].as_f64().unwrap().to_bits(),
+            107.77218518861261_f64.to_bits()
+        );
+        assert_eq!(
+            value["hours"][1].as_f64().unwrap().to_bits(),
+            109.97288162256923_f64.to_bits()
+        );
+        let serialized = serde_json::to_vec(&value).unwrap();
+        let again: Value = serde_json::from_slice(&serialized).unwrap();
+        assert_eq!(again, value);
+        assert_eq!(
+            value["speed"].as_f64().unwrap().to_bits(),
+            0.9866550281440141_f64.to_bits()
+        );
+        assert_eq!(
+            value["longitude"].as_f64().unwrap().to_bits(),
+            218.62318308734282_f64.to_bits()
+        );
     }
     fn source(root: &Path, calls: Vec<(Value, Value)>) -> (Source, Index) {
         let case = root.join("native/cases/synthetic");
