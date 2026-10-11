@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use std::process::Command;
 
 const SCOPE_HINT: &str = "Change only the named component. For extractor reliability, the neural function extracts sourced USER facts into the supplied Turn JSON; it does not extract rules from the textbook or interpret a chart. Improve the initially accepted sourced facts and reduce actual focused repairs. Downstream conversation or supplying-program defects are separately observed and cannot be repaired by this component. Never invent missing ownership or skip source guards. Exact observation quotes come from the user's actual words, not book text.";
+const READING_RESPONSE_CONTRACT: &str = "The student's response contract is fixed. Preserve every supplied required field name and value type. Put per-role comparisons in the existing scalar finding/explanation strings where provided; do not demand extra tables/maps, scratch ledgers, markdown/code fences, new tools, schema changes or altered token limits. Stay within the actual supplied response-size constraints; do not invent a numeric budget.";
 
 /// Check the actual stdin, not a packet that might never reach the writer.
 /// The renderer's third argument is a TEMPLATE, not an extra instruction.
@@ -197,7 +198,11 @@ pub(crate) fn prepare(
     } else {
         SCOPE_HINT
     };
-    let reflection = format!("{reflection}\n\n{scope}");
+    let mut reflection = format!("{reflection}\n\n{scope}");
+    if plan.function == Function::ReadingJourney {
+        reflection.push_str("\n\n");
+        reflection.push_str(READING_RESPONSE_CONTRACT);
+    }
     let fixed_source = guide_parts(&plan.guide)?.quoted_source.join("\n");
     let book = plan
         .review_book
@@ -403,7 +408,25 @@ mod tests {
         assert!(prepared
             .prompt
             .contains("validated_independent_reading_review"));
+        assert_eq!(
+            prepared.prompt.matches(READING_RESPONSE_CONTRACT).count(),
+            1
+        );
+        assert!(prepared.prompt.contains(
+            &captured[0].1["evaluation"]["actual_function_calls"][0]["schema"].to_string()
+        ));
         assert!(!prepared.prompt.contains("DO_NOT_TRANSPLANT_ARCHIVE"));
+        // The reading reminder must not change a non-reading writer's scope
+        // or replace its actual outputs and feedback.
+        let mut other_plan = plan.clone();
+        other_plan.function = Function::Classification;
+        other_plan.objective = Objective::WholeFunction;
+        other_plan.target_stage = None;
+        other_plan.target_method = None;
+        let mut other_capture = captured.clone();
+        other_capture[0].1["evaluation"]["final"] = json!({"method":"relationship"});
+        let other = prepare(&other_plan, &other_plan.seed, &components, &other_capture).unwrap();
+        assert!(!other.prompt.contains(READING_RESPONSE_CONTRACT));
         let mut forbidden = captured;
         forbidden[0].0.id = plan.development[0].id.clone();
         assert!(prepare(&plan, &plan.seed, &components, &forbidden)

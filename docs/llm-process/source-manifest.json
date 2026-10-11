@@ -415,7 +415,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "911b71ebda226b8c43f5c2a3a08f59f3b1c5ee9169c3c5499329ed6f9ba3daad"
+      "sha256": "dc6c140940480b04e7827740f4832729cdd1ee37b34cb32af11e3077da2f64a7"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -495,7 +495,7 @@
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",
-      "sha256": "86915d093d066aa730e0c95182b7e3c706dcf2fdf44a32873fbc6f65b951f63c"
+      "sha256": "e44381e4efc399c33c1aefe9a74b4385a28d73213aba86fe947c07fe7ee5f6d8"
     },
     {
       "path": "tools/horary-loop/Cargo.lock",
