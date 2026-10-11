@@ -259,10 +259,47 @@ pub(crate) fn prompt_with_program(
     program: Option<&horary_prompt_program::Program>,
 ) -> Result<(String, Option<horary_prompt_program::Applied>), String> {
     let (fixed, applied) = resolved_guide_for(stage, matter, input, program)?;
-    Ok((prompt_with_guide(input, schema, fixed), applied))
+    Ok((prompt_with_guide(stage, input, schema, fixed), applied))
 }
 
-fn prompt_with_guide(input: &Value, schema: &Value, fixed: String) -> String {
+/// The model sees a lossless JSON Schema presentation. Native acceptance keeps
+/// the original expanded contract, including every allowed evidence ID.
+fn model_contract(stage: Stage, schema: &Value) -> Value {
+    if stage != Stage::Judgment || schema.get("$defs").is_some() {
+        return schema.clone();
+    }
+    let checks_path = if schema.get("oneOf").is_some() {
+        "/oneOf/0/properties/checks/properties"
+    } else {
+        "/properties/checks/properties"
+    };
+    let Some(checks) = schema.pointer(checks_path).and_then(Value::as_object) else {
+        return schema.clone();
+    };
+    let Some(shared) = checks.values().next() else {
+        return schema.clone();
+    };
+    // Do not factor different limits or evidence sets into one definition.
+    if checks.len() != Stage::Judgment.checks().len()
+        || !checks.values().all(|check| check == shared)
+    {
+        return schema.clone();
+    }
+    let mut presented = schema.clone();
+    presented["$defs"] = json!({"judgment_check":shared});
+    for check in presented
+        .pointer_mut(checks_path)
+        .and_then(Value::as_object_mut)
+        .into_iter()
+        .flat_map(|checks| checks.values_mut())
+    {
+        *check = json!({"$ref":"#/$defs/judgment_check"});
+    }
+    presented
+}
+
+fn prompt_with_guide(stage: Stage, input: &Value, schema: &Value, fixed: String) -> String {
+    let schema = model_contract(stage, schema);
     // Stable teaching and stable contract precede changing data. No whole chart
     // or conversation history is smuggled into this prefix.
     if input.get("original_input").is_some() && input.get("native_validation_error").is_some() {
@@ -335,6 +372,29 @@ fn base_guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String,
 mod repair_message_tests {
     use super::*;
 
+    fn expanded_contract(presented: &Value) -> Value {
+        fn expand(value: &Value, root: &Value) -> Value {
+            if let Some(reference) = value.get("$ref").and_then(Value::as_str) {
+                assert_eq!(reference, "#/$defs/judgment_check");
+                return root["$defs"]["judgment_check"].clone();
+            }
+            match value {
+                Value::Object(properties) => Value::Object(
+                    properties
+                        .iter()
+                        .filter(|(key, _)| key.as_str() != "$defs")
+                        .map(|(key, value)| (key.clone(), expand(value, root)))
+                        .collect(),
+                ),
+                Value::Array(values) => {
+                    Value::Array(values.iter().map(|value| expand(value, root)).collect())
+                }
+                _ => value.clone(),
+            }
+        }
+        expand(presented, presented)
+    }
+
     fn captured_repair() -> (Value, Value, Value, Stage, Matter) {
         let capture: Value = serde_json::from_str(include_str!(
             "../test-fixtures/training-judgment-repair-messages.json"
@@ -362,15 +422,11 @@ mod repair_message_tests {
         let actual: Value =
             serde_json::from_str(&prompt(stage, matter, &input, &schema).unwrap()).unwrap();
         assert_eq!(actual.as_array().unwrap().len(), 4);
-        // Exact message bytes preserve the source guide, original chart/context
-        // and rejected answer; only the duplicate corrective schema is removed.
-        assert_eq!(
-            &actual.as_array().unwrap()[..3],
-            &legacy.as_array().unwrap()[..3]
-        );
+        assert_eq!(actual[0], legacy[0]);
+        assert_eq!(actual[2], legacy[2]);
         let first: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
         assert_eq!(first["input"], input["original_input"]);
-        assert_eq!(first["worksheet_contract"], schema);
+        assert_eq!(expanded_contract(&first["worksheet_contract"]), schema);
         let rejected: Value = serde_json::from_str(actual[2]["content"].as_str().unwrap()).unwrap();
         assert_eq!(rejected, input["previous_worksheet"]);
         let correction: Value =
@@ -410,19 +466,38 @@ mod repair_message_tests {
             capture["expected_removed_serialized_prompt_utf8_bytes"]
                 .as_u64()
                 .unwrap() as usize
+                + legacy[1].to_string().len()
+                - actual[1].to_string().len()
         );
     }
 
     #[test]
-    fn captured_original_judgment_prompt_is_byte_identical_before_repair() {
+    fn captured_original_judgment_keeps_native_data_and_lossless_contract() {
         let (capture, repair, schema, stage, matter) = captured_repair();
         let actual: Value = serde_json::from_str(
             &prompt(stage, matter, &repair["original_input"], &schema).unwrap(),
         )
         .unwrap();
+        assert_eq!(actual[0], capture["legacy_messages"][0]);
+        let body: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(body["input"], repair["original_input"]);
+        assert_eq!(expanded_contract(&body["worksheet_contract"]), schema);
+        assert!(body["worksheet_contract"].to_string().len() < schema.to_string().len());
+    }
+
+    #[test]
+    fn judgment_presentation_preserves_native_limits_and_all_evidence_ids() {
+        let (_, _, schema, _, _) = captured_repair();
+        let compact = model_contract(Stage::Judgment, &schema);
+        assert_eq!(expanded_contract(&compact), schema);
+        assert!(schema.to_string().len() - compact.to_string().len() > 1500);
+        assert_eq!(model_contract(Stage::Contacts, &schema), schema);
+        let mut different_limits = schema.clone();
+        different_limits["oneOf"][0]["properties"]["checks"]["properties"]["scope_of_answer"]
+            ["properties"]["evidence"]["maxItems"] = json!(1);
         assert_eq!(
-            actual.as_array().unwrap(),
-            &capture["legacy_messages"].as_array().unwrap()[..2]
+            model_contract(Stage::Judgment, &different_limits),
+            different_limits
         );
     }
 }
@@ -479,6 +554,7 @@ mod effective_guide_tests {
                 assert_eq!(
                     prompt(stage, Matter::Other, &input, &schema).unwrap(),
                     prompt_with_guide(
+                        stage,
                         &input,
                         &schema,
                         base_guide_for(stage, Matter::Other, &input).unwrap()

@@ -54,6 +54,9 @@ enum Action {
         /// Pinned stopped-owner state, owner/controller PIDs and exit1 receipt.
         #[arg(long)]
         owner_receipt: PathBuf,
+        /// Exact first sealed import plus successful paid second review, no reset.
+        #[arg(long)]
+        paid_prefix: bool,
     },
     /// Independent bounded review of existing native outputs; never runs a student.
     VerifyCompleteJourney {
@@ -310,17 +313,29 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             source,
             state,
             owner_receipt,
+            paid_prefix,
         } => {
-            let plan = horary_gepa::complete_journey::prepare_continuation(
-                &source,
-                &state,
-                &owner_receipt,
-                &std::env::current_exe().map_err(|e| e.to_string())?,
-            )?;
+            let controller = std::env::current_exe().map_err(|e| e.to_string())?;
+            let plan = if paid_prefix {
+                horary_gepa::complete_journey::prepare_prefix_continuation(
+                    &source,
+                    &state,
+                    &owner_receipt,
+                    &controller,
+                )?
+            } else {
+                horary_gepa::complete_journey::prepare_continuation(
+                    &source,
+                    &state,
+                    &owner_receipt,
+                    &controller,
+                )?
+            };
+            let inherited = if paid_prefix { 2 } else { 1 };
             println!(
                 "{}",
                 serde_json::json!({"prepared":state,"original_paid_answer_reused":true,
-                "inherited_review_calls":1,"remaining_new_review_calls":plan.max_review_calls-1,
+                "inherited_review_calls":inherited,"remaining_new_review_calls":plan.max_review_calls-inherited,
                 "new_paid_calls":0,"student_calls":0,"reflection_calls":0})
             );
         }
@@ -523,17 +538,28 @@ mod tests {
             source,
             state,
             owner_receipt,
+            paid_prefix,
         } = Cli::try_parse_from(args).unwrap().action
         else {
             panic!("Wrong action")
         };
         assert_eq!(source, PathBuf::from("/synthetic/stopped"));
         assert_eq!(state, PathBuf::from("/synthetic/new"));
+        assert!(!paid_prefix);
         assert_eq!(
             owner_receipt,
             PathBuf::from("/synthetic/direct-tool-closure.json")
         );
         assert!(Cli::try_parse_from(&args[..6]).is_err());
+        let mut prefix = args.to_vec();
+        prefix.push("--paid-prefix");
+        assert!(matches!(
+            Cli::try_parse_from(prefix).unwrap().action,
+            Action::PrepareCompleteJourneyContinuation {
+                paid_prefix: true,
+                ..
+            }
+        ));
     }
 
     #[test]

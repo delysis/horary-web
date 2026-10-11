@@ -340,6 +340,26 @@ pub struct PairPlan {
     pub review_seconds: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation: Option<Pin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paid_prefix: Option<Pin>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PaidPrefix {
+    version: String,
+    predecessor: PathBuf,
+    owner_receipt: Pin,
+    source_hashes: BTreeMap<String, String>,
+    imports: Vec<PaidPrefixImport>,
+    inherited_review_calls: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct PaidPrefixImport {
+    request: Value,
+    canonical_review_sha256: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -829,6 +849,9 @@ impl PairPlan {
         if self.continuation.is_some() {
             let _ = verify_continuation(self)?;
         }
+        if self.paid_prefix.is_some() {
+            let _ = verify_prefix(self)?;
+        }
         self.program.verify()?;
         self.split.verify()?;
         self.passages.verify()?;
@@ -899,6 +922,7 @@ pub fn prepare(options: Preparation, state: &Path) -> Result<PairPlan> {
         max_review_calls: options.max_review_calls,
         review_seconds: options.review_seconds,
         continuation: None,
+        paid_prefix: None,
     };
     let _ = plan.verify_sources()?;
     keep(&state.join("plan.json"), &plan)?;
@@ -914,6 +938,10 @@ pub fn prepare(options: Preparation, state: &Path) -> Result<PairPlan> {
 const PAID_CONTINUATION: &str = "complete-journey-paid-validation-continuation-v1";
 
 fn predecessor_hashes(root: &Path) -> Result<BTreeMap<String, String>> {
+    paid_prefix_hashes(root, &["00000"])
+}
+
+fn paid_prefix_hashes(root: &Path, names: &[&str]) -> Result<BTreeMap<String, String>> {
     fn walk(root: &Path, relative: &str, hashes: &mut BTreeMap<String, String>) -> Result<()> {
         let file = controls::ordinary(root, relative)?;
         let metadata = fs::symlink_metadata(&file).map_err(|e| e.to_string())?;
@@ -944,12 +972,19 @@ fn predecessor_hashes(root: &Path) -> Result<BTreeMap<String, String>> {
         .map_err(|e| e.to_string())?
         .collect::<std::io::Result<Vec<_>>>()
         .map_err(|e| e.to_string())?;
-    if entries.len() != 1 || entries[0].file_name() != "00000" {
+    if entries.len() != names.len()
+        || entries
+            .iter()
+            .any(|e| !names.iter().any(|name| e.file_name() == *name))
+    {
         return Err("This bounded continuation supports only the first failed paid review; other operations remain unreplayed".into());
     }
     let mut hashes = BTreeMap::new();
     walk(root, "plan.json", &mut hashes)?;
-    walk(root, "operations/00000", &mut hashes)?;
+    for name in names {
+        walk(root, &format!("operations/{name}"), &mut hashes)?;
+    }
+    let paid_name = if names.len() == 1 { "00000" } else { "00001" };
     for file in [
         "request.json",
         "reservation.json",
@@ -963,13 +998,176 @@ fn predecessor_hashes(root: &Path) -> Result<BTreeMap<String, String>> {
         "prepared.json",
         "validation-failure.json",
     ] {
-        if !hashes.contains_key(&format!("operations/00000/{file}")) {
+        if !hashes.contains_key(&format!("operations/{paid_name}/{file}")) {
             return Err(format!(
                 "Paid continuation lacks {file}; no new request is permitted"
             ));
         }
     }
+    if names.len() == 2 {
+        for file in [
+            "request.json",
+            "reservation.json",
+            "answer.json",
+            "response.json",
+            "completed.json",
+            "cache-source.json",
+        ] {
+            if !hashes.contains_key(&format!("operations/00000/{file}")) {
+                return Err(format!("Paid prefix lacks original sealed {file}"));
+            }
+        }
+        for file in [
+            "owner-observed.json",
+            "owner-exit.json",
+            "review-owner-started.json",
+        ] {
+            walk(root, file, &mut hashes)?;
+        }
+    }
     Ok(hashes)
+}
+
+const PAID_PREFIX: &str = "complete-journey-two-paid-review-prefix-v1";
+
+fn prefix_source(root: &Path, owner: &Pin) -> Result<PairPlan> {
+    owner.verify()?;
+    let closure = load(&owner.file)?;
+    if closure["version"] != "horary-owned-complete-review-validation-closure-v1"
+        || closure["state"] != json!(root)
+        || closure["exit_code"] != 1
+        || closure["owner_pid_observed"] != true
+        || closure["provider_resubmission_authorized"] != false
+        || closure["predecessor_run_lock_must_be_exclusively_acquired"] != true
+        || closure["tool_session_id"].as_u64().is_none_or(|n| n == 0)
+    {
+        return Err("Two-review prefix requires the authentic stopped owned-review receipt".into());
+    }
+    let required = [
+        "plan.json",
+        "owner-observed.json",
+        "owner-exit.json",
+        "review-owner-started.json",
+        "operations/00001/submitted.json",
+        "operations/00001/answer.json",
+        "operations/00001/exit.json",
+        "operations/00001/validation-failure.json",
+    ];
+    for file in required {
+        let expected = closure["files"]
+            .get(file)
+            .and_then(Value::as_str)
+            .ok_or("Owned closure omits a mandatory hash")?;
+        crate::verify(&controls::ordinary(root, file)?, expected)?;
+    }
+    let observed = load(&root.join("owner-observed.json"))?;
+    let exited = load(&root.join("owner-exit.json"))?;
+    let started = load(&root.join("review-owner-started.json"))?;
+    let pids = controls::owner_pids(&observed)?;
+    if pids.len() != 2
+        || observed["state"] != json!(root)
+        || exited["state"] != json!(root)
+        || started["state"] != json!(root)
+        || closure["owner_pid"] != pids[0]
+        || closure["controller_pid"] != pids[1]
+        || exited["owner_pid"] != pids[0]
+        || exited["controller_pid"] != pids[1]
+        || exited["exit_code"] != 1
+        || !exited["signal"].is_null()
+        || started["owner_pid"] != pids[0]
+        || started["plan_sha256"] != digest(read(&root.join("plan.json"))?)
+        || started["controller"] != observed["controller"]
+        || started["automatic_resubmission"] != false
+        || exited["automatic_resubmission"] != false
+    {
+        return Err("Stopped owned-review identity/exit changed".into());
+    }
+    for pid in pids {
+        controls::absent(pid)?;
+    }
+    let operation = root.join("operations/00001");
+    let child = load(&operation.join("submitted.json"))?["pid"]
+        .as_u64()
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or("Paid prefix child PID missing")?;
+    if closure["recorded_child_pid"] != child {
+        return Err("Owned closure changed its exact paid child".into());
+    }
+    controls::absent(child)?;
+    let source: PairPlan =
+        serde_json::from_value(load(&root.join("plan.json"))?).map_err(|e| e.to_string())?;
+    if source.paid_prefix.is_some() || source.continuation.is_none() {
+        return Err("Only the original one-import/one-paid stopped prefix is supported".into());
+    }
+    source.verify_sources()?;
+    if observed["controller"] != json!(source.controller.file) {
+        return Err("Stopped controller differs from its pinned plan".into());
+    }
+    let _ = controls::sealed(root, "operations/00000")?;
+    let request = load(&operation.join("request.json"))?;
+    let reservation = load(&operation.join("reservation.json"))?;
+    let exit = load(&operation.join("exit.json"))?;
+    let failure = load(&operation.join("validation-failure.json"))?;
+    if request["sequence"] != 1
+        || request["kind"] != "codex_complete_journey_review"
+        || request["plan_sha256"] != digest(read(&root.join("plan.json"))?)
+        || reservation["review_calls"] != 1
+        || reservation["teacher_calls"] != 0
+        || reservation["physical_generation_attempts"] != 0
+        || reservation["reservation_before_submission"] != true
+        || exit["code"] != 0
+        || exit["success"] != true
+        || failure["paid_answer_preserved"] != true
+        || failure["automatic_resubmission"] != false
+        || operation.join("completed.json").exists()
+        || root.join("verification-result.json").exists()
+    {
+        return Err(
+            "Paid second review is not a successful preserved host-validation failure".into(),
+        );
+    }
+    let audit = horary_loop::review_events::inspect(&operation.join("events.jsonl"))?;
+    if let Some(error) = audit.violation {
+        return Err(error);
+    }
+    if audit.completed_turns != 1 {
+        return Err("Paid prefix requires exactly one completed second-review turn".into());
+    }
+    Ok(source)
+}
+
+fn verify_prefix(plan: &PairPlan) -> Result<PaidPrefix> {
+    let pin = plan.paid_prefix.as_ref().ok_or("Missing paid prefix pin")?;
+    pin.verify()?;
+    let receipt: PaidPrefix =
+        serde_json::from_value(load(&pin.file)?).map_err(|e| e.to_string())?;
+    if receipt.version != PAID_PREFIX
+        || receipt.inherited_review_calls != 2
+        || receipt.imports.len() != 2
+        || paid_prefix_hashes(&receipt.predecessor, &["00000", "00001"])? != receipt.source_hashes
+    {
+        return Err("Exact two-review prefix artifacts/reservations changed".into());
+    }
+    let source = prefix_source(&receipt.predecessor, &receipt.owner_receipt)?;
+    let mut unchanged = plan.clone();
+    unchanged.controller = source.controller.clone();
+    unchanged.paid_prefix = None;
+    if serde_json::to_value(unchanged).map_err(|e| e.to_string())?
+        != serde_json::to_value(source).map_err(|e| e.to_string())?
+    {
+        return Err("Two-review prefix changed native/data/program/source/reviewer/bounds".into());
+    }
+    for (sequence, import) in receipt.imports.iter().enumerate() {
+        let request = load(
+            &receipt
+                .predecessor
+                .join(format!("operations/{sequence:05}/request.json")),
+        )?;
+        if request["sequence"] != sequence || request["request"] != import.request {
+            return Err("Two-review prefix changed exact import order/request".into());
+        }
+    }
+    Ok(receipt)
 }
 
 fn successful_paid_source(root: &Path, owner: &Pin) -> Result<(PairPlan, Value)> {
@@ -1071,6 +1269,7 @@ fn verify_continuation(plan: &PairPlan) -> Result<PaidContinuation> {
     let mut unchanged = plan.clone();
     unchanged.controller = source.controller.clone();
     unchanged.continuation = None;
+    unchanged.paid_prefix = None;
     if serde_json::to_value(unchanged).map_err(|e| e.to_string())?
         != serde_json::to_value(source).map_err(|e| e.to_string())?
         || request != receipt.request
@@ -1116,7 +1315,7 @@ pub fn prepare_continuation(
     let observed = observation(&plan.baseline, &case.id, &captured)?;
     let packet = packet(&plan, &plan.baseline, case, &captured, &observed)?;
     let (schema, prompt, reconstructed) =
-        review_contract(&plan, "baseline", case, &packet, &observed);
+        legacy_review_contract(&plan, "baseline", case, &packet, &observed);
     let operation = source.join("operations/00000");
     let prepared = load(&operation.join("prepared.json"))?;
     if prepared["executable"] != json!(plan.codex)
@@ -1189,6 +1388,130 @@ pub fn prepare_continuation(
         &state.join("prepared.json"),
         &json!({"version":VERSION,"plan_sha256":digest(read(&state.join("plan.json"))?),
         "original_paid_answer_reused":true,"inherited_review_calls":1,"remaining_new_review_calls":plan.max_review_calls-1,
+        "new_paid_calls":0,"student_calls":0,"reflection_calls":0,"automatic_resubmission":false}),
+    )?;
+    Ok(plan)
+}
+
+/// Revalidate a bounded successful paid prefix locally; no reviewer is invoked.
+pub fn prepare_prefix_continuation(
+    source: &Path,
+    state: &Path,
+    owner_receipt: &Path,
+    controller: &Path,
+) -> Result<PairPlan> {
+    if !source.is_absolute() || !state.is_absolute() || state.exists() {
+        return Err("Paid prefix needs a closed absolute source and fresh state".into());
+    }
+    let lock = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(controls::ordinary(source, "run.lock")?)
+        .map_err(|e| e.to_string())?;
+    lock.try_lock_exclusive()
+        .map_err(|e| format!("Original owned review still holds its journal: {e}"))?;
+    let owner = Pin::capture(owner_receipt)?;
+    let hashes = paid_prefix_hashes(source, &["00000", "00001"])?;
+    let mut plan = prefix_source(source, &owner)?;
+    let case = plan.cases.first().ok_or("No original first case")?;
+    let mut imports = Vec::new();
+    let mut responses = Vec::new();
+    for (sequence, (name, side)) in [("baseline", &plan.baseline), ("candidate", &plan.candidate)]
+        .into_iter()
+        .enumerate()
+    {
+        let directory = source.join(format!("operations/{sequence:05}"));
+        let original = load(&directory.join("request.json"))?;
+        let captured = calls(side, &case.id)?;
+        let observed = observation(side, &case.id, &captured)?;
+        let packet = packet(&plan, side, case, &captured, &observed)?;
+        let (schema, prompt, request) =
+            legacy_review_contract(&plan, name, case, &packet, &observed);
+        if original["kind"] != "codex_complete_journey_review"
+            || original["sequence"] != sequence
+            || original["plan_sha256"] != digest(read(&source.join("plan.json"))?)
+            || original["request"] != request
+        {
+            return Err(
+                "Paid prefix changed the exact original two logical requests or order".into(),
+            );
+        }
+        if sequence == 1 {
+            let prepared = load(&directory.join("prepared.json"))?;
+            if load(&directory.join("packet.json"))? != packet.context
+                || load(&directory.join("schema.json"))? != schema
+                || read(&directory.join("prompt.txt"))? != prompt.as_bytes()
+                || prepared["executable"] != json!(plan.codex)
+                || prepared["model_override"] != false
+                || prepared["stdin_sha256"] != digest(&prompt)
+                || prepared["deadline_seconds"] != plan.review_seconds
+                || prepared["arguments"]
+                    != json!(horary_loop::self_contained_codex_arguments(
+                        &directory.join("schema.json"),
+                        &directory.join("answer.json")
+                    ))
+            {
+                return Err("Second paid review packet/prompt/schema/invocation changed".into());
+            }
+            for artifact in &packet.sources {
+                if read(&controls::ordinary(
+                    &directory,
+                    &format!("sources/{}", artifact.file),
+                )?)? != artifact.bytes
+                {
+                    return Err(format!("Second paid source changed: {}", artifact.file));
+                }
+            }
+        }
+        let response = validate(&packet, &observed, load(&directory.join("answer.json"))?)?;
+        if sequence == 0 && response != load(&directory.join("response.json"))? {
+            return Err("Original sealed first review changed under source policy".into());
+        }
+        imports.push(PaidPrefixImport {
+            request,
+            canonical_review_sha256: digest(response.to_string()),
+        });
+        responses.push(response);
+    }
+    if paid_prefix_hashes(source, &["00000", "00001"])? != hashes {
+        return Err("Paid prefix changed during local validation".into());
+    }
+    fs::create_dir(state)
+        .map_err(|e| format!("Fresh prefix cannot overwrite a prior attempt: {e}"))?;
+    let receipt = PaidPrefix {
+        version: PAID_PREFIX.into(),
+        predecessor: source.into(),
+        owner_receipt: owner,
+        source_hashes: hashes,
+        imports,
+        inherited_review_calls: 2,
+    };
+    keep(&state.join("paid-prefix.json"), &receipt)?;
+    plan.controller = Pin::capture(controller)?;
+    plan.paid_prefix = Some(Pin::capture(&state.join("paid-prefix.json"))?);
+    plan.verify_sources()?;
+    let mut journal = Journal::open_verification(state, &plan, plan.max_review_calls)?;
+    for (sequence, (import, response)) in receipt.imports.iter().zip(&responses).enumerate() {
+        let Operation::Fresh(directory) = journal.begin_complete_journey_review(&import.request)?
+        else {
+            return Err("Fresh paid prefix cannot reuse a preexisting operation".into());
+        };
+        fs::write(
+            directory.join("answer.json"),
+            read(&source.join(format!("operations/{sequence:05}/answer.json")))?,
+        )
+        .map_err(|e| e.to_string())?;
+        keep(
+            &directory.join("cache-source.json"),
+            &json!({"type":PAID_PREFIX,"source":plan.paid_prefix,"source_sequence":sequence,
+            "inherited_review_calls":1,"new_paid_calls":0,"semantic_judgments_changed":false}),
+        )?;
+        journal.finish(&directory, response)?;
+    }
+    keep(
+        &state.join("prepared.json"),
+        &json!({"version":VERSION,"plan_sha256":digest(read(&state.join("plan.json"))?),
+        "original_paid_answers_reused":2,"inherited_review_calls":2,"remaining_new_review_calls":plan.max_review_calls-2,
         "new_paid_calls":0,"student_calls":0,"reflection_calls":0,"automatic_resubmission":false}),
     )?;
     Ok(plan)
@@ -1421,7 +1744,7 @@ fn revalidate(packet: &Packet, observed: &Value, saved: &Value) -> Result<Value>
     Ok(result)
 }
 
-fn review_contract(
+fn legacy_review_contract(
     plan: &PairPlan,
     side_name: &str,
     case: &Case,
@@ -1436,6 +1759,22 @@ fn review_contract(
     (schema, prompt, request)
 }
 
+fn review_contract(
+    plan: &PairPlan,
+    side_name: &str,
+    case: &Case,
+    packet: &Packet,
+    observed: &Value,
+) -> (Value, String, Value) {
+    let (schema, prompt, mut request) =
+        legacy_review_contract(plan, side_name, case, packet, observed);
+    let prompt = prompt.replace("cite actual native outputs and the textbook for every scored pipeline dimension.",
+        "For scored classification, elicitation and interpretation cite actual native outputs and the textbook. Linguistic extraction requires actual user words and native consultation/output provenance; textbook citation is optional for copying/normalization. Horary rules and every observed source obligation still require textbook plus native witnesses.");
+    request["version"] = json!("horary-complete-journey-review-source-policy-2026-10-11.2");
+    request["prompt_sha256"] = json!(digest(&prompt));
+    (schema, prompt, request)
+}
+
 fn review(
     plan: &PairPlan,
     journal: &mut Journal,
@@ -1444,9 +1783,51 @@ fn review(
     packet: &Packet,
     observed: &Value,
 ) -> Result<Value> {
-    let (schema, prompt, request) = review_contract(plan, side_name, case, packet, observed);
+    let old_import = if plan.paid_prefix.is_some() {
+        let prefix = verify_prefix(plan)?;
+        prefix
+            .imports
+            .iter()
+            .any(|i| i.request["side"] == side_name && i.request["case_id"] == case.id)
+    } else if plan.continuation.is_some() {
+        let receipt = verify_continuation(plan)?;
+        receipt.request["side"] == side_name && receipt.request["case_id"] == case.id
+    } else {
+        false
+    };
+    let (schema, prompt, request) = if old_import {
+        legacy_review_contract(plan, side_name, case, packet, observed)
+    } else {
+        review_contract(plan, side_name, case, packet, observed)
+    };
     let directory = match journal.begin_complete_journey_review(&request)? {
         Operation::Reused(value) => {
+            if plan.paid_prefix.is_some() {
+                let receipt = verify_prefix(plan)?;
+                if let Some((sequence, import)) = receipt
+                    .imports
+                    .iter()
+                    .enumerate()
+                    .find(|(_, i)| i.request == request)
+                {
+                    let original = validate(
+                        packet,
+                        observed,
+                        load(
+                            &receipt
+                                .predecessor
+                                .join(format!("operations/{sequence:05}/answer.json")),
+                        )?,
+                    )?;
+                    if original != value
+                        || digest(value.to_string()) != import.canonical_review_sha256
+                    {
+                        return Err(
+                            "Paid prefix cache changed the exact original semantic answer".into(),
+                        );
+                    }
+                }
+            }
             if plan.continuation.is_some() {
                 let receipt = verify_continuation(plan)?;
                 if receipt.request == request {
@@ -2380,7 +2761,7 @@ mod tests {
         let observed = observation(&plan.baseline, "a", &captured).unwrap();
         let packet = packet(&plan, &plan.baseline, &plan.cases[0], &captured, &observed).unwrap();
         let (schema, prompt, request) =
-            review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed);
+            legacy_review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed);
         let mut journal = Journal::open_verification(&state, &plan, 2).unwrap();
         let Operation::Fresh(operation) = journal.begin_complete_journey_review(&request).unwrap()
         else {
@@ -2438,6 +2819,275 @@ mod tests {
                 "validation_failure_sha256":digest(read(&operation.join("validation-failure.json")).unwrap())}),
         );
         (fixture, plan, state, owner)
+    }
+
+    fn stopped_owned_prefix() -> (Fixture, PairPlan, PathBuf, PathBuf) {
+        let (fixture, _, original, old_owner) = stopped_paid_review();
+        let root = fixture.source.path().canonicalize().unwrap();
+        let source = root.join("owned-review");
+        let plan = prepare_continuation(
+            &original,
+            &source,
+            &old_owner,
+            &std::env::current_exe().unwrap(),
+        )
+        .unwrap();
+        let captured = calls(&plan.candidate, "a").unwrap();
+        let observed = observation(&plan.candidate, "a", &captured).unwrap();
+        let packet = packet(&plan, &plan.candidate, &plan.cases[0], &captured, &observed).unwrap();
+        let (schema, prompt, request) =
+            legacy_review_contract(&plan, "candidate", &plan.cases[0], &packet, &observed);
+        let mut journal = Journal::open_verification(&source, &plan, 2).unwrap();
+        let first = load(&source.join("operations/00000/request.json")).unwrap();
+        assert!(matches!(
+            journal
+                .begin_complete_journey_review(&first["request"])
+                .unwrap(),
+            Operation::Reused(_)
+        ));
+        let Operation::Fresh(directory) = journal.begin_complete_journey_review(&request).unwrap()
+        else {
+            panic!("Fresh synthetic second review")
+        };
+        write(&directory.join("packet.json"), &packet.context);
+        write(&directory.join("schema.json"), &schema);
+        fs::write(directory.join("prompt.txt"), &prompt).unwrap();
+        for source in &packet.sources {
+            let file = directory.join("sources").join(&source.file);
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, &source.bytes).unwrap();
+        }
+        write(&directory.join("answer.json"), &unobserved_body(&packet));
+        write(
+            &directory.join("prepared.json"),
+            &json!({"executable":plan.codex,"model_override":false,"stdin_sha256":digest(&prompt),
+            "deadline_seconds":plan.review_seconds,"arguments":horary_loop::self_contained_codex_arguments(&directory.join("schema.json"),&directory.join("answer.json"))}),
+        );
+        write(
+            &directory.join("exit.json"),
+            &json!({"code":0,"success":true}),
+        );
+        fs::write(
+            directory.join("events.jsonl"),
+            "{\"type\":\"turn.started\"}\n{\"type\":\"turn.completed\"}\n",
+        )
+        .unwrap();
+        let mut pids = Vec::new();
+        for _ in 0..3 {
+            let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
+            pids.push(child.id());
+            child.wait().unwrap();
+        }
+        write(&directory.join("submitted.json"), &json!({"pid":pids[2]}));
+        write(
+            &directory.join("validation-failure.json"),
+            &json!({"paid_answer_preserved":true,"automatic_resubmission":false,"error":"Synthetic prior linguistic-extraction book veto"}),
+        );
+        let lock = journal.retain_ownership().unwrap();
+        fs2::FileExt::unlock(&lock).unwrap();
+        drop(journal);
+        drop(lock);
+        write(
+            &source.join("owner-observed.json"),
+            &json!({"state":source,"owner_pid":pids[0],"children":[pids[1]],"controller":plan.controller.file}),
+        );
+        write(
+            &source.join("owner-exit.json"),
+            &json!({"state":source,"owner_pid":pids[0],"controller_pid":pids[1],"exit_code":1,"signal":null,"automatic_resubmission":false}),
+        );
+        write(
+            &source.join("review-owner-started.json"),
+            &json!({"state":source,"owner_pid":pids[0],"controller":plan.controller.file,"plan_sha256":digest(read(&source.join("plan.json")).unwrap()),"automatic_resubmission":false}),
+        );
+        let mut files = BTreeMap::new();
+        for file in [
+            "plan.json",
+            "owner-observed.json",
+            "owner-exit.json",
+            "review-owner-started.json",
+            "operations/00001/submitted.json",
+            "operations/00001/exit.json",
+            "operations/00001/answer.json",
+            "operations/00001/validation-failure.json",
+        ] {
+            files.insert(file, digest(read(&source.join(file)).unwrap()));
+        }
+        let owner = root.join("owned-closure.json");
+        write(
+            &owner,
+            &json!({"version":"horary-owned-complete-review-validation-closure-v1","state":source,"tool_session_id":39301,"exit_code":1,
+            "owner_pid":pids[0],"controller_pid":pids[1],"recorded_child_pid":pids[2],"owner_pid_observed":true,"files":files,
+            "predecessor_run_lock_must_be_exclusively_acquired":true,"provider_resubmission_authorized":false}),
+        );
+        (fixture, plan, source, owner)
+    }
+
+    #[test]
+    fn source_policy_changes_future_wire_and_never_mutates_legacy_paid_contract() {
+        let fixture = Fixture::new();
+        let plan = fixture.prepare();
+        assert!(serde_json::to_value(&plan)
+            .unwrap()
+            .get("paid_prefix")
+            .is_none());
+        let captured = calls(&plan.baseline, "a").unwrap();
+        let observed = observation(&plan.baseline, "a", &captured).unwrap();
+        let packet = packet(&plan, &plan.baseline, &plan.cases[0], &captured, &observed).unwrap();
+        let (old_schema, old_prompt, old_request) =
+            legacy_review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed);
+        let (new_schema, new_prompt, new_request) =
+            review_contract(&plan, "baseline", &plan.cases[0], &packet, &observed);
+        assert_eq!(old_schema, new_schema);
+        assert_ne!(old_prompt, new_prompt);
+        assert!(new_prompt.contains("textbook citation is optional for copying/normalization"));
+        assert_ne!(old_request["version"], new_request["version"]);
+        assert_ne!(old_request["prompt_sha256"], new_request["prompt_sha256"]);
+        assert_eq!(old_request["context_sha256"], new_request["context_sha256"]);
+    }
+
+    #[test]
+    fn exact_two_review_prefix_preserves_answers_ancestry_and_spent_budget() {
+        let (fixture, original, source, owner) = stopped_owned_prefix();
+        let state = fixture
+            .source
+            .path()
+            .canonicalize()
+            .unwrap()
+            .join("two-review-continuation");
+        let original_plan = read(&source.join("plan.json")).unwrap();
+        let old_answer = read(&source.join("operations/00001/answer.json")).unwrap();
+        let plan =
+            prepare_prefix_continuation(&source, &state, &owner, &std::env::current_exe().unwrap())
+                .unwrap();
+        assert_eq!(plan.max_review_calls, original.max_review_calls);
+        assert_eq!(read(&source.join("plan.json")).unwrap(), original_plan);
+        assert_eq!(
+            read(&state.join("operations/00001/answer.json")).unwrap(),
+            old_answer
+        );
+        assert!(!source.join("operations/00001/completed.json").exists());
+        assert_eq!(
+            load(&state.join("prepared.json")).unwrap()["inherited_review_calls"],
+            2
+        );
+        for seq in 0..2 {
+            assert_eq!(
+                load(&state.join(format!("operations/{seq:05}/reservation.json"))).unwrap()
+                    ["review_calls"],
+                1
+            );
+        }
+        let prefix = verify_prefix(&plan).unwrap();
+        let mut journal = Journal::open_verification(&state, &plan, plan.max_review_calls).unwrap();
+        for i in &prefix.imports {
+            assert!(matches!(
+                journal.begin_complete_journey_review(&i.request).unwrap(),
+                Operation::Reused(_)
+            ));
+        }
+        assert!(journal
+            .begin_complete_journey_review(&json!({"would_reset_spent_reservations":true}))
+            .err()
+            .unwrap()
+            .contains("budget"));
+        let mut changed = load(&source.join("operations/00001/answer.json")).unwrap();
+        changed["qualification"] = json!("Changed semantic wording");
+        write(&source.join("operations/00001/answer.json"), &changed);
+        assert!(plan.verify_sources().is_err());
+    }
+
+    #[test]
+    fn two_review_prefix_rejects_unknown_operations_and_fabricated_owned_identity() {
+        for invalid in ["extra", "unknown_owner", "missing_pin"] {
+            let (fixture, _, source, owner) = stopped_owned_prefix();
+            match invalid {
+                "extra" => {
+                    fs::create_dir(source.join("operations/00002")).unwrap();
+                }
+                "unknown_owner" => {
+                    let mut v = load(&owner).unwrap();
+                    v["owner_pid_observed"] = json!(false);
+                    write(&owner, &v);
+                }
+                "missing_pin" => {
+                    let mut v = load(&owner).unwrap();
+                    v["files"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("operations/00001/answer.json");
+                    write(&owner, &v);
+                }
+                _ => unreachable!(),
+            }
+            let state = fixture
+                .source
+                .path()
+                .canonicalize()
+                .unwrap()
+                .join("withheld-prefix");
+            assert!(
+                prepare_prefix_continuation(
+                    &source,
+                    &state,
+                    &owner,
+                    &std::env::current_exe().unwrap()
+                )
+                .is_err(),
+                "{invalid}"
+            );
+            assert!(!state.exists());
+        }
+    }
+
+    #[test]
+    #[ignore = "Explicit saved original TRAIN paid artifacts, no reviewer/model invocation"]
+    fn original_paid_prefix_revalidates_without_changing_semantics_or_absent_reading() {
+        let source = PathBuf::from(
+            std::env::var("HORARY_SAVED_FULL_REVIEW_STATE")
+                .expect("Explicit TRAIN saved review state required"),
+        );
+        let plan: PairPlan =
+            serde_json::from_value(load(&source.join("plan.json")).unwrap()).unwrap();
+        assert_eq!(plan.cases[0].partition, "training");
+        for (sequence, (name, side)) in
+            [("baseline", &plan.baseline), ("candidate", &plan.candidate)]
+                .into_iter()
+                .enumerate()
+        {
+            let directory = source.join(format!("operations/{sequence:05}"));
+            let captured = calls(side, &plan.cases[0].id).unwrap();
+            let observed = observation(side, &plan.cases[0].id, &captured).unwrap();
+            let packet = packet(&plan, side, &plan.cases[0], &captured, &observed).unwrap();
+            let (_, _, request) =
+                legacy_review_contract(&plan, name, &plan.cases[0], &packet, &observed);
+            assert_eq!(
+                load(&directory.join("request.json")).unwrap()["request"],
+                request
+            );
+            let bytes = read(&directory.join("answer.json")).unwrap();
+            let raw: Value = serde_json::from_slice(&bytes).unwrap();
+            let result = validate(&packet, &observed, raw.clone()).unwrap();
+            let mut expected = raw;
+            packet.expand(&mut expected).unwrap();
+            let mut body = result.clone();
+            for key in [
+                "version",
+                "case_id",
+                "native_observation_sha256",
+                "interpretation_observed",
+            ] {
+                body.as_object_mut().unwrap().remove(key);
+            }
+            assert_eq!(body, expected);
+            assert_eq!(result["interpretation_observed"], false);
+            assert_eq!(result["pipeline"]["reading"]["state"], "unobserved");
+            if sequence == 0 {
+                assert_eq!(result, load(&directory.join("response.json")).unwrap());
+            } else {
+                assert_eq!(result["pipeline"]["extraction"]["score"], 2);
+            }
+            assert_eq!(read(&directory.join("answer.json")).unwrap(), bytes);
+        }
     }
 
     #[test]
@@ -2602,10 +3252,12 @@ mod tests {
         let book = reference("book-source.json", "");
         let native = reference("native-final.json", "/session/method/result");
         let speech = reference("native-first-turn.json", "/session/messages");
+        let extraction = reference("calls/0003-result.json", "/result");
         let good = json!({"state":"scored","score":2,"reason":"Controlled independent review calibration","evidence_refs":[book,native]});
         let spoken = json!({"state":"scored","score":2,"reason":"Actual authored assistant witness","evidence_refs":[speech]});
+        let extracted = json!({"state":"scored","score":2,"reason":"Actual source-word consultation witness","evidence_refs":[extraction]});
         let body = json!({"first_turn":{"concern_actor":spoken,"evidence_honesty":spoken,"useful_inquiry":spoken,"natural_phrasing":spoken,"continuity":spoken},"follow_up":null,
-            "pipeline":{"classification":good,"elicitation":good,"extraction":good,"reading":good},
+            "pipeline":{"classification":good,"elicitation":good,"extraction":extracted,"reading":good},
             "obligations":packet.context["reading_obligations"].as_object().unwrap().keys().map(|id|json!({"id":id,"state":"fulfilled","reason":"Controlled source-obligation witness","evidence_refs":[book,native]})).collect::<Vec<_>>(),
             "findings":[],"qualification":"Calibration only; no model-quality or astrological correctness claim"});
         let review = validate(&packet, &observed, body).unwrap();
