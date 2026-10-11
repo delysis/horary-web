@@ -30,6 +30,11 @@ enum Action {
         case_seconds: u64,
         #[arg(long, default_value_t = 28)]
         max_calls: u64,
+        /// Exact prompt program for a fresh full journey, never an accepted checkpoint.
+        #[arg(long, requires = "program_sha256")]
+        program: Option<PathBuf>,
+        #[arg(long, requires = "program")]
+        program_sha256: Option<String>,
     },
     /// Seal a closed native corpus after its owner and child have exited.
     SealCorpus {
@@ -132,15 +137,25 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             cases,
             case_seconds,
             max_calls,
+            program,
+            program_sha256,
         } => {
+            let program = match (program, program_sha256) {
+                (Some(file), Some(sha256)) => {
+                    Some(horary_gepa::campaign::ProgramSource { file, sha256 })
+                }
+                (None, None) => None,
+                _ => return Err("--program and --program-sha256 must be supplied together".into()),
+            };
             println!(
                 "{}",
-                horary_gepa::campaign::run(
+                horary_gepa::campaign::run_with_program(
                     &evidence,
                     &native_executable,
                     &cases,
                     case_seconds,
-                    max_calls
+                    max_calls,
+                    program.as_ref()
                 )?
             );
         }
@@ -238,4 +253,46 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn campaign_program_and_hash_are_an_explicit_pair_and_baseline_stays_optional() {
+        let baseline = [
+            "horary-gepa",
+            "campaign",
+            "--evidence",
+            "/synthetic/run",
+            "--native-executable",
+            "/synthetic/native",
+            "--cases",
+            "synthetic-explicit",
+        ];
+        assert!(Cli::try_parse_from(baseline).is_ok());
+        let mut args = baseline.to_vec();
+        args.extend(["--program", "/synthetic/program.json"]);
+        assert!(Cli::try_parse_from(&args).is_err());
+        args.extend([
+            "--program-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ]);
+        let parsed = Cli::try_parse_from(&args).unwrap();
+        assert!(matches!(
+            parsed.action,
+            Action::Campaign {
+                program: Some(_),
+                program_sha256: Some(_),
+                ..
+            }
+        ));
+        let mut hash_only = baseline.to_vec();
+        hash_only.extend([
+            "--program-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ]);
+        assert!(Cli::try_parse_from(&hash_only).is_err());
+    }
 }

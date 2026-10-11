@@ -64,6 +64,10 @@ HORARY_GOOGLE_KEY_FILE=/absolute/path/to/private-key-file \
 
 Native exit 101 can mean completed negative semantic observations. An uncertain provider submission, missing response or interrupted corpus remains ineligible for sealing. `campaign` writes its pre-start receipt in a sibling `.owner` directory because native execution creates the campaign directory itself; it mirrors those exact bytes after child exit. Provider quota waiting is recorded separately from generation latency. Use an isolated Cargo target to build new helpers, leaving all historical owned binaries intact.
 
+To check a selected teaching program through the actual application pipeline, add the explicit pair `--program /absolute/selected-program.json --program-sha256 EXACT_SHA256` to a **fresh** campaign. Both arguments are required together. The launcher validates and copies the exact program before releasing the native process, verifies the native program receipt after exit, and retains that copy with the closed campaign. An ordinary baseline clears inherited overlays; it cannot accidentally run candidate teaching. Both modes begin with the original synthetic question and device context and run the complete production pipeline, without importing accepted facts, a chart, recorded answers or a specialist checkpoint.
+
+A matching program manifest proves which teaching was supplied, not that its selector ran or that it helped. Inspect the actual per-call applied-program receipts, compare identical baseline/candidate fixtures and bounds, and independently review the delivered interpretation against every source obligation. Upstream failures and unfinished readings remain failures or unobserved work, respectively. Neither this opt-in launcher nor corpus sealing promotes a program into the application.
+
 ```sh
 cargo build --manifest-path tools/horary-gepa/Cargo.toml --locked
 tools/horary-gepa/target/debug/horary-gepa prepare \

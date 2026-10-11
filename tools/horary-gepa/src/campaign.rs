@@ -8,7 +8,7 @@
 #![forbid(unsafe_code)]
 
 use crate::{corpus, keep, read, verify, Result};
-use horary_prompt_program::digest;
+use horary_prompt_program::{digest, Program};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -34,6 +34,93 @@ const ROOT_WITNESSES: [&str; 6] = [
 ];
 
 type Hashes = BTreeMap<String, String>;
+
+/// Explicit opt-in teaching; a baseline never inherits an ambient overlay.
+pub struct ProgramSource {
+    pub file: PathBuf,
+    pub sha256: String,
+}
+
+struct PinnedProgram {
+    source: PathBuf,
+    bytes: Vec<u8>,
+    program: Program,
+    sha256: String,
+}
+
+impl PinnedProgram {
+    fn read(source: &ProgramSource) -> Result<Self> {
+        if !source.file.is_absolute()
+            || source.sha256.len() != 64
+            || !source.sha256.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(
+                "An explicit program needs an absolute ordinary file and its SHA256".into(),
+            );
+        }
+        let observed = hash_file(&source.file)?;
+        if !observed.eq_ignore_ascii_case(&source.sha256) {
+            return Err("Explicit prompt program differs from its requested SHA256".into());
+        }
+        let bytes = read(&source.file)?;
+        if digest(&bytes) != observed {
+            return Err("Explicit prompt program changed while being read".into());
+        }
+        Ok(Self {
+            source: source.file.canonicalize().map_err(|e| e.to_string())?,
+            program: Program::parse(&bytes)?,
+            bytes,
+            sha256: observed,
+        })
+    }
+
+    fn receipt(&self) -> Value {
+        json!({"id":self.program.id,"sha256":self.sha256,"file":"prompt-program.json",
+            "baseline_manifest_sha256":self.program.baseline_manifest_sha256,
+            "overrides":self.program.overrides.iter().map(|o| o.selector()).collect::<Vec<_>>()})
+    }
+
+    fn snapshot(&self, owner: &Path) -> Result<()> {
+        let file = owner.join("prompt-program.json");
+        let mut snapshot = fresh_file(&file)?;
+        snapshot
+            .write_all(&self.bytes)
+            .and_then(|_| snapshot.sync_all())
+            .map_err(|e| e.to_string())?;
+        verify(&file, &self.sha256)
+    }
+
+    fn verify_native(&self, campaign: &Path) -> Result<()> {
+        verify(&campaign.join("prompt-program.json"), &self.sha256)?;
+        if crate::load(&campaign.join("manifest.json"))?["prompt_program"] != self.receipt() {
+            return Err(
+                "Native campaign did not preserve the explicitly pinned program receipt".into(),
+            );
+        }
+        Ok(())
+    }
+}
+
+fn isolate_environment(command: &mut Command, owner: &Path, program: bool) {
+    for variable in [
+        "HORARY_NATIVE_LLAMA_TEST_MODEL",
+        "HORARY_EVAL_PROGRAM",
+        "HORARY_EVAL_MODES",
+        "HORARY_NEURAL_TASK",
+        "HORARY_EVAL_ORIGIN_SHA256",
+        "HORARY_EVAL_FIXED_CANDIDATE_SHA256",
+        "HORARY_EVAL_EXPERIMENT_ROLE",
+        "OPENAI_API_KEY",
+        "CODEX_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+    ] {
+        command.env_remove(variable);
+    }
+    if program {
+        command.env("HORARY_EVAL_PROGRAM", owner.join("prompt-program.json"));
+    }
+}
 
 fn fresh_file(path: &Path) -> Result<File> {
     OpenOptions::new()
@@ -131,6 +218,26 @@ pub fn run(
     case_seconds: u64,
     max_calls: u64,
 ) -> Result<Value> {
+    run_with_program(
+        campaign,
+        native,
+        selected_ids,
+        case_seconds,
+        max_calls,
+        None,
+    )
+}
+
+/// Run the complete production journey with one explicitly pinned teaching
+/// program. No accepted state, inferred facts or recorded answers are imported.
+pub fn run_with_program(
+    campaign: &Path,
+    native: &Path,
+    selected_ids: &[String],
+    case_seconds: u64,
+    max_calls: u64,
+    program: Option<&ProgramSource>,
+) -> Result<Value> {
     let locator = std::env::var_os("HORARY_GOOGLE_KEY_FILE")
         .map(PathBuf::from)
         .ok_or("Set the private HORARY_GOOGLE_KEY_FILE locator")?;
@@ -141,6 +248,7 @@ pub fn run(
         case_seconds,
         max_calls,
         &locator,
+        program,
     )
 }
 
@@ -151,6 +259,7 @@ fn run_with_locator(
     case_seconds: u64,
     max_calls: u64,
     locator: &Path,
+    program: Option<&ProgramSource>,
 ) -> Result<Value> {
     if !cfg!(unix) {
         return Err("The owned startup pipe requires a Unix host".into());
@@ -214,18 +323,23 @@ fn run_with_locator(
     {
         return Err("Keep the private credential locator outside campaign evidence".into());
     }
+    let program = program.map(PinnedProgram::read).transpose()?;
     fs::create_dir(&owner)
         .map_err(|e| format!("Fresh campaign ownership guard blocks resubmission: {e}"))?;
-    keep(
-        &owner.join("configuration.json"),
-        &json!({
+    let mut configuration = json!({
         "entry":ENTRY,"provider":"google","model":"gemma-4-26b-a4b-it","full_reading":true,
         "case_parallelism":4,"case_seconds":case_seconds,"max_calls_per_case":max_calls,
         "physical_generation_attempt_reservation":physical_reservation,"wall_deadline_seconds":wall_seconds,
         "input_tokens_per_minute":14000,"ordinary_unconstrained_text":true,
         "response_schema":false,"local_inference":false,"automatic_resubmission":false,
-        "startup_gate":"owner seals submission before releasing one pipe token"}),
-    )?;
+        "startup_gate":"owner seals submission before releasing one pipe token"});
+    if let Some(program) = &program {
+        program.snapshot(&owner)?;
+        configuration["prompt_program"] = program.receipt();
+        configuration["program_source_file"] = json!(program.source);
+        configuration["program_scope"] = json!("Full production journey from authored original question/device; guide overlay only, no imported state or answers");
+    }
+    keep(&owner.join("configuration.json"), &configuration)?;
     let mut command = Command::new("/bin/sh");
     command
         .args(["-c", GATE, "horary-campaign-gate"])
@@ -244,25 +358,21 @@ fn run_with_locator(
         .env("HORARY_EVAL_CASE_SECONDS", case_seconds.to_string())
         .env("HORARY_EVAL_MAX_CALLS", max_calls.to_string())
         .env("HORARY_EVAL_EVIDENCE", &campaign)
-        .env("HORARY_EVAL_PHASE", "fresh_owned_control")
+        .env(
+            "HORARY_EVAL_PHASE",
+            if program.is_some() {
+                "fresh_owned_candidate"
+            } else {
+                "fresh_owned_control"
+            },
+        )
         .env("HORARY_GOOGLE_KEY_FILE", locator)
         .env("HORARY_GOOGLE_INPUT_TPM", "14000")
         .env("HORARY_CAMPAIGN_OWNER_DIRECTORY", &owner)
         .stdin(Stdio::piped())
         .stdout(Stdio::from(fresh_file(&owner.join("native.stdout.log"))?))
         .stderr(Stdio::from(fresh_file(&owner.join("native.stderr.log"))?));
-    for variable in [
-        "HORARY_NATIVE_LLAMA_TEST_MODEL",
-        "HORARY_EVAL_PROGRAM",
-        "HORARY_EVAL_MODES",
-        "HORARY_NEURAL_TASK",
-        "OPENAI_API_KEY",
-        "CODEX_API_KEY",
-        "GEMINI_API_KEY",
-        "GOOGLE_API_KEY",
-    ] {
-        command.env_remove(variable);
-    }
+    isolate_environment(&mut command, &owner, program.is_some());
     let child = command.spawn().map_err(|e| e.to_string())?;
     let native_pid = child.id();
     let mut child = OwnedChild(Some(child));
@@ -273,6 +383,9 @@ fn run_with_locator(
     let submitted_bytes = read(&owner.join("submitted.json"))?;
     let submitted_sha = digest(&submitted_bytes);
     verify(&native, &native_sha)?;
+    if let Some(program) = &program {
+        verify(&owner.join("prompt-program.json"), &program.sha256)?;
+    }
     if fs::symlink_metadata(&campaign).is_ok() {
         return Err(
             "Campaign appeared before startup release; child was not authorized to run".into(),
@@ -321,6 +434,10 @@ fn run_with_locator(
     verify(&campaign.join("submitted.json"), &submitted_sha)?;
     keep(&campaign.join("owner-exit.json"), &exit)?;
     verify(&native, &native_sha)?;
+    if let Some(program) = &program {
+        verify(&owner.join("prompt-program.json"), &program.sha256)?;
+        program.verify_native(&campaign)?;
+    }
     let mut files = Hashes::new();
     for name in ROOT_WITNESSES {
         let path = campaign.join(name);
@@ -342,12 +459,14 @@ fn run_with_locator(
         "submitted_sha256":submitted_sha,"owner_exit_sha256":hash_file(&campaign.join("owner-exit.json"))?,
         "native_executable":native,"native_executable_sha256":native_sha,"files":files,"case_files":case_files}),
     )?;
-    Ok(
-        json!({"campaign":campaign,"owner_directory":owner,"native_exit_code":code,
+    let mut receipt = json!({"campaign":campaign,"owner_directory":owner,"native_exit_code":code,
         "closure":closure,"closure_sha256":hash_file(&closure)?,"native_pid_reaped":true,
         "automatic_resubmission":false,"case_trees":case_files.len(),
-        "qualification":"Complete ordinary-file trees are pinned without editing outcomes or claiming semantic success. Seal in a later process after owner exit; unsettled/partial evidence remains rejectable."}),
-    )
+        "qualification":"Complete ordinary-file trees are pinned without editing outcomes or claiming semantic success. Seal in a later process after owner exit; unsettled/partial evidence remains rejectable."});
+    if let Some(program) = &program {
+        receipt["prompt_program"] = program.receipt();
+    }
+    Ok(receipt)
 }
 
 #[cfg(all(test, unix))]
@@ -357,7 +476,25 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     fn fake_native(directory: &Path, code: i32) -> PathBuf {
+        fake_native_with_program(directory, code, None)
+    }
+
+    fn fake_native_with_program(directory: &Path, code: i32, program: Option<Value>) -> PathBuf {
         let native = directory.join("synthetic-native");
+        fs::write(
+            directory.join("synthetic-manifest.json"),
+            serde_json::to_vec(&json!({"provider":"synthetic-offline","prompt_program":program}))
+                .unwrap(),
+        )
+        .unwrap();
+        let program_setup = if program.is_some() {
+            r#"test "$HORARY_EVAL_PROGRAM" = "$HORARY_CAMPAIGN_OWNER_DIRECTORY/prompt-program.json" || exit 100
+test "$HORARY_EVAL_PHASE" = fresh_owned_candidate || exit 102
+cp "$HORARY_EVAL_PROGRAM" "$HORARY_EVAL_EVIDENCE/prompt-program.json" || exit 103"#
+        } else {
+            r#"test -z "${HORARY_EVAL_PROGRAM+x}" || exit 100
+test "$HORARY_EVAL_PHASE" = fresh_owned_control || exit 102"#
+        };
         fs::write(&native, format!(r#"#!/bin/sh
 test -f "$HORARY_CAMPAIGN_OWNER_DIRECTORY/submitted.json" || exit 91
 test -f "$HORARY_CAMPAIGN_OWNER_DIRECTORY/start-authorized.json" || exit 92
@@ -368,8 +505,13 @@ test "$HORARY_EVAL_FILTER" = synthetic-explicit || exit 96
 test "$HORARY_EVAL_MAX_CALLS" = 8 || exit 97
 test "$HORARY_EVAL_CASE_SECONDS" = 5 || exit 98
 test "$1" = elicitation_eval::real_model_catalogue_campaign || exit 99
+test -z "${{HORARY_EVAL_EXPERIMENT_ROLE+x}}" || exit 104
+test -z "${{HORARY_EVAL_ORIGIN_SHA256+x}}" || exit 105
+test -z "${{HORARY_EVAL_FIXED_CANDIDATE_SHA256+x}}" || exit 106
+test -z "${{HORARY_NEURAL_TASK+x}}" || exit 107
 mkdir -p "$HORARY_EVAL_EVIDENCE/cases/synthetic-explicit/calls"
-printf '%s' '{{"provider":"synthetic-offline"}}' > "$HORARY_EVAL_EVIDENCE/manifest.json"
+{program_setup}
+cp "$HORARY_CAMPAIGN_OWNER_DIRECTORY/../synthetic-manifest.json" "$HORARY_EVAL_EVIDENCE/manifest.json"
 printf '%s' '[]' > "$HORARY_EVAL_EVIDENCE/fixtures.json"
 printf '%s' '{{}}' > "$HORARY_EVAL_EVIDENCE/report.json"
 printf '%s' '{{}}' > "$HORARY_EVAL_EVIDENCE/completed.json"
@@ -401,6 +543,7 @@ exit {code}
             5,
             8,
             &locator(&root),
+            None,
         )
         .unwrap();
         assert_eq!(receipt["native_exit_code"], 101);
@@ -441,7 +584,8 @@ exit {code}
             &["synthetic-explicit".into()],
             5,
             8,
-            &locator(&root)
+            &locator(&root),
+            None,
         )
         .is_err());
     }
@@ -462,6 +606,7 @@ exit {code}
             5,
             8,
             &key,
+            None,
         )
         .unwrap();
         assert_eq!(receipt["native_exit_code"], 7);
@@ -474,7 +619,8 @@ exit {code}
             &["synthetic-explicit".into()],
             5,
             8,
-            &key
+            &key,
+            None,
         )
         .unwrap_err()
         .contains("ownership guard"));
@@ -491,7 +637,9 @@ exit {code}
             vec!["synthetic-explicit".into(), "synthetic-explicit".into()],
             vec!["../case".into()],
         ] {
-            assert!(run_with_locator(&root.join("invalid"), &native, &ids, 5, 8, &key).is_err());
+            assert!(
+                run_with_locator(&root.join("invalid"), &native, &ids, 5, 8, &key, None).is_err()
+            );
         }
         assert!(!root.join("invalid.owner").exists());
         let cases = root.join("tree");
@@ -504,7 +652,8 @@ exit {code}
             &["synthetic-explicit".into()],
             u64::MAX,
             8,
-            &key
+            &key,
+            None,
         )
         .is_err());
         assert!(!root.join("overflow.owner").exists());
@@ -518,5 +667,208 @@ exit {code}
         assert!(cancelled);
         assert!(!status.success());
         assert!(child.0.is_none());
+    }
+
+    fn program_source(directory: &Path) -> ProgramSource {
+        let file = directory.join("program-source.json");
+        let value = json!({"version":1,"id":"synthetic-initial-extractor",
+            "baseline_manifest_sha256":digest("synthetic-discovery-manifest"),
+            "overrides":[{"stage":"intake","recognition_phase":"complete_selected_program","method":"movable_deal",
+                "expected_guide_sha256":digest("synthetic-original-guide"),
+                "replacement_text":"Synthetic revised teaching for initial extraction. Preserve every genuine source fact, canonical actor, provenance, native evidence and every unfilled field without importing an accepted checkpoint.","edits":[]}],
+            "rationale":"Synthetic offline fixture only, no model-quality evidence",
+            "evidence":[{"case_id":"synthetic-training","file":"synthetic-request.json","json_pointer":"/prompt/0/content","sha256":digest("synthetic-training-request")}],
+            "training_case_ids":["synthetic-training"],"holdout_case_ids":["synthetic-reserved"]});
+        // Deliberately noncanonical formatting: the launcher must retain bytes,
+        // not rewrite this program through serde.
+        let bytes = serde_json::to_vec_pretty(&value).unwrap();
+        fs::write(&file, &bytes).unwrap();
+        ProgramSource {
+            file,
+            sha256: digest(bytes),
+        }
+    }
+
+    #[test]
+    fn explicit_program_is_pinned_before_release_and_native_closure_keeps_exact_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let source = program_source(&root);
+        let pinned = PinnedProgram::read(&source).unwrap();
+        let native = fake_native_with_program(&root, 101, Some(pinned.receipt()));
+        let campaign = root.join("candidate");
+        let receipt = run_with_locator(
+            &campaign,
+            &native,
+            &["synthetic-explicit".into()],
+            5,
+            8,
+            &locator(&root),
+            Some(&source),
+        )
+        .unwrap();
+        assert_eq!(receipt["native_exit_code"], 101);
+        assert_eq!(receipt["prompt_program"], pinned.receipt());
+        assert_eq!(
+            read(&root.join("candidate.owner/prompt-program.json")).unwrap(),
+            pinned.bytes
+        );
+        assert_eq!(
+            read(&campaign.join("prompt-program.json")).unwrap(),
+            pinned.bytes
+        );
+        let configuration = load(&root.join("candidate.owner/configuration.json")).unwrap();
+        assert_eq!(configuration["prompt_program"], pinned.receipt());
+        assert_eq!(configuration["program_source_file"], json!(source.file));
+        let start = load(&root.join("candidate.owner/start-authorized.json")).unwrap();
+        assert_eq!(
+            start["configuration_sha256"],
+            hash_file(&root.join("candidate.owner/configuration.json")).unwrap()
+        );
+        let closure = load(&campaign.join("corpus-closure.json")).unwrap();
+        assert_eq!(closure["files"]["prompt-program.json"], source.sha256);
+        assert_eq!(
+            load(&campaign.join("cases/synthetic-explicit/outcome.json")).unwrap(),
+            json!({"only":"synthetic"})
+        );
+        // Changed external teaching cannot change the private pre-start snapshot.
+        fs::write(&source.file, "changed after release").unwrap();
+        verify(
+            &root.join("candidate.owner/prompt-program.json"),
+            &source.sha256,
+        )
+        .unwrap();
+        pinned.verify_native(&campaign).unwrap();
+        fs::write(campaign.join("prompt-program.json"), "drift").unwrap();
+        assert!(pinned.verify_native(&campaign).is_err());
+        fs::write(campaign.join("prompt-program.json"), &pinned.bytes).unwrap();
+        keep(
+            &root.join("incorrect-manifest.json"),
+            &json!({"prompt_program":null}),
+        )
+        .unwrap();
+        fs::copy(
+            root.join("incorrect-manifest.json"),
+            campaign.join("manifest.json"),
+        )
+        .unwrap();
+        assert!(pinned.verify_native(&campaign).is_err());
+    }
+
+    #[test]
+    fn stale_malformed_or_aliased_program_stops_before_ownership_or_native_start() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let native = fake_native(&root, 0);
+        let key = locator(&root);
+        let source = program_source(&root);
+        let alias = root.join("program-alias.json");
+        std::os::unix::fs::symlink(&source.file, &alias).unwrap();
+        let bad = root.join("malformed-program.json");
+        fs::write(&bad, "{}").unwrap();
+        for (index, source) in [
+            ProgramSource {
+                file: source.file.clone(),
+                sha256: digest("wrong bytes"),
+            },
+            ProgramSource {
+                file: source.file.clone(),
+                sha256: "not-a-hash".into(),
+            },
+            ProgramSource {
+                file: alias,
+                sha256: source.sha256.clone(),
+            },
+            ProgramSource {
+                file: bad,
+                sha256: digest("{}"),
+            },
+        ]
+        .iter()
+        .enumerate()
+        {
+            let campaign = root.join(format!("bad-{index}"));
+            assert!(run_with_locator(
+                &campaign,
+                &native,
+                &["synthetic-explicit".into()],
+                5,
+                8,
+                &key,
+                Some(source)
+            )
+            .is_err());
+            assert!(!campaign.exists());
+            assert!(!root.join(format!("bad-{index}.owner")).exists());
+        }
+    }
+
+    #[test]
+    fn native_program_drift_keeps_terminal_failure_without_closure_or_resubmission() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let source = program_source(&root);
+        let pinned = PinnedProgram::read(&source).unwrap();
+        let native = fake_native_with_program(&root, 101, Some(pinned.receipt()));
+        let script = String::from_utf8(read(&native).unwrap()).unwrap().replace(
+            "cp \"$HORARY_EVAL_PROGRAM\" \"$HORARY_EVAL_EVIDENCE/prompt-program.json\" || exit 103",
+            "printf '%s' drift > \"$HORARY_EVAL_EVIDENCE/prompt-program.json\"",
+        );
+        fs::write(&native, script).unwrap();
+        let key = locator(&root);
+        let campaign = root.join("changed-native");
+        let run = || {
+            run_with_locator(
+                &campaign,
+                &native,
+                &["synthetic-explicit".into()],
+                5,
+                8,
+                &key,
+                Some(&source),
+            )
+        };
+        assert!(run().is_err());
+        let exit = load(&root.join("changed-native.owner/owner-exit.json")).unwrap();
+        assert_eq!(exit["native_exit_code"], 101);
+        assert!(!campaign.join("corpus-closure.json").exists());
+        verify(
+            &root.join("changed-native.owner/prompt-program.json"),
+            &source.sha256,
+        )
+        .unwrap();
+        assert!(run().unwrap_err().contains("no replay or resubmission"));
+    }
+
+    #[test]
+    fn baseline_strips_inherited_overlays_and_candidate_uses_only_its_snapshot() {
+        let owner = Path::new("/synthetic/owner");
+        for explicit in [false, true] {
+            let mut command = Command::new("/synthetic/native");
+            for variable in [
+                "HORARY_EVAL_PROGRAM",
+                "HORARY_EVAL_ORIGIN_SHA256",
+                "HORARY_EVAL_FIXED_CANDIDATE_SHA256",
+                "HORARY_EVAL_EXPERIMENT_ROLE",
+                "HORARY_NEURAL_TASK",
+            ] {
+                command.env(variable, "/ambient/never-selected");
+            }
+            isolate_environment(&mut command, owner, explicit);
+            let env: BTreeMap<_, _> = command.get_envs().collect();
+            assert_eq!(
+                env[std::ffi::OsStr::new("HORARY_EVAL_PROGRAM")],
+                explicit.then_some(std::ffi::OsStr::new("/synthetic/owner/prompt-program.json"))
+            );
+            for variable in [
+                "HORARY_EVAL_ORIGIN_SHA256",
+                "HORARY_EVAL_FIXED_CANDIDATE_SHA256",
+                "HORARY_EVAL_EXPERIMENT_ROLE",
+                "HORARY_NEURAL_TASK",
+                "HORARY_NATIVE_LLAMA_TEST_MODEL",
+            ] {
+                assert_eq!(env[std::ffi::OsStr::new(variable)], None);
+            }
+        }
     }
 }
