@@ -1,0 +1,26 @@
+{
+  "version": "horary-documentation-chart-2026-10-11.1",
+  "purpose": "Frozen astronomical input for an authored documentation scheduler fixture; not a model answer, expert qualification or production chart override.",
+  "generator": "process_reference::tests::capture_documentation_chart_fixture",
+  "captured_os": "macos",
+  "captured_arch": "aarch64",
+  "question": "Will I get married in the next year?",
+  "anchor": {
+    "timestamp_ms": 1789387200000.0,
+    "latitude": 38.657,
+    "longitude": -77.249,
+    "timezone": "America/New_York"
+  },
+  "source_sha256": {
+    "crates/horary-ai-core/src/astronomy.rs": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af",
+    "crates/horary-ai-core/src/book_method.rs": "03f68a9c5f0dd4a54bc14c317ab63327ec9c8d3f6b7f369d12cee60d24d928d6",
+    "crates/horary-ai-core/src/ephemeris_coefficients.rs": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c",
+    "crates/horary-ai-core/src/events.rs": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a",
+    "src-tauri/src/horary_pipeline.rs": "4b37923bbf625393749cb09e26e37a390c041de6c3ba274893e89936a22e03f2",
+    "src-tauri/src/process_reference.rs": "c30e6e6ee35f41b7b53d6eff2ea0786286337c814e139afd4c5c31fdc0ee4ac7"
+  },
+  "chart_path": "src-tauri/test-fixtures/process-reference-chart.json",
+  "chart_file_sha256": "b63bc213271c7ed71e9127f36550484794f6904498b116a97db036793afee0c6",
+  "native_chart_input_sha256": "eb0feab95c20699ee7d836971c218e313f45e5e0f9ef57fc9bd7d87df67cb149",
+  "chart_input_sha256": "eb0feab95c20699ee7d836971c218e313f45e5e0f9ef57fc9bd7d87df67cb149"
+}

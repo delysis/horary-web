@@ -1,0 +1,66 @@
+{
+  "version": "2026-09-14",
+  "backendId": "llama-native-kit",
+  "preferred": true,
+  "status": "release-target",
+  "rustBinding": {
+    "crate": "llama-cpp-2",
+    "version": "0.1.154",
+    "cargoFeature": "native-llama",
+    "gpuFeatures": [
+      "native-llama-metal"
+    ]
+  },
+  "tauriBoundary": {
+    "frontendTransport": "tauri-ipc",
+    "frontendLoopbackHttp": false,
+    "streamTransport": "tauri-events"
+  },
+  "modelPolicy": {
+    "allowUserImportedGguf": true,
+    "requireRemoteCatalogModel": false,
+    "verifiedCatalogModelsMayBeEmpty": true
+  },
+  "capabilities": {
+    "inProcessWorker": true,
+    "continuousBatching": {
+      "enabled": false,
+      "defaultParallelSequences": 4,
+      "maxParallelSequences": 4,
+      "scheduler": "Independent task batches with up to four sequences; one owned request at a time"
+    },
+    "kvCache": {
+      "enabled": true,
+      "tiers": [
+        {
+          "id": "hot",
+          "medium": "native-kit memory cache",
+          "purpose": "Bounded in-memory bank of fixed lesson prefixes, authenticated by the native owner and restored per batch case"
+        }
+      ]
+    },
+    "speculativeDecoding": {
+      "enabledWhenDraftModelPresent": false,
+      "nativeWorkerActive": false,
+      "preferredType": "draft-mtp",
+      "defaultDraftTokens": 3,
+      "implementationStatus": "Not exposed by the pinned native-kit controlled generation API",
+      "supportedFamilies": []
+    },
+    "jsonConstrainedOutput": {
+      "required": false,
+      "nativeValidationRequired": true,
+      "fallbackValidation": "Each stage validates its own worksheet, evidence IDs, and native calculation boundary; single tasks also use schema constraints"
+    }
+  },
+  "fallback": {
+    "backendId": "llama-server-sidecar",
+    "allowed": true,
+    "releaseBlocking": false,
+    "reason": "sidecar remains a development and compatibility fallback, not the primary native release gate"
+  },
+  "nativeKit": {
+    "repository": "https://github.com/delysis/native-platform.git",
+    "revision": "a2e7c92fec8f4a7649dd43e6baa88128a8d1b9e2"
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "source": {
+    "name": "NASA/JPL Horizons API",
+    "url": "https://ssd.jpl.nasa.gov/api/horizons.api",
+    "retrievedAt": "2026-06-30",
+    "parameters": {
+      "EPHEM_TYPE": "OBSERVER",
+      "CENTER": "500@399",
+      "TIME_TYPE": "UT",
+      "TLIST_TYPE": "CAL",
+      "QUANTITIES": "31",
+      "ANG_FORMAT": "DEG",
+      "EXTRA_PREC": "YES"
+    },
+    "notes": "Phase references compare geocentric ecliptic longitudes at the chart instant and one hour later, matching the app's aspect phase epsilon."
+  },
+  "aspectPhaseEpsilonHours": 1,
+  "tolerancesArcMinutes": {
+    "orb": 30
+  },
+  "cases": [
+    {
+      "id": "nyc-dst-spring-sun-moon-applying",
+      "input": {
+        "utc": "2024-03-10T07:30:00.000Z",
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "aspect": {
+        "planet1": "Sun",
+        "planet2": "Moon",
+        "aspectName": "Conjunction",
+        "angle": 0
+      },
+      "reference": {
+        "current": {
+          "Sun": 350.2170769,
+          "Moon": 349.3215011
+        },
+        "future": {
+          "Sun": 350.2587184,
+          "Moon": 349.9573165
+        },
+        "currentOrb": 0.8955758,
+        "futureOrb": 0.3014019,
+        "applying": true,
+        "separating": false
+      }
+    },
+    {
+      "id": "nyc-dst-fall-moon-mercury-separating",
+      "input": {
+        "utc": "2024-11-03T06:30:00.000Z",
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "aspect": {
+        "planet1": "Moon",
+        "planet2": "Mercury",
+        "aspectName": "Conjunction",
+        "angle": 0
+      },
+      "reference": {
+        "current": {
+          "Moon": 240.598626,
+          "Mercury": 240.648358
+        },
+        "future": {
+          "Moon": 241.1077499,
+          "Mercury": 240.7060715
+        },
+        "currentOrb": 0.049732,
+        "futureOrb": 0.4016784,
+        "applying": false,
+        "separating": true
+      }
+    },
+    {
+      "id": "london-solstice-mercury-mars-applying",
+      "input": {
+        "utc": "2024-06-21T12:00:00.000Z",
+        "latitude": 51.5,
+        "longitude": -0.1
+      },
+      "aspect": {
+        "planet1": "Mercury",
+        "planet2": "Mars",
+        "aspectName": "Sextile",
+        "angle": 60
+      },
+      "reference": {
+        "current": {
+          "Mercury": 98.82274,
+          "Mars": 39.0711222
+        },
+        "future": {
+          "Mercury": 98.9099832,
+          "Mars": 39.1015604
+        },
+        "currentOrb": 0.2483822,
+        "futureOrb": 0.1915772,
+        "applying": true,
+        "separating": false
+      }
+    },
+    {
+      "id": "tokyo-equinox-sun-moon-separating",
+      "input": {
+        "utc": "2024-09-22T12:00:00.000Z",
+        "latitude": 35.6762,
+        "longitude": 139.6503
+      },
+      "aspect": {
+        "planet1": "Sun",
+        "planet2": "Moon",
+        "aspectName": "Trine",
+        "angle": 120
+      },
+      "reference": {
+        "current": {
+          "Sun": 179.9703278,
+          "Moon": 60.9421511
+        },
+        "future": {
+          "Sun": 180.011088,
+          "Moon": 61.5319647
+        },
+        "currentOrb": 0.9718233,
+        "futureOrb": 1.5208767,
+        "applying": false,
+        "separating": true
+      }
+    }
+  ]
+}

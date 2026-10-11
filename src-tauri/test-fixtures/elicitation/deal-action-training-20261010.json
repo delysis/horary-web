@@ -1,0 +1,1420 @@
+[
+  {
+    "id": "deal10-movable-explicit-sale-profit",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "Will I make a worthwhile profit from selling these hand-thrown bowls? I own the bowls and I will be the seller. The craft fair is in Bozeman, Montana, United States, on October 9, 2026 at 3 PM. I am asking from here in Woodbridge, Virginia, United States, now; the fair is not where I am asking from.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "event_place",
+          "contains": "Bozeman"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        },
+        {
+          "field": "reader_place",
+          "contains": "Woodbridge"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "movable",
+      "subject_name_contains": "bowls",
+      "canonical_mentions": [
+        "bowls"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–172; incoming money 156, 158; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "An explicit profitable sale is sell plus profit, never deal_capacity=profit. Retain the device/reader anchor rather than moving to the fair."
+  },
+  {
+    "id": "deal10-movable-explicit-buy-relative",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "I am considering buying a used cello for myself from my sister Vivian. Vivian owns the cello and is the seller. Is the cello sound enough to be a good purchase? This is my own question, asked here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Vivian"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "movable",
+      "subject_name_contains": "cello",
+      "canonical_mentions": [
+        "cello"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Vivian",
+      "relationships": {
+        "vivian": "sibling"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–172; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Buyer/potential possessor and current title owner are separate. Quality of the potential possession uses the buyer second; keep the actual sibling seller third."
+  },
+  {
+    "id": "deal10-movable-implicit-sale-agent",
+    "method": "movable_deal",
+    "mode": "implicit",
+    "words": "My brother Felix owns these wooden stools and would be the party agreeing to their sale. I am taking them to the craft fair in Springfield on Friday at 3 PM as his helper; I am not the contracting seller. Will Felix find a buyer there? By Springfield I mean the one near us here in Northern Virginia.",
+    "device_available": true,
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "Felix"
+        },
+        {
+          "field": "event_place",
+          "contains": "Springfield",
+          "place_qualifier_any": [
+            "VA",
+            "Virginia"
+          ]
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "movable",
+      "subject_name_contains": "stools",
+      "canonical_mentions": [
+        "stools"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Felix",
+      "relationships": {
+        "felix": "sibling"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–172; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "The brother is explicitly the actual contracting seller, while the speaker is only the intermediary. Do not treat the helper as DealActor or turn the buyer from the helper. Friday normalizes to Oct9; nearby Springfield stays Virginia event context."
+  },
+  {
+    "id": "deal10-movable-implicit-buy-quality",
+    "method": "movable_deal",
+    "mode": "implicit",
+    "words": "This second-hand sewing machine has caught my eye. I would exchange my savings for it and use it myself. Is it in sound condition, or am I overlooking a problem? I am here now; no seller has been named.",
+    "device_available": true,
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "movable",
+      "subject_name_contains": "sewing machine",
+      "canonical_mentions": [
+        "sewing machine"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "",
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–172; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Exchange of money for a prospective movable establishes buy without an explicit buying keyword. The buyer is known; the title owner and unnamed seller may stay honestly unspecified."
+  },
+  {
+    "id": "deal10-movable-missing-owner",
+    "method": "movable_deal",
+    "mode": "missing",
+    "words": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now.",
+    "device_available": true,
+    "follow_up": "The bracelets belong to me; I made them and I own them.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "movable",
+      "subject_name_contains": "bracelets",
+      "canonical_mentions": [
+        "bracelets"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge"
+    },
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "movable",
+      "subject_name_contains": "bracelets",
+      "canonical_mentions": [
+        "bracelets"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "167–172; incoming money 156, 158; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Selling is not proof of ownership. Elicit the missing title owner, preserve sell/profit and acquire the response rather than repeat the sales goal."
+  },
+  {
+    "id": "deal10-movable-missing-action",
+    "method": "movable_deal",
+    "mode": "missing",
+    "words": "A transaction involving this viola has been proposed to me. Is the deal a sound one? I have not said whether I would be buying or selling it. This is my own question from here now.",
+    "device_available": true,
+    "follow_up": "I would be selling it. The viola is mine, and I would handle the sale myself.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "movable",
+      "subject_name_contains": "viola",
+      "canonical_mentions": [
+        "viola"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge"
+    },
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "deal_capacity"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "movable",
+      "subject_name_contains": "viola",
+      "canonical_mentions": [
+        "viola"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "167–172; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "The object and own concern are clear, but transaction action is genuinely missing. Do not guess buy or replace action with quality; acquire seller and title only when selling becomes known."
+  },
+  {
+    "id": "deal10-property-explicit-sibling-sale",
+    "method": "property",
+    "mode": "explicit",
+    "words": "Will my brother Oliver complete the purchase of my townhouse? I own the townhouse and I am selling it to Oliver. I am asking here now; the closing appointment is in Richmond, Virginia, United States, on October 12, 2026 at 11 AM.",
+    "device_available": true,
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Oliver"
+        },
+        {
+          "field": "event_place",
+          "contains": "Richmond"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-12"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "townhouse",
+      "canonical_mentions": [
+        "townhouse"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "relationships": {
+        "oliver": "sibling"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Sale is from the speaker perspective even though the buyer purchase is also spoken. The brother is a bound third-house counterparty, not a generic seventh; closing place/time do not anchor the chart."
+  },
+  {
+    "id": "deal10-property-explicit-buy-profit",
+    "method": "property",
+    "mode": "explicit",
+    "words": "Would buying my friend Hazel's apartment to let out give me a worthwhile return? Hazel owns the apartment, and I would buy it for myself. I would collect rent, not operate a shop or workshop there. The property is in Bristol, United Kingdom; I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Hazel"
+        },
+        {
+          "field": "event_place",
+          "contains": "Bristol"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "apartment",
+      "canonical_mentions": [
+        "apartment"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Hazel",
+      "relationships": {
+        "hazel": "friend"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Buying action stays separate from profit. Property held to let uses property profit fifth, not business-workplace profit tenth. Preserve current owner friend without denying source-complete prospective buyer inputs."
+  },
+  {
+    "id": "deal10-property-implicit-market-return",
+    "method": "property",
+    "mode": "implicit",
+    "words": "I own the cottage. I am putting it on the market myself rather than letting it to a tenant. Will letting it go leave me with a worthwhile return? I am asking here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "cottage",
+      "canonical_mentions": [
+        "cottage"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Putting owned property on the market establishes sell; explicit rather-than-letting blocks a rental classification. Return is the requested facet, not the action."
+  },
+  {
+    "id": "deal10-property-implicit-offer-quality",
+    "method": "property",
+    "mode": "implicit",
+    "words": "I have viewed a bungalow and have the deposit ready to make an offer for myself. My friend Mira owns it and would be the seller. How sound is the bungalow, and is the asking price proportionate to its condition? I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Mira"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "bungalow",
+      "canonical_mentions": [
+        "bungalow"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Mira",
+      "relationships": {
+        "mira": "friend"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "167–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Deposit and purchaser offer establish buy even without buying verb. Distinguish quality fourth from price tenth; owner friend is retained, never replaced by prospective purchaser title."
+  },
+  {
+    "id": "deal10-property-missing-counterparty-relation",
+    "method": "property",
+    "mode": "missing",
+    "words": "Will Rowan complete buying my terraced house? I own the house and I am the seller; Rowan is the buyer. I have not told you Rowan's relationship to me. I am asking here now.",
+    "device_available": true,
+    "follow_up": "Rowan is my sister.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Rowan"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "house",
+      "canonical_mentions": [
+        "house"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "relationships": {
+        "rowan": "sibling"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Rowan"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "rowan"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "house",
+      "canonical_mentions": [
+        "house"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "relationships": {
+        "rowan": "unknown"
+      }
+    },
+    "source_pages": "167–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "The named buyer is already identified and must not disappear during repair. Buyer is a task role, not proof of personal relationship; elicit the relation that determines the house."
+  },
+  {
+    "id": "deal10-property-missing-transaction-side",
+    "method": "property",
+    "mode": "missing",
+    "words": "I have been sent a draft purchase contract for a cottage. Does this property deal look sound for me? I have not said which side of the purchase contract I would be on. I am asking here now.",
+    "device_available": true,
+    "follow_up": "I am the seller. I own the cottage, and I would be selling it myself.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "cottage",
+      "canonical_mentions": [
+        "cottage"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge"
+    },
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "deal_capacity"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "cottage",
+      "canonical_mentions": [
+        "cottage"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "167–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "A purchase contract does not identify whether the speaker buys or sells. Ask the transaction side, then acquire the conditional seller/owner; do not invent an owner before the action is clear."
+  },
+  {
+    "id": "deal10-rental-explicit-tenant",
+    "method": "rental",
+    "mode": "explicit",
+    "words": "I have been offered a lease of an apartment to live in myself. I would rent it as the tenant, not run a business there. My friend Naomi owns the apartment and would be my landlord. Would this be a congenial tenancy for me? I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Naomi"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "apartment",
+      "canonical_mentions": [
+        "apartment"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Naomi",
+      "relationships": {
+        "naomi": "friend"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "170; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Tenant actor is the speaker; friend remains actual owner/counterparty. Title ownership by a landlord is not missing tenant information and should not block the source-complete tenancy."
+  },
+  {
+    "id": "deal10-rental-explicit-landlord-profit",
+    "method": "rental",
+    "mode": "explicit",
+    "words": "I own a cottage and want to rent it out for residential use. I would be the landlord. My neighbour Iris wants to rent it from me. Would the tenancy give me a worthwhile return? I am asking here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Iris"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "cottage",
+      "canonical_mentions": [
+        "cottage"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "relationships": {
+        "iris": "neighbor"
+      },
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "170; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Rent action is distinct from profit facet; actual landlord and named tenant capacities are retained. Ordinary home rent is not the workplace/farm business recipe."
+  },
+  {
+    "id": "deal10-rental-implicit-lease-home",
+    "method": "rental",
+    "mode": "implicit",
+    "words": "An apartment lease has landed in front of me. I would live there myself, and the place is available if I sign. Would it make a pleasant home? I would not own the apartment or use it as a workplace. I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "apartment",
+      "canonical_mentions": [
+        "apartment"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "",
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "170; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Residential lease and prospective occupation imply rent/tenant; no title owner is supplied or needed to bind the speaker as tenant. Explicit not-owning prevents a fabricated owner assertion."
+  },
+  {
+    "id": "deal10-rental-implicit-let-friday",
+    "method": "rental",
+    "mode": "implicit",
+    "words": "I own a flat and have it on the residential letting list. I would handle the lease myself. Will I get the tenancy agreed at the appointment in Springfield this Friday at 3 PM? I mean the Springfield near us in Northern Virginia, and I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "event_place",
+          "contains": "Springfield",
+          "place_qualifier_any": [
+            "VA",
+            "Virginia"
+          ]
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "flat",
+      "canonical_mentions": [
+        "flat"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge"
+    },
+    "source_pages": "170; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Letting implies rent with landlord speaker. Friday and near-device Springfield are inferred event context only; the chart stays the native Wednesday reader moment/place."
+  },
+  {
+    "id": "deal10-rental-missing-actor",
+    "method": "rental",
+    "mode": "missing",
+    "words": "There is a proposed residential lease for a flat. Will the agreement go ahead? I have not yet told you whose tenancy or landlord decision I am asking about. I am asking here now.",
+    "device_available": true,
+    "follow_up": "I would be the tenant and live in the flat myself. The landlord has not been named.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "flat",
+      "canonical_mentions": [
+        "flat"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "",
+      "chart_place_contains": "Woodbridge"
+    },
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "deal_actor"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "flat",
+      "canonical_mentions": [
+        "flat"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "170; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "The rental action is known but the operative actor is genuinely missing. Ask who would make the agreement; do not substitute a question about the property deed."
+  },
+  {
+    "id": "deal10-rental-missing-reader-place",
+    "method": "rental",
+    "mode": "missing",
+    "words": "Will the residential lease I want to take go ahead? I would be the tenant and live in the apartment myself. The viewing is in Cambridge, United Kingdom, on October 9, 2026 at 10 AM. This is a question for now, not a chart for the viewing. Location access is unavailable and I have not yet said where I am asking from.",
+    "device_available": false,
+    "follow_up": "I am asking from Woodbridge, Virginia, United States.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "event_place",
+          "contains": "Cambridge"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        },
+        {
+          "field": "reader_place",
+          "contains": "Woodbridge"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "subject_kind": "property",
+      "subject_name_contains": "apartment",
+      "canonical_mentions": [
+        "apartment"
+      ],
+      "forbidden_facts": [
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "",
+      "chart_place_contains": "Woodbridge"
+    },
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "event_place",
+          "contains": "Cambridge"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "chart_place"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "apartment",
+      "canonical_mentions": [
+        "apartment"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "170; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Device unavailability calls for the reader place in conversation; the viewing venue is never a fallback. The receipt moment remains now and is retained after the location answer."
+  },
+  {
+    "id": "deal10-business-explicit-rent-profit",
+    "method": "business_property",
+    "mode": "explicit",
+    "words": "I can rent this available workshop and run my pottery business there myself. Would taking the lease be profitable for my business? The building belongs to my friend Elise, who would be the lessor. I do not own the building. I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Elise"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "workshop",
+      "canonical_mentions": [
+        "workshop"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Elise",
+      "relationships": {
+        "elise": "friend"
+      }
+    },
+    "source_pages": "170–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Rent/operator/beneficiary is the speaker, title owner/lessor is the friend. Dedicated business profit tenth/final outcome fourth is distinct from home rental profit fifth. Expert-review stop is an honest native boundary."
+  },
+  {
+    "id": "deal10-business-explicit-buy-profit",
+    "method": "business_property",
+    "mode": "explicit",
+    "words": "My brother Marcus owns a farm and has offered to sell it to me; it is available if I decide to buy. I would buy the farm and work it myself as my business. Would doing that give me a worthwhile profit? I am asking here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Marcus"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "farm",
+      "canonical_mentions": [
+        "farm"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "Marcus",
+      "relationships": {
+        "marcus": "sibling"
+      }
+    },
+    "source_pages": "170–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Available farm used by the buyer is business_property, buy plus profit. Keep current owner and specific brother separately; do not require ordinary completion aspect for an assumed available choice. Expert recipe stays blocked pending review."
+  },
+  {
+    "id": "deal10-business-implicit-studio-lease",
+    "method": "business_property",
+    "mode": "implicit",
+    "words": "The recording studio is available on a twelve-month lease. It would be the base of my sound-engineering business and I would run it myself. Is there a worthwhile living to be made from taking it? The studio is in Springfield near us here in Northern Virginia; I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "event_place",
+          "contains": "Springfield",
+          "place_qualifier_any": [
+            "VA",
+            "Virginia"
+          ]
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "recording studio",
+      "canonical_mentions": [
+        "recording studio"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "170–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Lease implies rent and business living is profit. Operator is known even though title owner is not. Nearby studio place is context, not chart relocation; native expert limit is not a reason to ask about deeds."
+  },
+  {
+    "id": "deal10-business-implicit-shop-offer",
+    "method": "business_property",
+    "mode": "implicit",
+    "words": "That available shop is for sale. I have my deposit ready and would make an offer for myself, then run my bookbinding business there. Is taking it a sound business move overall? I would not just let the building to someone else. I am asking from here now.",
+    "device_available": true,
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "shop",
+      "canonical_mentions": [
+        "shop"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "170–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "Offer for a for-sale work property implies buy; the operator is the speaker. Overall quality remains situation, not action=quality or a rental investment method. Current title remains unspecified and expert boundary remains explicit."
+  },
+  {
+    "id": "deal10-business-missing-operator",
+    "method": "business_property",
+    "mode": "missing",
+    "words": "An available workshop could be rented for commercial use. Would taking it be profitable? I have not said who would rent it or operate the business. I am asking here now.",
+    "device_available": true,
+    "follow_up": "I would rent it and run my own bicycle-repair business there. I would not own the building.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "querent"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "querent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "workshop",
+      "canonical_mentions": [
+        "workshop"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        },
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "deal_actor"
+        },
+        {
+          "kind": "field",
+          "id": "deal_beneficiary"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "workshop",
+      "canonical_mentions": [
+        "workshop"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "170–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "The commercial use and rent action are known; operator/beneficiary needs elicitation. A lease/deed question would ask for the wrong input. Supplying operator closes intake but does not bypass expert judgment review."
+  },
+  {
+    "id": "deal10-business-missing-beneficiary",
+    "method": "business_property",
+    "mode": "missing",
+    "words": "An available bakery building could be bought and worked by someone in my family. Would taking it pay off for the person who would run the business? I have not identified that person yet. This is my own concern, not a message from someone else. I am asking here now.",
+    "device_available": true,
+    "follow_up": "My sister Farah would buy the bakery building and run her own bakery business there.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "deal_actor",
+          "contains": "Farah"
+        },
+        {
+          "field": "deal_beneficiary",
+          "contains": "Farah"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "bakery building",
+      "canonical_mentions": [
+        "bakery building"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": "",
+      "relationships": {
+        "farah": "sibling"
+      }
+    },
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "deal_actor"
+        },
+        {
+          "kind": "field",
+          "id": "deal_beneficiary"
+        }
+      ],
+      "ready": false,
+      "subject_kind": "property",
+      "subject_name_contains": "bakery building",
+      "canonical_mentions": [
+        "bakery building"
+      ],
+      "forbidden_facts": [
+        "reader_place",
+        "question_time",
+        "time_occurrence"
+      ],
+      "owner": ""
+    },
+    "source_pages": "170–171; reader/moment 7–8; roles 25–27, 30; dignity/reception/occasion 44–45, 71–73, 90–98",
+    "rationale": "The available work-property recipe is the same whether bought or rented; action is optional source context, not an extra inquiry. The actual person whose operating benefit is being assessed is genuinely unidentified. Acquire that person and relationship without claiming present title, then retain the expert judgment boundary."
+  }
+]

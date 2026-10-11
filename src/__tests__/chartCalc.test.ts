@@ -1,10 +1,36 @@
 import { describe, it, expect } from 'vitest'
+import houseFixtures from '../astro/__fixtures__/swiss-regiomontanus-houses.json'
+import phaseFixtures from '../astro/__fixtures__/jpl-aspect-phases.json'
 import {
   formatDeg,
   formatDegArcMin,
   dmsToDecimal,
   calculateChart,
 } from '../chartCalc'
+
+describe('display chart reference accuracy', () => {
+  it('uses the supplied UTC instant for house cusps, independently of the computer timezone', () => {
+    for (const fixture of houseFixtures.cases) {
+      const { summary, error } = calculateChart(new Date(fixture.input.utc), fixture.input.latitude, fixture.input.longitude)
+      expect(error).toBeUndefined()
+      fixture.expected.cusps.forEach((expected, i) => {
+        const delta = Math.abs(((summary!.houses[i].eclipticDegrees - expected + 540) % 360) - 180)
+        expect(delta * 60, `${fixture.id}: house ${i + 1}`).toBeLessThanOrEqual(houseFixtures.tolerancesArcMinutes.cusp)
+      })
+    }
+  })
+
+  it('uses measured motion for applying and separating aspects', () => {
+    for (const fixture of phaseFixtures.cases) {
+      const { summary } = calculateChart(new Date(fixture.input.utc), fixture.input.latitude, fixture.input.longitude)
+      const aspect = summary!.aspectsList.find(a =>
+        [a.from, a.to].sort().join() === [fixture.aspect.planet1, fixture.aspect.planet2].sort().join()
+        && a.type === fixture.aspect.aspectName.toLowerCase())
+      expect(aspect, fixture.id).toBeDefined()
+      expect(aspect!.applying, fixture.id).toBe(fixture.reference.applying)
+    }
+  })
+})
 
 // --- formatDeg ---
 
@@ -106,9 +132,9 @@ describe('calculateChart', () => {
       expect(result.error).toBe('Longitude must be between -180 and 180.')
     })
 
-    it('accepts boundary latitude 90', () => {
+    it('rejects undefined houses at the geographic poles', () => {
       const result = calculateChart(new Date('2024-01-01T12:00:00'), 90, 0)
-      expect(result.error).toBeUndefined()
+      expect(result.error).toMatch(/undefined.*poles/)
     })
 
     it('accepts boundary longitude 180', () => {

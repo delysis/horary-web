@@ -1,0 +1,533 @@
+{
+  "purpose": "Source fingerprint; no private app data",
+  "sources": [
+    {
+      "path": ".gitattributes",
+      "sha256": "5f5367f7c325e3ab92d68d82f60172c829870f466357991516083409bb1fa0da"
+    },
+    {
+      "path": "crates/horary-ai-core/src/astronomy.rs",
+      "sha256": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af"
+    },
+    {
+      "path": "crates/horary-ai-core/src/book_method.rs",
+      "sha256": "03f68a9c5f0dd4a54bc14c317ab63327ec9c8d3f6b7f369d12cee60d24d928d6"
+    },
+    {
+      "path": "crates/horary-ai-core/src/chart_input.rs",
+      "sha256": "134549449a56b80dddc63a0b6bf1d47f1a502971e76ef466de54554465fc7127"
+    },
+    {
+      "path": "crates/horary-ai-core/src/ephemeris_coefficients.rs",
+      "sha256": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c"
+    },
+    {
+      "path": "crates/horary-ai-core/src/events.rs",
+      "sha256": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a"
+    },
+    {
+      "path": "crates/horary-prompt-program/Cargo.lock",
+      "sha256": "adde4b00a1af1a44d7d16160da41c0cb78099008a9fab3b048000ed3c5d0d895"
+    },
+    {
+      "path": "crates/horary-prompt-program/Cargo.toml",
+      "sha256": "65020040e7892d2a18df29479b4db9d3dd5271d1747a7026b23286d928ca6b93"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/comparison.rs",
+      "sha256": "2411fba0e8e4f389e817f86c4d40fb8603ee15b9a9ccf0454201fbd9b00a5924"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/lib.rs",
+      "sha256": "5114fd11e252a6561735374b3d53a4e45f552c8fa895487604d5bc7752b3214d"
+    },
+    {
+      "path": "docs/ELICITATION_EVALUATION.md",
+      "sha256": "d4b6cdd48702ebb19255d4cabec7e856fbfe3029818a9205453a3172be858aae"
+    },
+    {
+      "path": "docs/ELICITATION_FINDINGS.md",
+      "sha256": "65ae57f3ad08f6fcbc100ddef582a5f7ac4ea1bb0baf085cbc6ad3bbd47b0acb"
+    },
+    {
+      "path": "docs/PROMPT_OPTIMIZATION.md",
+      "sha256": "a78952ad57aa977758e6d3152198d37e76701ce0c72e26ef0521c2e74762aa60"
+    },
+    {
+      "path": "docs/llm-process/adversarial-fixture-provenance.json",
+      "sha256": "ffff225bf64c18c8e71bf97a1018c3e1331dddb68e3f1847aec33f2bb48d5967"
+    },
+    {
+      "path": "docs/llm-process/discovery-145-union.json",
+      "sha256": "0481f520f62cadae91ac736c63546d1a74d1d2c5c796196212f5672941c667dc"
+    },
+    {
+      "path": "docs/llm-process/optimization-trial-1.json",
+      "sha256": "c699d99b7768381ba57d46f6c7e60b61bd31e0d2a78bd321aaea4385d06cd438"
+    },
+    {
+      "path": "docs/llm-process/production-replays.json",
+      "sha256": "d2dbc700ee7fe15b7fa49ae1a01b4b01cb54181020f03d202a61305f0de7d28e"
+    },
+    {
+      "path": "scripts/check-release-assets.mjs",
+      "sha256": "0aaa25739ae823b2a3295ab9273fd549aed93013aedc14e5662c59ec969ce3e6"
+    },
+    {
+      "path": "src-tauri/Cargo.lock",
+      "sha256": "74e484392c871023953b5c714219bc70eecc2572cc9d9ad2bd34240203f3b176"
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "sha256": "edf0b6d6554a5e82cd684af6edce775dfb22f016b78b45998149bac0651ca87b"
+    },
+    {
+      "path": "src-tauri/Info.plist",
+      "sha256": "691595e34600e60f713e107cd8a1276f7783b638af14cb815fa5a718cf616883"
+    },
+    {
+      "path": "src-tauri/build.rs",
+      "sha256": "ccde2e47d40a71f2d4ba254612edf3cf38c90fd7e301ec5133fd3ca23aaf0c4a"
+    },
+    {
+      "path": "src-tauri/model-manifest.json",
+      "sha256": "33c9f7a9053ee4464094f919be50ce52df522638628b966839aa289992652a0b"
+    },
+    {
+      "path": "src-tauri/native-llama-runtime.json",
+      "sha256": "b6bfde1d9e3d6cf8949dd3f43e56006016b8bb499525e03200b43cbb67ea0d31"
+    },
+    {
+      "path": "src-tauri/native/location_bridge.m",
+      "sha256": "ae1b75037d0c2ce0004052cbe07eb782e757110941e179e4bae153309a7e2e10"
+    },
+    {
+      "path": "src-tauri/native/location_bridge_test.inc",
+      "sha256": "222f486d9d76c6dd50e954a50bf5e05e69f942f42633913d3adceb35b037c049"
+    },
+    {
+      "path": "src-tauri/native/permissions_bridge.m",
+      "sha256": "f7cbfc3c72e349e9d6018a6b38cec3bc972b71ed8dea4e37cc6937bd93232ae7"
+    },
+    {
+      "path": "src-tauri/src/conversation.rs",
+      "sha256": "7860d64f74624ea9279fcee874a433f372911927efebbd1c48920b164f69fa5c"
+    },
+    {
+      "path": "src-tauri/src/deal_training_bank.rs",
+      "sha256": "7c34f736f34386533e42cb4ab09796714fae3f542fd96021ee870994f2fc9faa"
+    },
+    {
+      "path": "src-tauri/src/elicitation_eval.rs",
+      "sha256": "2e5bd63a76728e132711ea802aaf841386e9ad01ae03c030f82592a984a18f01"
+    },
+    {
+      "path": "src-tauri/src/geocode.rs",
+      "sha256": "9dab309ac9f925312e2ec2a5babdb27fe0a037cea92644764fbfdd1e3d38ca13"
+    },
+    {
+      "path": "src-tauri/src/hf_cache.rs",
+      "sha256": "03ed3fe9879527bad731eb6bf32bd0761cc12a3296f4375132c512e84564671d"
+    },
+    {
+      "path": "src-tauri/src/horary_contract.rs",
+      "sha256": "952515a34754e692a8034c891ce586a2f66ff869e59a6de2e9e3bbd86eee944d"
+    },
+    {
+      "path": "src-tauri/src/horary_conversation.rs",
+      "sha256": "a0555dcb4c35ba45363ec428ff9a28de3e8553e1eca0c58dace552aa5454c5b9"
+    },
+    {
+      "path": "src-tauri/src/horary_executor.rs",
+      "sha256": "c34ebfbc78047f0bf2e4482f9e817879db7fb9f2a8a112074cfc0b924df95421"
+    },
+    {
+      "path": "src-tauri/src/horary_lessons.rs",
+      "sha256": "41531fb54e0573835b07537e69d68ba9d2027e7429a0398f24d873ecb04a9a8e"
+    },
+    {
+      "path": "src-tauri/src/horary_pipeline.rs",
+      "sha256": "4b37923bbf625393749cb09e26e37a390c041de6c3ba274893e89936a22e03f2"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/condition.md",
+      "sha256": "600eb37e06dae1db996c9eb797b464b68e0c86769126d2b9333686170b35e60b"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/contacts.md",
+      "sha256": "02bbfe30e839699b3ba8c0442dbb24b181cd1c2b52bbb3dd20cdcfc0944ad5e7"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/conversation.md",
+      "sha256": "5f14c98565bbefac507db9ec041301969a18817a40f4f9d693619a6cd8fb2735"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/core.txt",
+      "sha256": "642152bc063d2c68a3f5b65cac79bc8805d47bfbe99836ae784b6bbb8ba5850a"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/explanation.md",
+      "sha256": "239f12ed08e0e20e81dcbb22497d449ffe12a6f2ab06ecaa1135d148db44ffa3"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/judgment.md",
+      "sha256": "ccddafec4e266996699f9ceca725e742748aa6823ad3f8950a18304af6000281"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/location.md",
+      "sha256": "7f4f1f919b2ada7630e0bab6012cb323de8ff14a087d940389f04f255fcac497"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/moment.md",
+      "sha256": "4896a8c962a6042e4c8c267a20717eb6520a2c461fb02fa9c6751dccdfe7cc10"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/passages.json",
+      "sha256": "2a61fc55471b3f0f6a6a85091e00910bb6231a4fd2bf2bf7c8f767b58116d47c"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/place.md",
+      "sha256": "e9aca14f097e27a5061494c68490d36605f0c8084d373a22b441c8def9577116"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/reception.md",
+      "sha256": "2afdc0f89cb5cfb8a4981a8efea380da92255079b9186372ed9ac3f422616dc2"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_common.md",
+      "sha256": "b168fc56ae0181d92e56608d74f69ed0201cf702a84e585f2e3037c09361da70"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_lost.md",
+      "sha256": "4a58ec2041bdef8f452e0ab6c73dcda02e7cb0021205219a325c05ac0e0b455c"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_other.md",
+      "sha256": "6ba06167c0c9b5e7fb07a82cdd421d5107fcdfe04fe5204f1be06aab63465168"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_relationship.md",
+      "sha256": "29fe643a7d5cc8f022287a08e55ee303a335d5dd4fe428a569c6385fed9a0bf5"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/timing.md",
+      "sha256": "bcc4afafb70917ab3c41f561458058ea52cfc46a96490a2bb3c915e31daa6ec4"
+    },
+    {
+      "path": "src-tauri/src/horary_recovery_tests.rs",
+      "sha256": "5c9caacf75794fd712d4d5a707f13b65e6c53d2d0ee2078bf0fcb803d4d8203b"
+    },
+    {
+      "path": "src-tauri/src/horary_role_options.rs",
+      "sha256": "36197b4ec4a5ba8a9b16b927355810c37dc8d5741e7c9e4b598407d83cd01eb2"
+    },
+    {
+      "path": "src-tauri/src/horary_step.rs",
+      "sha256": "90f6986ddf9cf89564f0a873d467a246ce44f65a81e64e4a4d3ce8355a5cf26e"
+    },
+    {
+      "path": "src-tauri/src/horary_step_tests.rs",
+      "sha256": "0d9cf52680d7c22f6b708dc4956d96f58b9866fb6fc1ac05ded32e7eb272adab"
+    },
+    {
+      "path": "src-tauri/src/hosted_gemma_eval.rs",
+      "sha256": "5325e86b19b5606a6eee22a1555d327608bc3466084a58592f053824654db5cc"
+    },
+    {
+      "path": "src-tauri/src/imported_models.rs",
+      "sha256": "7819b89aa4bc7f763c4d44f904ba5edfa1506f0ceb3976a49c2d70a4fb9ff611"
+    },
+    {
+      "path": "src-tauri/src/lib.rs",
+      "sha256": "9224d675a966bf5255970692b3c23af269038ceacbe7d57aa01de6a51dbd6936"
+    },
+    {
+      "path": "src-tauri/src/llama.rs",
+      "sha256": "7a217e9ae749aa49f813fce7d8f8989372f093e40bb819fa439763add5d6ed7e"
+    },
+    {
+      "path": "src-tauri/src/local_dictation.rs",
+      "sha256": "0f889bed5dbfeef4acb7bf12272b54ca664252d7cab86e76215c3c08ccf2a633"
+    },
+    {
+      "path": "src-tauri/src/microphone_capture.rs",
+      "sha256": "2bbaa9468a1f815c20bc1a660ea4e02068c2a14da86be678759e591e34cc7d48"
+    },
+    {
+      "path": "src-tauri/src/model_manifest.rs",
+      "sha256": "33b8e66304650fcdcb8d7286d033d4ff3fdf480c99c5acfc5e7c2fc12f1e65c7"
+    },
+    {
+      "path": "src-tauri/src/native_llama.rs",
+      "sha256": "bffb74731d75cd36276876868d7617eede3f2d0f41e99cf442f69dd4b8dc7f4b"
+    },
+    {
+      "path": "src-tauri/src/native_llama_worker.rs",
+      "sha256": "463e017ff67b84af676431a81340173ceee37a90c040ea4a72591905d4832ccf"
+    },
+    {
+      "path": "src-tauri/src/native_location.rs",
+      "sha256": "c212796958d3c5716c71073aeb7891fd3d9a007c121665a5e1adacef9113520a"
+    },
+    {
+      "path": "src-tauri/src/permissions.rs",
+      "sha256": "715b56580458df972b0d0ce7c17b79e4c552b4f2bfd3efe71406c27d9cb289cb"
+    },
+    {
+      "path": "src-tauri/src/process_overview.md",
+      "sha256": "1e0b2c06694f011ad0a7ea006841506fd14a15f8e0cb7222a545940480c44c56"
+    },
+    {
+      "path": "src-tauri/src/process_reference.rs",
+      "sha256": "c30e6e6ee35f41b7b53d6eff2ea0786286337c814e139afd4c5c31fdc0ee4ac7"
+    },
+    {
+      "path": "src-tauri/src/reading_contract_overview.md",
+      "sha256": "59b538c4eb712241836640d895c896f240db37700ad7618d9d783f7aa39e85a4"
+    },
+    {
+      "path": "src-tauri/src/reading_contract_tests.rs",
+      "sha256": "516201a128d97875fe60a46f324a24a7aa320b6f689cbfd9721b661e6ba85eaf"
+    },
+    {
+      "path": "src-tauri/src/reading_contracts.rs",
+      "sha256": "18cf1e859a52298fdd13b12760b6df19284dcaca7e65e9191204038ddcca395a"
+    },
+    {
+      "path": "src-tauri/src/reading_eval.rs",
+      "sha256": "38a92666f8e01617c139037c85caa0cd8374a9fb966cb8469fa37fae22c3c2d8"
+    },
+    {
+      "path": "src-tauri/src/reading_method.rs",
+      "sha256": "d3ff9f8afbad00741058ae650a74be65c2674a29b9e9398157b8b46258683b4a"
+    },
+    {
+      "path": "src-tauri/src/reading_neural_eval.rs",
+      "sha256": "75d3e3ed4b89ecc10f699c9cdc79d76257fb69534ec495c68388bf868efc8f67"
+    },
+    {
+      "path": "src-tauri/src/reading_store.rs",
+      "sha256": "ba1710789b976a71ea15f199d35e2b446593691708c439f5890c4c7659614ec7"
+    },
+    {
+      "path": "src-tauri/src/recognition_programs.rs",
+      "sha256": "614c600215824dfef2f43829b72b5aff67253f81266d39c62635c299ae6348e0"
+    },
+    {
+      "path": "src-tauri/src/review_progress.rs",
+      "sha256": "63f0b037f49d23bbe1153174ca68a98fe37492cbb8ea62bf8f446a1782a25c36"
+    },
+    {
+      "path": "src-tauri/src/tool_formats.rs",
+      "sha256": "18e4b25e4da3a89b72008f904349833f965f958afd540f888a13c4a038509e06"
+    },
+    {
+      "path": "src-tauri/src/voice.rs",
+      "sha256": "b98148911cb58a0d90f44a75fb0868c833a8a8339868c03faa64e6e1881dbdba"
+    },
+    {
+      "path": "src-tauri/src/wake_listening.rs",
+      "sha256": "09afcc4a41c0636548218e85015b2b2012acf5b29bac4f990b4cf976cba93602"
+    },
+    {
+      "path": "src-tauri/src/worksheet_xml.rs",
+      "sha256": "f4a1c6d0c18d1a189601f4c3cc5225a9fc15dd35f5fc371c6a088e285dcad828"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/core.json",
+      "sha256": "1b74a5069aa84fa3bbed1eaf2b12f2ab0e5056003e623c4c0a28f3c6fff4ddc2"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/deal-action-training-20261010.json",
+      "sha256": "e2eb558c27ae8aa8f67c4f406296d3f6b97808689e2812e9afd891be1c2e26b9"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/edge.json",
+      "sha256": "bd3d194122b4b4b8164610758d67378d7ca347037d778dfcf4c0d2a38423f7b0"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/invariant-adversarial.json",
+      "sha256": "1d4c73303cab1018d9b865e852a913b3ee7cf998516ccc2b9d47e18873bad822"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/specialist.json",
+      "sha256": "2b9478586c01a105c3984134147aa440e7c1eb07f27295e0ea9999fe9ed999b5"
+    },
+    {
+      "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
+      "sha256": "e76493098161032cc3f44aa982bb689fd165b1a3517dd66de0c835a28f7892c2"
+    },
+    {
+      "path": "src-tauri/test-fixtures/process-reference-chart.json",
+      "sha256": "b63bc213271c7ed71e9127f36550484794f6904498b116a97db036793afee0c6"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/core-rubrics.json",
+      "sha256": "d1b766082fb7d2f90b7bbbb5021c43b5c3abb01720225daa47cc310ed419a55a"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/deal-action-training-rubrics-20261010.json",
+      "sha256": "4952065bb91ab40ed524355ac6e07a02e3af89da2c37da3555bf27a122ac42ae"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/specialist-rubrics.json",
+      "sha256": "5429d3151a1b6bf7bad3bc9edb483f67578811d9585a02cf5d22d0ccd13b860a"
+    },
+    {
+      "path": "src/App.css",
+      "sha256": "cdec81927fddbb3506be625219a7fe85f21acae1276641250fa5e106c7d01c60"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "0534311032c98793435cde8fddbd735608e98832ad7c3080e10825884124008a"
+    },
+    {
+      "path": "src/ReadingDocument.tsx",
+      "sha256": "6ad9f03f3b42457b59eccc874ff72c9754839d76785e70888fbdcb4b2b498316"
+    },
+    {
+      "path": "src/ReadingHistory.tsx",
+      "sha256": "0a88bc75587b858bd3e97a1d2096abc9f4adc22e4dddeda70c7d8de2acb4e437"
+    },
+    {
+      "path": "tools/horary-gepa/Cargo.lock",
+      "sha256": "05cba3842cd499c15c8810f3faa0196b24774b34853d17ecd57e982018996649"
+    },
+    {
+      "path": "tools/horary-gepa/Cargo.toml",
+      "sha256": "8d45146db3ad7ef6418361ff91da6fa5aef12ed4e384791776c60f995d34f303"
+    },
+    {
+      "path": "tools/horary-gepa/README.md",
+      "sha256": "28f2d40fabad74e04f24d18df8352d2c6db358cd0554db337a30d7e5147028cf"
+    },
+    {
+      "path": "tools/horary-gepa/src/campaign.rs",
+      "sha256": "0f84888954f1e8d7559c6fefc67ec907f1ffd801b4c61dfff950afe5281a28f7"
+    },
+    {
+      "path": "tools/horary-gepa/src/controls.rs",
+      "sha256": "c412c1bfbe65f949b05342264662e8ff6e6031fb7a1a46ec3cedfb29047148d0"
+    },
+    {
+      "path": "tools/horary-gepa/src/corpus.rs",
+      "sha256": "bd7f13e924b357f03bc993c714bc98b747549a5dba3c84f699d24deda8ca5d93"
+    },
+    {
+      "path": "tools/horary-gepa/src/executable.rs",
+      "sha256": "03b96eccfa8fe9ee3d81c4f7497cc70729866634b5b4656c2efeb64e200603ef"
+    },
+    {
+      "path": "tools/horary-gepa/src/initial_extractor.rs",
+      "sha256": "0fdd59e3485bd06c7c02f0849ae16ca41a79b382ca11788e4a3061c874b78b1a"
+    },
+    {
+      "path": "tools/horary-gepa/src/journal.rs",
+      "sha256": "6ea5634047e79a816f5ac0f98b8ef5827e1c11f04ca4553fd5fe6320e70a31a1"
+    },
+    {
+      "path": "tools/horary-gepa/src/lib.rs",
+      "sha256": "d8d67ca7f1158c959eadd14d5892c58394954371aa734fa16f468e4f29f3d7f0"
+    },
+    {
+      "path": "tools/horary-gepa/src/main.rs",
+      "sha256": "fae4f840afb416bafa38de830183b2f123052c8afe2c093f340508e417eed074"
+    },
+    {
+      "path": "tools/horary-gepa/src/metric.rs",
+      "sha256": "54a202686af548b06eb20b6458073bad6f09d0711b03cb1d32482e8341e95285"
+    },
+    {
+      "path": "tools/horary-gepa/src/native.rs",
+      "sha256": "c675e82c3d6f8fb1b28f6cfaddb1eed2c224200d1ebb62851bbc10cb4df6876b"
+    },
+    {
+      "path": "tools/horary-gepa/src/reading.rs",
+      "sha256": "17a1c8354a42b202a88bcd99a47493866069e13db733739def89eff19f3a6532"
+    },
+    {
+      "path": "tools/horary-gepa/src/recovery.rs",
+      "sha256": "91f25b155ced1634941f2119a444a47f937ae4d04ef228655bff7df124562d4d"
+    },
+    {
+      "path": "tools/horary-gepa/src/review.rs",
+      "sha256": "4e1fb1aaf716f51490cbafee4636a05a570e38b4bc536ef5b8c0d08cdbe88f96"
+    },
+    {
+      "path": "tools/horary-gepa/src/status.rs",
+      "sha256": "d17497d48eab2d020af08ec92d1682966cbf01f7aad9362093701f29131f3576"
+    },
+    {
+      "path": "tools/horary-gepa/src/teacher.rs",
+      "sha256": "b90fb497071067f7d2d437b64eee142ad4ec297d7c4fb1bb3ab311ca4a24a085"
+    },
+    {
+      "path": "tools/horary-loop/Cargo.lock",
+      "sha256": "696930dc5cbd3b6e6aeb11565bc253bf73b0b6bdc2648ec2db78f1089b6ac5c7"
+    },
+    {
+      "path": "tools/horary-loop/Cargo.toml",
+      "sha256": "16ca8de8adb08f046d504bf2fa28f646560da4b066e11e38cce6f43e1fd44b59"
+    },
+    {
+      "path": "tools/horary-loop/README.md",
+      "sha256": "e4227d210e7934a3f88631ca1e19303a871b3f0a13d6d7f18855bd7a7029d85b"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-catalogue.rs",
+      "sha256": "9955b5801d7898b68b4258ff10f45dbcefbb2bd76d73cc684025e427a9be4574"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-experiment.rs",
+      "sha256": "9edd242ef1400f4dac0c34c0400423a30c27c4e588e7a84edc6a9f876b6c8aa5"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-optimize.rs",
+      "sha256": "d5a592f43fe57b7cb6e8d119dfc6cb00a1ee780e083aa47b339395072419b03e"
+    },
+    {
+      "path": "tools/horary-loop/src/campaign.rs",
+      "sha256": "c505989b599698c823ccf0ff0f7b8bc9a6315f2ca8796fdc46a5413d3f73ee1a"
+    },
+    {
+      "path": "tools/horary-loop/src/catalogue.rs",
+      "sha256": "0ebc67c2326fea2caa5d4c8f9eded9e7d3c60e57c977333da69da2d6c6e8cc7c"
+    },
+    {
+      "path": "tools/horary-loop/src/comparison.rs",
+      "sha256": "57215a11a11728b22869a68d3dcd5b86f72529b5cb0e27aac039cbeb850d9351"
+    },
+    {
+      "path": "tools/horary-loop/src/lib.rs",
+      "sha256": "b7aaf2fa6900dda97752d5b1b3cc62aee16cca4cfcebff5fb1ada57eb9f2635d"
+    },
+    {
+      "path": "tools/horary-loop/src/main.rs",
+      "sha256": "fc937b75fac647513a1d09cd977c38e87eb06b8bc4cf7ec979264661e6a21985"
+    },
+    {
+      "path": "tools/horary-loop/src/packet.rs",
+      "sha256": "28fed57a8335bfdfd0674e0234072463e05da11cf17b1acdf57f92153f300f77"
+    },
+    {
+      "path": "tools/horary-loop/src/refs.rs",
+      "sha256": "0dbb34e14882e9f0dfd3d5f2256408a500368b57598396f070709fcdac112cb9"
+    },
+    {
+      "path": "tools/horary-loop/src/review_events.rs",
+      "sha256": "252826e9c0a5d5285fda72aa84c477bf8506430d442c96bad813388d47a233e1"
+    },
+    {
+      "path": "tools/horary-loop/src/schema_check.rs",
+      "sha256": "7444f7d32f9d1c45baf627f738b5776e9a9441f1e85fda5666d2562c46db82ff"
+    },
+    {
+      "path": "tools/horary-loop/src/store.rs",
+      "sha256": "af90f2c9d34852adbc99ec2c6d80023e5c87ed14b9ecef79e0085bb6c8ba74c1"
+    },
+    {
+      "path": "tools/horary-loop/src/types.rs",
+      "sha256": "f6359257b66d077715ddd81990f56430a0f9a2a2b224dcbf50bd36468324fb78"
+    }
+  ]
+}

@@ -1,0 +1,1536 @@
+{
+  "version": 2,
+  "created_utc": "2026-10-08T09:28:53.171Z",
+  "supersedes": {
+    "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/independent-review-next/full-suite-1-union.json",
+    "sha256": "51215c4ff784de29d61d2358cccafb3c434a58c4e42a01048d9b1d80dc172075",
+    "reason": "Correct diagnostic aggregation to use explicit first_turn_execution_completed and follow_up_execution_completed, rather than overall case execution_status; both underlying campaigns and every outcome remain unchanged."
+  },
+  "qualification": "145 distinct synthetic case IDs have outcome receipts across two source-compatible discovery campaigns. Outcomes include semantic failures and execution interruptions. This is not 145 passing readings, blind validation, voice performance, completed judgment or SME approval.",
+  "identity": {
+    "source_hashes": {
+      "crates/horary-ai-core/src/astronomy.rs": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af",
+      "crates/horary-ai-core/src/book_method.rs": "aca59ef276a5b83090e21e42b26bd25f8210233bf042f826d2ed7150796b194b",
+      "crates/horary-ai-core/src/chart_input.rs": "134549449a56b80dddc63a0b6bf1d47f1a502971e76ef466de54554465fc7127",
+      "crates/horary-ai-core/src/ephemeris_coefficients.rs": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c",
+      "crates/horary-ai-core/src/events.rs": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a",
+      "crates/horary-ai-core/src/lib.rs": "43bfe70958ec5db9956175dac6bc3031e5ecb613144cca6d5f821dd464467553",
+      "crates/horary-ai-core/src/review.rs": "1837debe3473e3ae2baf176b69fecdc07b2e4ba0afb7733ea48cf2b071ab484b",
+      "docs/ELICITATION_EVALUATION.md": "eae3a7a6026ea3e67ed993ea56558b24c8f29d1c71b036caba30c27139014f5a",
+      "src-tauri/Cargo.lock": "79b89b6e43a3c68caa71c7adbb1517ce6dee4e1d1c7cd02da1610ccc461b39d1",
+      "src-tauri/Cargo.toml": "72eff7fad90a711fbf7e864fc8fca2e33d7c864725752755d3a60feda72c19e5",
+      "src-tauri/src/ai.rs": "6b8c451e594a88d2e7a0e2178b9741a333c5f619d478a92346d261973ed63521",
+      "src-tauri/src/conversation.rs": "7860d64f74624ea9279fcee874a433f372911927efebbd1c48920b164f69fa5c",
+      "src-tauri/src/elicitation_eval.rs": "55ca923b20ea3f8aa14900efa199d4210078b0b3729e7387cb3b50535b328469",
+      "src-tauri/src/geocode.rs": "924fbb8c0bbf808ea302becd3c9dc4c89624d317a5d2cf8e6364d1236bb967f2",
+      "src-tauri/src/hf_cache.rs": "03ed3fe9879527bad731eb6bf32bd0761cc12a3296f4375132c512e84564671d",
+      "src-tauri/src/horary_contract.rs": "eb1f17ded834a85c7532b2d2a2ffd0a944b646bb53cb301bc4495e0da08a7e27",
+      "src-tauri/src/horary_conversation.rs": "a0555dcb4c35ba45363ec428ff9a28de3e8553e1eca0c58dace552aa5454c5b9",
+      "src-tauri/src/horary_executor.rs": "c34ebfbc78047f0bf2e4482f9e817879db7fb9f2a8a112074cfc0b924df95421",
+      "src-tauri/src/horary_lessons.rs": "7a543bb85879a9838fef66018cd5862d65514390f394731746481baff2279ccc",
+      "src-tauri/src/horary_pipeline.rs": "87ac34c7e030b38d4770289c9221d92d028348c4da152392090af2b895ab3f77",
+      "src-tauri/src/horary_prompts/condition.md": "3d4c8024e29ae0f511c6473b179d57262913d8c4b375813f9891c53c17b71812",
+      "src-tauri/src/horary_prompts/contacts.md": "cf4ed0bf30996e10aa8dd8591c22e6886c97bf4644da537127eda73f031af468",
+      "src-tauri/src/horary_prompts/conversation.md": "8c76bd725a5baab256c025509e66327f66f31b2a57da7975b06469018993e631",
+      "src-tauri/src/horary_prompts/core.txt": "642152bc063d2c68a3f5b65cac79bc8805d47bfbe99836ae784b6bbb8ba5850a",
+      "src-tauri/src/horary_prompts/explanation.md": "239f12ed08e0e20e81dcbb22497d449ffe12a6f2ab06ecaa1135d148db44ffa3",
+      "src-tauri/src/horary_prompts/judgment.md": "47242947bcfd8c5e79015474dbf359215edc80e4cb5ac6ee743155e9f87570dd",
+      "src-tauri/src/horary_prompts/location.md": "7f4f1f919b2ada7630e0bab6012cb323de8ff14a087d940389f04f255fcac497",
+      "src-tauri/src/horary_prompts/moment.md": "4896a8c962a6042e4c8c267a20717eb6520a2c461fb02fa9c6751dccdfe7cc10",
+      "src-tauri/src/horary_prompts/passages.json": "a0206aae984524506d35001a913336e1f6779b18e70f2eee055ee723955d400a",
+      "src-tauri/src/horary_prompts/place.md": "e9aca14f097e27a5061494c68490d36605f0c8084d373a22b441c8def9577116",
+      "src-tauri/src/horary_prompts/reception.md": "7012c3fe2270bc9d82dfbffd85617ec852e885d491a44a811835fd8c691eb793",
+      "src-tauri/src/horary_prompts/significators_common.md": "bfbd2d3f013f8411bc9ba17a2a78b30eda4f4c9dd787fd2317493b435b04ddac",
+      "src-tauri/src/horary_prompts/significators_lost.md": "761fa1f30d941b1d2c3eb855dabee54dbb66a9b81c05413597be2f2393bd406e",
+      "src-tauri/src/horary_prompts/significators_other.md": "6ba06167c0c9b5e7fb07a82cdd421d5107fcdfe04fe5204f1be06aab63465168",
+      "src-tauri/src/horary_prompts/significators_relationship.md": "c253332d79697506189eeaca2c47f84e2c70cfaa3b74a24f9ef789efc530e0cb",
+      "src-tauri/src/horary_prompts/timing.md": "bcc4afafb70917ab3c41f561458058ea52cfc46a96490a2bb3c915e31daa6ec4",
+      "src-tauri/src/horary_recovery_tests.rs": "1954cb566976bc52b0b254fdc022a82b79e8da127eb66ee010c5f01c993cdbe2",
+      "src-tauri/src/horary_role_options.rs": "d1e2169259034af03acde338b7337b31d51f5ec06037a2ba36aa72f3a143f6dd",
+      "src-tauri/src/horary_step.rs": "2235295820c44595aa7ffc2f4174f3501103aaad404ebe9f7f5d067a581be7ff",
+      "src-tauri/src/horary_step_tests.rs": "d19c229854dbc70c349fc69adb04be7df3707f6d8f40def36d9b9403b9da7c6b",
+      "src-tauri/src/inference.rs": "2b1422e11a2cfae335383c811e4f255a5675b3353eebb2301a3ec7d2862bd186",
+      "src-tauri/src/lib.rs": "befc2875d68d2d11ea9e657b2f238051ec1b672af833628f9acd18a1cc5525fb",
+      "src-tauri/src/llama.rs": "7eba68b713c1a5e90ba4f53669953603581ab51e6d33ecbad12d62d57ac3fee5",
+      "src-tauri/src/local_dictation.rs": "0f889bed5dbfeef4acb7bf12272b54ca664252d7cab86e76215c3c08ccf2a633",
+      "src-tauri/src/main.rs": "6aade5ea843b3cf1b299910db825c8173cf36629ae7fda91444210e8a08d4944",
+      "src-tauri/src/microphone_capture.rs": "2bbaa9468a1f815c20bc1a660ea4e02068c2a14da86be678759e591e34cc7d48",
+      "src-tauri/src/model_manifest.rs": "33b8e66304650fcdcb8d7286d033d4ff3fdf480c99c5acfc5e7c2fc12f1e65c7",
+      "src-tauri/src/native_llama.rs": "bffb74731d75cd36276876868d7617eede3f2d0f41e99cf442f69dd4b8dc7f4b",
+      "src-tauri/src/native_llama_worker.rs": "463e017ff67b84af676431a81340173ceee37a90c040ea4a72591905d4832ccf",
+      "src-tauri/src/native_location.rs": "c212796958d3c5716c71073aeb7891fd3d9a007c121665a5e1adacef9113520a",
+      "src-tauri/src/permissions.rs": "715b56580458df972b0d0ce7c17b79e4c552b4f2bfd3efe71406c27d9cb289cb",
+      "src-tauri/src/process_overview.md": "6ae27b1ac05c8c16b0b73c67b209444821ec7dcbb696e827240998b9686775c1",
+      "src-tauri/src/process_reference.rs": "d4941e1f9b0e88db568e64d80e9099050dd4de7cf0b280fc089930cb1bcf0807",
+      "src-tauri/src/reading_contract_overview.md": "0f912666b124bc2a898e2f150222ecdca19bc93d825f54c54e9f86f75187b110",
+      "src-tauri/src/reading_contract_tests.rs": "44564d1363268c8f27e4a391ab32dc8b19f00ad805568e12b40a0b4d0f7a52a5",
+      "src-tauri/src/reading_contracts.rs": "509474ea21af7c388e64284b20d9478e28b011b6ca0d12000bed67f8dfb613a4",
+      "src-tauri/src/reading_method.rs": "f6dd86b36c55c807855e77e94695767395948dec1ff5ebca8e4c43555171db65",
+      "src-tauri/src/reading_store.rs": "ba1710789b976a71ea15f199d35e2b446593691708c439f5890c4c7659614ec7",
+      "src-tauri/src/recognition_programs.rs": "875becb46d4dd07ee78c4b8a8086a990277241675da3db1534014840702b9eef",
+      "src-tauri/src/review_export.rs": "35346c5a4d3a80df5253c0975a380c140156db2736950b773e7892f05c9654da",
+      "src-tauri/src/review_progress.rs": "63f0b037f49d23bbe1153174ca68a98fe37492cbb8ea62bf8f446a1782a25c36",
+      "src-tauri/src/storage.rs": "645b528cbe90b2dd7e96092817f3331a73f78f33b2194a14d3c24d0507150b86",
+      "src-tauri/src/tool_formats.rs": "18e4b25e4da3a89b72008f904349833f965f958afd540f888a13c4a038509e06",
+      "src-tauri/src/voice.rs": "b98148911cb58a0d90f44a75fb0868c833a8a8339868c03faa64e6e1881dbdba",
+      "src-tauri/src/wake_listening.rs": "09afcc4a41c0636548218e85015b2b2012acf5b29bac4f990b4cf976cba93602",
+      "src-tauri/src/worksheet_xml.rs": "a6e2c8a15e05d3034edd199c67a2fd9ba97dcf02e2e170aa0796ce39552c9c96",
+      "src-tauri/test-fixtures/elicitation/core.json": "1b74a5069aa84fa3bbed1eaf2b12f2ab0e5056003e623c4c0a28f3c6fff4ddc2",
+      "src-tauri/test-fixtures/elicitation/edge.json": "bd3d194122b4b4b8164610758d67378d7ca347037d778dfcf4c0d2a38423f7b0",
+      "src-tauri/test-fixtures/elicitation/specialist.json": "2b9478586c01a105c3984134147aa440e7c1eb07f27295e0ea9999fe9ed999b5",
+      "src/data/cities.json": "6d61f6ccaf9428b646a70ce4df3570e55841cfa0413be55e1c75d2bcd6d93730",
+      "src/data/us_locations.json": "6e80ab9cf617650884a3f45d9b9ef80ab49d82c4d918b52c70c267297ac26dcb"
+    },
+    "canonical_fixture_sha256": "f447159bf726379a613d394605e075f38db8e339b83ff04e5a8ff8d4396bceae",
+    "fixture_receipt_sha256": "b5bdaa7dcbf7b4d212dca29851296a7b11eec688970a119cfa6c85d82dab5232",
+    "book": {
+      "path": "/Users/george/Downloads/The Horary Textbook - John Frawley.dots_ocr.md",
+      "sha256": "cd5853df311b12f2ec7fcc612f49b0a5248a5c9b87ef7780730fbdcd618d32d4"
+    },
+    "model": {
+      "path": "/Users/george/.cache/huggingface/hub/models--google--gemma-4-12B-it-qat-q4_0-gguf/snapshots/29d097773436b69ff9feafd636ab4cf873786537/gemma-4-12b-it-qat-q4_0.gguf",
+      "bytes": 6975879296,
+      "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"
+    },
+    "native_executable": {
+      "path": "/Users/george/eileen/horary-web/src-tauri/target/debug/deps/horary_lib-ab3593140416caf1",
+      "sha256": "b6aadfafd0e0c039a452c8399e5dffc8cb79ed75aeca7ebb24a5b9d7e8b8ab5e",
+      "original_launch_log": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1.log",
+      "original_launch_log_sha256": "7c8ac1b96daf6faaa9eec48433c69d1b3a3cb16e274099987d5f5c05551dd74a"
+    },
+    "settings": {
+      "batch": 4,
+      "decoder": "EXPLORATION unconstrained native independent batches of up to4; exact production executor validates each proposal",
+      "ctx_tokens": 32768,
+      "temperature": 0,
+      "seed": 0,
+      "group_seconds": 300,
+      "max_calls": 16,
+      "full_reading": false,
+      "frozen_clock": {
+        "local": "2026-10-07T12:00",
+        "timezone": "America/New_York",
+        "timestamp_ms": 1791388800000
+      },
+      "device": {
+        "id": "device-location",
+        "label": "Near Woodbridge, VA, United States",
+        "name": "Woodbridge",
+        "country": "US",
+        "latitude": 38.657,
+        "longitude": -77.249,
+        "timezone": "America/New_York",
+        "provider": "device"
+      }
+    },
+    "verified_at_closure": true
+  },
+  "continuation_plan": {
+    "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder.continuation-plan.json",
+    "sha256": "285c977e0709f731808d453fe3b942332d5dc878e91d82421f679a69f7015f86"
+  },
+  "campaigns": [
+    {
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1",
+      "manifest_sha256": "3c7a8c994453cd0039e8a54ddd40c8566e706e06871244bc8302cb6f5976d02f",
+      "report_sha256": "674af965141bfe6773ccd48952173c032a36001db1d01253b538ae0930b52f7f",
+      "campaign_state": {
+        "status": "infrastructure_interrupted",
+        "reason": "Evidence I/O failure at /Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/adoption-missing/first-turn.json: No space left on device (os error 28) at path \"/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/adoption-missing/evidence-partial-yVot5w\"; Evidence I/O failure at /Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/medical-implicit/first-turn.json: No space left on device (os error 28) at path \"/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/medical-implicit/evidence-partial-80TxcX\"",
+        "completed_cases": 90,
+        "selected_cases": 145,
+        "active_or_unfinished_case_ids": [
+          "adoption-implicit",
+          "adoption-missing",
+          "medical-explicit",
+          "medical-implicit"
+        ],
+        "boundary": "Campaign collection/setup stopped. Completed case semantic grades are unchanged; absent outcomes do not certify model failure or success."
+      },
+      "counts": {
+        "completed_outcomes": 90,
+        "first_semantic_passes": 46,
+        "first_completed_semantic_failures": 30,
+        "first_execution_interruptions": 14,
+        "case_execution_statuses": {
+          "call_budget_exhausted": 2,
+          "completed": 74,
+          "exploration_group_interrupted": 14
+        },
+        "first_conversational_replies": 76,
+        "scripted_followups_executed": 12,
+        "scripted_followup_passes": 5,
+        "scripted_followup_completed_semantic_failures": 6,
+        "scripted_followup_execution_interruptions": 1,
+        "scripted_followup_statuses": {
+          "executed after matching elicitation": 12,
+          "not scripted": 61,
+          "withheld because the intended fact or single eligible proposal was not correctly elicited": 17
+        }
+      }
+    },
+    {
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder",
+      "manifest_sha256": "61e472cd2b918610748cd77a3bb06da0b8ac9224e0d2466b90e6f893801c37b4",
+      "report_sha256": "b50bad2665454adaf51a20bb38c3e31b217d49ed232f14ac9e543ac3092cdc95",
+      "campaign_state": {
+        "status": "completed"
+      },
+      "exit_receipt_sha256": "fc999fbe5083ea04a0d486db8396c195678b0e4846c21679bc706882801e4f7a",
+      "counts": {
+        "completed_outcomes": 55,
+        "first_semantic_passes": 22,
+        "first_completed_semantic_failures": 21,
+        "first_execution_interruptions": 12,
+        "case_execution_statuses": {
+          "call_budget_exhausted": 1,
+          "completed": 43,
+          "exploration_group_interrupted": 11
+        },
+        "first_conversational_replies": 43,
+        "scripted_followups_executed": 6,
+        "scripted_followup_passes": 3,
+        "scripted_followup_completed_semantic_failures": 2,
+        "scripted_followup_execution_interruptions": 1,
+        "scripted_followup_statuses": {
+          "executed after matching elicitation": 6,
+          "not scripted": 35,
+          "withheld because the intended fact or single eligible proposal was not correctly elicited": 14
+        }
+      }
+    }
+  ],
+  "union_counts": {
+    "completed_outcomes": 145,
+    "first_semantic_passes": 68,
+    "first_completed_semantic_failures": 51,
+    "first_execution_interruptions": 26,
+    "case_execution_statuses": {
+      "call_budget_exhausted": 3,
+      "completed": 117,
+      "exploration_group_interrupted": 25
+    },
+    "first_conversational_replies": 119,
+    "scripted_followups_executed": 18,
+    "scripted_followup_passes": 8,
+    "scripted_followup_completed_semantic_failures": 8,
+    "scripted_followup_execution_interruptions": 2,
+    "scripted_followup_statuses": {
+      "executed after matching elicitation": 18,
+      "not scripted": 96,
+      "withheld because the intended fact or single eligible proposal was not correctly elicited": 31
+    }
+  },
+  "outcomes": [
+    {
+      "id": "adoption-explicit",
+      "sha256": "1798a71382086e85274c35b45b9c0a2b55697c72e432a590645869ed4f473a3d",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/adoption-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "adoption-implicit",
+      "sha256": "4d16ade5536dfde31ee575dcabc01dd9e5263e9f85084f8d97a55a6bde0b1bdc",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/adoption-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "adoption-missing",
+      "sha256": "8384ceae85d67c6f01e279efdb95c5238bd21d820b656154c3a2daa5acea6c43",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/adoption-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "allegation-explicit",
+      "sha256": "8c704cf868fc29888efe4a53234e56cc29de1b5ba5a0fb47a017d10c7f16e0f6",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/allegation-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "allegation-implicit",
+      "sha256": "a1e3e8a0b89c31d13064fa08ca8f737fe3d180ccf5dc0725e31cf9d4c1b4d18c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/allegation-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "allegation-missing",
+      "sha256": "3068db13c8bc93ae0efc31cf7b86a1571c2290827652bbd2910500dce4b3c9da",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/allegation-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "anchor-clock-fold",
+      "sha256": "4b826eece8eb21e3f11824ed732dd9d241de66811e8bd95385dc406ab733cabb",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-clock-fold/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "anchor-clock-gap",
+      "sha256": "9682fcc0d610fbe6641ea4da156ba3d3a67ed3fff8e0cc3e8a5dc193e7bda839",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-clock-gap/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "anchor-device-default",
+      "sha256": "a829c59fa78f76d75637dad5006630a35199f6299adf409a08a75c9201934f00",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-device-default/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "anchor-explicit-historical",
+      "sha256": "7350b2889ed88b8dfced6aaeb5568349b3a33968717d8872e99a592494984f93",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-explicit-historical/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "anchor-explicit-illinois",
+      "sha256": "670bdd3f7f001db3b71533e6206b81964b7a9c82f173274cb82e24f63ac04350",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-explicit-illinois/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "anchor-location-unavailable",
+      "sha256": "3796560afed2641a50d598bf5f4b9effa48f6c33a55ed639163f885e8dbd1586",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-location-unavailable/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "anchor-nearby-springfield",
+      "sha256": "6cd34f1027c0c2aa0e0995de53c9a9ee26871be094d1f99d503917c819d9429b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/anchor-nearby-springfield/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "bet-explicit",
+      "sha256": "ee6a1d963b4d9eb77f423295835deadd423d0731ce9453bf68c6ea5391015f59",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/bet-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "bet-implicit",
+      "sha256": "eefc903561b99b45bf53e2f0c2b4fa67817e4f47b1962126eaa04779ffc2efed",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/bet-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "bet-missing",
+      "sha256": "b69ae2a228b672ae0a73bd17fe14538bbd6921c5dce8bffde563e304d396ab9e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/bet-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "business_property-explicit",
+      "sha256": "8f26b14833cdf42d82eb810ff44294542ac641b65c421d1d443579b0acbc009d",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/business_property-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "business_property-implicit",
+      "sha256": "3b525348ca452231216417993fb6c18a3218a011ea3eb862e642c1f8c1998e0a",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/business_property-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "business_property-missing",
+      "sha256": "a306c250c7ea92be97f0ec2a278262364dd8efe6ca91d56caf5034a8c6e0bd9e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/business_property-missing/outcome.json",
+      "execution_status": "call_budget_exhausted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "choice-explicit",
+      "sha256": "dcceda85d5a430d868da03e607213f7a6abee2e4baa3d583a194713517b7f4d5",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/choice-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "choice-implicit",
+      "sha256": "2ce74e664ce9730b887d7f1b5af7642cacaef00e5201a6c062e6eb51b1256f0a",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/choice-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "choice-missing",
+      "sha256": "1541f6a503ee76c3fb09bcbf0361bedb4f7ff346b5418e02aa12121dbd029e31",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/choice-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "classification-negated-job",
+      "sha256": "9c9cbde4370c6dea688ea34f3d8c16cd862c54c85c45f724f4e3e9d59b36acd5",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/classification-negated-job/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "contact-explicit",
+      "sha256": "26cd34f4357946a716b25aab5a29e1c44e02ff72b18709c682df8b2432be22c0",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/contact-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "contact-implicit",
+      "sha256": "eb2473e09b26c3d526b7f5b4538b5a575a2a0f39d9d60d6e36e61d635db4f2d8",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/contact-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "contact-missing",
+      "sha256": "2767c8410e009b70940a3437bcbe159f4180698d8fcfb6a142e20f960d574caf",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/contact-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "contest-explicit",
+      "sha256": "2a8ce706e3ce31e8d350c0e59d1045eaecab38861e98568ef0db03d5e46d8ed0",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/contest-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "contest-implicit",
+      "sha256": "1ce4e9f38188a003102c8b67f9544f14825b9f8babc2391e0945a7cf74ca2db5",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/contest-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "contest-missing",
+      "sha256": "355d06f750bcb6eaee15fe59a720098831e39b72d1a52a5c33bba4fb741ee2f9",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/contest-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "context-distant-venue",
+      "sha256": "a2fcd587b6ce337c7b869e785e13dc79f9c8c40d1dd7b4cc24dd17c6215ae517",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/context-distant-venue/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "context-relative-friday",
+      "sha256": "92bc9a1a210754908ea2a226719716e446936c0fe580ebaaf4a247910dce37a7",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/context-relative-friday/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "count-sales-reframing",
+      "sha256": "ef9c9ab3c0cfa6308068c1fd752b32a1979b2ae02354073b0e035ef179da9137",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/count-sales-reframing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "court_case-explicit",
+      "sha256": "fca83d2971421863e289aa29fa6f849c15f1a7b8d2e26fcf52ef8580a1976029",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/court_case-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "court_case-implicit",
+      "sha256": "2326204ec077982daeddde87b0f1560427253258988cc42ed4597d882afffdf0",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/court_case-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "court_case-missing",
+      "sha256": "9d261de9b69805d39085ff79a5e52d47b9bbfa797ad820aaa326defa91cdc9bf",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/court_case-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "custody-explicit",
+      "sha256": "eae75f433119e88e42ba8bc780353839b7e4bdae92e8809914e3b00f54c2572e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/custody-explicit/outcome.json",
+      "execution_status": "call_budget_exhausted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "custody-implicit",
+      "sha256": "9b038af13ecdd65d1dbd14ccccd5fa4fb21093830e9b402dc3bd7be2ea8bd989",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/custody-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "custody-missing",
+      "sha256": "e09bd4465189b27d7683b6c823f2a08f96a03fd1f3615509665cfd44412e43d6",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/custody-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "dream-explicit",
+      "sha256": "b3cd2f2581da2ba7766b6565087891e547b86055559c8ebce1c6b3ebb77c1928",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/dream-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "dream-implicit",
+      "sha256": "494d3dff6633dbdff1e56ee5cb9de23e086204c41f0478375c16eb0000a73e13",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/dream-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "dream-missing",
+      "sha256": "60a743820b68cd66cbd361a77f606ad4db50e3be0d4272004415d64d780c4cc3",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/dream-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "education-explicit",
+      "sha256": "b61ccbf78979149fce558d4d344d66576a6f24aa39e84a64a0e64e983fbb6166",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/education-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "education-implicit",
+      "sha256": "1b00e0b247afae499c11f376f5b1d327c463fc4f9adf3a80a71fb6d6fe83e04a",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/education-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "education-missing",
+      "sha256": "a3acfc0467e72458a2b8814c34be2b16dfdb1644e6f51624bcce1d74aeaac2b3",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/education-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "election-explicit",
+      "sha256": "44b8d7dc2c5d35a248240ccd528ba2a2f98a3ee0663688695a325cd9fb6e410c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/election-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "election-implicit",
+      "sha256": "c6182ac8019046cd89403d4ab205c75f641cbe622746537ff29baed539aaf1f1",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/election-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "election-missing",
+      "sha256": "76fb9dced1d91dd49eb6ead1dde88602a417d7a0b5182873a9cf3e8a72c939fc",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/election-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "exam-explicit",
+      "sha256": "50996e58238c1c5f99666fc176d038587ffbc6b7fce85fe663739ec564e4597b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/exam-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "exam-implicit",
+      "sha256": "5b1a9c3077c0aabd9f66e99c2a78d32b310b5fa451186e9b6e2fec7450ea36e2",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/exam-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "exam-missing",
+      "sha256": "862acdb3e7941676b6593c77d65ceb75cd70ce53fa8b41fcd8d5036133f03fdd",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/exam-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "existing_job-explicit",
+      "sha256": "24403f28e162b8858dfc46deeb0ddddbc96af9d6793fa930abb55780c677e9af",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/existing_job-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "existing_job-implicit",
+      "sha256": "b8a5db5484b4d0f9ef879ea2c5cefa7a1cec0c5873b74f6043931e55a2c51c89",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/existing_job-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "existing_job-missing",
+      "sha256": "240bbe5951f34975345fd64384ff26cdf778711d3692496599fd02e77a3813b9",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/existing_job-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "fertility-explicit",
+      "sha256": "8a9d83739b11b2f74448fa1102ba1ff270d35acfefae7f25829336105f2a9fe0",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/fertility-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "fertility-implicit",
+      "sha256": "f43547bfc04a3553330f13688f9b34df41c136b08ce20272dfbb747c61128b8c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/fertility-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "fertility-missing",
+      "sha256": "0c687635c0dd53b58ed8adbd61e40d4627ee548a1a65041766fe78bfd22829c7",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/fertility-missing/outcome.json",
+      "execution_status": "call_budget_exhausted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "hiring-explicit",
+      "sha256": "b315eabf68cc89e7b248fab601ac36258c61c3b148838bff8374077f64874134",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/hiring-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "hiring-implicit",
+      "sha256": "c3dcc391c36ce9c4fc47fd7e0d5c81e77b38889470a343345ea088e08382ba34",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/hiring-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "hiring-missing",
+      "sha256": "b1995c11971214512e262264ae15c15abe66f1e7818034b17f161edbd73388af",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/hiring-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "information-explicit",
+      "sha256": "569b24c176fae6d5abf6ae4c1ff48c777193a28160db6b1503f80a75b64f5d75",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/information-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "information-implicit",
+      "sha256": "8f67328ed5cd0be8b5cb05378a19aa9fee2b6d26cd0ef3645f222a394368cb9c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/information-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "information-missing",
+      "sha256": "b916641599715753d69b59749b4889509e3f574d431865839e055784ab3aeca5",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/information-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "investment-explicit",
+      "sha256": "42aae4762cea9642c53b6d657cb742b71aab9bcaea0a37e9e3cdc0a1ecb33078",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/investment-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "investment-implicit",
+      "sha256": "ad6f0b11f18299b2dd0fa9fdda8682abff31ebed744799ac9bc64d5fe1787eef",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/investment-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "investment-missing",
+      "sha256": "6c60f1cc8fb484291bac5a8cd6cbad3a2cf45e0b0890f57a0caae1ecd72011ec",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/investment-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "job_offer-explicit",
+      "sha256": "d7fe7690ff7ebe50e6821dc223375d011b63ab47d42c67d024a983f1fb469a3c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/job_offer-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "job_offer-implicit",
+      "sha256": "b6d87d17db34a8b50a33da6876e429ed23420611ce9a5d964e44eb09a6780d09",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/job_offer-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "job_offer-missing",
+      "sha256": "0052c2bea98b83f427241af294652c0bb57231c84d29840b7e1b2555fe59ba27",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/job_offer-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "knowledge-explicit",
+      "sha256": "c875ab096e5d90853b6025e697e2fec1dacf6be1c42c77675394978a71d120d7",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/knowledge-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "knowledge-implicit",
+      "sha256": "091d9ba38831b260d6eb8f651cb759f98899d17e953f671d86f2621c709666b7",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/knowledge-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "knowledge-missing",
+      "sha256": "25a21ccb8f46dd45e9826e84d582e58acc49b76c3537ed97050f8f1210ff775b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/knowledge-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "lost_animal-explicit",
+      "sha256": "36c60541f47c99bc2add712f69d03c171327ef00eb1da629500c4ffd8b1f7434",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/lost_animal-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "lost_animal-implicit",
+      "sha256": "b9fb9faf8ddc87ea48919b34f0917a880a23882a806a378d7918a66930315cb3",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/lost_animal-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "lost_animal-missing",
+      "sha256": "73637dd10f0a394c30d117d1e3d4fb6d7f8992323f790937d00de2519edc724d",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/lost_animal-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "lost_object-explicit",
+      "sha256": "e524c73dded8593cc94f127f5e57d856917bf4f75e41f227aaac0b6803b55f00",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/lost_object-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "lost_object-implicit",
+      "sha256": "6e893fb053a98e8b9056440d243c5361603a0c81098ae37e483c19269ddefa55",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/lost_object-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "lost_object-missing",
+      "sha256": "b476b6db16145fcb3237941046621bd85ba54ed03f0e52d50def8ad3f3866e70",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/lost_object-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "medical-explicit",
+      "sha256": "508f245560e930a4b1a82426ee92cb716b74f7ea489662452b8261b5227192ad",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/medical-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "medical-implicit",
+      "sha256": "f7843b63452b2386ad932fda870ad6eee96af92cddca22747e0b0550c4a66124",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/medical-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "medical-missing",
+      "sha256": "5386d1a48c5d431594da6dbb254f77c545afbc3bd33260626c2fec4db669a50a",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/medical-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "missing_person-explicit",
+      "sha256": "9cbcae10d716b026d2dadc88012934e4fc8c2a075f43a765ba0c79cef8d5f499",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/missing_person-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "missing_person-implicit",
+      "sha256": "472204c402b0bc79630089bdd4ce860aee879f317ad5b27296a6e3a16acf95f2",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/missing_person-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "missing_person-missing",
+      "sha256": "12d44ba6516741e331c78a6881582a85bc5c1c1fdc0e8e50abb6f7c7d4db8ad5",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/missing_person-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "money-explicit",
+      "sha256": "d6540820d236dad61aa2313aa1de531957996f3549b874595e1fbb9037db35c0",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/money-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "money-implicit",
+      "sha256": "628ca5bf20d50a29d8597469bcd63cb68dc70733f5d3ac45c0f627ad90493383",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/money-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "money-missing",
+      "sha256": "e07f20d829d53b5b6e96f210c10effb0e3ecfd78d46d2fc6a3b9b474c453f396",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/money-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "movable_deal-explicit",
+      "sha256": "79087041e15810503da82ae984261bd5fb5670b632e93e1d3fd653ea70a61564",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/movable_deal-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "movable_deal-implicit",
+      "sha256": "bd388e65b47b8486ac04a8e8512a973323b0ec9c5240d950dca75797b508623a",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/movable_deal-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "movable_deal-missing",
+      "sha256": "f163c04b396c51f4da984636ef6b4403ee9d44077d9bf3309510541f7217d4c9",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/movable_deal-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "new_job-explicit",
+      "sha256": "e456af9f10bcf7d1a9027e5e91cb6e433198d7ab5a10972f760c9f7a7c67e898",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/new_job-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "new_job-implicit",
+      "sha256": "4c17ed414e222fa794cc0fef4bbbdd7080fe814185bdae957b6220e1ce2088a8",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/new_job-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "new_job-missing",
+      "sha256": "3f336814f6a9966c45f8a45b3083235e9643cac16bbc92b2b6232d49dc00d515",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/new_job-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "ownership-seller-is-not-owner",
+      "sha256": "cc7892a115637f1325e855e4dae677f16fee9ace6099dfe092124facce1c85c6",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/ownership-seller-is-not-owner/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "parcel-explicit",
+      "sha256": "ef5cf52f9755402118166160c6627c25e486a824292620abf985e1491b84938b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/parcel-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "parcel-implicit",
+      "sha256": "0774b957f6deb7119792d78bc58ff112ec2b1f8b4bdb5849107a209f9b4dcba8",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/parcel-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "parcel-missing",
+      "sha256": "6a553456eeceb6e9ee9b37eb6ddce9aaccc2e5077fe798406e61b628557cb9ba",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/parcel-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "person_description-explicit",
+      "sha256": "e226fca2730bcb7a9632e0af8a3b219e64895909a30070758d1c4217611eb31e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/person_description-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "person_description-implicit",
+      "sha256": "60f6e1ee94dce3175184f5140c2bf4196553c4973c114f63303928b5cd1327d7",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/person_description-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "person_description-missing",
+      "sha256": "abb35a7c36dab7ce5e4556bc0820da135477bff7bb8cec2c1a13b02de2570dd2",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/person_description-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "person-description-future-marriage-role",
+      "sha256": "c8d76ae2ad14ada9c16d616063685ebd1cd7e414e0cefe0ec26c8dabae180917",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/person-description-future-marriage-role/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "politics-explicit",
+      "sha256": "a2f3efc9b90a6def10f451b99aac7abd68e4c444a99692d0fa7c083a3787af6b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/politics-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "politics-implicit",
+      "sha256": "266bef36c8c61af567c3677297cd879676a7a113be586fcbb98b4932554a9196",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/politics-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "politics-missing",
+      "sha256": "4faa1ca10befa68faa9324a47c97713d8a89f8321c33c43e48d0359cfa9f2354",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/politics-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "pregnancy-explicit",
+      "sha256": "cec29598d066fbc3c9d95427175c8c7b38ad290afea3fb2eff63050180fc66d3",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/pregnancy-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "pregnancy-implicit",
+      "sha256": "4f9724fbd911f695a899ef33da6bb1d8e435751c86d85d2c3760bc9ad7e40997",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/pregnancy-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "pregnancy-missing",
+      "sha256": "844ae81351482c23cd620b072ea78e40a982875730fa5830c4a2a46cf4813410",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/pregnancy-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "property-explicit",
+      "sha256": "d4bbae0a134702c2331b403de27d2cfb5d86aa44733b36aab6b54060157fa16e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/property-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "property-implicit",
+      "sha256": "c3b42829585a35232c84a2e5b2b50c25c28308b48e847e24e3f15b9f039f1979",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/property-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "property-missing",
+      "sha256": "1e1f1596b91f5fb8f4bd72581ac6ab845ccebdf0b8063e65939cfccaa6ecbcbe",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/property-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "relationship-explicit",
+      "sha256": "f6a2940ea25d29d9c204371d9bfacd74b2a13515b703d58d4dbded56e0705db9",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/relationship-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "relationship-implicit",
+      "sha256": "0129e4b5e6f5577dc5faee2af63e13ff63cb7c50c342464de7e795f7f131aa84",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/relationship-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "relationship-missing",
+      "sha256": "7d24202365fb06e2ec0a2a589e4e0749270291ed62b7cb4e08f22ffda8cc88d3",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/relationship-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "rental-explicit",
+      "sha256": "ba0b7a74eff8c0f59c2f8c6f6c19f1e12348697f746d609667e1e1fa3a80d527",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/rental-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "rental-implicit",
+      "sha256": "6b13e9bfa4deb9cb4e47c9cd5e20b195946837acb1076512809f106c0dc64359",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/rental-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "rental-missing",
+      "sha256": "1623266e6bbcb9c5d68d64b100e2d7c96575509a30f86d64edd9f49e1cc093f5",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/rental-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "return_to_job-explicit",
+      "sha256": "d1bbacd8dbff358744a0d34ce3a12efabdf1004cac59aa7f01e00a158f201b2e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/return_to_job-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "return_to_job-implicit",
+      "sha256": "3f19e62a87da9a4ac27a1af5627c2c65f670706771c564ac66bcb8ca063fc561",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/return_to_job-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "return_to_job-missing",
+      "sha256": "9f439306127dbc82af0932275beb0307e64a4ad76e4261a33407db194cfe474f",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/return_to_job-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "tax-explicit",
+      "sha256": "cae577748852b44855ac588279b58f76651666b0e7043400c13e919dd0b42e10",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/tax-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "tax-implicit",
+      "sha256": "09c17d1d07ed54a97eca37e32f5cbb38a58b162a37011e144bcf40b500247128",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/tax-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "tax-missing",
+      "sha256": "8ecddfe0cc66e9b20249edab0cdf92255923e5609fdaee37cb6d97ade29f0ea9",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/tax-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "trust-explicit",
+      "sha256": "6689eb810c02fa2be88f3ddb7921b699c3f4906dcbbb63acda90c074c1749afb",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/trust-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "trust-implicit",
+      "sha256": "ec54f9a25efbd095a8ed5b3ef0dee44e532747d21e855d9d5c093c56894de9c7",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/trust-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "trust-missing",
+      "sha256": "942f1101dc6d237da29e14fcb19916feaa194ef6fb4ecc531db05a0f5b3a03ce",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/trust-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": true,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "unclassified-explicit",
+      "sha256": "9b47b279ec0085dce6b28847e145320365b94bc13ba5f059c6c55be77a79e938",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/unclassified-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "unclassified-implicit",
+      "sha256": "82f4c7b9216e5eab6d2bea66b8e11bdfadbf0c56dae4e0109029e58dabffe717",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/unclassified-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "unclassified-missing",
+      "sha256": "5db645b25f9fc44d67a8da2856a6ec227ace370b392c377cfb2515a175f56fc3",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/unclassified-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "undertaking-explicit",
+      "sha256": "4362ef8e36e4d9d503f7d8e4af9e25849cc15fa3d58a7cdf5a182d6029290793",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/undertaking-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "undertaking-implicit",
+      "sha256": "3735a7141a315698194ed8e8ebf2fa9dc797020403b7ba5549567beaf513cf6f",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/undertaking-implicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "undertaking-missing",
+      "sha256": "50d821084644453da32243631315e0a91dbcc71b823810e1326305f8c411b80b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/undertaking-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "vehicle-explicit",
+      "sha256": "20f24308c11517266d7f3575d37fdf8b7a3c2152b82388226d462b63351c4a1f",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/vehicle-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "vehicle-implicit",
+      "sha256": "e80ff42a2e1dca859dcf0bd48d12b3d229a531739a5ba5dadae45fb0c4e7abe4",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/vehicle-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "vehicle-missing",
+      "sha256": "7a9d30ef9f10768055a62b64185ff78f4ad2fe4c060e707f4328fcf64b50300e",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/vehicle-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "visit-explicit",
+      "sha256": "973a727ce350130b41f2070138663f0e9bf356d5336f6c056bf29558ab11b85a",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/visit-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "visit-implicit",
+      "sha256": "afa9c164069d76c53de4607edc5d48fa26fedd1f9a6a0747f60bf0332196dafc",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/visit-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "visit-missing",
+      "sha256": "03d4b2f16599888c37c29776fd61a96a77c57d93b8d97d93eec82c21b21b650b",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/visit-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "weather-explicit",
+      "sha256": "b8ba41dddbcf5a0afb94f520a270e26d9efa9c8f330ca1ae4d40e331da7f1547",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/weather-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "weather-implicit",
+      "sha256": "6b830890d4c2fcd2fae0a7385347adb0e01e826550ab074cea9494abf65c848d",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/weather-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "weather-missing",
+      "sha256": "070b8c06cec987cb40c613f575e43af2c4831f4d9b43663623e6e5dcfb9b6c85",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/weather-missing/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited"
+    },
+    {
+      "id": "wish-explicit",
+      "sha256": "e49fdb2a2efd2805189dcb4ef355ed96d27d3ae2c7331e81eac69ef51d73d799",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/wish-explicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "wish-implicit",
+      "sha256": "0cfe633ad627630adbe61f9797294291982786422b52a343bcaf08148c022362",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/wish-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "wish-missing",
+      "sha256": "d6a7d9be3609c09eca15b597bc3bd13d992b6661f1e9175a5762c84c2762047c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1-remainder/cases/wish-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    },
+    {
+      "id": "work_person-explicit",
+      "sha256": "8d7751b2405664bc4ceae6b8485e868ffb4f767309e1d03093c73b473d778c2c",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/work_person-explicit/outcome.json",
+      "execution_status": "exploration_group_interrupted",
+      "first_semantic_pass": false,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "work_person-implicit",
+      "sha256": "72d3ff7b6b56c06ea854e2c9c0e9274cf96dbd041292001f7bdba1cae26cf4b0",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/work_person-implicit/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": null,
+      "follow_up_status": "not scripted"
+    },
+    {
+      "id": "work_person-missing",
+      "sha256": "8502cc8ed186d4f5effc7ab280dbe323595e0bb2e4fc5c7ddfc700cbff22da11",
+      "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/full-suite-1/cases/work_person-missing/outcome.json",
+      "execution_status": "completed",
+      "first_semantic_pass": true,
+      "follow_up_pass": false,
+      "follow_up_status": "executed after matching elicitation"
+    }
+  ],
+  "original_partial_case_directories_retained": [
+    "adoption-missing",
+    "medical-implicit"
+  ],
+  "native_reports_preserved": true
+}

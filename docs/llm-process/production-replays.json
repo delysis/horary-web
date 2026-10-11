@@ -1,0 +1,214 @@
+{
+  "authorship": "Derived from retained production-decoder receipts. Synthetic elicitation only; readiness is not interpretation, speech or SME qualification.",
+  "campaigns": [
+    {
+      "campaign": "/Users/george/.codex/evidence/horary-scenarios-20261007/post-integration-production-1",
+      "manifest_sha256": "8929aee26a8ec0d8b6a2a9cfa5c57d97c50ec27e6f4a24e5965da641365e23d1",
+      "report_sha256": "c191cd979b0dfa31feea547c79bd0a187fd0f99eece2dd5fad06a854aba8b01e",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "model_sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+      "working_diff_sha256": "9309f84d3008e9834191c735f14ffe09dd50601abbe2c12dcc6b720b31435b8c",
+      "selected_count": 5,
+      "recorded_outcomes": 4,
+      "status": "infrastructure_interrupted",
+      "termination_record": {
+        "path": "/Users/george/.codex/evidence/horary-scenarios-20261007/loop-integration/post-integration-production-1-termination.json",
+        "sha256": "bdb3c5f767f56a2ea0fd7c47feaa2cd77d20b3c1100078a505d810ab7cc8857d"
+      },
+      "cases": [
+        {
+          "id": "anchor-clock-fold",
+          "outcome_sha256": "6e11c14d2aa9772fa0e7a28823025134dbe18b69c8a632e5b9012ce3774e5064",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": false,
+          "follow_up_status": "executed after matching elicitation",
+          "calls": 7,
+          "rejected_attempts": 1,
+          "elapsed_ms": 83654,
+          "reply": "Since the clocks moved back on that night, that specific time occurred twice. Do you mean the earlier occurrence or the later one?",
+          "after_chart_moment_ms": null,
+          "after_time_occurrence": null
+        },
+        {
+          "id": "anchor-clock-gap",
+          "outcome_sha256": "77706980970e8c2e1c0435a184f7b4ff380d889c81e32fd44793d66382cb9491",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": true,
+          "follow_up_status": "executed after matching elicitation",
+          "calls": 7,
+          "rejected_attempts": 0,
+          "elapsed_ms": 111539,
+          "reply": "The time you provided for New York on March 8, 2026, falls within a Daylight Saving Time clock gap where the hour is skipped, so I'll need a valid time to cast the chart for you.",
+          "after_chart_moment_ms": 1772955000000,
+          "after_time_occurrence": null
+        },
+        {
+          "id": "anchor-device-default",
+          "outcome_sha256": "07ac51985a2d29ef45586d8cc1cd1aa2dc3c6253d3090da06ea72d44bdf75e35",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": null,
+          "follow_up_status": "not scripted",
+          "calls": 3,
+          "rejected_attempts": 0,
+          "elapsed_ms": 30660,
+          "reply": "Since you are currently single, we are looking at whether a new relationship develops into a marriage within the next year. I have the chart ready and will begin looking at the possibilities for you.",
+          "after_chart_moment_ms": null,
+          "after_time_occurrence": null
+        },
+        {
+          "id": "investment-explicit",
+          "outcome_sha256": "a5b50ed04c9a49e6506b9b43da5bf671fc3948ccd469f5458a41fb1332febc5b",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": null,
+          "follow_up_status": "not scripted",
+          "calls": 3,
+          "rejected_attempts": 0,
+          "elapsed_ms": 41852,
+          "reply": "I have cast the chart for your holdings in Northstar Ltd. I haven't established whether the value will increase yet, but I am looking into the indications for your profit over the next six months.",
+          "after_chart_moment_ms": null,
+          "after_time_occurrence": null
+        }
+      ]
+    },
+    {
+      "campaign": "/Users/george/.codex/evidence/horary-scenarios-20261007/post-integration-production-2",
+      "manifest_sha256": "1dfbb641cc4a40ee317791f86996429d8b6ed72ee5bbc60bece24fab3af61f28",
+      "report_sha256": "0e406cea580717cd87d1274e6621ba775a87ba92edfb4d64768ecb03c0b90196",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "model_sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+      "working_diff_sha256": "b854c8067a70c7387b0cae4850efd0866c1358db21090aed9b92fcaee251ac17",
+      "selected_count": 2,
+      "recorded_outcomes": 2,
+      "status": "completed_with_semantic_failure",
+      "termination_record": null,
+      "cases": [
+        {
+          "id": "anchor-clock-fold",
+          "outcome_sha256": "429625018fbf6d6bf1038fd2b289640d8c483cd0f20c68289f2479078bbacaa7",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": true,
+          "follow_up_status": "executed after matching elicitation",
+          "calls": 7,
+          "rejected_attempts": 0,
+          "elapsed_ms": 109354,
+          "reply": "Since the clocks moved back on that night, that specific time occurred twice. Do you mean the earlier occurrence or the later one?",
+          "after_chart_moment_ms": 1762065000000,
+          "after_time_occurrence": {
+            "state": "resolved",
+            "observation": {
+              "value": "later",
+              "evidence": {
+                "source": "user",
+                "turn": 3,
+                "quote": "The second 1:30 AM, after the clocks moved back."
+              }
+            }
+          }
+        },
+        {
+          "id": "anchor-clock-gap",
+          "outcome_sha256": "77869e77550060b5ce63fc0cc83a192d3e7f94adec0a8a4cae82520bfea911eb",
+          "first_turn_pass": false,
+          "first_turn_mismatches": [
+            "Necessary information ChartMoment was not tracked",
+            "The reader must elicit one expected missing fact; selected None",
+            "Native readiness must be false; actual true"
+          ],
+          "follow_up_pass": null,
+          "follow_up_status": "withheld because the intended fact or single eligible proposal was not correctly elicited",
+          "calls": 3,
+          "rejected_attempts": 0,
+          "elapsed_ms": 44398,
+          "reply": "Since you are currently single, we are looking at whether a new relationship develops into a marriage within the next year. I have the chart ready for the moment you posed this in New York.",
+          "after_chart_moment_ms": null,
+          "after_time_occurrence": null
+        }
+      ]
+    },
+    {
+      "campaign": "/Users/george/.codex/evidence/horary-scenarios-20261007/post-integration-production-3",
+      "manifest_sha256": "58da6cd4a1f2bd2b6d6fa0fd1869e9b0625322ac3c11b0dbed06926082e11420",
+      "report_sha256": "16eeb9003a719c2a1fc128c50706f56029d4b1c29a13bb7b0416600a5fd399aa",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "model_sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
+      "working_diff_sha256": "968c42eeb724eced262f394caeaf7d58b819b9a32276b09395c9970f0b51ab7d",
+      "selected_count": 2,
+      "recorded_outcomes": 2,
+      "status": "completed",
+      "termination_record": null,
+      "wall_seconds": 382.62,
+      "hardware": {
+        "backend": "Metal",
+        "device": "Apple M4 Max",
+        "log_sha256": "fbe0b444912ec3d8db544622d910d3694db35d8376eab604d1155420223a72fe"
+      },
+      "cases": [
+        {
+          "id": "anchor-clock-fold",
+          "outcome_sha256": "81cde982787ac062fc42c4e1f2c7bf15dcccc8ab989b5a250fb606db3b101471",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": true,
+          "follow_up_status": "executed after matching elicitation",
+          "calls": 7,
+          "rejected_attempts": 0,
+          "elapsed_ms": 147003,
+          "reply": "Since the clocks moved back on that day, that specific time occurred twice. Do you mean the earlier occurrence or the later one?",
+          "after_chart_moment_ms": 1762065000000,
+          "after_question_time": {
+            "state": "resolved",
+            "observation": {
+              "value": "2025-11-02T01:30",
+              "evidence": {
+                "source": "user",
+                "turn": 1,
+                "quote": "November 2, 2025 at 1:30 AM"
+              }
+            }
+          },
+          "after_time_occurrence": {
+            "state": "resolved",
+            "observation": {
+              "value": "later",
+              "evidence": {
+                "source": "user",
+                "turn": 3,
+                "quote": "The second 1:30 AM, after the clocks moved back."
+              }
+            }
+          }
+        },
+        {
+          "id": "anchor-clock-gap",
+          "outcome_sha256": "c1eed7221a59f2ede6bc87916100d55a1dd63338a0626cf7e890d9132b842a5d",
+          "first_turn_pass": true,
+          "first_turn_mismatches": [],
+          "follow_up_pass": true,
+          "follow_up_status": "executed after matching elicitation",
+          "calls": 8,
+          "rejected_attempts": 1,
+          "elapsed_ms": 206854,
+          "reply": "The time you've provided for New York City on March 8, 2026, falls within a Daylight Saving Time clock gap where the hour is skipped, so I'll need a valid time to cast the chart for you.",
+          "after_chart_moment_ms": 1772955000000,
+          "after_question_time": {
+            "state": "resolved",
+            "observation": {
+              "value": "2026-03-08T03:30",
+              "evidence": {
+                "source": "user",
+                "turn": 3,
+                "quote": "I meant 3:30 AM that morning."
+              }
+            }
+          },
+          "after_time_occurrence": null
+        }
+      ]
+    }
+  ]
+}

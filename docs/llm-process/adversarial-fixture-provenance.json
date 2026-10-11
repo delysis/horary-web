@@ -1,0 +1,34 @@
+{
+  "bank": {
+    "file": "invariant-adversarial.json",
+    "caseCount": 21,
+    "sha256": "1d4c73303cab1018d9b865e852a913b3ee7cf998516ccc2b9d47e18873bad822",
+    "goldPolicy": "Source-derived normative expectations retained, including unresolved cases; this bank is not claimed to pass the current application or model.",
+    "deliberateRepresentationBoundary": "invariant-sale-agent-distinct-from-contract-party",
+    "knownStructuralGaps": [
+      "invariant-property-held-condition-without-deal",
+      "invariant-visit-hired-plumber",
+      "invariant-visit-one-time-electrician"
+    ],
+    "expertReviewMethods": [
+      "parcel",
+      "visit"
+    ]
+  },
+  "originalFixtureBytes": {
+    "core.json": {
+      "sha256": "1b74a5069aa84fa3bbed1eaf2b12f2ab0e5056003e623c4c0a28f3c6fff4ddc2",
+      "currentSameBytes": true
+    },
+    "specialist.json": {
+      "sha256": "2b9478586c01a105c3984134147aa440e7c1eb07f27295e0ea9999fe9ed999b5",
+      "currentSameBytes": true
+    },
+    "edge.json": {
+      "sha256": "bd3d194122b4b4b8164610758d67378d7ca347037d778dfcf4c0d2a38423f7b0",
+      "currentSameBytes": true
+    }
+  },
+  "qualification": "The 21-case source-derived supplement is executable but unqualified. Original145 fixture bytes are unchanged; known gaps remain.",
+  "source_proposal_sha256": "27c81cd99bda0a1dc083ecb8be5d411c4a6f25dc067b2c05e79604f2728e3c88"
+}

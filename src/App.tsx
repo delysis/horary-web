@@ -1,604 +1,350 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { calculateChart, dmsToDecimal, dtLocalNowValue, formatDeg } from './chartCalc'
-import { ChartWheel } from './ChartWheel'
-import { AspectGrid } from './AspectGrid'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import { ReadingChart, ReadingPassage } from './ReadingDocument'
+import type { Chart, Fact, Progress, Revision, Section } from './ReadingDocument'
+import { ReadingHistory } from './ReadingHistory'
+import type { MethodRecord, SavedReading } from './ReadingHistory'
 import './App.css'
 
-function decimalToDMS(decimal: number): { deg: string; min: string; sec: string } {
-  const abs = Math.abs(decimal)
-  let deg = Math.floor(abs)
-  const minFloat = (abs - deg) * 60
-  let min = Math.floor(minFloat)
-  let sec = Math.round((minFloat - min) * 60)
-  if (sec >= 60) { sec = 0; min += 1 }
-  if (min >= 60) { min = 0; deg += 1 }
-  return { deg: String(deg), min: String(min).padStart(2, '0'), sec: String(sec).padStart(2, '0') }
-}
+type Message = { role: string; text: string }
+type Session = { readingId?: string; savedReadings?: SavedReading[]; method?: { records: MethodRecord[] }; audit?: unknown[]; messages: Message[]; question: string; chart: Chart | null; chartAfterMessage?: number; snapshotId?: number; place: { label: string; timezone: string } | null; sections: Section[]; revisions?: Revision[]; facts?: Fact[]; progress?: Progress[]; revision: number; status: string; busy: boolean }
+type Heard = { generation: number; state: 'waiting' | 'listening' | 'heard' | 'unavailable'; id?: number }
+type Permissions = { microphone: string; speech: string; location: string; voiceAvailable: boolean }
+const EMPTY: Session = { messages: [], question: '', chart: null, place: null, sections: [], revision: 0, status: '', busy: false }
+const OPENING = 'What would you like to know?'
+const native = () => '__TAURI_INTERNALS__' in window
 
-function fmtDMS(deg: string, min: string, sec: string, sign: string) {
-  return `${deg}° ${min}′ ${sec}″ ${sign}`
-}
-
-function App() {
-  const now = dtLocalNowValue()
-  const [dateLocal, setDateLocal] = useState(now.slice(0, 10))
-  const [timeHour, setTimeHour] = useState(now.slice(11, 13))
-  const [timeMinute, setTimeMinute] = useState(now.slice(14, 16))
-  const [amPm, setAmPm] = useState<'AM' | 'PM'>(Number(now.slice(11, 13)) < 12 ? 'AM' : 'PM')
-
-  const [isEditing, setIsEditing] = useState(false)
-  const [castSnapshot, setCastSnapshot] = useState({ date: now.slice(0, 10), hour: now.slice(11, 13), minute: now.slice(14, 16), amPm: Number(now.slice(11, 13)) < 12 ? 'AM' as const : 'PM' as const })
-  const [geolocating, setGeolocating] = useState(true)
-  const [locationDetected, setLocationDetected] = useState(false)
-  const [locationSet, setLocationSet] = useState(false)
-  const [geoError, setGeoError] = useState('')
-  const detectedLocation = useRef<{ latDeg: string; latMin: string; latSec: string; latSign: 'N' | 'S'; lonDeg: string; lonMin: string; lonSec: string; lonSign: 'E' | 'W'; timezone: string } | null>(null)
-
-  const [locationName, setLocationName] = useState('')
-  const [detectedCityName, setDetectedCityName] = useState('')
-  const [locationSearching, setLocationSearching] = useState(false)
-  const [locationError, setLocationError] = useState('')
-  const [locationTimezone, setLocationTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone)
-
-  const [latDeg, setLatDeg] = useState('')
-  const [latMin, setLatMin] = useState('')
-  const [latSec, setLatSec] = useState('')
-  const [latSign, setLatSign] = useState<'N' | 'S'>('N')
-  const [lonDeg, setLonDeg] = useState('')
-  const [lonMin, setLonMin] = useState('')
-  const [lonSec, setLonSec] = useState('')
-  const [lonSign, setLonSign] = useState<'E' | 'W'>('W')
-  const [question, setQuestion] = useState('')
-  const [submitError, setSubmitError] = useState('')
-  const [showSettings, setShowSettings] = useState(false)
-  const [showAngles, setShowAngles] = useState(() => localStorage.getItem('showAngles') === 'true')
-  const [showHouses, setShowHouses] = useState(() => localStorage.getItem('showHouses') === 'true')
-  const [showPlanets, setShowPlanets] = useState(() => localStorage.getItem('showPlanets') === 'true')
-  const [showAspects, setShowAspects] = useState(() => localStorage.getItem('showAspects') === 'true')
-  const [showAspectGrid, setShowAspectGrid] = useState(() => localStorage.getItem('showAspectGrid') === 'true')
-  const [use24Hour, setUse24Hour] = useState(() => localStorage.getItem('use24Hour') === 'true')
-  const [nudgeUnit, setNudgeUnit] = useState<'minute'|'hour'|'day'|'week'|'month'|'year'>('day')
-  const [darkMode, setDarkMode] = useState(() => {
-    const stored = localStorage.getItem('darkMode')
-    return stored !== null ? stored === 'true' : window.matchMedia('(prefers-color-scheme: dark)').matches
-  })
+export default function App() {
+  const [session, setSession] = useState<Session>(EMPTY)
+  const [ready, setReady] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [openingMic, setOpeningMic] = useState(false)
+  const [manual, setManual] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
+  const [foreground, setForeground] = useState(true)
+  const [wakeState, setWakeState] = useState<'off' | 'opening' | 'waiting' | 'listening'>('off')
+  const [wakeUnavailable, setWakeUnavailable] = useState(false)
+  const [voicePaused, setVoicePaused] = useState(false)
+  const [wakeRegistered, setWakeRegistered] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [permissions, setPermissions] = useState<Permissions | null>(null)
+  const [textFallback, setTextFallback] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [dark, setDark] = useState(() => window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false)
+  const page = useRef<HTMLElement>(null)
+  const tail = useRef<HTMLDivElement>(null)
+  const historyTrigger = useRef<HTMLButtonElement>(null)
+  const turn = useRef(0)
+  const wakeGeneration = useRef(0)
+  const followUp = useRef(false)
+  const canHear = useRef(true)
+  const heard = useRef<(update: Heard) => void>(() => {})
+  const capture = useRef(false)
+  const starting = useRef(false)
+  const abandonCapture = useRef(false)
+  const busyRef = useRef(false)
+  const mounted = useRef(true)
+  const acceptedSnapshot = useRef(0)
+  const contextReady = useRef<Promise<void> | null>(null)
+  const newLeaf = useRef<() => void>(() => {})
+  const opening = useRef<Promise<Session> | null>(null)
+  const authorizing = useRef<Promise<Permissions> | null>(null)
+  const granted = useRef<Permissions | null>(null)
+  const permissionEpoch = useRef(0)
+  const speechTurn = useRef(0)
+  const busy = pending || session.busy
+  const accept = useCallback((s: Session) => {
+    if (!mounted.current) return
+    const sequence = s.snapshotId || 0
+    if (sequence < acceptedSnapshot.current) return
+    acceptedSnapshot.current = sequence
+    setSession(s)
+  }, [])
+  async function quiet() { if (native()) await invoke('voice_stop_speaking').catch(() => {}) }
+  async function say(text: string) {
+    if (!native() || !mounted.current) return
+    const spokenTurn = ++speechTurn.current
+    setSpeaking(true)
+    try { await invoke('voice_speak', { text }) }
+    catch { /* The written reading remains available if an installed voice is absent. */ }
+    finally { if (mounted.current && spokenTurn === speechTurn.current) setSpeaking(false) }
+  }
+  const prepareContext = useCallback(async (current: Session) => {
+    if (!contextReady.current) contextReady.current = (async () => {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      let location: { latitude: number; longitude: number; accuracyMeters?: number } | undefined
+      if (!current.place && !current.chart && granted.current?.location === 'granted') location = await invoke<typeof location>('get_current_location', { req: { timeoutMs: 6000 } }).catch(() => undefined)
+      await invoke('conversation_device_context', { ...(current.readingId ? { readingId: current.readingId } : {}), context: { timezone, locale: navigator.language, latitude: location?.latitude ?? null, longitude: location?.longitude ?? null, accuracyMeters: location?.accuracyMeters ?? null } })
+    })()
+    const prepared = contextReady.current
+    try { await prepared }
+    catch (error) { if (contextReady.current === prepared) contextReady.current = null; throw error }
+  }, [])
   useEffect(() => {
-    document.body.style.backgroundColor = darkMode ? '#242424' : '#ffffff'
-    document.body.style.color = darkMode ? 'rgba(255,255,255,0.87)' : '#213547'
-  }, [darkMode])
-  const [locationInputMode, setLocationInputMode] = useState<'search' | 'coordinates'>(() => localStorage.getItem('locationInputMode') === 'coordinates' ? 'coordinates' : 'search')
-  const settingsRef = useRef<HTMLDivElement>(null)
-  const questionEditRef = useRef<HTMLTextAreaElement>(null)
-  const questionViewRef = useRef<HTMLTextAreaElement>(null)
-  const coordFallback = useRef<Record<string, string>>({})
-
-  useLayoutEffect(() => {
-    const ref = isEditing ? questionEditRef.current : questionViewRef.current
-    if (ref) { ref.style.height = 'auto'; ref.style.height = ref.scrollHeight + 'px' }
-  }, [question, isEditing])
-
-  useEffect(() => {
-    if (!showSettings) return
-    function handleClickOutside(e: MouseEvent) {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
-        setShowSettings(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showSettings])
-
-
-  function detectLocation() {
-    if (!navigator.geolocation) { setGeolocating(false); setGeoError('Geolocation is not supported by this browser.'); return }
-    setGeolocating(true)
-    setGeoError('')
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude
-        const lon = pos.coords.longitude
-        const ld = decimalToDMS(lat)
-        const lo = decimalToDMS(lon)
-        setLatDeg(ld.deg); setLatMin(ld.min); setLatSec(ld.sec)
-        setLatSign(lat >= 0 ? 'N' : 'S')
-        setLonDeg(lo.deg); setLonMin(lo.min); setLonSec(lo.sec)
-        setLonSign(lon >= 0 ? 'E' : 'W')
-        let tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-        try {
-          const tzRes = await fetch(`https://timeapi.io/api/timezone/coordinate?latitude=${lat}&longitude=${lon}`)
-          const tzData = await tzRes.json()
-          if (tzData.timeZone) tz = tzData.timeZone
-        } catch { /* keep browser timezone */ }
-        setLocationTimezone(tz)
-        detectedLocation.current = {
-          latDeg: ld.deg, latMin: ld.min, latSec: ld.sec, latSign: lat >= 0 ? 'N' : 'S',
-          lonDeg: lo.deg, lonMin: lo.min, lonSec: lo.sec, lonSign: lon >= 0 ? 'E' : 'W',
-          timezone: tz,
-        }
-        try {
-          const revRes = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-            { headers: { 'Accept-Language': 'en' } }
-          )
-          const revData = await revRes.json()
-          const addr = revData.address ?? {}
-          const city = addr.city ?? addr.town ?? addr.village ?? addr.hamlet ?? addr.county ?? ''
-          const country = addr.country ?? ''
-          setDetectedCityName([city, country].filter(Boolean).join(', '))
-        } catch { /* city name lookup failed */ }
-        setLocationDetected(true)
-        setLocationSet(true)
-        setGeolocating(false)
-      },
-      (err) => { setGeolocating(false); setLocationDetected(false); setGeoError(err.code === 1 ? 'Location access denied. Allow it in your browser settings.' : 'Could not detect location.') },
-      { timeout: 10000 }
-    )
-  }
-
-  useEffect(() => { detectLocation() }, [])
-
-  function saveCastSnapshot() {
-    const h = String(Number(timeHour) || 0).padStart(2, '0')
-    const m = String(Number(timeMinute) || 0).padStart(2, '0')
-    if (new Date(`${dateLocal}T${h}:${m}`) > new Date()) {
-      setSubmitError('The date and time cannot be in the future.')
-      return
-    }
-    setSubmitError('')
-    setCastSnapshot({ date: dateLocal, hour: timeHour, minute: timeMinute, amPm })
-  }
-
-  function resetToCastTime() {
-    setDateLocal(castSnapshot.date)
-    setTimeHour(castSnapshot.hour)
-    setTimeMinute(castSnapshot.minute)
-    setAmPm(castSnapshot.amPm)
-  }
-
-  function resetToNow() {
-    const n = dtLocalNowValue()
-    setDateLocal(n.slice(0, 10))
-    setTimeHour(n.slice(11, 13))
-    setTimeMinute(n.slice(14, 16))
-    setAmPm(Number(n.slice(11, 13)) < 12 ? 'AM' : 'PM')
-    if (detectedLocation.current) {
-      const d = detectedLocation.current
-      setLatDeg(d.latDeg); setLatMin(d.latMin); setLatSec(d.latSec); setLatSign(d.latSign)
-      setLonDeg(d.lonDeg); setLonMin(d.lonMin); setLonSec(d.lonSec); setLonSign(d.lonSign)
-      setLocationTimezone(d.timezone)
-    }
-    setLocationName('')
-    if (!detectedLocation.current) setLocationTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone)
-    saveCastSnapshot()
-    setIsEditing(false)
-  }
-
-  const display12Hour = (() => {
-    const h = Number(timeHour) || 0
-    if (h === 0 || h === 12) return '12'
-    return String(h > 12 ? h - 12 : h)
-  })()
-
-  function handleHour12Change(val: string) {
-    let h = Number(val)
-    if (isNaN(h)) return
-    const oldH = Number(display12Hour)
-    // Wrap around
-    if (h > 12) h = 1
-    if (h < 1) h = 12
-    // Flip AM/PM when crossing between 11 and 12
-    let newAmPm = amPm
-    if (h === 12 && oldH === 11) newAmPm = amPm === 'AM' ? 'PM' : 'AM'
-    if (h === 11 && oldH === 12) newAmPm = amPm === 'AM' ? 'PM' : 'AM'
-    setAmPm(newAmPm)
-    setTimeHour(newAmPm === 'AM' ? String(h === 12 ? 0 : h) : String(h === 12 ? 12 : h + 12))
-  }
-
-  function handleDatePartChange(part: 'year' | 'month' | 'day', value: string) {
-    const [y, m, d] = dateLocal.split('-').map(Number)
-    let ny = y, nm = m, nd = d
-    if (part === 'year') ny = parseInt(value)
-    if (part === 'month') nm = parseInt(value)
-    if (part === 'day') nd = parseInt(value)
-    const maxDay = new Date(ny, nm, 0).getDate()
-    if (nd > maxDay) nd = maxDay
-    setDateLocal(`${String(ny).padStart(4, '0')}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`)
-    setSubmitError('')
-  }
-
-  function handleAmPmChange(val: 'AM' | 'PM') {
-    setAmPm(val)
-    const h = Number(timeHour) || 0
-    if (val === 'AM' && h >= 12) setTimeHour(String(h - 12))
-    if (val === 'PM' && h < 12) setTimeHour(String(h + 12))
-  }
-
-  function nudgeTime(direction: 1 | -1) {
-    const h = String(Number(timeHour) || 0).padStart(2, '0')
-    const m = String(Number(timeMinute) || 0).padStart(2, '0')
-    const dt = new Date(`${dateLocal}T${h}:${m}`)
-    if (nudgeUnit === 'minute') dt.setMinutes(dt.getMinutes() + direction)
-    else if (nudgeUnit === 'hour') dt.setHours(dt.getHours() + direction)
-    else if (nudgeUnit === 'day') dt.setDate(dt.getDate() + direction)
-    else if (nudgeUnit === 'week') dt.setDate(dt.getDate() + direction * 7)
-    else if (nudgeUnit === 'month') dt.setMonth(dt.getMonth() + direction)
-    else if (nudgeUnit === 'year') dt.setFullYear(dt.getFullYear() + direction)
-    const y = dt.getFullYear()
-    const mo = String(dt.getMonth() + 1).padStart(2, '0')
-    const d = String(dt.getDate()).padStart(2, '0')
-    setDateLocal(`${y}-${mo}-${d}`)
-    setTimeHour(String(dt.getHours()))
-    setTimeMinute(String(dt.getMinutes()).padStart(2, '0'))
-    setAmPm(dt.getHours() < 12 ? 'AM' : 'PM')
-  }
-
-  async function searchLocation() {
-    if (!locationName.trim() || locationSearching) return
-    setLocationSearching(true)
-    setLocationError('')
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationName)}&format=json&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      )
-      const data = await res.json()
-      if (!data.length) { setLocationError('Location not found.'); return }
-      const lat = parseFloat(data[0].lat)
-      const lon = parseFloat(data[0].lon)
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) { setLocationError('Invalid coordinates returned.'); return }
-      const ld = decimalToDMS(lat)
-      const lo = decimalToDMS(lon)
-      setLatDeg(ld.deg); setLatMin(ld.min); setLatSec(ld.sec)
-      setLatSign(lat >= 0 ? 'N' : 'S')
-      setLonDeg(lo.deg); setLonMin(lo.min); setLonSec(lo.sec)
-      setLonSign(lon >= 0 ? 'E' : 'W')
-      setLocationSet(true)
+    mounted.current = true
+    let live = true
+    page.current?.focus()
+    const theme = window.matchMedia?.('(prefers-color-scheme: dark)')
+    const change = (e: MediaQueryListEvent) => setDark(e.matches)
+    theme?.addEventListener?.('change', change)
+    if (native()) void (async () => {
+      const attempt = turn.current
       try {
-        const tzRes = await fetch(`https://timeapi.io/api/timezone/coordinate?latitude=${lat}&longitude=${lon}`)
-        const tzData = await tzRes.json()
-        if (tzData.timeZone) setLocationTimezone(tzData.timeZone)
-      } catch { /* keep existing timezone */ }
-    } catch {
-      setLocationError('Search failed. Check your connection.')
-    } finally {
-      setLocationSearching(false)
-    }
+        opening.current ??= invoke<Session>('conversation_open')
+        authorizing.current ??= invoke<Permissions>('startup_permissions')
+        const [next, access] = await Promise.all([opening.current, authorizing.current])
+        if (!live) return
+        granted.current = access; setPermissions(access); setTextFallback(!access.voiceAvailable)
+        accept(next)
+        await prepareContext(next).catch(() => { if (live) setNotice('I may need to ask where we are.') })
+        if (!live) return
+        if (attempt === turn.current && !next.messages.length && !next.sections.length) { await say(OPENING); followUp.current = true }
+        if (live) setReady(true)
+      } catch {
+        if (live) {
+          // Permission acquisition is independent of opening the reading. A
+          // failed device service must leave a usable conversational fallback.
+          setTextFallback(true)
+          const next = await opening.current?.catch(() => null)
+          if (next && live) { accept(next); setReady(true) }
+          setNotice('Voice is unavailable. You can still write to me here.')
+        }
+      }
+    })()
+    return () => { live = false; mounted.current = false; theme?.removeEventListener?.('change', change) }
+  }, [accept, prepareContext])
+  useEffect(() => {
+    if (!busy || !native()) return
+    const attempt = turn.current
+    const timer = window.setInterval(() => { void invoke<Session>('conversation_snapshot').then(s => { if (attempt === turn.current) accept(s) }).catch(() => {}) }, 700)
+    return () => window.clearInterval(timer)
+  }, [busy, accept])
+  useEffect(() => {
+    const nearEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240
+    if (nearEnd) tail.current?.scrollIntoView?.({ behavior: 'smooth', block: 'end' })
+  }, [session.messages.length, session.sections.length])
+  async function stopWake() {
+    const generation = ++wakeGeneration.current
+    if (native()) await invoke('voice_listen', { generation, enabled: false, followUp: false }).catch(() => {})
   }
-
-  const parsed = useMemo(() => {
-    const h = String(Number(timeHour) || 0).padStart(2, '0')
-    const m = String(Number(timeMinute) || 0).padStart(2, '0')
-    const dt = new Date(`${dateLocal}T${h}:${m}`)
-    const latDec = dmsToDecimal(Number(latDeg) || 0, Number(latMin) || 0, Number(latSec) || 0, latSign)
-    const lonDec = dmsToDecimal(Number(lonDeg) || 0, Number(lonMin) || 0, Number(lonSec) || 0, lonSign)
-    return { dt, lat: latDec, lon: lonDec }
-  }, [dateLocal, timeHour, timeMinute, latDeg, latMin, latSec, latSign, lonDeg, lonMin, lonSec, lonSign])
-
-  const chart = useMemo(() => calculateChart(parsed.dt, parsed.lat, parsed.lon), [parsed])
-
-  const locationFields = (
-    <>
-      {locationInputMode === 'search' ? (
-        <div style={{ marginBottom: 12 }}>
-          <label>
-            Location
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <input
-                type="text"
-                value={locationName}
-                onChange={(e) => setLocationName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && searchLocation()}
-                placeholder="Search for a city or place"
-                style={{ flex: 1, padding: '0.5em 0.8em' }}
-              />
-              <button onClick={searchLocation} disabled={locationSearching}>
-                {locationSearching ? 'Searching…' : 'Search'}
-              </button>
-            </div>
-            {locationError && <div style={{ color: '#c55', marginTop: 4 }}>{locationError}</div>}
-          </label>
+  useEffect(() => {
+    if (!native()) return
+    let disposed = false
+    let stop: (() => void) | undefined
+    void listen<Heard>('horary-voice', event => heard.current(event.payload)).then(unlisten => {
+      if (disposed) unlisten()
+      else { stop = unlisten; setWakeRegistered(true) }
+    }).catch(() => setWakeUnavailable(true))
+    return () => { disposed = true; stop?.() }
+  }, [])
+  useEffect(() => {
+    if (!native() || !wakeRegistered) return
+    if (!ready || textFallback || busy || speaking || manual || historyOpen || !foreground || voicePaused || wakeUnavailable) { setWakeState('off'); return }
+    const generation = ++wakeGeneration.current
+    setWakeState('opening')
+    void invoke<boolean>('voice_listen', { generation, enabled: true, followUp: followUp.current }).then(active => {
+      if (active === false && mounted.current && generation === wakeGeneration.current) { canHear.current = false; setForeground(false); setWakeState('off') }
+    }).catch(() => {
+      if (mounted.current && generation === wakeGeneration.current) { setWakeUnavailable(true); setWakeState('off') }
+    })
+    followUp.current = false
+    return () => { void stopWake() }
+  }, [ready, textFallback, busy, speaking, manual, historyOpen, foreground, voicePaused, wakeUnavailable, wakeRegistered])
+  useEffect(() => {
+    if (!native() || !ready) return
+    let live = true
+    const refresh = () => {
+      const epoch = ++permissionEpoch.current
+      void invoke<Permissions>('permission_status').then(access => {
+        if (!live || !mounted.current || epoch !== permissionEpoch.current) return
+        if (access.location === 'granted' && granted.current?.location !== 'granted') contextReady.current = null
+        granted.current = access; setPermissions(access); setTextFallback(!access.voiceAvailable)
+        if (access.voiceAvailable) { setVoicePaused(false); setWakeUnavailable(false); setNotice('') }
+      }).catch(() => {})
+    }
+    window.addEventListener('focus', refresh)
+    return () => { live = false; window.removeEventListener('focus', refresh) }
+  }, [ready])
+  const scope = () => session.readingId ? { readingId: session.readingId } : {}
+  async function openLeaf(id?: string) {
+    if (!native() || !ready || busyRef.current || session.busy || capture.current || starting.current || wakeState === 'listening') return
+    const attempt = ++turn.current
+    busyRef.current = true; setPending(true); setNotice('')
+    try {
+      await stopWake(); await quiet()
+      const next = await invoke<Session>(id ? 'conversation_reopen' : 'conversation_fresh', id ? { id } : {})
+      if (!mounted.current || attempt !== turn.current) return
+      contextReady.current = null; accept(next)
+      setHistoryOpen(false); setVoicePaused(false)
+      page.current?.focus(); window.scrollTo?.({ top: 0, behavior: 'smooth' })
+      if (!id) { await say(OPENING); followUp.current = true }
+    } catch { if (attempt === turn.current) setNotice('I couldn’t open that leaf. This reading is still here.') }
+    finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
+  }
+  useEffect(() => { newLeaf.current = () => { void openLeaf() } })
+  useEffect(() => {
+    if (!native()) return
+    let disposed = false
+    let stop: (() => void) | undefined
+    void listen('horary-new-reading', () => newLeaf.current()).then(unlisten => { if (disposed) unlisten(); else stop = unlisten }).catch(() => {})
+    return () => { disposed = true; stop?.() }
+  }, [])
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); void openLeaf() } }
+    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key)
+  })
+  const pause = useCallback(async () => {
+    abandonCapture.current = true
+    ++turn.current
+    setVoicePaused(true); setWakeState('off')
+    await stopWake(); await quiet()
+    if (capture.current) { capture.current = false; setRecording(false); setManual(false); await invoke('voice_cancel').catch(() => {}) }
+    if (busyRef.current || session.busy) { await invoke('conversation_cancel').catch(() => {}); busyRef.current = false; setPending(false) }
+    setNotice('')
+  }, [session.busy])
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && !historyOpen) { e.preventDefault(); void pause() } }
+    const leave = () => {
+      canHear.current = false; setForeground(false)
+      abandonCapture.current = true
+      if (capture.current) { capture.current = false; setRecording(false); setManual(false); void invoke('voice_cancel').catch(() => {}) }
+    }
+    const focus = () => { if (!document.hidden) { canHear.current = true; setForeground(true) } }
+    const visibility = () => { if (document.hidden) leave(); else focus() }
+    window.addEventListener('keydown', key); window.addEventListener('blur', leave); window.addEventListener('focus', focus); document.addEventListener('visibilitychange', visibility)
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('blur', leave); window.removeEventListener('focus', focus); document.removeEventListener('visibilitychange', visibility) }
+  }, [pause, historyOpen])
+  async function deliverVoice(id: number, attempt: number) {
+    await prepareContext(session)
+    if (attempt !== turn.current) return
+    const next = await invoke<Session>('conversation_voice', { id, ...scope() })
+    if (!mounted.current || attempt !== turn.current) return
+    accept(next); setWakeUnavailable(false)
+    const reply = next.messages.at(-1)
+    const spoken = reply?.role === 'assistant' ? reply.text : next.sections.slice().reverse().find(s => s.step === 'judgment')?.body
+    if (spoken) { await say(spoken); if (attempt === turn.current) followUp.current = true }
+  }
+  async function submitText() {
+    const text = draft.trim()
+    if (!textFallback || !ready || !native() || !text || busyRef.current || session.busy) return
+    const attempt = ++turn.current
+    busyRef.current = true; setPending(true); setNotice('')
+    try {
+      await prepareContext(session)
+      if (attempt !== turn.current) return
+      const next = await invoke<Session>('conversation_send', { text, ...scope() })
+      if (!mounted.current || attempt !== turn.current) return
+      accept(next); setDraft('')
+      const reply = next.messages.at(-1)
+      if (reply?.role === 'assistant') await say(reply.text)
+    } catch { if (attempt === turn.current) setNotice('Your words are still here. Shall we try again?') }
+    finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
+  }
+  async function consumeHeard(id: number) {
+    if (busyRef.current || session.busy || !canHear.current || historyOpen || capture.current || starting.current) return
+    const attempt = ++turn.current
+    busyRef.current = true; setPending(true); setNotice(''); setWakeState('off')
+    try { await deliverVoice(id, attempt) }
+    catch { if (attempt === turn.current) { setVoicePaused(true); setNotice('Something interrupted the reading. Your earlier words are still here.'); await say('Something interrupted the reading. Shall we try again?') } }
+    finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) setPending(false) } }
+  }
+  useEffect(() => {
+    heard.current = update => {
+      if (!mounted.current || update.generation !== wakeGeneration.current || !canHear.current || busyRef.current || historyOpen) return
+      if (update.state === 'unavailable') { setWakeUnavailable(true); setWakeState('off') }
+      else if (update.state === 'heard' && update.id !== undefined) void consumeHeard(update.id)
+      else if (update.state === 'waiting' || update.state === 'listening') setWakeState(update.state)
+    }
+  })
+  async function finishSpeaking() {
+    if (!capture.current) return
+    capture.current = false; setRecording(false)
+    const attempt = ++turn.current
+    busyRef.current = true; setPending(true); setNotice('')
+    try {
+      const voice = await invoke<{ id: number; text: string | null }>('voice_finish')
+      if (attempt !== turn.current) return
+      await deliverVoice(voice.id, attempt)
+    } catch { if (attempt === turn.current) { setVoicePaused(true); setNotice('I didn’t quite catch that.'); await say('I didn’t quite catch that.') } }
+    finally { if (attempt === turn.current) { busyRef.current = false; if (mounted.current) { setPending(false); setManual(false) } } }
+  }
+  async function beginSpeaking() {
+    if (busyRef.current || session.busy || starting.current || capture.current) return
+    if (!native()) { setNotice('Voice is available in the desktop app.'); return }
+    if (!ready) return
+    starting.current = true; abandonCapture.current = false; setManual(true); setOpeningMic(true); setNotice('')
+    try {
+      await stopWake(); await quiet()
+      if (abandonCapture.current || !mounted.current) return
+      await invoke('voice_start')
+      if (abandonCapture.current || !mounted.current) { await invoke('voice_cancel').catch(() => {}); return }
+      capture.current = true; setRecording(true); setVoicePaused(false)
+    } catch { if (mounted.current && !abandonCapture.current) { setTextFallback(true); setNotice('I can’t hear you yet.'); await say('I can’t hear you yet.') } }
+    finally { starting.current = false; if (mounted.current) { setOpeningMic(false); if (!capture.current) setManual(false) } }
+  }
+  function toggleSpeaking() {
+    if (textFallback && !busy && !speaking) void recoverMicrophone()
+    else if (starting.current || busyRef.current || session.busy || speaking) void pause()
+    else if (capture.current) void finishSpeaking()
+    else if (wakeState === 'listening') void invoke('voice_listen_finish', { generation: wakeGeneration.current }).catch(() => {})
+    else void beginSpeaking()
+  }
+  async function recoverMicrophone() {
+    if (!native()) return
+    try {
+      if (permissions?.microphone === 'denied' || permissions?.microphone === 'restricted') {
+        await invoke('open_microphone_permissions')
+      } else {
+        const access = await invoke<Permissions>('permission_status')
+        if (!mounted.current) return
+        granted.current = access; setPermissions(access)
+        if (access.voiceAvailable) { setTextFallback(false); setVoicePaused(false); setWakeUnavailable(false); setNotice('') }
+        else await invoke('open_microphone_permissions')
+      }
+    } catch { setNotice('Microphone access is unavailable. Your words can still reach me here.') }
+  }
+  const closeHistory = useCallback(() => { setHistoryOpen(false); historyTrigger.current?.focus() }, [])
+  async function showHistory() {
+    if (capture.current || starting.current || wakeState === 'listening') await pause()
+    else await stopWake()
+    setHistoryOpen(true)
+  }
+  useEffect(() => {
+    if (!recording) return
+    const timer = window.setTimeout(() => { void finishSpeaking() }, 120000)
+    return () => window.clearTimeout(timer)
+    // Native capture bounds its storage independently of the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording])
+  useEffect(() => () => { abandonCapture.current = true; ++turn.current; void stopWake(); void quiet(); if (capture.current && native()) void invoke('voice_cancel').catch(() => {}) }, [])
+  function material(after: number) {
+    return <>{session.chart && (session.chartAfterMessage || 1) === after && <ReadingChart key={`chart-${session.revision}`} chart={session.chart} place={session.place} dark={dark} facts={session.facts} />}{session.sections.filter(s => (s.after_message || 1) === after).map(section => <ReadingPassage key={`${section.revision}-${section.method_stage || section.title}`} section={section} />)}</>
+  }
+  const listening = recording || wakeState === 'listening'
+  const voiceState = listening ? 'listening' : openingMic || wakeState === 'opening' || native() && !ready ? 'opening' : speaking ? 'speaking' : busy ? 'thinking' : wakeState === 'waiting' ? 'waiting' : 'idle'
+  const voiceLabel = listening ? 'Finish speaking' : openingMic ? 'Cancel listening' : busy ? 'Pause reading' : speaking ? 'Pause speech' : textFallback ? 'Microphone access' : 'Speak your question'
+  const voiceTip = notice || (voiceState === 'waiting' ? 'Say “Oracle”, or touch to speak.' : voiceLabel)
+  return <>
+    <button ref={historyTrigger} type="button" className="quiet-icon history-trigger" aria-label="Earlier readings" aria-haspopup="dialog" aria-expanded={historyOpen} aria-controls="reading-history" title="Earlier readings" onClick={() => void showHistory()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10a2 2 0 0 1 2 2v11M5 7h10a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" /><path d="M7 12h6M7 15h4" /></svg></button>
+    <main ref={page} className="unfolding-page" data-listening={listening} data-thinking={busy} tabIndex={-1} aria-label="Your unfolding reading">
+      <article className="living-document">
+        <p className="opening-question">{OPENING}</p>
+        <div className="document-conversation" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions text">
+          {session.messages.map((message, i) => <Fragment key={i}><div className={`passage ${message.role}`}>{message.text.split('\n\n').map((p, n) => <p key={n}>{p}</p>)}</div>{material(i + 1)}</Fragment>)}
         </div>
-      ) : (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <label>
-              Latitude
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                <input type="number" min={0} max={90} value={latDeg} onFocus={() => { coordFallback.current.latDeg = latDeg }} onBlur={(e) => { if (e.target.value === '') setLatDeg(coordFallback.current.latDeg ?? '0') }} onChange={(e) => setLatDeg(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Degrees" />
-                <span>°</span>
-                <input type="number" min={0} max={59} value={latMin} onFocus={() => { coordFallback.current.latMin = latMin }} onBlur={(e) => { if (e.target.value === '') setLatMin(coordFallback.current.latMin ?? '0') }} onChange={(e) => setLatMin(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Minutes" />
-                <span>′</span>
-                <input type="number" min={0} max={59} value={latSec} onFocus={() => { coordFallback.current.latSec = latSec }} onBlur={(e) => { if (e.target.value === '') setLatSec(coordFallback.current.latSec ?? '0') }} onChange={(e) => setLatSec(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Seconds" />
-                <span>″</span>
-                <select value={latSign} onChange={(e) => setLatSign(e.target.value as 'N' | 'S')} style={{ padding: '0.5em 0.8em' }}>
-                  <option value="N">N</option>
-                  <option value="S">S</option>
-                </select>
-              </div>
-            </label>
-            <label>
-              Longitude
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-                <input type="number" min={0} max={180} value={lonDeg} onFocus={() => { coordFallback.current.lonDeg = lonDeg }} onBlur={(e) => { if (e.target.value === '') setLonDeg(coordFallback.current.lonDeg ?? '0') }} onChange={(e) => setLonDeg(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Degrees" />
-                <span>°</span>
-                <input type="number" min={0} max={59} value={lonMin} onFocus={() => { coordFallback.current.lonMin = lonMin }} onBlur={(e) => { if (e.target.value === '') setLonMin(coordFallback.current.lonMin ?? '0') }} onChange={(e) => setLonMin(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Minutes" />
-                <span>′</span>
-                <input type="number" min={0} max={59} value={lonSec} onFocus={() => { coordFallback.current.lonSec = lonSec }} onBlur={(e) => { if (e.target.value === '') setLonSec(coordFallback.current.lonSec ?? '0') }} onChange={(e) => setLonSec(e.target.value)} style={{ width: '6ch', padding: '0.5em 0.4em' }} title="Seconds" />
-                <span>″</span>
-                <select value={lonSign} onChange={(e) => setLonSign(e.target.value as 'E' | 'W')} style={{ padding: '0.5em 0.8em' }}>
-                  <option value="E">E</option>
-                  <option value="W">W</option>
-                </select>
-              </div>
-            </label>
-          </div>
-        </div>
-      )}
-    </>
-  )
-
-  return (
-    <div className={darkMode ? 'night-mode' : ''} style={{ maxWidth: 568, margin: '0 auto', padding: 24, textAlign: 'left', minHeight: '100vh', background: darkMode ? '#242424' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', position: 'relative', zIndex: 200 }}>
-        <h1 style={{ marginBottom: 4 }}>Horary Calculator</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button className="icon-btn" onClick={() => { const d = !darkMode; setDarkMode(d); localStorage.setItem('darkMode', String(d)) }} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.8, color: 'inherit' }} title={darkMode ? 'Switch to day mode' : 'Switch to night mode'}>
-            {darkMode ? '☀︎' : '☽︎'}
-          </button>
-        <div style={{ position: 'relative' }} ref={settingsRef}>
-          <button className="icon-btn" onClick={() => setShowSettings(s => !s)} style={{ fontSize: '1.2em', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.7, color: 'inherit' }} title="Settings">⚙︎</button>
-          {showSettings && (
-            <div style={{ position: 'absolute', right: 0, top: '100%', background: darkMode ? '#1a1a1a' : '#ffffff', color: darkMode ? 'rgba(255,255,255,0.87)' : '#213547', border: `1px solid ${darkMode ? '#444' : '#ccc'}`, borderRadius: 8, padding: 12, minWidth: 220, zIndex: 9999 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isEditing} onChange={(e) => { if (!e.target.checked) saveCastSnapshot(); setIsEditing(e.target.checked); if (!e.target.checked) { resetToNow(); setSubmitError('') } }} />
-                Look up past question
-              </label>
-              <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
-              {[['showAngles', 'Show angles', showAngles, setShowAngles], ['showHouses', 'Show houses', showHouses, setShowHouses], ['showPlanets', 'Show planets', showPlanets, setShowPlanets], ['showAspects', 'Show aspects list', showAspects, setShowAspects], ['showAspectGrid', 'Show aspects chart', showAspectGrid, setShowAspectGrid]].map(([key, label, value, setter]) => (
-                <label key={key as string} style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginBottom: 4 }}>
-                  <input type="checkbox" checked={value as boolean} onChange={(e) => { localStorage.setItem(key as string, String(e.target.checked)); (setter as (v: boolean) => void)(e.target.checked) }} />
-                  {label as string}
-                </label>
-              ))}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginTop: 4 }}>
-                <input type="checkbox"
-                  checked={showAngles && showHouses && showPlanets && showAspects && showAspectGrid}
-                  onChange={(e) => { const v = e.target.checked; localStorage.setItem('showAngles', String(v)); localStorage.setItem('showHouses', String(v)); localStorage.setItem('showPlanets', String(v)); localStorage.setItem('showAspects', String(v)); localStorage.setItem('showAspectGrid', String(v)); setShowAngles(v); setShowHouses(v); setShowPlanets(v); setShowAspects(v); setShowAspectGrid(v) }}
-                />
-                Show all
-              </label>
-              <hr style={{ border: 'none', borderTop: darkMode ? '1px solid #444' : '1px solid #ddd', margin: '8px 0' }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                <input type="checkbox" checked={use24Hour} onChange={(e) => { localStorage.setItem('use24Hour', String(e.target.checked)); setUse24Hour(e.target.checked) }} />
-                Use 24-hour time
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', marginTop: 4 }}>
-                <input type="checkbox" checked={locationInputMode === 'coordinates'} onChange={(e) => { const m = e.target.checked ? 'coordinates' : 'search'; localStorage.setItem('locationInputMode', m); setLocationInputMode(m); setLocationError('') }} />
-                Enter coordinates manually
-              </label>
-            </div>
-          )}
-        </div>
-        </div>
-      </div>
-
-      {!isEditing && (
-        <div style={{ marginTop: 32, marginBottom: 16, opacity: 0.85 }}>
-          <div><b>Date:</b> {parsed.dt.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-          <div><b>Time:</b> {parsed.dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: !use24Hour })}</div>
-          {geolocating && <div style={{ opacity: 0.6, marginTop: 4 }}>Detecting location…</div>}
-          {!geolocating && locationDetected && (
-            <div><b>Location:</b> {detectedCityName || `${fmtDMS(latDeg, latMin, latSec, latSign)}, ${fmtDMS(lonDeg, lonMin, lonSec, lonSign)}`}</div>
-          )}
-          {!geolocating && !locationDetected && (
-            <>
-              <button onClick={detectLocation} style={{ marginBottom: geoError ? 6 : 12 }}>Detect my location</button>
-              {geoError && <div style={{ color: '#c55', marginBottom: 10, fontSize: '0.9em' }}>{geoError}{/Chrome|Firefox|Safari|Edge/.test(navigator.userAgent) && !/Mobi|Android/i.test(navigator.userAgent) ? ' Click the lock icon in your browser\'s address bar to reset it.' : ''}</div>}
-              {locationFields}
-            </>
-          )}
-        </div>
-      )}
-
-      {isEditing && (
-        <div style={{ marginTop: 32, marginBottom: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
-            <label>
-              Date
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                {(() => {
-                  const [dy, dm, dd] = dateLocal.split('-').map(Number)
-                  const now = new Date()
-                  const curYear = now.getFullYear(), curMonth = now.getMonth() + 1, curDay = now.getDate()
-                  const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
-                  const daysInMonth = new Date(dy, dm, 0).getDate()
-                  const maxMonth = dy === curYear ? curMonth : 12
-                  const maxDay = (dy === curYear && dm === curMonth) ? curDay : daysInMonth
-                  const selStyle = { padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }
-                  return (<>
-                    <select value={dm} onChange={(e) => handleDatePartChange('month', e.target.value)} style={selStyle}>
-                      {months.slice(0, maxMonth).map((name, i) => <option key={i+1} value={i+1}>{name}</option>)}
-                    </select>
-                    <select value={dd} onChange={(e) => handleDatePartChange('day', e.target.value)} style={selStyle}>
-                      {Array.from({ length: maxDay }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <select value={dy} onChange={(e) => handleDatePartChange('year', e.target.value)} style={selStyle}>
-                      {Array.from({ length: curYear - 1800 + 1 }, (_, i) => curYear - i).map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </>)
-                })()}
-              </div>
-            </label>
-            <label>
-              Time
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
-                {(() => {
-                  const now = new Date()
-                  const [dy, dm, dd] = dateLocal.split('-').map(Number)
-                  const isToday = dy === now.getFullYear() && dm === now.getMonth() + 1 && dd === now.getDate()
-                  const numStyle = { width: '3.5ch', padding: '0.5em 0.4em', fontSize: 'inherit', fontFamily: 'inherit', textAlign: 'center' as const }
-                  const selStyle = { padding: '0.5em 0.8em', fontSize: 'inherit', fontFamily: 'inherit' }
-                  return use24Hour ? (
-                    <>
-                      <input type="number" min={0} max={23} value={timeHour} onChange={(e) => setTimeHour(e.target.value)} style={numStyle} title="Hour" />
-                      <span>:</span>
-                      <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={numStyle} title="Minute" />
-                    </>
-                  ) : (
-                    <>
-                      <input type="number" value={display12Hour} onChange={(e) => handleHour12Change(e.target.value)} style={numStyle} title="Hour" />
-                      <span>:</span>
-                      <input type="number" min={0} max={59} value={timeMinute} onChange={(e) => setTimeMinute(e.target.value)} style={numStyle} title="Minute" />
-                      <select value={amPm} onChange={(e) => handleAmPmChange(e.target.value as 'AM' | 'PM')} style={selStyle}>
-                        <option value="AM">AM</option>
-                        {now.getHours() >= 12 || !isToday ? <option value="PM">PM</option> : null}
-                      </select>
-                    </>
-                  )
-                })()}
-              </div>
-            </label>
-          </div>
-          {locationFields}
-          <button style={{ marginTop: 12 }} onClick={resetToNow}>
-            Use current time &amp; place
-          </button>
-          <div style={{ marginTop: 16 }}>
-            Question
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 4 }}>
-              <textarea
-                ref={questionEditRef}
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder="What is your question?"
-                rows={1}
-                style={{ flex: 1, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', padding: '0.5em 0.8em' }}
-              />
-              <button onClick={saveCastSnapshot}>Submit</button>
-            </div>
-            {submitError && <div style={{ color: '#c55', marginTop: 6, fontSize: '0.9em' }}>{submitError}</div>}
-          </div>
-        </div>
-      )}
-
-      {!isEditing && (
-        <div style={{ marginBottom: 16 }}>
-          Question
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 4 }}>
-            <textarea
-              ref={questionViewRef}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What is your question?"
-              rows={1}
-              style={{ flex: 1, resize: 'none', overflow: 'hidden', fontFamily: 'inherit', fontSize: 'inherit', padding: '0.5em 0.8em' }}
-            />
-            <button onClick={saveCastSnapshot}>Submit</button>
-          </div>
-          {submitError && <div style={{ color: '#c55', marginTop: 6, fontSize: '0.9em' }}>{submitError}</div>}
-        </div>
-      )}
-
-      {(isEditing || locationSet) && chart.summary ? (
-        <div style={{ marginTop: 12, padding: 12, border: 'none', borderRadius: 8, overflowX: 'auto' }}>
-          <h2 style={{ marginTop: 0 }}>Chart wheel</h2>
-          <ChartWheel data={chart.summary.astroChartData} darkMode={darkMode} />
-        </div>
-      ) : null}
-
-      <div style={{ marginTop: 16 }}>
-        {(isEditing || locationSet) && chart.error ? (
-          <div style={{ padding: 12, border: '1px solid #c33', borderRadius: 8 }}>
-            <b>Error:</b> {chart.error}
-          </div>
-        ) : (isEditing || locationSet) && chart.summary ? (
-          <>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-            <button onClick={() => nudgeTime(-1)}>◀</button>
-            <select value={nudgeUnit} onChange={(e) => setNudgeUnit(e.target.value as typeof nudgeUnit)} title="Nudge increment" style={{ padding: '0.5em 1.2em', fontSize: 'inherit', fontFamily: 'inherit' }}>
-              <option value="minute">Minute</option>
-              <option value="hour">Hour</option>
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-              <option value="year">Year</option>
-            </select>
-            <button onClick={() => nudgeTime(1)}>▶</button>
-            <button onClick={resetToCastTime}>Reset</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: (showAngles || showHouses) && (showPlanets || showAspects) ? '1fr 1fr' : '1fr', gap: 0 }}>
-            {(showAngles || showHouses) && (
-              <div style={{ padding: '12px 6px 12px 12px', border: 'none', borderRadius: 8, minWidth: 0 }}>
-                {showAngles && (
-                  <>
-                    <h2 style={{ marginTop: 0 }}>Angles</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      <li><b>ASC:</b> {chart.summary.ascendant}</li>
-                      <li><b>DSC:</b> {chart.summary.descendant}</li>
-                      <li><b>MC:</b> {chart.summary.midheaven}</li>
-                      <li><b>IC:</b> {chart.summary.ic}</li>
-                    </ul>
-                  </>
-                )}
-                {showHouses && (
-                  <>
-                    <h2 style={{ marginTop: showAngles ? 16 : 0 }}>Houses</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      {chart.summary.houses.map((h) => (
-                        <li key={h.house}>
-                          <b>House {h.house}:</b> {h.sign} {h.formatted || formatDeg(h.eclipticDegrees)}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-
-            {(showPlanets || showAspects) && (
-              <div style={{ padding: '12px 12px 12px 6px', border: 'none', borderRadius: 8, minWidth: 0, overflow: 'hidden' }}>
-                {showPlanets && (
-                  <>
-                    <h2 style={{ marginTop: 0 }}>Planets</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      {chart.summary.planets.map((p) => (
-                        <li key={p.key}>
-                          <b>{p.name}:</b> {p.sign} {p.formatted || formatDeg(p.eclipticDegrees)}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {showAspects && (
-                  <>
-                    <h2 style={{ marginTop: showPlanets ? 16 : 0 }}>Aspects</h2>
-                    <ul style={{ marginTop: 8 }}>
-                      {chart.summary.aspectsList.length === 0 && <li>No aspects found with default orbs.</li>}
-                      {chart.summary.aspectsList.map((a, idx) => (
-                        <li key={`${a.from}-${a.to}-${idx}`}>
-                          <b>{a.from}</b> {a.type.charAt(0).toUpperCase() + a.type.slice(1)} <b>{a.to}</b> {a.orb}{a.applying != null ? ` — ${a.applying ? 'applying' : 'separating'}` : ''}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          {showAspectGrid && (
-            <div style={{ marginTop: 16, padding: 12, border: 'none', borderRadius: 8, overflow: 'hidden' }}>
-              <h2 style={{ marginTop: 0 }}>Aspects chart</h2>
-              <AspectGrid
-                planets={chart.summary.planets.map(p => p.name)}
-                aspects={chart.summary.aspectsList}
-              />
-            </div>
-          )}
-          </>
-        ) : null}
-      </div>
-    </div>
-  )
+        {busy && <p className="visually-hidden" role="status">{session.status || 'Considering your question.'}</p>}
+        {notice && <p id="reading-notice" className="visually-hidden" role="alert">{notice}</p>}
+        {textFallback && <form className="fallback-words" onSubmit={e => { e.preventDefault(); void submitText() }}>
+          <textarea aria-label="Your words" title="Write your question; Return sends it, Shift–Return adds a line." value={draft} maxLength={8000} disabled={!ready || busy} rows={2} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void submitText() } }} />
+          <button type="submit" className="quiet-icon" aria-label="Send" title="Send your words" disabled={!ready || busy || !draft.trim()}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 5v14" /></svg></button>
+        </form>}
+        <div ref={tail} />
+      </article>
+    </main>
+    <div className="listening-dock"><button type="button" className="listening-orb" data-state={voiceState} data-notice={!!notice} aria-label={voiceLabel} aria-describedby={notice ? 'reading-notice' : undefined} aria-pressed={listening} title={voiceTip} onClick={toggleSpeaking}><span aria-hidden="true">{notice ? '!' : '?'}</span></button><span className="visually-hidden" role="status">{listening ? 'Listening.' : openingMic ? 'Opening the microphone.' : ''}</span></div>
+    <ReadingHistory open={historyOpen} close={closeHistory} saved={session.savedReadings} revisions={session.revisions} records={session.method?.records} audit={session.audit} unavailable={busy || listening || openingMic || native() && !ready} openReading={id => void openLeaf(id)} />
+  </>
 }
-
-export default App

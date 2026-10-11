@@ -1,69 +1,19 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
+  font-weight: 400; color-scheme: light dark;
+  --paper: #f7f3e9; --ink: #36362e; --soft: #77715e; --faint: #817a69; --line: #d5cab4;
+  --gold: #927b4d; --wash: #b39b69;
+  background: var(--paper); color: var(--ink);
 }
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-  scrollbar-gutter: stable;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.5em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+* { box-sizing: border-box }
+body { margin: 0; min-width: 320px }
+textarea { font-family: inherit }
+a { color: inherit }
+::selection { background: #e1d5b9 }
+#root { min-height: 100dvh }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px }
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #171e25; --ink: #ede3ce; --soft: #b4ad9a; --faint: #a49c89; --line: #424750; --gold: #c1a779; --wash: #c4a16b }
+  ::selection { background: #4c4b46 }
 }
