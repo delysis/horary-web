@@ -110,6 +110,15 @@ pub(crate) fn prepare(
                     "source_result_sha256":call["source_result_sha256"]})).collect::<Vec<_>>(),
                 "native_rejection":actual["outcome"]["semantic_abort_witness"]})
         } else if plan.function == Function::ReadingJourney {
+            if plan.selected_stage_observation {
+                crate::selected_stage::verify_observation(plan, &evaluation["evaluation"])?;
+                crate::selected_stage::verify_review(
+                    plan,
+                    example,
+                    &evaluation["evaluation"],
+                    &evaluation["independent_review"],
+                )?;
+            }
             let calls = evaluation["evaluation"]["actual_function_calls"]
                 .as_array()
                 .filter(|calls| !calls.is_empty())
@@ -159,6 +168,19 @@ pub(crate) fn prepare(
                 evaluation["independent_review"].clone();
             feedback["source_reading_rubric"] =
                 load(&example.source_case_directory.join("reading-rubric.json"))?;
+            if plan.selected_stage_observation {
+                feedback["actual_native_gates"] =
+                    evaluation["evaluation"]["outcome"]["selected_stage"].clone();
+                feedback["validated_independent_selected_stage_review"] =
+                    evaluation["independent_review"].clone();
+                feedback
+                    .as_object_mut()
+                    .ok_or("Invalid stage feedback")?
+                    .remove("validated_independent_reading_review");
+                feedback["scope"]=json!("Selected component only; full reading is unobserved and cannot qualify promotion");
+                feedback["native_rejection"] =
+                    evaluation["evaluation"]["outcome"]["semantic_abort_witness"].clone();
+            }
         }
         samples.push(vec![
             ("Inputs".into(), Reflective::Text(inputs.to_string())),

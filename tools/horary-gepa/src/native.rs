@@ -44,11 +44,18 @@ pub fn evaluate(
     if let Some(receipt) = &fixed_receipt {
         request["fixed_program"] = receipt.clone();
     }
+    if plan.exact_response_memoization {
+        request["exact_response_memoization"] = json!({"version":horary_prompt_program::response_memo::VERSION,
+            "excluded_stage":plan.signature().stage,"qualification":"Component search with exact raw-response reuse; not fresh complete-journey qualification"});
+    }
     if plan.objective == Objective::ExtractorReliability {
         request["objective"] = json!(plan.objective);
     }
     if plan.initial_extractor_observation {
         request["initial_extractor_observation"] = json!(true);
+    }
+    if plan.selected_stage_observation {
+        request["selected_stage_observation"] = json!(true);
     }
     if plan.function == Function::ReadingJourney {
         request["objective"] = json!(plan.objective);
@@ -104,6 +111,9 @@ pub fn evaluate(
         }
         if plan.initial_extractor_observation {
             crate::initial_extractor::verify_observation(plan, &response)?;
+        }
+        if plan.selected_stage_observation {
+            crate::selected_stage::verify_observation(plan, &response)?;
         }
         // The logical operation identity stays identical on deterministic replay.
         // Cache availability changes after the first run; it is execution detail.
@@ -181,6 +191,17 @@ pub fn evaluate(
         Operation::Fresh(path) => path,
     };
     let program_file = program.as_ref().map(|_| directory.join("program.json"));
+    let memo_pin = if plan.exact_response_memoization {
+        let index = crate::memo::snapshot(plan, journal, example)?;
+        let file = directory.join("response-memo-index.json");
+        keep(&file, &index)?;
+        Some(horary_prompt_program::response_memo::Pin {
+            sha256: digest(read(&file)?),
+            file,
+        })
+    } else {
+        None
+    };
     if let Some(program) = &program {
         keep(program_file.as_ref().ok_or("No program path")?, program)?;
     }
@@ -205,6 +226,12 @@ pub fn evaluate(
             task["initial_extractor_observation"] = json!(true);
         }
         if plan.function == Function::ReadingJourney {
+            if let Some(pin) = &memo_pin {
+                task["exact_response_memoization"] = json!(pin);
+            }
+            if plan.selected_stage_observation {
+                task["selected_stage_observation"] = json!(true);
+            }
             task["target_stage"] = json!(plan.target_stage);
             task["source_branch"] = json!(example.source_branch);
             task["source_rubric_sha256"] = json!(example.source_rubric_sha256);
@@ -273,7 +300,7 @@ pub fn evaluate(
         if !invoked {
             outcome["target_function_not_invoked_reason"] = json!("The observed upstream route did not select the optimized function; native grades are retained, but this target earns no fitness");
         }
-    } else if plan.function == Function::ReadingJourney {
+    } else if plan.function == Function::ReadingJourney && !plan.selected_stage_observation {
         crate::reading::verify_invocation(plan, &outcome, &focused)?;
     }
     let mut fixed_invocations = None;
@@ -331,6 +358,9 @@ pub fn evaluate(
         "native_evidence_directory":native_directory,
         "actual_function_calls":focused,
         "archival_control":archival,"cache_identity":cache_key});
+    if plan.selected_stage_observation {
+        crate::selected_stage::bind(plan, &mut response)?;
+    }
     if let Some(receipt) = fixed_invocations {
         response["fixed_program_invocations"] = receipt;
         response["fixed_program_composition"] =
@@ -496,6 +526,9 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
                     "source_result_sha256":digest(read(&directory.join("calls").join(name.replace("-request.json","-result.json")))?)});
                 if let Some(protocol) = task.get("executor_guide_identity") {
                     focused["executor_guide_identity"] = protocol.clone();
+                }
+                if plan.selected_stage_observation {
+                    focused["schema_sha256"] = task["schema_sha256"].clone();
                 }
                 calls.push(focused);
             }

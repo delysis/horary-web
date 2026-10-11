@@ -31,6 +31,10 @@ use std::{
 const EVALUATOR_VERSION: &str = "horary-four-hurdle-evaluator-2026-10-10.3";
 #[path = "reading_neural_eval.rs"]
 mod reading;
+#[path = "response_memo_tests.rs"]
+mod response_memo_tests;
+#[path = "selected_stage_eval.rs"]
+mod selected_stage;
 const CORE: &str = include_str!("../test-fixtures/elicitation/core.json");
 const SPECIALIST: &str = include_str!("../test-fixtures/elicitation/specialist.json");
 
@@ -1243,6 +1247,7 @@ fn write_index_text(path: &Path, value: &str) -> Result<(), String> {
 struct Reader<'a> {
     state: &'a NativeLlamaState,
     hosted: Option<Arc<crate::hosted_gemma_eval::Client>>,
+    response_memo: Option<Arc<horary_prompt_program::response_memo::Memo>>,
     dir: PathBuf,
     cancelled: Arc<AtomicBool>,
     calls: Mutex<Vec<Value>>,
@@ -1255,6 +1260,7 @@ struct Reader<'a> {
     group: Option<usize>,
     program: Option<Arc<horary_prompt_program::Program>>,
     initial_extractor_target: Option<Method>,
+    selected_stage_target: Option<Stage>,
 }
 
 /// Experimental teaching is applied to the actual native request, not to an
@@ -1458,6 +1464,7 @@ impl Drop for Deadline {
 struct CaseRun {
     full_reading: bool,
     initial_extractor_target: Option<Method>,
+    selected_stage_target: Option<Stage>,
     seconds: u64,
     max_calls: u64,
     dispatcher: Option<mpsc::Sender<BatchCall>>,
@@ -1466,8 +1473,113 @@ struct CaseRun {
     program: Option<Arc<horary_prompt_program::Program>>,
     rubrics: Option<Arc<BTreeMap<String, crate::reading_eval::Rubric>>>,
     hosted: Option<Arc<crate::hosted_gemma_eval::Client>>,
+    response_memo: Option<Arc<horary_prompt_program::response_memo::Memo>>,
+}
+
+fn memo_signature(
+    request: &Value,
+    branch: Option<usize>,
+) -> Result<horary_prompt_program::response_memo::Signature, String> {
+    use horary_prompt_program::response_memo::{model_decoding, ExactHashes, Signature};
+    let (stage, matter, input, schema, prompt) = if let Some(i) = branch {
+        let task = request["tasks"]
+            .as_array()
+            .and_then(|tasks| tasks.get(i))
+            .and_then(Value::as_array)
+            .filter(|t| t.len() == 4)
+            .ok_or("Memo branch is malformed")?;
+        (
+            &task[0],
+            &task[1],
+            &task[2],
+            &task[3],
+            &request["prompts"][i],
+        )
+    } else {
+        (
+            &request["stage"],
+            &request["matter"],
+            &request["input"],
+            &request["schema"],
+            &request["prompt"],
+        )
+    };
+    let stage = stage.as_str().ok_or("Memo has no current stage")?;
+    let context = &request["memo_context"];
+    let wire_request = crate::hosted_gemma_eval::wire_request(
+        &prompt.to_string(),
+        schema,
+        if branch.is_none() && stage == "judgment" {
+            1400
+        } else {
+            1000
+        },
+    )?;
+    let captured_wire = branch.map_or(&request["memo_wire_request"], |i| {
+        &request["memo_wire_requests"][i]
+    });
+    if !captured_wire.is_null() && *captured_wire != wire_request {
+        return Err("Captured current memo wire differs from actual native translation".into());
+    }
+    Ok(Signature {
+        case_id: context["case_id"]
+            .as_str()
+            .ok_or("Memo has no current case")?
+            .into(),
+        fixture_sha256: context["fixture_sha256"]
+            .as_str()
+            .ok_or("Memo has no current fixture")?
+            .into(),
+        initial_sha256: context["initial_sha256"]
+            .as_str()
+            .ok_or("Memo has no current initial context")?
+            .into(),
+        stage: stage.into(),
+        matter: matter.clone(),
+        prompt: prompt.clone(),
+        schema: schema.clone(),
+        input: input.clone(),
+        model_decoding: model_decoding(&request["provider"])?,
+        exact: Some(ExactHashes::values(input, schema, prompt, &wire_request)?),
+        wire_request,
+    })
+}
+
+fn verified_reuse(call: &Value, branch: Option<usize>, result: &Value) -> Result<bool, String> {
+    let witness = branch.map_or(&call["response_reuse"], |i| &call["response_reuses"][i]);
+    if witness.is_null() {
+        return Ok(false);
+    }
+    horary_prompt_program::response_memo::verify_reuse(
+        witness,
+        &memo_signature(&call["request"], branch)?,
+        result,
+    )?;
+    Ok(true)
 }
 impl Reader<'_> {
+    fn memo_context(&self) -> Result<Value, String> {
+        Ok(json!({"case_id":self.case_id(),
+            "fixture_sha256":horary_prompt_program::digest(fs::read(self.dir.join("fixture.json")).map_err(|e|e.to_string())?),
+            "initial_sha256":horary_prompt_program::digest(fs::read(self.dir.join("initial.json")).map_err(|e|e.to_string())?)}))
+    }
+    fn memoized(
+        &self,
+        request: &Value,
+        branch: Option<usize>,
+    ) -> Result<Option<(NativeGenerationResult, Value)>, String> {
+        let Some(memo) = &self.response_memo else {
+            return Ok(None);
+        };
+        let signature = memo_signature(request, branch)?;
+        memo.lookup(&signature)?
+            .map(|(result, witness)| {
+                serde_json::from_value(result)
+                    .map(|result| (result, witness))
+                    .map_err(|e| format!("Sealed cached response failed native decoding: {e}"))
+            })
+            .transpose()
+    }
     fn case_id(&self) -> &str {
         self.dir
             .file_name()
@@ -1506,6 +1618,12 @@ impl Runtime for Reader<'_> {
     fn initial_extractor_sequence(&self) -> Option<u64> {
         Some(self.sequence.load(Ordering::Acquire))
     }
+    fn selected_stage_target(&self) -> Option<Stage> {
+        self.selected_stage_target
+    }
+    fn selected_stage_sequence(&self) -> Option<u64> {
+        Some(self.sequence.load(Ordering::Acquire))
+    }
     fn device_location(&self) -> Result<Option<LocationCandidate>, String> {
         let sequence = self.device_calls.fetch_add(1, Ordering::AcqRel) + 1;
         let result = self.device_available.then(device);
@@ -1525,12 +1643,15 @@ impl Runtime for Reader<'_> {
         schema: &Value,
         audio: Option<&[u8]>,
     ) -> Result<NativeGenerationResult, String> {
+        if self.response_memo.is_some() && audio.is_some() {
+            return Err("Exact response memoization accepts synthetic text only".into());
+        }
         self.check()?;
         let sequence = self.sequence.fetch_add(1, Ordering::AcqRel) + 1;
         let (prompt, applied) =
             trial_prompt(stage, matter, input, schema, self.program.as_deref())?;
         let messages: Value = serde_json::from_str(&prompt).map_err(|e| e.to_string())?;
-        let request = json!({"sequence":sequence,"stage":stage,"matter":matter,
+        let mut request = json!({"sequence":sequence,"stage":stage,"matter":matter,
             "provider":self.hosted.as_ref().map(|client|client.metadata()),
             "prompt":messages,
             "schema":schema,"input":input,
@@ -1543,6 +1664,15 @@ impl Runtime for Reader<'_> {
             "decoder":if self.hosted.is_some(){"hosted unconstrained text; prompt-specified contract, native acceptance and repair; not on-device qualification"}else if self.dispatcher.is_some(){"EXPLORATION unconstrained independent batch; not production-decoder qualification"}else{"production constrained single text generation"},
             "exploration_group":self.group,
             "cancellation_scope":if self.group.is_some(){"shared group; a deadline can interrupt every peer"}else{"individual case"}});
+        if self.response_memo.is_some() {
+            request["memo_context"] = self.memo_context()?;
+            request["memo_wire_request"] = crate::hosted_gemma_eval::wire_request(
+                &prompt,
+                schema,
+                if stage == Stage::Judgment { 1400 } else { 1000 },
+            )?;
+        }
+        let cached = self.memoized(&request, None)?;
         write_new(
             &self
                 .dir
@@ -1553,10 +1683,13 @@ impl Runtime for Reader<'_> {
         let start = Instant::now();
         println!(
             "{}",
-            json!({"event":"model_started","case_id":self.case_id(),"sequence":sequence,"stage":stage,"hosted":self.hosted.is_some()})
+            json!({"event":if cached.is_some(){"response_reused"}else{"model_started"},"case_id":self.case_id(),"sequence":sequence,"stage":stage,"hosted":self.hosted.is_some()})
         );
         let mut provider_receipt = Value::Null;
-        let result = if let Some(hosted) = &self.hosted {
+        let response_reuse = cached.as_ref().map(|(_, witness)| witness.clone());
+        let result = if let Some((result, _)) = cached {
+            Ok(result)
+        } else if let Some(hosted) = &self.hosted {
             if audio.is_some() {
                 return Err("Hosted evaluation accepts synthetic text cases only".into());
             }
@@ -1600,12 +1733,13 @@ impl Runtime for Reader<'_> {
             )
             .map_err(|e| e.message)
         };
-        self.keep_call(
-            sequence,
-            json!({"request":request,"wall_ms":start.elapsed().as_millis(),
+        let mut call = json!({"request":request,"wall_ms":start.elapsed().as_millis(),
             "provider_receipt":provider_receipt,
-            "result":result.as_ref().map_err(String::as_str)}),
-        )?;
+            "result":result.as_ref().map_err(String::as_str)});
+        if self.response_memo.is_some() {
+            call["response_reuse"] = json!(response_reuse);
+        }
+        self.keep_call(sequence, call)?;
         result
     }
     fn generate_batch(
@@ -1627,12 +1761,29 @@ impl Runtime for Reader<'_> {
             .iter()
             .map(|(prompt, _)| (prompt.clone(), 1000))
             .collect();
-        let request = json!({"sequence":sequence,"tasks":tasks,"prompts":prompts.iter()
+        let mut request = json!({"sequence":sequence,"tasks":tasks,"prompts":prompts.iter()
             .map(|(p,_)|serde_json::from_str::<Value>(p)).collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?,
             "prompt_program":prepared.iter().map(|(_,applied)|applied).collect::<Vec<_>>(),
             "executor_guide_identity":horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE,
             "provider":self.hosted.as_ref().map(|client|client.metadata()),
             "decoder":if self.hosted.is_some(){"hosted parallel unconstrained text branches; prompt contracts and native acceptance unchanged"}else{"production unconstrained independent analysis batch"}});
+        if self.response_memo.is_some() {
+            request["memo_context"] = self.memo_context()?;
+            request["memo_wire_requests"] = json!(prompts
+                .iter()
+                .zip(tasks)
+                .map(|((prompt, max), (_, _, _, schema))| {
+                    crate::hosted_gemma_eval::wire_request(prompt, schema, *max)
+                })
+                .collect::<Result<Vec<_>, _>>()?);
+        }
+        let cached = (0..tasks.len())
+            .map(|i| self.memoized(&request, Some(i)))
+            .collect::<Result<Vec<_>, _>>()?;
+        let response_reuses = cached
+            .iter()
+            .map(|entry| entry.as_ref().map(|(_, witness)| witness.clone()))
+            .collect::<Vec<_>>();
         write_new(
             &self
                 .dir
@@ -1645,15 +1796,33 @@ impl Runtime for Reader<'_> {
             "{}",
             json!({"event":"model_started","case_id":self.case_id(),"sequence":sequence,"stages":tasks.iter().map(|task|task.0).collect::<Vec<_>>(),"hosted":self.hosted.is_some()})
         );
+        if self.response_memo.is_some() {
+            println!(
+                "{}",
+                json!({"event":"exact_response_batch_plan","case_id":self.case_id(),"sequence":sequence,
+                "branches":response_reuses.iter().enumerate().map(|(i,witness)|json!({"branch":i,"stage":tasks[i].0,
+                    "mode":if witness.is_some(){"exact_response_reuse"}else{"fresh_generation"}})).collect::<Vec<_>>()})
+            );
+        }
         let mut provider_receipts = Value::Null;
         let result = if let Some(hosted) = &self.hosted {
             let attempts = std::thread::scope(|scope| {
                 let workers = prompts
                     .iter()
                     .zip(tasks)
-                    .map(|((prompt, max_tokens), (_, _, _, schema))| {
+                    .zip(cached)
+                    .map(|(((prompt, max_tokens), (_, _, _, schema)), cached)| {
                         let cancel = self.cancelled.clone();
-                        scope.spawn(move || hosted.generate(prompt, schema, *max_tokens, cancel))
+                        scope.spawn(move || {
+                            if let Some((result, _)) = cached {
+                                crate::hosted_gemma_eval::Attempt {
+                                    result: Ok(result),
+                                    receipt: Value::Null,
+                                }
+                            } else {
+                                hosted.generate(prompt, schema, *max_tokens, cancel)
+                            }
+                        })
                     })
                     .collect::<Vec<_>>();
                 workers
@@ -1690,12 +1859,13 @@ impl Runtime for Reader<'_> {
             )
             .map_err(|e| e.message)
         };
-        self.keep_call(
-            sequence,
-            json!({"request":request,"wall_ms":start.elapsed().as_millis(),
+        let mut call = json!({"request":request,"wall_ms":start.elapsed().as_millis(),
             "provider_receipts":provider_receipts,
-            "result":result.as_ref().map_err(String::as_str)}),
-        )?;
+            "result":result.as_ref().map_err(String::as_str)});
+        if self.response_memo.is_some() {
+            call["response_reuses"] = json!(response_reuses);
+        }
+        self.keep_call(sequence, call)?;
         result
     }
     fn publish(&self, session: &mut Session) -> Result<(), String> {
@@ -1989,6 +2159,7 @@ fn source_hashes(root: &Path) -> Result<BTreeMap<String, String>, String> {
     .collect();
     // This opt-in entry is compiled even when a local ignore rule hides it.
     names.insert("src-tauri/src/reading_neural_eval.rs".into());
+    names.insert("src-tauri/src/selected_stage_eval.rs".into());
     // Include this untracked runner during development, as well as any new
     // production source. Ignored build artifacts are excluded by Git.
     names.extend(
@@ -3191,6 +3362,18 @@ fn evaluate_case(
     if config.full_reading && config.initial_extractor_target.is_some() {
         return Err("A full reading cannot stop at an extractor component boundary".into());
     }
+    if config.response_memo.is_some()
+        && (!config.full_reading || config.hosted.is_none() || config.dispatcher.is_some())
+    {
+        return Err(
+            "Raw response memoization requires an explicit hosted full reading function".into(),
+        );
+    }
+    if config.selected_stage_target.is_some()
+        && (!config.full_reading || config.initial_extractor_target.is_some())
+    {
+        return Err("A selected reading stage requires real production input preparation".into());
+    }
     let case_dir = dir.join("cases").join(&case.id);
     fs::create_dir(&case_dir).map_err(|e| e.to_string())?;
     fs::create_dir(case_dir.join("calls")).map_err(|e| e.to_string())?;
@@ -3213,6 +3396,7 @@ fn evaluate_case(
     let reader = Reader {
         state,
         hosted: config.hosted.clone(),
+        response_memo: config.response_memo.clone(),
         dir: case_dir.clone(),
         cancelled,
         calls: Mutex::new(Vec::new()),
@@ -3225,6 +3409,7 @@ fn evaluate_case(
         group: config.group,
         program: config.program.clone(),
         initial_extractor_target: config.initial_extractor_target,
+        selected_stage_target: config.selected_stage_target,
     };
     let mut session = Session::default();
     if case.device_available {
@@ -3287,6 +3472,13 @@ fn evaluate_case(
         .follow_up
         .as_ref()
         .filter(|_| config.initial_extractor_target.is_none())
+        .filter(|_| {
+            config.selected_stage_target.is_none()
+                || !session.audit.iter().any(|event| {
+                    event["event"] == "selected_stage_boundary"
+                        || event["event"] == "selected_stage_uninvoked"
+                })
+        })
     {
         let bound_need = scripted_need_is_eligible(&case, &session);
         let proposal = proposal_is_eligible(&case, &first, &session);
@@ -3974,6 +4166,7 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
     let config = CaseRun {
         full_reading,
         initial_extractor_target: None,
+        selected_stage_target: None,
         seconds,
         max_calls,
         dispatcher: None,
@@ -3982,6 +4175,7 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         program,
         rubrics,
         hosted,
+        response_memo: None,
     };
     for (group_index, group) in cases.chunks(batch_size).enumerate() {
         progress.active_case_ids = group.iter().map(|case| case.id.clone()).collect();
@@ -4206,7 +4400,7 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     git(repository.path(), &["init", "--quiet"]).unwrap();
     fs::write(
         repository.path().join(".gitignore"),
-        "invariant-adversarial.json\nlocal-rubrics.json\nreading_neural_eval.rs\n",
+        "invariant-adversarial.json\nlocal-rubrics.json\nreading_neural_eval.rs\nselected_stage_eval.rs\n",
     )
     .unwrap();
     let directory = repository
@@ -4225,6 +4419,10 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
     fs::create_dir_all(reading_path.parent().unwrap()).unwrap();
     let reading_source = "// Synthetic compiled reading module\n";
     fs::write(&reading_path, reading_source).unwrap();
+    let selected_key = "src-tauri/src/selected_stage_eval.rs";
+    let selected_path = repository.path().join(selected_key);
+    let selected_source = "// Synthetic compiled selected stage module\n";
+    fs::write(&selected_path, selected_source).unwrap();
     let before = source_hashes(repository.path()).unwrap();
     let key = "src-tauri/test-fixtures/elicitation/invariant-adversarial.json";
     let rubric_key = "src-tauri/test-fixtures/readings/local-rubrics.json";
@@ -4238,6 +4436,15 @@ fn a_loaded_supplement_is_fingerprinted_even_when_git_ignores_it() {
         format!("{:x}", Sha256::digest(reading_source))
     );
     assert!(before.keys().all(|name| !name.contains('\\')));
+    assert_eq!(
+        before[selected_key],
+        format!("{:x}", Sha256::digest(selected_source))
+    );
+    fs::write(&selected_path, format!("{selected_source}// Changed\n")).unwrap();
+    assert_ne!(
+        before[selected_key],
+        source_hashes(repository.path()).unwrap()[selected_key]
+    );
     fs::write(
         directory.join("invariant-adversarial.json"),
         format!("{data}\n"),
@@ -4903,6 +5110,7 @@ fn real_model_classification_function() -> Result<(), String> {
     let reader = Reader {
         state: &state,
         hosted,
+        response_memo: None,
         dir: dir.clone(),
         cancelled,
         calls: Mutex::new(Vec::new()),
@@ -4915,6 +5123,7 @@ fn real_model_classification_function() -> Result<(), String> {
         group: None,
         program: program.map(Arc::new),
         initial_extractor_target: None,
+        selected_stage_target: None,
     };
     write_new(
         &dir.join("initial.json"),
@@ -5262,6 +5471,7 @@ fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
     let reader = Reader {
         state: &state,
         hosted: None,
+        response_memo: None,
         dir: directory.path().into(),
         cancelled: Arc::new(AtomicBool::new(false)),
         calls: Mutex::new(Vec::new()),
@@ -5274,6 +5484,7 @@ fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
         group: None,
         program: None,
         initial_extractor_target: None,
+        selected_stage_target: None,
     };
     let runtime = ClassificationReplayRuntime {
         reader: &reader,
@@ -6158,9 +6369,11 @@ fn real_model_input_journey_function() -> Result<(), String> {
         case.clone(),
         CaseRun {
             full_reading: false,
+            response_memo: None,
             initial_extractor_target: task
                 .initial_extractor_observation
                 .then_some(task.target_method),
+            selected_stage_target: None,
             seconds,
             max_calls,
             dispatcher: None,

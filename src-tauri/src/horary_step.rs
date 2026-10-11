@@ -408,7 +408,11 @@ pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &
         return schema;
     }
     if stage != Stage::Significators {
-        let data = horary_contract::schema_for(stage, matter, facts);
+        let data = if stage == Stage::Condition {
+            horary_contract::condition_schema(original_input(input), facts)
+        } else {
+            horary_contract::schema_for(stage, matter, facts)
+        };
         return if information_fields(stage).is_empty() {
             data
         } else {
@@ -718,8 +722,27 @@ pub fn check(
         return Ok(Checked::NeedsInput { request });
     }
     let input = original_input(input);
+    if stage == Stage::Condition {
+        if let Err(error) =
+            horary_contract::validate_shape(value, &horary_contract::condition_schema(input, facts))
+        {
+            let repair = condition_coverage(value, input, facts)
+                .err()
+                .unwrap_or_else(|| condition_repair_limits(input, facts));
+            return Err(format!("{error}\n{repair}"));
+        }
+    }
     if stage != Stage::Significators {
-        horary_contract::validate_for(stage, matter, value, facts)?;
+        horary_contract::validate_for(stage, matter, value, facts).map_err(|error| {
+            if stage == Stage::Condition {
+                let repair = condition_coverage(value, input, facts)
+                    .err()
+                    .unwrap_or_else(|| condition_repair_limits(input, facts));
+                format!("{error}\n{repair}")
+            } else {
+                error
+            }
+        })?;
     }
     if stage == Stage::Condition {
         condition_coverage(value, input, facts)?;
@@ -834,6 +857,7 @@ fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<()
         .iter()
         .filter_map(|role| role["planet"].as_str())
         .collect();
+    let mut missing = Vec::new();
     for planet in planets {
         for (facet, check) in [
             (ConditionFacet::Essential, "own_dignity"),
@@ -854,16 +878,37 @@ fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<()
             if !available.iter().any(|fact| {
                 cited.is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(fact.id.as_str())))
             }) {
-                let ids = available
+                let testimony = available
                     .iter()
-                    .map(|fact| fact.id.as_str())
+                    .map(|fact| format!("{}: {}", fact.id, fact.detail))
                     .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(format!("Condition review omits {planet} from {check}. Use its supplied native testimony ({ids}) in that check and assess each selected role. Preserve correctly sourced checks; repair this worksheet rather than asking the person for already supplied chart facts. Coverage does not require a positive state or event verdict."));
+                    .join("; ");
+                missing.push(format!("Condition review omits {planet} from {check}. Required native testimony (choose a supplied ID for this facet): {testimony}."));
             }
         }
     }
-    Ok(())
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{}\n{}\nPreserve correctly sourced checks and repair the whole rejected worksheet. Do not ask the person for already supplied chart facts. Coverage does not require a positive state or establish interpretation correctness.", missing.join("\n"), condition_repair_limits(input, facts)))
+    }
+}
+
+fn condition_repair_limits(input: &Value, facts: &[Fact]) -> String {
+    let contract = horary_contract::condition_schema(input, facts);
+    let limits = Stage::Condition
+        .checks()
+        .iter()
+        .map(|key| {
+            format!(
+                "{key}: {}",
+                contract["properties"]["checks"]["properties"][*key]["properties"]["evidence"]
+                    ["maxItems"]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("Allowed states: supported, contradicted, unestablished, not_relevant. Evidence maxima for this input ({limits}); use current IDs only. Optional supporting facts must fit these limits without replacing the required essential or house-capacity testimony.")
 }
 
 #[cfg(test)]

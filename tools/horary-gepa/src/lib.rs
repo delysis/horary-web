@@ -8,11 +8,13 @@ pub mod executable;
 pub mod fixed;
 pub mod initial_extractor;
 pub mod journal;
+pub mod memo;
 pub mod metric;
 pub mod native;
 pub mod reading;
 pub mod recovery;
 pub mod review;
+pub mod selected_stage;
 pub mod status;
 pub mod teacher;
 
@@ -279,6 +281,8 @@ pub struct Plan {
     pub recovery: Option<recovery::Recovery>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixed_program: Option<fixed::Source>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub exact_response_memoization: bool,
     pub guide: String,
     pub guide_sha256: String,
     pub seed: Candidate,
@@ -302,6 +306,9 @@ pub struct Plan {
     /// historical paid request/review identities and recovery semantics intact.
     #[serde(default, skip_serializing_if = "is_false")]
     pub initial_extractor_observation: bool,
+    /// An explicit fresh measurement stop; omission preserves legacy journals.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub selected_stage_observation: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_method: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -352,6 +359,15 @@ impl Plan {
             .collect())
     }
     pub fn validate(&self) -> Result<()> {
+        if self.selected_stage_observation
+            && (self.function != Function::ReadingJourney
+                || self.objective != Objective::SelectedStageReliability
+                || self.control_mode != ControlMode::FreshHosted
+                || self.initial_extractor_observation
+                || self.recovery.is_some())
+        {
+            return Err("Selected-stage observation requires an explicit fresh hosted reading component round".into());
+        }
         if self.initial_extractor_observation
             && (self.function != Function::InputJourney
                 || self.objective != Objective::ExtractorReliability
@@ -457,6 +473,7 @@ impl Plan {
         }
         self.reconstruct(&self.seed)?;
         fixed::validate_scope(self)?;
+        memo::validate(self)?;
         Ok(())
     }
 
@@ -647,6 +664,7 @@ impl Plan {
 }
 
 pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -> Result<Plan> {
+    memo::validate(&plan)?;
     if plan.function == Function::InputJourney && plan.objective == Objective::ExtractorReliability
     {
         plan.initial_extractor_observation = true;
@@ -871,7 +889,14 @@ impl Adapter {
         }
         for example in examples {
             let evaluation = native::evaluate(&self.plan, &mut self.journal, &example, candidate)?;
-            let independent = if self.plan.function == Function::ReadingJourney {
+            let independent = if self.plan.selected_stage_observation {
+                Some(selected_stage::evaluate(
+                    &self.plan,
+                    &mut self.journal,
+                    &example,
+                    &evaluation,
+                )?)
+            } else if self.plan.function == Function::ReadingJourney {
                 Some(reading::evaluate(
                     &self.plan,
                     &mut self.journal,
@@ -888,7 +913,14 @@ impl Adapter {
             } else {
                 None
             };
-            let feedback = if self.plan.function == Function::ReadingJourney {
+            let feedback = if self.plan.selected_stage_observation {
+                selected_stage::grade(
+                    &evaluation,
+                    independent
+                        .as_ref()
+                        .ok_or("Missing selected-stage review")?,
+                )?
+            } else if self.plan.function == Function::ReadingJourney {
                 reading::grade(
                     &evaluation,
                     independent.as_ref().ok_or("Missing reading review")?,
@@ -1130,6 +1162,7 @@ mod tests {
             codex_snapshot: None,
             recovery: None,
             fixed_program: None,
+            exact_response_memoization: false,
             guide_sha256: digest(&guide),
             guide,
             seed,
@@ -1148,6 +1181,7 @@ mod tests {
             function: Function::Classification,
             objective: Objective::WholeFunction,
             initial_extractor_observation: false,
+            selected_stage_observation: false,
             target_method: None,
             target_stage: None,
             max_review_calls: 0,
@@ -1169,6 +1203,26 @@ mod tests {
             .validate()
             .unwrap_err()
             .contains("Initial extractor observation"));
+    }
+    #[test]
+    fn selected_stage_flag_is_explicit_and_legacy_paid_plan_shape_is_unchanged() {
+        let old = serde_json::to_value(plan()).unwrap();
+        assert!(old.get("selected_stage_observation").is_none());
+        let decoded: Plan = serde_json::from_value(old.clone()).unwrap();
+        assert!(!decoded.selected_stage_observation);
+        assert_eq!(serde_json::to_value(decoded).unwrap(), old);
+        let mut bad = plan();
+        bad.selected_stage_observation = true;
+        assert!(bad
+            .validate()
+            .unwrap_err()
+            .contains("explicit fresh hosted"));
+        bad.function = Function::ReadingJourney;
+        bad.objective = Objective::SelectedStageReliability;
+        assert!(bad
+            .validate()
+            .unwrap_err()
+            .contains("explicit fresh hosted"));
     }
     #[test]
     fn component_search_preserves_quoted_source_and_actual_signature() {

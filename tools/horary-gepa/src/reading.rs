@@ -127,11 +127,12 @@ pub(crate) fn verify_settled_calls(directory: &Path) -> Result<u64> {
             continue;
         }
         let result = load(&path)?;
-        let request = load(
+        let request_bytes = read(
             &directory
                 .join("calls")
                 .join(name.replace("-result.json", "-request.json")),
         )?;
+        let request: Value = serde_json::from_slice(&request_bytes).map_err(|e| e.to_string())?;
         if request != result["request"] {
             return Err("Semantic negative lost a paired actual request".into());
         }
@@ -147,7 +148,7 @@ pub(crate) fn verify_settled_calls(directory: &Path) -> Result<u64> {
                 .get("Ok")
                 .ok_or("Unsettled reading call cannot be a semantic zero")?]
         };
-        let receipts = if result["provider_receipt"].is_object() {
+        let receipts = if !request["tasks"].is_array() {
             vec![&result["provider_receipt"]]
         } else {
             result["provider_receipts"]
@@ -159,7 +160,20 @@ pub(crate) fn verify_settled_calls(directory: &Path) -> Result<u64> {
         if outputs.len() != branches || receipts.len() != branches {
             return Err("Native batch witnesses are incomplete".into());
         }
-        for (output, receipt) in outputs.iter().zip(receipts) {
+        for (i, (output, receipt)) in outputs.iter().zip(receipts).enumerate() {
+            let branch = request["tasks"].is_array().then_some(i);
+            let reuse = branch.map_or(&result["response_reuse"], |i| &result["response_reuses"][i]);
+            if !reuse.is_null() {
+                if !receipt.is_null() {
+                    return Err("A reused response cannot claim a fresh provider receipt".into());
+                }
+                let signature = horary_prompt_program::response_memo::signature_from_request(
+                    &request_bytes,
+                    branch,
+                )?;
+                horary_prompt_program::response_memo::verify_reuse(reuse, &signature, output)?;
+                continue;
+            }
             if receipt["submitted"] != true
                 || receipt["provider"] != "google_gemini_api"
                 || receipt["response"]["http_status"] != 200
@@ -883,7 +897,9 @@ pub fn grade(evaluation: &Value, review: &Value) -> Result<crate::metric::Feedba
         || evaluation["outcome"]["follow_up_execution_completed"] == true
             && evaluation["outcome"]["follow_up_pass"] == true
             && conversation(&review["follow_up"]);
-    let qualified = evaluation["outcome"]["known_native_semantic_abort"] != true
+    let memoized = !evaluation["outcome"]["exact_response_memoization"].is_null();
+    let qualified = !memoized
+        && evaluation["outcome"]["known_native_semantic_abort"] != true
         && score == 2
         && native_inputs
         && native_reading
@@ -891,14 +907,23 @@ pub fn grade(evaluation: &Value, review: &Value) -> Result<crate::metric::Feedba
         && obligations
         && conversation(&review["first_turn"])
         && supplying;
-    Ok(crate::metric::Feedback {score:score as f64 / 2.0, qualified,
-        feedback:json!({"objective":"selected_stage_reliability","selected_stage_score":score,
+    let mut feedback = json!({"objective":"selected_stage_reliability","selected_stage_score":score,
             "independent_selected_stage_score":independent_score,"selected_native_rejection_exhausted":selected_abort,
             "whole_journey_gates":{"native_inputs":native_inputs,"native_completed_reading":native_reading,
                 "independent_pipeline":semantic,"source_obligations":obligations,
                 "first_conversation":conversation(&review["first_turn"]),"scripted_supplying_journey":supplying},
             "full_reading_review_pass":qualified,
-            "qualification":"Component merit is separate from full-journey/source gates; neither authorizes reserved, on-device or packaged promotion."}).to_string()})
+            "qualification":"Component merit is separate from full-journey/source gates; neither authorizes reserved, on-device or packaged promotion."});
+    if memoized {
+        feedback["exact_response_memoization"] =
+            evaluation["outcome"]["exact_response_memoization"].clone();
+        feedback["fresh_complete_journey_qualification"] = json!(false);
+    }
+    Ok(crate::metric::Feedback {
+        score: score as f64 / 2.0,
+        qualified,
+        feedback: feedback.to_string(),
+    })
 }
 
 pub fn evaluate(
@@ -1173,6 +1198,20 @@ mod tests {
         assert!(grade(&evaluation, &review).unwrap().qualified);
         review["pipeline"]["reading"]["score"] = json!(1);
         assert!(!grade(&evaluation, &review).unwrap().qualified);
+    }
+    #[test]
+    fn exact_response_component_merit_cannot_claim_fresh_journey_qualification() {
+        let mut evaluation = evaluation();
+        let original_review = review(&evaluation);
+        assert!(grade(&evaluation, &original_review).unwrap().qualified);
+        evaluation["outcome"]["exact_response_memoization"] =
+            json!({"reused_responses":3,"target_always_fresh":true});
+        let feedback = grade(&evaluation, &review(&evaluation)).unwrap();
+        assert_eq!(feedback.score, 1.0);
+        assert!(!feedback.qualified);
+        let report: Value = serde_json::from_str(&feedback.feedback).unwrap();
+        assert_eq!(report["fresh_complete_journey_qualification"], false);
+        assert_eq!(report["exact_response_memoization"]["reused_responses"], 3);
     }
     #[test]
     fn unobserved_stage_is_a_typed_stop_never_zero_or_a_gold_checkpoint() {

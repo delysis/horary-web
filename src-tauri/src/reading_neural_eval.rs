@@ -24,8 +24,12 @@ struct Task {
     fixed_program_file: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fixed_program_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    exact_response_memoization: Option<horary_prompt_program::response_memo::Pin>,
     #[serde(default)]
     inspect_prompt_only: bool,
+    #[serde(default, skip_serializing_if = "super::selected_stage::disabled")]
+    selected_stage_observation: bool,
 }
 
 fn reading_stage(stage: Stage) -> bool {
@@ -40,7 +44,7 @@ fn reading_stage(stage: Stage) -> bool {
     )
 }
 
-fn selected(request: &Value, branch: Option<usize>) -> Result<Value, String> {
+pub(super) fn selected(request: &Value, branch: Option<usize>) -> Result<Value, String> {
     if let Some(branch) = branch {
         let tasks = request["tasks"]
             .as_array()
@@ -222,7 +226,7 @@ fn fixed_source(task: &Task) -> Result<Option<(Vec<u8>, horary_prompt_program::P
     }
 }
 
-fn counts(calls: &[Value]) -> Result<(u64, u64), String> {
+pub(super) fn counts(calls: &[Value]) -> Result<(u64, u64), String> {
     let mut providers = 0u64;
     for call in calls {
         let request = &call["request"];
@@ -267,7 +271,7 @@ fn counts(calls: &[Value]) -> Result<(u64, u64), String> {
     Ok((calls.len() as u64, providers))
 }
 
-fn focused(calls: &[Value], stage: Stage, method: Method) -> Result<Vec<Value>, String> {
+pub(super) fn focused(calls: &[Value], stage: Stage, method: Method) -> Result<Vec<Value>, String> {
     let mut output = Vec::new();
     for call in calls {
         let request = &call["request"];
@@ -293,7 +297,7 @@ fn focused(calls: &[Value], stage: Stage, method: Method) -> Result<Vec<Value>, 
 
 /// A real production ReadyReading has no deserializer or public constructor.
 /// Require its audit witness too; a source capture cannot grant this permit.
-fn authentic_permit(snapshot: &Value, focused: &Value) -> bool {
+pub(super) fn authentic_permit(snapshot: &Value, focused: &Value) -> bool {
     let binding = &focused["binding"];
     binding.is_object()
         && snapshot["session"]["audit"]
@@ -319,15 +323,22 @@ pub(super) fn provider_responses_settled(calls: &[Value]) -> bool {
             } else {
                 vec![call["result"].get("Ok")?]
             };
-            let receipts = if call["provider_receipt"].is_object() {
-                vec![&call["provider_receipt"]]
-            } else {
+            let receipts = if call["request"]["tasks"].is_array() {
                 call["provider_receipts"].as_array()?.iter().collect()
+            } else {
+                vec![&call["provider_receipt"]]
             };
             if results.len() != expected || receipts.len() != expected {
                 return None;
             }
-            for (result, receipt) in results.iter().zip(receipts) {
+            for (i, (result, receipt)) in results.iter().zip(receipts).enumerate() {
+                let branch = call["request"]["tasks"].is_array().then_some(i);
+                if verified_reuse(call, branch, result).ok()? {
+                    if !receipt.is_null() {
+                        return None;
+                    }
+                    continue;
+                }
                 let attempts = receipt["generation_attempts"].as_array()?;
                 if receipt["submitted"] != true
                     || receipt["provider"] != "google_gemini_api"
@@ -406,6 +417,47 @@ pub(super) fn semantic_abort(
     )
 }
 
+fn apply_memo_accounting(
+    outcome: &mut Value,
+    task: &Task,
+    case_id: &str,
+    calls: &[Value],
+) -> Result<(), String> {
+    let (_, providers) = counts(calls)?;
+    if task.exact_response_memoization.is_some() {
+        let mut reused = 0u64;
+        for call in calls {
+            if call["request"]["memo_context"]["case_id"] != case_id
+                || call["request"]["memo_context"]["fixture_sha256"] != task.source_fixture_sha256
+                || call["request"]["memo_context"]["initial_sha256"] != task.source_initial_sha256
+            {
+                return Err(
+                    "Current memoized trace changed original case/device/clock provenance".into(),
+                );
+            }
+            let branches = call["request"]["tasks"].as_array().map_or(1, Vec::len);
+            for i in 0..branches {
+                let branch = call["request"]["tasks"].is_array().then_some(i);
+                let result = branch.map_or(&call["result"]["Ok"], |i| &call["result"]["Ok"][i]);
+                if verified_reuse(call, branch, result)? {
+                    if memo_signature(&call["request"], branch)?.stage == task.target_stage.name() {
+                        return Err("Mutable reading target or its repair was reused".into());
+                    }
+                    reused += 1;
+                }
+            }
+        }
+        let fresh = providers
+            .checked_sub(reused)
+            .ok_or("Memo reuse count exceeds actual neural invocations")?;
+        outcome["exact_response_memoization"] = json!({"version":horary_prompt_program::response_memo::VERSION,"inventory":task.exact_response_memoization,
+            "reused_responses":reused,"fresh_generation_requests":fresh,"logical_neural_function_invocations":providers,
+            "target_always_fresh":true,"source_states_or_permits_injected":false,"qualification":"Memoized component measurement; never fresh complete-journey qualification"});
+        outcome["model_calls"] = json!(fresh);
+    }
+    Ok(())
+}
+
 fn measurement(
     case: &Case,
     task: &Task,
@@ -444,6 +496,7 @@ fn measurement(
     outcome["captured_checkpoint_reused"] = json!(false);
     outcome["reading_semantic_review"] =
         json!("pending independent source-cited judgment; native completion is not correctness");
+    apply_memo_accounting(&mut outcome, task, &case.id, calls)?;
     let error = run_error
         .or(first["result"]["Err"].as_str())
         .or(final_state["follow_up"]["result"]["Err"].as_str());
@@ -476,6 +529,9 @@ fn real_model_reading_function() -> Result<(), String> {
     ))
     .map_err(|e| e.to_string())?;
     let task: Task = serde_json::from_slice(&task_bytes).map_err(|e| e.to_string())?;
+    if task.selected_stage_observation && task.inspect_prompt_only {
+        return Err("Selected-stage execution cannot be replaced by prompt-only inspection".into());
+    }
     let case = catalogue()?
         .into_iter()
         .find(|case| case.id == task.case_id)
@@ -565,6 +621,14 @@ fn real_model_reading_function() -> Result<(), String> {
         .transpose()
         .map_err(|e| e.to_string())?;
     let program = program(&task, program_bytes.as_deref())?;
+    let response_memo = task.exact_response_memoization.as_ref().map(|pin| {
+        let index:horary_prompt_program::response_memo::Index=serde_json::from_slice(&pin.bytes()?).map_err(|e|e.to_string())?;
+        if index.case_id!=case.id || index.fixture_sha256!=task.source_fixture_sha256
+            || index.initial_sha256!=task.source_initial_sha256 || index.excluded_stage!=task.target_stage.name() {
+            return Err("Memo inventory differs from the selected case, original fixture, initial context or mutable stage".into());
+        }
+        horary_prompt_program::response_memo::Memo::load(index).map(Arc::new)
+    }).transpose()?;
     let fixed = fixed_source(&task)?;
     let fixed_provenance = fixed.as_ref().map(|(_, original)| json!({
         "source_sha256":task.fixed_program_sha256,
@@ -588,6 +652,11 @@ fn real_model_reading_function() -> Result<(), String> {
     );
     fs::create_dir(&dir).map_err(|e| format!("Reading evidence must be fresh: {e}"))?;
     write_new(&dir.join("task.json"), &task)?;
+    if let Some(pin) = &task.exact_response_memoization {
+        atomic_evidence_file(&dir.join("response-memo-index.json"), true, |file| {
+            file.write_all(&pin.bytes()?).map_err(|e| e.to_string())
+        })?;
+    }
     for ((name, _, _), source) in source_files.iter().zip(&bytes) {
         atomic_evidence_file(&dir.join(name), true, |file| {
             file.write_all(source).map_err(|e| e.to_string())
@@ -661,6 +730,21 @@ fn real_model_reading_function() -> Result<(), String> {
     if let Some(provenance) = &fixed_provenance {
         manifest["fixed_program"] = provenance.clone();
     }
+    if let Some(pin) = &task.exact_response_memoization {
+        manifest["exact_response_memoization"] = json!({"version":horary_prompt_program::response_memo::VERSION,"inventory":pin,
+            "scope":"Exact-response component optimization, not fresh complete-journey qualification",
+            "target_always_fresh":task.target_stage,"excluded_sources":response_memo.as_ref().map(|m|&m.excluded),
+            "current_native_sources":manifest["sources"],"session_start":"Session::default; original fixture/device/clock; no accepted state injection"});
+    }
+    if task.selected_stage_observation {
+        manifest["selected_stage_observation"] = json!(true);
+        manifest["scope"] = json!("selected_stage_function_only");
+        manifest["full_reading"] = json!(false);
+        atomic_evidence_file(&dir.join("stage-source-index.json"), true, |file| {
+            file.write_all(include_bytes!("horary_prompts/passages.json"))
+                .map_err(|e| e.to_string())
+        })?;
+    }
     write_new(&dir.join("manifest.json"), &manifest)?;
     if let Some(source) = &program_bytes {
         atomic_evidence_file(&dir.join("prompt-program.json"), true, |file| {
@@ -677,6 +761,7 @@ fn real_model_reading_function() -> Result<(), String> {
         CaseRun {
             full_reading: true,
             initial_extractor_target: None,
+            selected_stage_target: task.selected_stage_observation.then_some(task.target_stage),
             seconds,
             max_calls,
             dispatcher: None,
@@ -685,6 +770,7 @@ fn real_model_reading_function() -> Result<(), String> {
             program: program.map(Arc::new),
             rubrics: Some(Arc::new(rubrics)),
             hosted: Some(hosted),
+            response_memo,
         },
     );
     let case_dir = dir.join("cases").join(&case.id);
@@ -708,15 +794,32 @@ fn real_model_reading_function() -> Result<(), String> {
         classification_source_bytes(&case_dir.join("initial.json"), &task.source_initial_sha256);
     let initial_verified = initial_check.is_ok();
     let run_error = run.as_ref().err().cloned().or_else(|| initial_check.err());
-    let mut outcome = measurement(
-        &case,
-        &task,
-        &raw,
-        (&first, &final_state),
-        &calls,
-        complete,
-        run_error.as_deref(),
-    )?;
+    let mut outcome = if task.selected_stage_observation {
+        let mut outcome = super::selected_stage::measurement(
+            (&case.id, task.target_stage, task.target_method),
+            &raw,
+            (&first, &final_state),
+            &calls,
+            complete,
+            run_error.as_deref(),
+        )?;
+        apply_memo_accounting(&mut outcome, &task, &case.id, &calls)?;
+        write_new(
+            &case_dir.join("selected-stage-observation.json"),
+            &outcome["selected_stage"],
+        )?;
+        outcome
+    } else {
+        measurement(
+            &case,
+            &task,
+            &raw,
+            (&first, &final_state),
+            &calls,
+            complete,
+            run_error.as_deref(),
+        )?
+    };
     outcome["fresh_initial_sha256_verified"] = json!(initial_verified);
     outcome["native_evidence_directory"] = json!(case_dir);
     outcome["physical_generation_attempt_reservation"] = json!(reservation);
@@ -727,7 +830,7 @@ fn real_model_reading_function() -> Result<(), String> {
         final_copy = json!({"session":null});
     }
     final_copy["scope"] = json!("reading_journey_function_only");
-    final_copy["full_reading"] = json!(true);
+    final_copy["full_reading"] = json!(!task.selected_stage_observation);
     final_copy["native_evidence_directory"] = json!(case_dir);
     write_new(&dir.join("final.json"), &final_copy)?;
     write_new(&dir.join("outcome.json"), &outcome)?;
@@ -860,8 +963,58 @@ fn synthetic_task() -> Task {
         program_file: None,
         fixed_program_file: None,
         fixed_program_sha256: None,
+        exact_response_memoization: None,
         inspect_prompt_only: false,
+        selected_stage_observation: false,
     }
+}
+
+#[test]
+fn selected_observer_retains_memo_context_and_fresh_call_accounting() {
+    let mut task = synthetic_task();
+    task.selected_stage_observation = true;
+    task.exact_response_memoization = Some(horary_prompt_program::response_memo::Pin {
+        file: PathBuf::from("/synthetic/immutable-response-index.json"),
+        sha256: horary_prompt_program::digest("offline inventory"),
+    });
+    let calls = vec![json!({"request":{"stage":"condition","memo_context":{
+        "case_id":task.case_id,"fixture_sha256":task.source_fixture_sha256,
+        "initial_sha256":task.source_initial_sha256}},"response_reuse":null,
+        "result":{"Ok":{"content":"A fresh synthetic response"}}})];
+    let mut observed = json!({"full_reading":false,"reading_semantic_review":"unobserved"});
+    apply_memo_accounting(&mut observed, &task, &task.case_id, &calls).unwrap();
+    assert_eq!(
+        observed["exact_response_memoization"]["reused_responses"],
+        0
+    );
+    assert_eq!(
+        observed["exact_response_memoization"]["fresh_generation_requests"],
+        1
+    );
+    assert_eq!(observed["model_calls"], 1);
+    assert_eq!(observed["full_reading"], false);
+    assert_eq!(observed["reading_semantic_review"], "unobserved");
+
+    let mut changed = calls;
+    changed[0]["request"]["memo_context"]["initial_sha256"] =
+        json!(horary_prompt_program::digest("different device or clock"));
+    assert!(apply_memo_accounting(&mut observed, &task, &task.case_id, &changed).is_err());
+}
+
+#[test]
+fn selected_stage_task_flag_omits_false_without_changing_legacy_paid_bytes() {
+    let task = synthetic_task();
+    let old = serde_json::to_value(&task).unwrap();
+    assert!(old.get("selected_stage_observation").is_none());
+    let decoded: Task = serde_json::from_value(old.clone()).unwrap();
+    assert!(!decoded.selected_stage_observation);
+    assert_eq!(serde_json::to_value(decoded).unwrap(), old);
+    let mut task = task;
+    task.selected_stage_observation = true;
+    assert_eq!(
+        serde_json::to_value(task).unwrap()["selected_stage_observation"],
+        true
+    );
 }
 
 #[test]
@@ -870,6 +1023,7 @@ fn legacy_reading_program_absence_keeps_exact_single_target_rule() {
     let encoded = serde_json::to_value(&task).unwrap();
     assert!(encoded.get("fixed_program_file").is_none());
     assert!(encoded.get("fixed_program_sha256").is_none());
+    assert!(encoded.get("exact_response_memoization").is_none());
     let decoded: Task = serde_json::from_value(encoded.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), encoded);
     assert!(program(&task, None).unwrap().is_none());

@@ -158,6 +158,168 @@ fn condition_coverage_seven_planets_fit_without_broadening_other_stage_contracts
         "summary":"Authored reception shape.","unknowns":[]});
     assert!(horary_contract::validate_shape(&reception, &schema).is_err());
 }
+
+#[test]
+fn condition_bundle_budget_includes_motion_solar_and_cusp_without_forcing_a_verdict() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let planets = ["Jupiter", "Mercury", "Moon", "Saturn"];
+    let (input, mut value, facts) = condition_fixture(&planets);
+    let supporting: Vec<_> = facts
+        .iter()
+        .filter(|fact| {
+            fact.planets
+                .iter()
+                .any(|planet| planets.contains(&planet.as_str()))
+                && (fact.kind == "position"
+                    || matches!(
+                        fact.condition_facet,
+                        Some(
+                            ConditionFacet::HouseCapacity
+                                | ConditionFacet::Solar
+                                | ConditionFacet::CuspAdvance
+                        )
+                    ))
+        })
+        .map(|fact| fact.id.clone())
+        .collect();
+    assert!(
+        supporting.len() > 7,
+        "This regression must cover the old evidence limit."
+    );
+    value["checks"]["ability_to_act"]["evidence"] = json!(supporting);
+    let schema = response_schema_for(Stage::Condition, Matter::Other, &input, &facts);
+    assert_eq!(
+        schema["oneOf"][0]["properties"]["checks"]["properties"]["ability_to_act"]["properties"]
+            ["evidence"]["maxItems"],
+        supporting.len()
+    );
+    assert!(matches!(
+        check(Stage::Condition, Matter::Other, &value, &input, &facts).unwrap(),
+        Checked::Data(_)
+    ));
+    // These assertions qualify native coverage, never the authored finding.
+    let house = facts
+        .iter()
+        .find(|fact| {
+            fact.planets == ["Jupiter"]
+                && fact.condition_facet == Some(ConditionFacet::HouseCapacity)
+        })
+        .unwrap();
+    value["checks"]["ability_to_act"]["evidence"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|id| id != &house.id);
+    assert!(
+        check(Stage::Condition, Matter::Other, &value, &input, &facts)
+            .err()
+            .unwrap()
+            .contains("omits Jupiter from ability_to_act")
+    );
+}
+
+#[test]
+fn condition_repair_reports_all_missing_native_facets_and_limits_together() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, mut value, facts) = condition_fixture(&["Jupiter", "Mercury", "Mercury"]);
+    value["checks"]["own_dignity"]["evidence"] = json!([]);
+    value["checks"]["ability_to_act"]["evidence"] = json!([]);
+    let error = check(Stage::Condition, Matter::Work, &value, &input, &facts)
+        .err()
+        .unwrap();
+    for planet in ["Jupiter", "Mercury"] {
+        for (facet, key) in [
+            (ConditionFacet::Essential, "own_dignity"),
+            (ConditionFacet::HouseCapacity, "ability_to_act"),
+        ] {
+            assert_eq!(
+                error.matches(&format!("omits {planet} from {key}")).count(),
+                1,
+                "Shared roles must not duplicate the requirement."
+            );
+            let fact = facts
+                .iter()
+                .find(|fact| fact.planets == [planet] && fact.condition_facet == Some(facet))
+                .unwrap();
+            assert!(
+                error.contains(&format!("{}: {}", fact.id, fact.detail)),
+                "Feedback must use literal current native testimony."
+            );
+        }
+    }
+    assert!(error.contains("Allowed states: supported, contradicted, unestablished, not_relevant"));
+    assert!(error.contains("Evidence maxima for this input"));
+    // A schema-valid positive check with no IDs fails a different native
+    // guard; that early rejection must still carry the complete checklist.
+    value["checks"]["own_dignity"]["state"] = json!("supported");
+    let positive_error = check(Stage::Condition, Matter::Work, &value, &input, &facts)
+        .err()
+        .unwrap();
+    assert!(positive_error.contains("needs supplied evidence"));
+    assert!(positive_error.contains("omits Mercury from own_dignity"));
+    assert!(positive_error.contains("omits Jupiter from ability_to_act"));
+    assert!(positive_error.contains("Evidence maxima for this input"));
+    value["checks"]["own_dignity"]["state"] = json!("mixed");
+    let shape_error = check(Stage::Condition, Matter::Work, &value, &input, &facts)
+        .err()
+        .unwrap();
+    assert!(shape_error.contains("unexpected value \"mixed\""));
+    assert!(shape_error.contains("omits Mercury from own_dignity"));
+    assert!(shape_error.contains("omits Jupiter from ability_to_act"));
+}
+
+#[test]
+fn condition_budget_follows_original_selected_roles_and_missing_calculations() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, _, facts) = condition_fixture(&["Mercury", "Mercury"]);
+    let budget = |input: &Value, facts: &[Fact]| {
+        response_schema_for(Stage::Condition, Matter::Other, input, facts)["oneOf"][0]["properties"]
+            ["checks"]["properties"]["own_dignity"]["properties"]["evidence"]["maxItems"]
+            .as_u64()
+            .unwrap()
+    };
+    assert_eq!(budget(&input, &facts), 2);
+    let repair = json!({"original_input":input,"previous_worksheet":{"question":{"roles":[{"planet":"Saturn"}]}}});
+    assert_eq!(
+        budget(&repair, &facts),
+        2,
+        "A rejected proposal cannot change the budget's roles."
+    );
+    let mut missing = facts.clone();
+    missing.retain(|fact| {
+        !(fact.planets == ["Mercury"] && fact.condition_facet == Some(ConditionFacet::Essential))
+    });
+    assert_eq!(
+        budget(&repair, &missing),
+        1,
+        "Missing native calculations provide no invented evidence capacity."
+    );
+    let mut duplicated = facts.clone();
+    duplicated.extend(facts.clone());
+    assert_eq!(budget(&repair, &duplicated), 2);
+}
+
+#[test]
+fn condition_larger_budget_keeps_current_id_and_shape_guards() {
+    let (input, mut value, facts) = condition_fixture(&["Jupiter", "Mercury", "Moon", "Saturn"]);
+    value["checks"]["ability_to_act"]["evidence"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("invented-fact"));
+    assert!(check(Stage::Condition, Matter::Other, &value, &input, &facts).is_err());
+    let (_, mut value, _) = condition_fixture(&["Jupiter", "Mercury", "Moon", "Saturn"]);
+    let schema = horary_contract::condition_schema(&input, &facts);
+    let limit = schema["properties"]["checks"]["properties"]["ability_to_act"]["properties"]
+        ["evidence"]["maxItems"]
+        .as_u64()
+        .unwrap() as usize;
+    value["checks"]["ability_to_act"]["evidence"] = json!(vec![facts[0].id.clone(); limit + 1]);
+    assert!(
+        check(Stage::Condition, Matter::Other, &value, &input, &facts)
+            .err()
+            .unwrap()
+            .contains(&format!("maximum is {limit}"))
+    );
+}
 fn permit(marker: &str) -> CheckedData {
     let options = crate::horary_role_options::build(
         Matter::Work,

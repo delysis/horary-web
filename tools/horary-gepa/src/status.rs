@@ -285,6 +285,14 @@ pub fn inspect(root: &Path) -> Result<Value> {
                     errors.push(error);
                 }
             }
+            if plan["selected_stage_observation"] == true && kind == Some("reading_journey") {
+                let check = serde_json::from_value::<crate::Plan>(plan.clone())
+                    .map_err(|e| e.to_string())
+                    .and_then(|p| crate::selected_stage::verify_observation(&p, &settled.response));
+                if let Err(error) = check {
+                    errors.push(error);
+                }
+            }
             if settled.artifacts.contains("cache-source.json") {
                 let source = load(&ordinary_path(&directory, "cache-source.json")?)?;
                 if source["type"] == "predecessor_import" {

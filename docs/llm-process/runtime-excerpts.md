@@ -84,6 +84,16 @@ pub trait Runtime: Sync {
     fn initial_extractor_sequence(&self) -> Option<u64> {
         None
     }
+    /// Measurement-only stop at a real accepted-input reading stage. No
+    /// production caller or full-journey campaign enables this test hook.
+    #[cfg(test)]
+    fn selected_stage_target(&self) -> Option<Stage> {
+        None
+    }
+    #[cfg(test)]
+    fn selected_stage_sequence(&self) -> Option<u64> {
+        None
+    }
     fn device_location(&self) -> Result<Option<LocationCandidate>, String> {
         Ok(None)
     }
@@ -716,7 +726,15 @@ pub fn run(
     previous: &Session,
 ) -> Result<(), String> {
     let result = run_inner(session, runtime, geocode, instant, audio, previous).and_then(|()| {
-        if session.method.brief.intent != "pause" {
+        let speak = session.method.brief.intent != "pause";
+        #[cfg(test)]
+        let speak = speak
+            && !(runtime.selected_stage_target().is_some()
+                && session.audit.iter().any(|event| {
+                    event["event"] == "selected_stage_boundary"
+                        || event["event"] == "selected_stage_uninvoked"
+                }));
+        if speak {
             crate::horary_conversation::respond(session, runtime)?;
         }
         Ok(())
@@ -1415,6 +1433,10 @@ fn generate_reading(
         roles.clone(),
     );
     runtime.publish(session)?;
+    #[cfg(test)]
+    if runtime.selected_stage_target() == Some(Stage::Significators) {
+        return selected_stage_boundary(session, runtime, &ready, Stage::Significators);
+    }
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
     let events = contact_evidence(&all, &roles);
@@ -1448,6 +1470,30 @@ fn generate_reading(
             json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"facts":positions}),
             positions.clone(),
         ));
+    }
+    #[cfg(test)]
+    if let Some(target) = runtime.selected_stage_target().filter(|stage| {
+        matches!(
+            stage,
+            Stage::Condition | Stage::Reception | Stage::Contacts | Stage::Location
+        )
+    }) {
+        if let Some((stage, input, facts)) = tasks.iter().find(|(stage, _, _)| *stage == target) {
+            // Use the existing production tuple and guard. Unrun siblings are
+            // absent, never represented by fabricated successful worksheets.
+            if let Some(data) = task(session, runtime, *stage, input.clone(), facts)? {
+                section(session, *stage, data.worksheet(), facts, Vec::new());
+                return selected_stage_boundary(session, runtime, &ready, *stage);
+            }
+            return Ok(());
+        }
+        // This method does not invoke the selected stage (e.g. Location on a
+        // non-lost question). Do not manufacture authority or run other actors.
+        session.audit.push(
+            json!({"event":"selected_stage_uninvoked","target_stage":target,
+            "reason":"The real method does not dispatch this independent stage"}),
+        );
+        return runtime.publish(session);
     }
     let values = execute_batch(session, runtime, &tasks)?;
     for ((stage, _, facts), value) in tasks.iter().zip(&values) {
@@ -1507,6 +1553,10 @@ fn generate_reading(
             .as_ref()
             .expect("Consultation installed"),
     )?;
+    #[cfg(test)]
+    if runtime.selected_stage_target() == Some(Stage::Judgment) {
+        return selected_stage_boundary(session, runtime, &ready, Stage::Judgment);
+    }
     let answer = judgment.worksheet();
     session.method.result = Some(contracts::ReadingResult::Judgment {
         binding: ready.binding().clone(),
@@ -1529,6 +1579,52 @@ fn generate_reading(
         Vec::new(),
     );
     Ok(())
+}
+
+/// Acceptance is emitted only after the production guard completed its native
+/// job, with the same current ReadyReading. The evaluator cannot create this
+/// permit from a captured specialist request.
+#[cfg(test)]
+fn selected_stage_boundary(
+    session: &mut Session,
+    runtime: &impl Runtime,
+    ready: &crate::reading_contracts::ReadyReading,
+    stage: Stage,
+) -> Result<(), String> {
+    ready.validate_current(
+        session
+            .method
+            .consultation
+            .as_ref()
+            .ok_or("No current consultation")?,
+    )?;
+    let index = session
+        .method
+        .records
+        .len()
+        .checked_sub(1)
+        .ok_or("No accepted stage record")?;
+    let record = &session.method.records[index];
+    if record.stage != stage
+        || record.revision != session.revision
+        || record.validation_error.is_some()
+    {
+        return Err("Selected stage boundary is not its actual accepted native record".into());
+    }
+    let jobs = session.method.flow.jobs.iter().filter(|job| {
+        job.stage == stage && job.revision == session.revision
+            && matches!(job.phase(), step::Phase::Complete { record_index } if *record_index == index)
+    }).collect::<Vec<_>>();
+    if jobs.len() != 1 {
+        return Err("Selected stage boundary lacks its unique completed native job".into());
+    }
+    session.audit.push(json!({"event":"selected_stage_boundary","version":1,
+        "target_stage":stage,"binding":ready.binding(),"reading_request":ready.input(),
+        "revision":session.revision,"after_message":session.messages.len(),"record_index":index,
+        "record_input_sha256":record.input_sha256,"native_job":jobs[0],"work_key":jobs[0].key,
+        "last_sequence":runtime.selected_stage_sequence().ok_or("No actual selected-stage call sequence")?,
+        "reading_delivered":false,"post_boundary_conversation_executed":false}));
+    runtime.publish(session)
 }
 
 #[cfg(test)]
@@ -2114,6 +2210,331 @@ mod tests {
                 "Will I get married in the next year?"
             );
             assert_eq!(fixture["chartMomentMs"], 1789387200000.);
+        }
+    }
+}
+
+#[cfg(test)]
+mod selected_stage_execution_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    };
+    struct Reader {
+        dir: tempfile::TempDir,
+        target: Option<Stage>,
+        calls: Mutex<Vec<(Stage, Value, Value)>>,
+        reject_first: AtomicBool,
+    }
+    impl Runtime for Reader {
+        fn selected_stage_target(&self) -> Option<Stage> {
+            self.target
+        }
+        fn selected_stage_sequence(&self) -> Option<u64> {
+            Some(self.calls.lock().unwrap().len() as u64)
+        }
+        fn device_location(&self) -> Result<Option<LocationCandidate>, String> {
+            Ok(Some(place()))
+        }
+        fn generate(
+            &self,
+            stage: Stage,
+            _matter: Matter,
+            input: &Value,
+            schema: &Value,
+            _audio: Option<&[u8]>,
+        ) -> Result<NativeGenerationResult, String> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((stage, input.clone(), schema.clone()));
+            let original = step::original_input(input);
+            let answer = match stage {
+                Stage::Conversation => {
+                    return Err("Unchanged conversation callback intentionally fails".into())
+                }
+                Stage::Intake if original["recognition_phase"] == "complete_selected_program" => {
+                    json!({
+                    "intent":"clarify","question":null,"frame":null,"people":[],
+                    "subject":{"name":"Prospective partner","kind":"person","owner_id":"","source_quote":"Will I get married in the next year?"},
+                    "updates":[{"field":"baseline","value":"hoped_for","quote":"Will I get married in the next year?","mode":"supply"},
+                        {"field":"horizon","value":"within the next year","quote":"in the next year","mode":"supply"}],
+                    "heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+                }
+                Stage::Intake => {
+                    json!({"intent":"read","question":"Will I get married in the next year?",
+                    "frame":{"method":"relationship","facet":"event"},"people":[],"subject":null,"updates":[],
+                    "heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+                }
+                Stage::Significators => {
+                    json!({"selections":[{"id":"querent.self","reason":"Synthetic person asking"},
+                    {"id":"subject.primary","reason":"Synthetic prospective partner"},
+                    {"id":"moon.contextual","reason":"Synthetic contextual Moon role"}],
+                    "summary":"Offline execution fixture, no interpretation claim","unknowns":[]})
+                }
+                Stage::Place => {
+                    json!({"mode":"select","place_id":"device","query":"","clarification":"","basis":"Actual synthetic device candidate"})
+                }
+                _ => {
+                    let mut checks = serde_json::Map::new();
+                    for key in stage.checks() {
+                        checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Offline mechanics only"}));
+                    }
+                    let mut value = json!({"checks":checks,"summary":"Offline mechanics only; no source-correct reading claimed","unknowns":[]});
+                    if stage == Stage::Condition {
+                        for (facet, key) in [
+                            ("essential", "own_dignity"),
+                            ("house_capacity", "ability_to_act"),
+                        ] {
+                            let ids = original["facts"]
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .filter(|fact| fact["condition_facet"] == facet)
+                                .map(|fact| fact["id"].clone())
+                                .collect::<Vec<_>>();
+                            value["checks"][key]["evidence"] = json!(ids);
+                        }
+                        if self.reject_first.swap(false, Ordering::AcqRel) {
+                            value["checks"]["ability_to_act"]["evidence"] = json!([]);
+                        }
+                    }
+                    if stage == Stage::Contacts {
+                        value["basis"] = json!("no_candidate_covered");
+                        value["candidate_ids"] = json!([]);
+                        value["candidate_signs"] = json!([]);
+                    }
+                    if stage == Stage::Judgment {
+                        value["verdict"] = json!("unresolved");
+                        value["answer"] = json!("Offline mechanics fixture only");
+                        value["evidence"] = json!([]);
+                        let boundary = original["facts"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .find(|f| f["kind"] == "boundary")
+                            .unwrap();
+                        value["checks"]["scope_of_answer"]["evidence"] = json!([boundary["id"]]);
+                    }
+                    value
+                }
+            };
+            Ok(NativeGenerationResult {
+                content: answer.to_string(),
+                prompt_tokens: 0,
+                generated_tokens: 0,
+                elapsed_ms: 0,
+                total_wall_ms: None,
+                batch_size: None,
+                lesson_bank_hit: None,
+                lesson_prepare_ms: None,
+                tokens_per_second: 0.,
+                prompt_cache_hit: false,
+                cached_prompt_tokens: 0,
+                prefilled_prompt_tokens: 0,
+                first_token_ms: None,
+                cold_cache_bytes: None,
+            })
+        }
+        fn generate_batch(
+            &self,
+            tasks: &[(Stage, Matter, Value, Value)],
+        ) -> Result<Vec<NativeGenerationResult>, String> {
+            tasks
+                .iter()
+                .map(|(stage, matter, input, schema)| {
+                    self.generate(*stage, *matter, input, schema, None)
+                })
+                .collect()
+        }
+        fn publish(&self, _session: &mut Session) -> Result<(), String> {
+            Ok(())
+        }
+        fn check(&self) -> Result<(), String> {
+            if self.calls.lock().unwrap().len() > 24 {
+                Err("Offline fixture exceeded native guard attempts".into())
+            } else {
+                Ok(())
+            }
+        }
+        fn directory(&self) -> &Path {
+            self.dir.path()
+        }
+    }
+    fn place() -> LocationCandidate {
+        LocationCandidate {
+            id: "device".into(),
+            label: "Synthetic device place".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        }
+    }
+    fn execute(target: Option<Stage>, reject_first: bool) -> (Session, Reader, Result<(), String>) {
+        let reader = Reader {
+            dir: tempfile::tempdir().unwrap(),
+            target,
+            calls: Mutex::new(vec![]),
+            reject_first: AtomicBool::new(reject_first),
+        };
+        let mut session = Session::default();
+        session.messages.push(Message {
+            role: "user".into(),
+            text: "Will I get married in the next year?".into(),
+        });
+        session.candidates.push(place());
+        session.device_context = Some(crate::conversation::DeviceContext {
+            timezone: "America/New_York".into(),
+            locale: "en-US".into(),
+            latitude: Some(38.657),
+            longitude: Some(-77.249),
+            accuracy_meters: Some(30.),
+        });
+        let previous = session.clone();
+        let result = run(
+            &mut session,
+            &reader,
+            &GeocodeState::default(),
+            1791388800000.,
+            None,
+            &previous,
+        );
+        (session, reader, result)
+    }
+    #[test]
+    fn actual_original_question_stops_before_failing_guru_and_independent_siblings() {
+        let (session, reader, result) = execute(Some(Stage::Condition), false);
+        result.unwrap();
+        let calls = reader.calls.lock().unwrap();
+        assert!(session.chart.is_some());
+        assert!(calls.iter().any(|(s, _, _)| *s == Stage::Intake));
+        assert!(calls.iter().any(|(s, _, _)| *s == Stage::Significators));
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|(s, _, _)| *s == Stage::Condition)
+                .count(),
+            1
+        );
+        assert!(!calls.iter().any(|(s, _, _)| matches!(
+            s,
+            Stage::Reception | Stage::Contacts | Stage::Judgment | Stage::Conversation
+        )));
+        assert!(session.method.result.is_none());
+        assert!(session
+            .audit
+            .iter()
+            .any(|e| e["event"] == "selected_stage_boundary"));
+        drop(calls);
+        let (_, reader, result) = execute(None, false);
+        assert_eq!(
+            result.unwrap_err(),
+            "Unchanged conversation callback intentionally fails"
+        );
+        assert!(reader
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(s, _, _)| *s == Stage::Conversation));
+    }
+    #[test]
+    fn actual_rejected_then_repaired_condition_has_original_job_and_effective_guide() {
+        let (session, reader, result) = execute(Some(Stage::Condition), true);
+        result.unwrap();
+        let calls = reader.calls.lock().unwrap();
+        let attempts = calls
+            .iter()
+            .filter(|(s, _, _)| *s == Stage::Condition)
+            .collect::<Vec<_>>();
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(step::original_input(&attempts[1].1), &attempts[0].1);
+        let boundary = session
+            .audit
+            .iter()
+            .find(|e| e["event"] == "selected_stage_boundary")
+            .unwrap();
+        let records = session
+            .method
+            .records
+            .iter()
+            .filter(|r| r.stage == Stage::Condition)
+            .collect::<Vec<_>>();
+        assert!(records[0].validation_error.is_some());
+        assert!(records[1].validation_error.is_none());
+        assert_eq!(
+            attempts[1].1["native_validation_error"],
+            json!(records[0].validation_error.as_ref().unwrap())
+        );
+        assert_eq!(
+            boundary["native_job"]["inputSha256"],
+            records[0].input_sha256
+        );
+        assert_eq!(boundary["native_job"]["phase"]["state"], "complete");
+        assert_eq!(boundary["record_input_sha256"], records[1].input_sha256);
+        assert_eq!(
+            records[1].guide_sha256,
+            crate::horary_lessons::digest(
+                &reader
+                    .guide_for(Stage::Condition, Matter::Relationship, &attempts[1].1)
+                    .unwrap()
+            )
+        );
+    }
+    #[test]
+    fn non_applicable_location_does_not_invent_execution_or_call_guru() {
+        let (session, reader, result) = execute(Some(Stage::Location), false);
+        result.unwrap();
+        assert!(!session
+            .audit
+            .iter()
+            .any(|e| e["event"] == "selected_stage_boundary"));
+        assert!(session
+            .audit
+            .iter()
+            .any(|e| e["event"] == "selected_stage_uninvoked"));
+        assert!(!reader
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(s, _, _)| matches!(s, Stage::Location | Stage::Conversation | Stage::Judgment)));
+    }
+    #[test]
+    fn significators_and_judgment_stop_only_after_their_actual_native_acceptance() {
+        for target in [Stage::Significators, Stage::Judgment] {
+            let (session, reader, result) = execute(Some(target), false);
+            result.unwrap();
+            let boundary = session
+                .audit
+                .iter()
+                .find(|e| e["event"] == "selected_stage_boundary")
+                .unwrap();
+            assert_eq!(boundary["target_stage"], json!(target));
+            assert_eq!(session.method.records.last().unwrap().stage, target);
+            assert!(session
+                .method
+                .records
+                .last()
+                .unwrap()
+                .validation_error
+                .is_none());
+            assert!(session.method.result.is_none());
+            let calls = reader.calls.lock().unwrap();
+            assert!(!calls
+                .iter()
+                .any(|(stage, _, _)| *stage == Stage::Conversation));
+            if target == Stage::Significators {
+                assert!(!calls.iter().any(|(stage, _, _)| *stage == Stage::Condition));
+            } else {
+                for stage in [Stage::Condition, Stage::Reception, Stage::Contacts] {
+                    assert!(calls.iter().any(|(actual, _, _)| *actual == stage));
+                }
+            }
         }
     }
 }
@@ -3576,9 +3997,7 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
     let evidence = if ids.is_empty() {
         list(text(1), 0)
     } else {
-        // Seven selected traditional planets must fit the shared condition
-        // coverage checks; other stage contracts retain their existing cap.
-        list(choice(&ids), if stage == Stage::Condition { 7 } else { 6 })
+        list(choice(&ids), 6)
     };
     match stage {
         Stage::Intake => crate::reading_contracts::turn_schema(None),
@@ -3595,7 +4014,14 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
         _ => {
             let mut checks = serde_json::Map::new();
             for key in stage.checks() {
-                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":{"type":"string","minLength":1,"maxLength":220,"description":"A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."}})));
+                let check_evidence = if stage == Stage::Condition {
+                    let mut contract = evidence.clone();
+                    contract["maxItems"] = json!(condition_evidence_budget(key, None, facts));
+                    contract
+                } else {
+                    evidence.clone()
+                };
+                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":check_evidence,"finding":{"type":"string","minLength":1,"maxLength":220,"description":"A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."}})));
             }
             let mut fields = serde_json::Map::from_iter([
                 ("checks".into(), object(Value::Object(checks))),
@@ -3666,6 +4092,85 @@ pub fn schema_for(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
     contract
 }
 
+/// Condition evidence is a bundle of native tests per planet, not one ID per
+/// planet. Its budget follows the supplied categories for the selected roles.
+/// The ID allowlist and the other stages' contracts remain unchanged.
+pub(crate) fn condition_schema(input: &Value, facts: &[Fact]) -> Value {
+    let mut contract = schema(Stage::Condition, facts);
+    let roles = input
+        .get("roles")
+        .or_else(|| input["question"].get("roles"))
+        .and_then(Value::as_array);
+    let planets: std::collections::BTreeSet<_> = roles
+        .into_iter()
+        .flatten()
+        .filter_map(|role| role["planet"].as_str())
+        .collect();
+    for key in Stage::Condition.checks() {
+        contract["properties"]["checks"]["properties"][*key]["properties"]["evidence"]
+            ["maxItems"] = json!(condition_evidence_budget(key, Some(&planets), facts));
+    }
+    contract
+}
+
+fn condition_evidence_budget(
+    check: &str,
+    selected: Option<&std::collections::BTreeSet<&str>>,
+    facts: &[Fact],
+) -> usize {
+    use horary_ai_core::book_method::ConditionFacet;
+    const PLANETS: [&str; 7] = [
+        "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+    ];
+    let eligible = |fact: &&Fact| {
+        let selected_planet = fact.planets.iter().any(|planet| {
+            PLANETS.contains(&planet.as_str())
+                && selected.is_none_or(|planets| planets.contains(planet.as_str()))
+        });
+        let position = fact.kind == "position";
+        let facet = (fact.kind == "condition")
+            .then_some(fact.condition_facet)
+            .flatten();
+        selected_planet
+            && match check {
+                "own_dignity" => position || facet == Some(ConditionFacet::Essential),
+                "ability_to_act" => {
+                    position
+                        || matches!(
+                            facet,
+                            Some(
+                                ConditionFacet::HouseCapacity
+                                    | ConditionFacet::Solar
+                                    | ConditionFacet::CuspAdvance
+                            )
+                        )
+                }
+                "context_exceptions" => {
+                    position || facet.is_some() || fact.kind == "moon" || fact.kind == "condition"
+                }
+                _ => false,
+            }
+            || check == "context_exceptions" && fact.kind == "boundary"
+    };
+    let supplied = facts
+        .iter()
+        .filter(eligible)
+        .map(|fact| fact.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    // Each traditional body supplies one position and at most four typed
+    // condition facets. Context additionally has a lunar-gap/status fact and
+    // the calculation boundary. Neither repeated roles nor duplicate IDs
+    // increase the budget, and missing calculations add no capacity.
+    let maximum = match check {
+        "own_dignity" => PLANETS.len() * 2,
+        "ability_to_act" => PLANETS.len() * 4,
+        "context_exceptions" => PLANETS.len() * 5 + 3,
+        _ => 0,
+    };
+    supplied.min(maximum)
+}
+
 pub fn prompt(
     stage: Stage,
     matter: Matter,
@@ -3699,14 +4204,15 @@ fn prompt_with_guide(input: &Value, schema: &Value, fixed: String) -> String {
         // Present repair as a rejected answer followed by native feedback.
         // Keeping the bad worksheet beside accepted input in one example-like
         // JSON object encouraged small models to copy the same mistake.
+        // The complete contract is already in the first user message. Repeating
+        // it in the correction can push a valid repair over the request budget.
         return json!([
             {"role":"system","content":fixed},
             {"role":"user","content":json!({"input":crate::horary_step::original_input(input),"worksheet_contract":schema}).to_string()},
             {"role":"assistant","content":input["previous_worksheet"].to_string()},
             {"role":"user","content":json!({
                 "native_validation_error":input["native_validation_error"],
-                "instruction":"Your preceding answer was REJECTED. None of its proposed changes were saved. Produce the complete corrected object using the original input and the output contract. Make the specific correction requested by the native validation error; do not repeat the forbidden entry. Do not change the person's question or ask them to correct your output.",
-                "worksheet_contract":schema
+                "instruction":"Your preceding answer was REJECTED. None of its proposed changes were saved. Produce the complete corrected object using the original input and the output contract. Make the specific correction requested by the native validation error; do not repeat the forbidden entry. Do not change the person's question or ask them to correct your output."
             }).to_string()}
         ]).to_string();
     }
@@ -3758,6 +4264,102 @@ fn base_guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String,
         guide.push_str(&crate::reading_contracts::method_guide(method));
     }
     Ok(guide)
+}
+
+#[cfg(test)]
+mod repair_message_tests {
+    use super::*;
+
+    fn captured_repair() -> (Value, Value, Value, Stage, Matter) {
+        let capture: Value = serde_json::from_str(include_str!(
+            "../test-fixtures/training-judgment-repair-messages.json"
+        ))
+        .unwrap();
+        let messages = &capture["legacy_messages"];
+        let first: Value = serde_json::from_str(messages[1]["content"].as_str().unwrap()).unwrap();
+        let feedback: Value =
+            serde_json::from_str(messages[3]["content"].as_str().unwrap()).unwrap();
+        let rejected: Value =
+            serde_json::from_str(messages[2]["content"].as_str().unwrap()).unwrap();
+        let input = json!({"original_input":first["input"],"previous_worksheet":rejected,
+            "native_validation_error":feedback["native_validation_error"],
+            "instruction":capture["native_repair_instruction"]});
+        let schema = first["worksheet_contract"].clone();
+        let stage = serde_json::from_value(capture["stage"].clone()).unwrap();
+        let matter = serde_json::from_value(capture["matter"].clone()).unwrap();
+        (capture, input, schema, stage, matter)
+    }
+
+    #[test]
+    fn captured_judgment_repair_keeps_all_evidence_with_one_complete_schema() {
+        let (capture, input, schema, stage, matter) = captured_repair();
+        let legacy = &capture["legacy_messages"];
+        let actual: Value =
+            serde_json::from_str(&prompt(stage, matter, &input, &schema).unwrap()).unwrap();
+        assert_eq!(actual.as_array().unwrap().len(), 4);
+        // Exact message bytes preserve the source guide, original chart/context
+        // and rejected answer; only the duplicate corrective schema is removed.
+        assert_eq!(
+            &actual.as_array().unwrap()[..3],
+            &legacy.as_array().unwrap()[..3]
+        );
+        let first: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(first["input"], input["original_input"]);
+        assert_eq!(first["worksheet_contract"], schema);
+        let rejected: Value = serde_json::from_str(actual[2]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(rejected, input["previous_worksheet"]);
+        let correction: Value =
+            serde_json::from_str(actual[3]["content"].as_str().unwrap()).unwrap();
+        let mut original_correction: Value =
+            serde_json::from_str(legacy[3]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(original_correction["worksheet_contract"], schema);
+        original_correction
+            .as_object_mut()
+            .unwrap()
+            .remove("worksheet_contract");
+        assert_eq!(correction, original_correction);
+        assert_eq!(
+            correction["native_validation_error"],
+            input["native_validation_error"]
+        );
+        let schema_copies = actual
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|message| message["role"] == "user")
+            .map(|message| {
+                serde_json::from_str::<Value>(message["content"].as_str().unwrap()).unwrap()
+            })
+            .filter(|body| body.get("worksheet_contract").is_some())
+            .count();
+        assert_eq!(schema_copies, 1);
+        assert_eq!(
+            legacy[3]["content"].as_str().unwrap().len()
+                - actual[3]["content"].as_str().unwrap().len(),
+            capture["expected_removed_model_text_utf8_bytes"]
+                .as_u64()
+                .unwrap() as usize
+        );
+        assert_eq!(
+            legacy.to_string().len() - actual.to_string().len(),
+            capture["expected_removed_serialized_prompt_utf8_bytes"]
+                .as_u64()
+                .unwrap() as usize
+        );
+    }
+
+    #[test]
+    fn captured_original_judgment_prompt_is_byte_identical_before_repair() {
+        let (capture, repair, schema, stage, matter) = captured_repair();
+        let actual: Value = serde_json::from_str(
+            &prompt(stage, matter, &repair["original_input"], &schema).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            actual.as_array().unwrap(),
+            &capture["legacy_messages"].as_array().unwrap()[..2]
+        );
+    }
 }
 
 #[cfg(test)]
@@ -5494,7 +6096,11 @@ pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &
         return schema;
     }
     if stage != Stage::Significators {
-        let data = horary_contract::schema_for(stage, matter, facts);
+        let data = if stage == Stage::Condition {
+            horary_contract::condition_schema(original_input(input), facts)
+        } else {
+            horary_contract::schema_for(stage, matter, facts)
+        };
         return if information_fields(stage).is_empty() {
             data
         } else {
@@ -5804,8 +6410,27 @@ pub fn check(
         return Ok(Checked::NeedsInput { request });
     }
     let input = original_input(input);
+    if stage == Stage::Condition {
+        if let Err(error) =
+            horary_contract::validate_shape(value, &horary_contract::condition_schema(input, facts))
+        {
+            let repair = condition_coverage(value, input, facts)
+                .err()
+                .unwrap_or_else(|| condition_repair_limits(input, facts));
+            return Err(format!("{error}\n{repair}"));
+        }
+    }
     if stage != Stage::Significators {
-        horary_contract::validate_for(stage, matter, value, facts)?;
+        horary_contract::validate_for(stage, matter, value, facts).map_err(|error| {
+            if stage == Stage::Condition {
+                let repair = condition_coverage(value, input, facts)
+                    .err()
+                    .unwrap_or_else(|| condition_repair_limits(input, facts));
+                format!("{error}\n{repair}")
+            } else {
+                error
+            }
+        })?;
     }
     if stage == Stage::Condition {
         condition_coverage(value, input, facts)?;
@@ -5920,6 +6545,7 @@ fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<()
         .iter()
         .filter_map(|role| role["planet"].as_str())
         .collect();
+    let mut missing = Vec::new();
     for planet in planets {
         for (facet, check) in [
             (ConditionFacet::Essential, "own_dignity"),
@@ -5940,16 +6566,37 @@ fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<()
             if !available.iter().any(|fact| {
                 cited.is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(fact.id.as_str())))
             }) {
-                let ids = available
+                let testimony = available
                     .iter()
-                    .map(|fact| fact.id.as_str())
+                    .map(|fact| format!("{}: {}", fact.id, fact.detail))
                     .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(format!("Condition review omits {planet} from {check}. Use its supplied native testimony ({ids}) in that check and assess each selected role. Preserve correctly sourced checks; repair this worksheet rather than asking the person for already supplied chart facts. Coverage does not require a positive state or event verdict."));
+                    .join("; ");
+                missing.push(format!("Condition review omits {planet} from {check}. Required native testimony (choose a supplied ID for this facet): {testimony}."));
             }
         }
     }
-    Ok(())
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{}\n{}\nPreserve correctly sourced checks and repair the whole rejected worksheet. Do not ask the person for already supplied chart facts. Coverage does not require a positive state or establish interpretation correctness.", missing.join("\n"), condition_repair_limits(input, facts)))
+    }
+}
+
+fn condition_repair_limits(input: &Value, facts: &[Fact]) -> String {
+    let contract = horary_contract::condition_schema(input, facts);
+    let limits = Stage::Condition
+        .checks()
+        .iter()
+        .map(|key| {
+            format!(
+                "{key}: {}",
+                contract["properties"]["checks"]["properties"][*key]["properties"]["evidence"]
+                    ["maxItems"]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("Allowed states: supported, contradicted, unestablished, not_relevant. Evidence maxima for this input ({limits}); use current IDs only. Optional supporting facts must fit these limits without replacing the required essential or house-capacity testimony.")
 }
 
 #[cfg(test)]

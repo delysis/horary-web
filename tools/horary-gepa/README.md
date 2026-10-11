@@ -167,3 +167,25 @@ cargo clippy --manifest-path tools/horary-gepa/Cargo.toml --locked --all-targets
 ```
 
 Ordinary tests use no credentials or models. They check real pinned-engine selection, source-preserving candidate assembly, train/development/reserved separation, immutable recovery, hard reservations, incomplete-journey boundaries and noncompensating semantic gates. Native classifier regressions separately check real executor acceptance, wrong/missing gold labels, capture tampering and logical-versus-physical call limits.
+
+Reading-stage searches may explicitly prepare with `--exact-response-memoization`
+in fresh-hosted mode. Each native invocation still starts a new session from its
+original synthetic words, device and clock. Only original, settled raw responses
+from sealed same-case corpus/control operations can be reused when the actual
+messages, schema, input, model/decoding and wire request match. Exact numeric
+tokens are retained across native/tool JSON parsers. Changed requests miss and
+use the bounded fresh provider path; the editable stage and every repair always
+generate afresh. Mixed analysis branches preserve order and up-to-four scheduling.
+Native acceptance, repairs, chart construction and permits run again.
+
+The per-invocation inventory is sealed execution evidence, separate from the
+stable logical request identity. Later completed same-case operations can provide
+new witnesses for subsequent invocations; the earliest original witness wins.
+Failed native answers remain failed/repaired when reused; uncertain provider
+attempts and already-reused receipts cannot seed another raw response. Traces
+keep source ancestry/provider receipts separately from current fresh attempts,
+and conservative reservations are retained. Reflection receives only the current
+training case's actually used evidence. Reserved/private cases stay excluded.
+Memoized component results are never fresh complete-journey qualification:
+the separate verification pair and acceptance campaigns require no cache.
+Omitting this flag preserves older serialized plans/tasks and paid identities.

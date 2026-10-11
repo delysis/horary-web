@@ -491,7 +491,7 @@ fn retain_service_attempts(
 
 /// Preserve message roles and every repair turn. No expected values or rubric
 /// are introduced when translating the app's prompt to Google's wire format.
-fn wire_request(prompt: &str, schema: &Value, max_tokens: u32) -> Result<Value, String> {
+pub(crate) fn wire_request(prompt: &str, schema: &Value, max_tokens: u32) -> Result<Value, String> {
     let messages: Value = serde_json::from_str(prompt).map_err(|e| e.to_string())?;
     let messages = messages
         .as_array()
@@ -644,6 +644,84 @@ fn token_pacing_reserves_parallel_calls_and_releases_only_expired_windows() {
     assert!(window
         .reserve(start + Duration::from_secs(61), 14_001)
         .is_err());
+}
+
+#[test]
+fn captured_oversized_repair_stays_unsubmitted_without_reservation_or_retry() {
+    let capture: Value = serde_json::from_str(include_str!(
+        "../test-fixtures/training-judgment-repair-messages.json"
+    ))
+    .unwrap();
+    let budget = u32::try_from(capture["configured_input_budget"].as_u64().unwrap()).unwrap();
+    let tokens = u32::try_from(
+        capture["recorded_input_token_counts"]["repair"]
+            .as_u64()
+            .unwrap(),
+    )
+    .unwrap();
+    let mut window = TokenWindow::new(budget);
+    let attempts = retain_service_attempts(
+        || match window.enqueue(tokens) {
+            Err(error) => (false, Err(error)),
+            Ok(_) => panic!("A single counted request cannot be amortized across quota windows"),
+        },
+        |_| panic!("An oversized unsubmitted request must not receive an HTTP retry"),
+    );
+    assert_eq!(
+        attempts.final_response.unwrap_err(),
+        capture["observed_oversized_error"].as_str().unwrap()
+    );
+    assert_eq!(attempts.receipts.len(), 1);
+    assert_eq!(attempts.receipts[0]["submitted"], false);
+    assert!(attempts.receipts[0].get("http_status").is_none());
+    assert!(window.waiting.is_empty());
+    assert!(window.reservations.is_empty());
+    assert_eq!(window.next_ticket, 0);
+    // Elapsed time does not turn a request above the true admission budget
+    // into a valid single request. The duplicate must be removed instead.
+    assert!(window
+        .reserve(Instant::now() + Duration::from_secs(61), tokens)
+        .is_err());
+    assert!(window.reservations.is_empty());
+}
+
+#[test]
+fn captured_large_valid_request_waits_for_the_full_previous_window() {
+    let capture: Value = serde_json::from_str(include_str!(
+        "../test-fixtures/training-judgment-repair-messages.json"
+    ))
+    .unwrap();
+    let budget = u32::try_from(capture["configured_input_budget"].as_u64().unwrap()).unwrap();
+    let tokens = u32::try_from(
+        capture["recorded_input_token_counts"]["initial"]
+            .as_u64()
+            .unwrap(),
+    )
+    .unwrap();
+    let mut window = TokenWindow::new(budget);
+    let start = Instant::now();
+    let first = window.enqueue(tokens).unwrap();
+    assert_eq!(window.reserve_ticket(start, first).unwrap(), None);
+    let next = window.enqueue(tokens).unwrap();
+    assert_eq!(
+        window.reserve_ticket(start, next).unwrap(),
+        Some(Duration::from_secs(61))
+    );
+    assert_eq!(
+        window
+            .reserve_ticket(start + Duration::from_secs(60), next)
+            .unwrap(),
+        Some(Duration::from_secs(1))
+    );
+    assert_eq!(
+        window
+            .reserve_ticket(start + Duration::from_secs(61), next)
+            .unwrap(),
+        None
+    );
+    assert!(window.waiting.is_empty());
+    assert_eq!(window.reservations.len(), 1);
+    assert_eq!(window.reservations[0].1, tokens);
 }
 
 #[test]

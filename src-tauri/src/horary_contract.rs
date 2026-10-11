@@ -60,9 +60,7 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
     let evidence = if ids.is_empty() {
         list(text(1), 0)
     } else {
-        // Seven selected traditional planets must fit the shared condition
-        // coverage checks; other stage contracts retain their existing cap.
-        list(choice(&ids), if stage == Stage::Condition { 7 } else { 6 })
+        list(choice(&ids), 6)
     };
     match stage {
         Stage::Intake => crate::reading_contracts::turn_schema(None),
@@ -79,7 +77,14 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
         _ => {
             let mut checks = serde_json::Map::new();
             for key in stage.checks() {
-                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":evidence,"finding":{"type":"string","minLength":1,"maxLength":220,"description":"A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."}})));
+                let check_evidence = if stage == Stage::Condition {
+                    let mut contract = evidence.clone();
+                    contract["maxItems"] = json!(condition_evidence_budget(key, None, facts));
+                    contract
+                } else {
+                    evidence.clone()
+                };
+                checks.insert((*key).into(), object(json!({"state":choice(&["supported","contradicted","unestablished","not_relevant"]),"evidence":check_evidence,"finding":{"type":"string","minLength":1,"maxLength":220,"description":"A brief nonempty explanation, including why a check is not relevant or unestablished. An empty string cannot finish a check."}})));
             }
             let mut fields = serde_json::Map::from_iter([
                 ("checks".into(), object(Value::Object(checks))),
@@ -150,6 +155,85 @@ pub fn schema_for(stage: Stage, matter: Matter, facts: &[Fact]) -> Value {
     contract
 }
 
+/// Condition evidence is a bundle of native tests per planet, not one ID per
+/// planet. Its budget follows the supplied categories for the selected roles.
+/// The ID allowlist and the other stages' contracts remain unchanged.
+pub(crate) fn condition_schema(input: &Value, facts: &[Fact]) -> Value {
+    let mut contract = schema(Stage::Condition, facts);
+    let roles = input
+        .get("roles")
+        .or_else(|| input["question"].get("roles"))
+        .and_then(Value::as_array);
+    let planets: std::collections::BTreeSet<_> = roles
+        .into_iter()
+        .flatten()
+        .filter_map(|role| role["planet"].as_str())
+        .collect();
+    for key in Stage::Condition.checks() {
+        contract["properties"]["checks"]["properties"][*key]["properties"]["evidence"]
+            ["maxItems"] = json!(condition_evidence_budget(key, Some(&planets), facts));
+    }
+    contract
+}
+
+fn condition_evidence_budget(
+    check: &str,
+    selected: Option<&std::collections::BTreeSet<&str>>,
+    facts: &[Fact],
+) -> usize {
+    use horary_ai_core::book_method::ConditionFacet;
+    const PLANETS: [&str; 7] = [
+        "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+    ];
+    let eligible = |fact: &&Fact| {
+        let selected_planet = fact.planets.iter().any(|planet| {
+            PLANETS.contains(&planet.as_str())
+                && selected.is_none_or(|planets| planets.contains(planet.as_str()))
+        });
+        let position = fact.kind == "position";
+        let facet = (fact.kind == "condition")
+            .then_some(fact.condition_facet)
+            .flatten();
+        selected_planet
+            && match check {
+                "own_dignity" => position || facet == Some(ConditionFacet::Essential),
+                "ability_to_act" => {
+                    position
+                        || matches!(
+                            facet,
+                            Some(
+                                ConditionFacet::HouseCapacity
+                                    | ConditionFacet::Solar
+                                    | ConditionFacet::CuspAdvance
+                            )
+                        )
+                }
+                "context_exceptions" => {
+                    position || facet.is_some() || fact.kind == "moon" || fact.kind == "condition"
+                }
+                _ => false,
+            }
+            || check == "context_exceptions" && fact.kind == "boundary"
+    };
+    let supplied = facts
+        .iter()
+        .filter(eligible)
+        .map(|fact| fact.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    // Each traditional body supplies one position and at most four typed
+    // condition facets. Context additionally has a lunar-gap/status fact and
+    // the calculation boundary. Neither repeated roles nor duplicate IDs
+    // increase the budget, and missing calculations add no capacity.
+    let maximum = match check {
+        "own_dignity" => PLANETS.len() * 2,
+        "ability_to_act" => PLANETS.len() * 4,
+        "context_exceptions" => PLANETS.len() * 5 + 3,
+        _ => 0,
+    };
+    supplied.min(maximum)
+}
+
 pub fn prompt(
     stage: Stage,
     matter: Matter,
@@ -183,14 +267,15 @@ fn prompt_with_guide(input: &Value, schema: &Value, fixed: String) -> String {
         // Present repair as a rejected answer followed by native feedback.
         // Keeping the bad worksheet beside accepted input in one example-like
         // JSON object encouraged small models to copy the same mistake.
+        // The complete contract is already in the first user message. Repeating
+        // it in the correction can push a valid repair over the request budget.
         return json!([
             {"role":"system","content":fixed},
             {"role":"user","content":json!({"input":crate::horary_step::original_input(input),"worksheet_contract":schema}).to_string()},
             {"role":"assistant","content":input["previous_worksheet"].to_string()},
             {"role":"user","content":json!({
                 "native_validation_error":input["native_validation_error"],
-                "instruction":"Your preceding answer was REJECTED. None of its proposed changes were saved. Produce the complete corrected object using the original input and the output contract. Make the specific correction requested by the native validation error; do not repeat the forbidden entry. Do not change the person's question or ask them to correct your output.",
-                "worksheet_contract":schema
+                "instruction":"Your preceding answer was REJECTED. None of its proposed changes were saved. Produce the complete corrected object using the original input and the output contract. Make the specific correction requested by the native validation error; do not repeat the forbidden entry. Do not change the person's question or ask them to correct your output."
             }).to_string()}
         ]).to_string();
     }
@@ -242,6 +327,102 @@ fn base_guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String,
         guide.push_str(&crate::reading_contracts::method_guide(method));
     }
     Ok(guide)
+}
+
+#[cfg(test)]
+mod repair_message_tests {
+    use super::*;
+
+    fn captured_repair() -> (Value, Value, Value, Stage, Matter) {
+        let capture: Value = serde_json::from_str(include_str!(
+            "../test-fixtures/training-judgment-repair-messages.json"
+        ))
+        .unwrap();
+        let messages = &capture["legacy_messages"];
+        let first: Value = serde_json::from_str(messages[1]["content"].as_str().unwrap()).unwrap();
+        let feedback: Value =
+            serde_json::from_str(messages[3]["content"].as_str().unwrap()).unwrap();
+        let rejected: Value =
+            serde_json::from_str(messages[2]["content"].as_str().unwrap()).unwrap();
+        let input = json!({"original_input":first["input"],"previous_worksheet":rejected,
+            "native_validation_error":feedback["native_validation_error"],
+            "instruction":capture["native_repair_instruction"]});
+        let schema = first["worksheet_contract"].clone();
+        let stage = serde_json::from_value(capture["stage"].clone()).unwrap();
+        let matter = serde_json::from_value(capture["matter"].clone()).unwrap();
+        (capture, input, schema, stage, matter)
+    }
+
+    #[test]
+    fn captured_judgment_repair_keeps_all_evidence_with_one_complete_schema() {
+        let (capture, input, schema, stage, matter) = captured_repair();
+        let legacy = &capture["legacy_messages"];
+        let actual: Value =
+            serde_json::from_str(&prompt(stage, matter, &input, &schema).unwrap()).unwrap();
+        assert_eq!(actual.as_array().unwrap().len(), 4);
+        // Exact message bytes preserve the source guide, original chart/context
+        // and rejected answer; only the duplicate corrective schema is removed.
+        assert_eq!(
+            &actual.as_array().unwrap()[..3],
+            &legacy.as_array().unwrap()[..3]
+        );
+        let first: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(first["input"], input["original_input"]);
+        assert_eq!(first["worksheet_contract"], schema);
+        let rejected: Value = serde_json::from_str(actual[2]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(rejected, input["previous_worksheet"]);
+        let correction: Value =
+            serde_json::from_str(actual[3]["content"].as_str().unwrap()).unwrap();
+        let mut original_correction: Value =
+            serde_json::from_str(legacy[3]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(original_correction["worksheet_contract"], schema);
+        original_correction
+            .as_object_mut()
+            .unwrap()
+            .remove("worksheet_contract");
+        assert_eq!(correction, original_correction);
+        assert_eq!(
+            correction["native_validation_error"],
+            input["native_validation_error"]
+        );
+        let schema_copies = actual
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|message| message["role"] == "user")
+            .map(|message| {
+                serde_json::from_str::<Value>(message["content"].as_str().unwrap()).unwrap()
+            })
+            .filter(|body| body.get("worksheet_contract").is_some())
+            .count();
+        assert_eq!(schema_copies, 1);
+        assert_eq!(
+            legacy[3]["content"].as_str().unwrap().len()
+                - actual[3]["content"].as_str().unwrap().len(),
+            capture["expected_removed_model_text_utf8_bytes"]
+                .as_u64()
+                .unwrap() as usize
+        );
+        assert_eq!(
+            legacy.to_string().len() - actual.to_string().len(),
+            capture["expected_removed_serialized_prompt_utf8_bytes"]
+                .as_u64()
+                .unwrap() as usize
+        );
+    }
+
+    #[test]
+    fn captured_original_judgment_prompt_is_byte_identical_before_repair() {
+        let (capture, repair, schema, stage, matter) = captured_repair();
+        let actual: Value = serde_json::from_str(
+            &prompt(stage, matter, &repair["original_input"], &schema).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            actual.as_array().unwrap(),
+            &capture["legacy_messages"].as_array().unwrap()[..2]
+        );
+    }
 }
 
 #[cfg(test)]

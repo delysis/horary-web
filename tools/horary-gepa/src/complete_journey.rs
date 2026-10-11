@@ -269,6 +269,7 @@ fn same_pair(baseline: &Side, candidate: &Side) -> Result<Vec<String>> {
         if manifest["full_reading"] != true
             || manifest["entry_point"] != "horary_pipeline::run"
             || manifest["expected_answers_sent_to_model"] != false
+            || !manifest["exact_response_memoization"].is_null()
         {
             return Err("Verification requires actual full production journeys with no gold supplied to the model".into());
         }
@@ -313,6 +314,13 @@ fn calls(side: &Side, id: &str) -> Result<Vec<Value>> {
         let result = load(&directory.join("calls").join(&result_name))?;
         if result["request"] != request {
             return Err("Native request/result identity changed".into());
+        }
+        if !result["response_reuse"].is_null()
+            || result["response_reuses"]
+                .as_array()
+                .is_some_and(|entries| entries.iter().any(|entry| !entry.is_null()))
+        {
+            return Err("Complete-journey qualification requires fresh generation, without exact-response reuse".into());
         }
         let branches = request["tasks"].as_array().map_or(1, Vec::len);
         for branch in 0..branches {
@@ -1532,6 +1540,34 @@ mod tests {
         assert!(source_coverage(&covered, &program())
             .unwrap_err()
             .contains("unique pinned"));
+    }
+
+    #[test]
+    fn exact_response_memoization_never_qualifies_a_fresh_complete_pair() {
+        let fixture = Fixture::new();
+        let plan = fixture.prepare();
+        for side in [&plan.baseline, &plan.candidate] {
+            let file = side.campaign.join("manifest.json");
+            let original = read(&file).unwrap();
+            let mut manifest = load(&file).unwrap();
+            manifest["exact_response_memoization"] = json!({"reused_responses":0});
+            write(&file, &manifest);
+            assert!(same_pair(&plan.baseline, &plan.candidate).is_err());
+            fs::write(&file, original).unwrap();
+        }
+        let result_file = plan
+            .candidate
+            .campaign
+            .join("cases/a/calls/0001-result.json");
+        let original = read(&result_file).unwrap();
+        let mut result = load(&result_file).unwrap();
+        result["response_reuse"] = json!({"source":"a settled original"});
+        write(&result_file, &result);
+        assert!(calls(&plan.candidate, "a")
+            .unwrap_err()
+            .contains("fresh generation"));
+        fs::write(&result_file, original).unwrap();
+        assert!(calls(&plan.candidate, "a").is_ok());
     }
 
     fn unobserved_body(packet: &Packet) -> Value {
