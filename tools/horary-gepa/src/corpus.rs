@@ -7,7 +7,10 @@
 //! native_executable_sha256 and automatic_resubmission=false. Exit fields are
 //! campaign, the same PIDs, submitted_sha256, native_exit_code and
 //! automatic_resubmission=false. Native exit 101 is valid only with the native
-//! completed marker, all selected outcomes and fully settled provider calls.
+//! completed marker and all selected outcomes. Paid generations must be fully
+//! settled. One exact terminal intake quota-wait cancellation before submission may be
+//! retained as infrastructure-unobserved fixture/prompt provenance only, with
+//! archived answer replay explicitly forbidden; it is never a semantic result.
 //!
 //! Before sealing, the launcher writes a CORPUS_VERSION closure with campaign,
 //! submitted_sha256, owner_exit_sha256, native_executable and its SHA256,
@@ -37,6 +40,8 @@ const KIND: &str = "fresh_owned_native_hosted";
 const MODEL: &str = "gemma-4-26b-a4b-it";
 const SEMANTIC_STOP: &str =
     "Synthetic case call budget exhausted; no successful completion implied";
+const QUOTA_CANCELLED: &str =
+    "Hosted request cancelled while waiting for token quota; no generation submitted";
 type Hashes = BTreeMap<String, String>;
 
 #[derive(Deserialize)]
@@ -173,11 +178,14 @@ fn safe_id(id: &str) -> bool {
 // Native hashes compact serialized typed fixtures/rubrics before pretty writing
 // them. Remove only JSON whitespace, retaining native key order and string bytes.
 fn compact_hash(path: &Path) -> Result<String> {
-    let bytes = read(path)?;
-    let _: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    compact_native_hash(&read(path)?)
+}
+
+fn compact_native_hash(bytes: &[u8]) -> Result<String> {
+    let _: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
     let (mut quoted, mut escaped) = (false, false);
     let mut compact = Vec::with_capacity(bytes.len());
-    for byte in bytes {
+    for &byte in bytes {
         if quoted || !byte.is_ascii_whitespace() {
             compact.push(byte);
         }
@@ -190,6 +198,96 @@ fn compact_hash(path: &Path) -> Result<String> {
         }
     }
     Ok(digest(compact))
+}
+
+/// Preserve the native producer's object order and floating-number spelling.
+/// The native application enables preserve_order/float_roundtrip; loading its
+/// input into the controller's Value and serializing it can change the digest.
+/// This small scanner selects a root field from already validated JSON bytes,
+/// without normalizing values or changing any captured artifact.
+fn native_root_field_hash(path: &Path, field: &str) -> Result<String> {
+    fn whitespace(bytes: &[u8], mut index: usize) -> usize {
+        while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
+            index += 1;
+        }
+        index
+    }
+    fn end(bytes: &[u8], start: usize) -> Result<usize> {
+        let mut quoted = false;
+        let mut escaped = false;
+        let mut depth = 0usize;
+        let compound = matches!(bytes.get(start), Some(b'{' | b'['));
+        for (offset, &byte) in bytes[start..].iter().enumerate() {
+            let index = start + offset;
+            if quoted {
+                if escaped {
+                    escaped = false;
+                } else if byte == b'\\' {
+                    escaped = true;
+                } else if byte == b'"' {
+                    quoted = false;
+                    if !compound {
+                        return Ok(index + 1);
+                    }
+                }
+                continue;
+            }
+            match byte {
+                b'"' => quoted = true,
+                b'{' | b'[' if compound => depth += 1,
+                b'}' | b']' if compound => {
+                    depth = depth.checked_sub(1).ok_or("Invalid native JSON depth")?;
+                    if depth == 0 {
+                        return Ok(index + 1);
+                    }
+                }
+                b',' | b'}' if !compound => return Ok(index),
+                byte if !compound && byte.is_ascii_whitespace() => return Ok(index),
+                _ => {}
+            }
+        }
+        Err("Unterminated native JSON field".into())
+    }
+    let bytes = read(path)?;
+    let _: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let mut index = whitespace(&bytes, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return Err("Native request is not a root object".into());
+    }
+    index += 1;
+    let mut keys = BTreeSet::new();
+    let mut selected = None;
+    loop {
+        index = whitespace(&bytes, index);
+        if bytes.get(index) == Some(&b'}') {
+            break;
+        }
+        if bytes.get(index) != Some(&b'"') {
+            return Err("Invalid native root-field key".into());
+        }
+        let key_end = end(&bytes, index)?;
+        let key: String =
+            serde_json::from_slice(&bytes[index..key_end]).map_err(|e| e.to_string())?;
+        if !keys.insert(key.clone()) {
+            return Err("Duplicate native request root field".into());
+        }
+        index = whitespace(&bytes, key_end);
+        if bytes.get(index) != Some(&b':') {
+            return Err("Invalid native root-field delimiter".into());
+        }
+        let start = whitespace(&bytes, index + 1);
+        let value_end = end(&bytes, start)?;
+        if key == field {
+            selected = Some(compact_native_hash(&bytes[start..value_end])?);
+        }
+        index = whitespace(&bytes, value_end);
+        if bytes.get(index) == Some(&b',') {
+            index += 1;
+        } else if bytes.get(index) != Some(&b'}') {
+            return Err("Invalid native root-field separator".into());
+        }
+    }
+    selected.ok_or_else(|| format!("Native request lacks root field {field}"))
 }
 
 fn wire(prompt: &Value, config: &Value) -> Result<Value> {
@@ -230,7 +328,68 @@ fn wire(prompt: &Value, config: &Value) -> Result<Value> {
     Ok(json!({"systemInstruction":{"parts":system},"contents":contents,"generationConfig":config}))
 }
 
-fn settled_calls(directory: &Path, manifest: &Value, outcome: &Value) -> Result<usize> {
+fn quota_not_submitted(request: &Value, result: &Value, sequence: u64) -> Result<Value> {
+    let receipt = &result["provider_receipt"];
+    let attempts = receipt["generation_attempts"]
+        .as_array()
+        .filter(|attempts| attempts.len() == 1)
+        .ok_or("Quota cancellation has ambiguous attempts")?;
+    let attempt = &attempts[0];
+    if sequence <= 1
+        || request.get("tasks").is_some()
+        || request["stage"] != "intake"
+        || !result["provider_receipts"].is_null()
+        || result["result"] != json!({"Err":QUOTA_CANCELLED})
+        || receipt["provider"] != "google_gemini_api"
+        || receipt["model"] != MODEL
+        || receipt["submitted"] != false
+        || receipt["http_wall_ms"] != 0
+        || receipt["queue_ms"].as_u64().is_none()
+        || receipt
+            .as_object()
+            .map(|r| r.keys().map(String::as_str).collect::<BTreeSet<_>>())
+            != Some(BTreeSet::from([
+                "provider",
+                "model",
+                "request",
+                "submitted",
+                "queue_ms",
+                "http_wall_ms",
+                "response",
+                "generation_attempts",
+                "token_count_response",
+                "reserved_input_tokens",
+                "native_result",
+            ]))
+        || receipt["native_result"] != result["result"]
+        || receipt["request"] != wire(&request["prompt"], &receipt["request"]["generationConfig"])?
+        || receipt["response"] != json!({"transport_error":QUOTA_CANCELLED})
+        || receipt["token_count_response"]["http_status"] != 200
+        || receipt["token_count_response"]["body"]["totalTokens"]
+            .as_u64()
+            .is_none_or(|n| n == 0)
+        || receipt["reserved_input_tokens"]
+            != receipt["token_count_response"]["body"]["totalTokens"]
+        || attempt["attempt"] != 1
+        || attempt["submitted"] != false
+        || attempt["error"] != QUOTA_CANCELLED
+        || attempt["wall_ms"].as_u64().is_none()
+        || attempt
+            .as_object()
+            .map(|a| a.keys().map(String::as_str).collect::<BTreeSet<_>>())
+            != Some(BTreeSet::from(["attempt", "submitted", "wall_ms", "error"]))
+    {
+        return Err("Cancellation is not an exact single-task pre-generation quota wait".into());
+    }
+    Ok(
+        json!({"sequence":sequence,"stage":request["stage"],"error":QUOTA_CANCELLED,
+        "request_file":format!("calls/{sequence:04}-request.json"),
+        "result_file":format!("calls/{sequence:04}-result.json"),
+        "generation_submitted":false,"measurement":"infrastructure_unobserved"}),
+    )
+}
+
+fn settled_calls(directory: &Path, manifest: &Value, outcome: &Value) -> Result<Option<Value>> {
     let calls = directory.join("calls");
     ordinary(&calls, true)?;
     let mut names = BTreeSet::new();
@@ -254,6 +413,7 @@ fn settled_calls(directory: &Path, manifest: &Value, outcome: &Value) -> Result<
         return Err("Native calls are absent, partial or outside their bound".into());
     }
     let mut physical = 0;
+    let mut quota = None;
     for sequence in 1..=count {
         let request_name = format!("{sequence:04}-request.json");
         let result_name = format!("{sequence:04}-result.json");
@@ -268,9 +428,17 @@ fn settled_calls(directory: &Path, manifest: &Value, outcome: &Value) -> Result<
             || !request["decoder"]
                 .as_str()
                 .is_some_and(|s| s.contains("unconstrained"))
-            || result["result"].get("Err").is_some()
         {
             return Err("Native call identity or settled result is inconsistent".into());
+        }
+        if result["result"].get("Err").is_some() {
+            if sequence != count || quota.is_some() {
+                return Err(
+                    "Only one exact terminal unsubmitted quota cancellation may be retained".into(),
+                );
+            }
+            quota = Some(quota_not_submitted(&request, &result, sequence)?);
+            continue;
         }
         let (prompts, outputs, receipts) = if let Some(tasks) = request["tasks"].as_array() {
             let prompts = request["prompts"]
@@ -364,7 +532,7 @@ fn settled_calls(directory: &Path, manifest: &Value, outcome: &Value) -> Result<
     if outcome["hosted_http_requests"].as_u64() != Some(physical as u64) {
         return Err("Physical hosted attempt count disagrees with retained receipts".into());
     }
-    Ok(physical)
+    Ok(quota)
 }
 
 fn question_state(snapshot: &Value, words: &[&str]) -> Result<()> {
@@ -413,13 +581,146 @@ fn semantic_stop(snapshot: &Value, error: &Value) -> bool {
             })
 }
 
+fn bind_quota_task(
+    directory: &Path,
+    first: &Value,
+    final_state: &Value,
+    mut quota: Value,
+) -> Result<Value> {
+    let terminal = quota["sequence"]
+        .as_u64()
+        .ok_or("Quota receipt lacks terminal sequence")?;
+    let records = first["session"]["method"]["records"]
+        .as_array()
+        .ok_or("Quota snapshot lacks native records")?;
+    let revision = first["session"]["revision"]
+        .as_u64()
+        .ok_or("Quota snapshot lacks native revision")?;
+    let jobs = first["session"]["method"]["flow"]["jobs"]
+        .as_array()
+        .ok_or("Quota snapshot lacks native jobs")?;
+    let paused = jobs
+        .iter()
+        .filter(|job| {
+            job["stage"] == quota["stage"]
+                && job["revision"] == revision
+                && job["phase"] == json!({"state":"paused","error":QUOTA_CANCELLED})
+        })
+        .collect::<Vec<_>>();
+    if paused.len() != 1
+        || first["session"]["method"]["flow"]["active"] != json!([])
+        || final_state["session"]["revision"] != revision
+        || final_state["session"]["method"]["records"] != json!(records)
+        || final_state["session"]["method"]["flow"] != first["session"]["method"]["flow"]
+    {
+        return Err("Quota cancellation lacks a unique unchanged native paused task".into());
+    }
+    let job = paused[0];
+    let bases = records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| {
+            record["stage"] == job["stage"]
+                && record["revision"] == revision
+                && record["inputSha256"] == job["inputSha256"]
+                && record["input"].get("original_input").is_none()
+        })
+        .collect::<Vec<_>>();
+    if bases.len() != 1 {
+        return Err("Quota task has no unique native original-input record".into());
+    }
+    let (base_index, base) = bases[0];
+    let mut base_sequences = Vec::new();
+    for sequence in 1..terminal {
+        let request = load(&directory.join(format!("calls/{sequence:04}-request.json")))?;
+        let result = load(&directory.join(format!("calls/{sequence:04}-result.json")))?;
+        if request.get("tasks").is_none()
+            && request["stage"] == job["stage"]
+            && request["input"] == base["input"]
+            && result["result"]["Ok"] == base["generation"]
+        {
+            base_sequences.push(sequence);
+        }
+    }
+    if base_sequences.len() != 1 {
+        return Err("Quota task original record lacks its exact earlier unrepaired call".into());
+    }
+    let first_sequence = base_sequences[0];
+    let base_request = directory.join(format!("calls/{first_sequence:04}-request.json"));
+    let seal = job["inputSha256"]
+        .as_str()
+        .ok_or("Quota task lacks its native input seal")?;
+    let key = job["key"].as_str().and_then(|key| key.rsplit_once('-'));
+    if native_root_field_hash(&base_request, "input")? != seal
+        || job["attempts"].as_u64() != Some(terminal - first_sequence + 1)
+        || records.len() != base_index + (terminal - first_sequence) as usize
+        || !key.is_some_and(|(sha, index)| {
+            sha.len() == 64
+                && sha
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                && index == base_index.to_string()
+        })
+    {
+        return Err("Quota task original-input seal or contiguous attempt ancestry changed".into());
+    }
+    for sequence in first_sequence..=terminal {
+        let request = load(&directory.join(format!("calls/{sequence:04}-request.json")))?;
+        if request.get("tasks").is_some()
+            || request["stage"] != job["stage"]
+            || *original_input(&request["input"]) != base["input"]
+        {
+            return Err("Quota cancellation crossed an unrelated native task or batch".into());
+        }
+        if sequence < terminal {
+            let record = &records[base_index + (sequence - first_sequence) as usize];
+            let result = load(&directory.join(format!("calls/{sequence:04}-result.json")))?;
+            if record["stage"] != job["stage"]
+                || record["revision"] != revision
+                || record["input"] != request["input"]
+                || record["generation"] != result["result"]["Ok"]
+                || record["raw"] != result["result"]["Ok"]["content"]
+                || record["guideSha256"] != request["guide_sha256"]
+                || record["schemaSha256"] != request["schema_sha256"]
+                || record["inputSha256"]
+                    != native_root_field_hash(
+                        &directory.join(format!("calls/{sequence:04}-request.json")),
+                        "input",
+                    )?
+                || ["guide_sha256", "schema_sha256"].iter().any(|field| {
+                    request[*field].as_str().is_none_or(|sha| {
+                        sha.len() != 64
+                            || !sha
+                                .bytes()
+                                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                    })
+                })
+                || record["validationError"]
+                    .as_str()
+                    .is_none_or(|error| error.is_empty())
+            {
+                return Err("Quota task lost a same-revision rejected native attempt".into());
+            }
+        }
+    }
+    quota["source_snapshot"] = json!("first-turn.json");
+    quota["base_record_index"] = json!(base_index);
+    quota["base_request_file"] = json!(format!("calls/{first_sequence:04}-request.json"));
+    quota["base_request_sha256"] = json!(digest(read(&base_request)?));
+    quota["native_original_input_sha256"] = json!(seal);
+    quota["native_revision"] = json!(revision);
+    quota["native_paused_job"] = job.clone();
+    quota["qualification"] = json!("Exact preserved infrastructure interruption; no completed semantic observation, optimizer fitness, answer replay or retry is authorized.");
+    Ok(quota)
+}
+
 fn case(
     directory: &Path,
     fixture: &Value,
     outcome: &Value,
     manifest: &Value,
     rubric: Option<&Value>,
-) -> Result<()> {
+) -> Result<Option<Value>> {
     let id = fixture["id"]
         .as_str()
         .ok_or("Missing source fixture identity")?;
@@ -429,7 +730,6 @@ fn case(
         || outcome["mode"] != fixture["mode"]
         || outcome["full_reading"] != manifest["full_reading"]
         || outcome["decoder_mode"] != "hosted_unconstrained_text"
-        || outcome["deadline_cancelled"] != false
         || outcome["group_cancelled"] != false
         || !outcome["provider_stop"].is_null()
         || !outcome["infrastructure_error"].is_null()
@@ -503,6 +803,27 @@ fn case(
         source_words.push(supplied);
     }
     question_state(&final_state, &source_words)?;
+    let quota = settled_calls(directory, manifest, outcome)?;
+    if let Some(quota) = quota {
+        if outcome["deadline_cancelled"] != true
+            || outcome["execution_status"] != "deadline_cancelled"
+            || outcome["first_turn_execution_completed"] != false
+            || !outcome["follow_up_execution_completed"].is_null()
+            || outcome["follow_up_scripted"] != false
+            || outcome["known_native_semantic_abort"] == true
+            || first["result"] != json!({"Err":QUOTA_CANCELLED})
+            || supplying
+            || !final_state["follow_up"]["result"].is_null()
+        {
+            return Err(
+                "Quota interruption cannot masquerade as semantic completion or failure".into(),
+            );
+        }
+        return bind_quota_task(directory, &first, &final_state, quota).map(Some);
+    }
+    if outcome["deadline_cancelled"] != false {
+        return Err("Unsupported deadline cancellation remains unobserved and unsealed".into());
+    }
     let first_completed = outcome["first_turn_execution_completed"] == true;
     let follow_completed = &outcome["follow_up_execution_completed"];
     if (first_completed && first["result"].get("Ok").is_none())
@@ -521,7 +842,6 @@ fn case(
     {
         return Err("Native terminal outcome is an unknown interruption, not a settled semantic observation".into());
     }
-    settled_calls(directory, manifest, outcome)?;
     // Inspect the native record, never synthesize normalized gold or a score.
     if outcome["known_native_semantic_abort"] == true {
         let witness = &outcome["semantic_abort_witness"];
@@ -550,7 +870,7 @@ fn case(
             return Err("Known semantic abort differs from its actual native rejection".into());
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 fn verify_pins(
@@ -781,6 +1101,7 @@ pub fn seal(campaign: &Path, closure_path: &Path) -> Result<Value> {
         return Err("Native report is not complete for its selected cases".into());
     }
     let mut origins = BTreeMap::new();
+    let mut unobserved = Vec::new();
     for id in selected {
         let fixture = source_fixtures
             .get(id)
@@ -802,20 +1123,29 @@ pub fn seal(campaign: &Path, closure_path: &Path) -> Result<Value> {
                 return Err(format!("Case {id} lacks {witness}"));
             }
         }
-        case(
+        let quota = case(
             &directory,
             fixture,
             &outcome,
             &manifest,
             rubric_bank.as_ref().map(|b| &b[id]),
         )?;
-        origins.insert(format!("{id}.json"), json!({"case_id":id,"origin":"fresh_completed_native_campaign",
+        let mut origin = json!({"case_id":id,"origin":"fresh_completed_native_campaign",
             "source_directory":directory,"source_manifest_sha256":closure.files["manifest.json"],
             "files":closure.case_files[id],"selected_outcome_unchanged":true,
             "fresh_corpus":{"closure":closure_path,"closure_sha256":closure_sha,
                 "submitted_sha256":closure.submitted_sha256,"owner_exit_sha256":closure.owner_exit_sha256,
                 "native_executable_sha256":closure.native_executable_sha256,"native_exit_code":exit.native_exit_code},
-            "qualification":"Closed evidence only; native semantic failures remain failures and interpretation needs independent source review."}));
+            "qualification":"Closed evidence only; native semantic failures remain failures and interpretation needs independent source review."});
+        if let Some(quota) = quota {
+            unobserved.push(id.to_owned());
+            origin["origin"] = json!("infrastructure_unobserved");
+            origin["archived_answer_replay_allowed"] = json!(false);
+            origin["measurement_use"] = json!("fixture_prompt_provenance_only");
+            origin["retention_witness"] = quota;
+            origin["qualification"] = json!("Preserved original fixture/prompt provenance for fresh controls only. Cancelled execution remains unobserved: no semantic fitness, completed result, answer replay or automatic retry.");
+        }
+        origins.insert(format!("{id}.json"), origin);
     }
     // All hashes and owner absences are rechecked immediately before publishing.
     verify_pins(&campaign, &closure_path, &closure_sha, &closure, &submitted)?;
@@ -859,7 +1189,8 @@ pub fn seal(campaign: &Path, closure_path: &Path) -> Result<Value> {
     }
     Ok(
         json!({"version":CORPUS_VERSION,"campaign":campaign,"closure":closure_path,"closure_sha256":closure_sha,
-        "case_count":origins.len(),"source_manifest_sha256":closure.files["manifest.json"],
+        "case_count":origins.len(),"infrastructure_unobserved_case_ids":unobserved,
+        "source_manifest_sha256":closure.files["manifest.json"],
         "case_origins":tree(&target)?,"native_outcomes_unchanged":true,"new_provider_calls":0,
         "qualification":"A sealed corpus does not qualify source-correct interpretation or model improvement."}),
     )
@@ -1025,6 +1356,78 @@ mod tests {
             result
         }
 
+        // The final intake attempt was counted by the native runtime, but
+        // Google generation was never submitted. Earlier answers are settled
+        // native rejections of this same original task, not a completed result.
+        fn quota_cancelled() -> Self {
+            let campaign = Self::new(false, true);
+            let directory = campaign.root.join("cases/a");
+            let mut request = load(&directory.join("calls/0001-request.json")).unwrap();
+            request["stage"] = json!("intake");
+            request["guide_sha256"] = json!(digest("Controlled actual guide"));
+            request["schema_sha256"] = json!(digest(request["schema"].to_string()));
+            write(&directory.join("calls/0001-request.json"), &request);
+            let mut result = load(&directory.join("calls/0001-result.json")).unwrap();
+            result["request"] = request.clone();
+            write(&directory.join("calls/0001-result.json"), &result);
+            let input_sha =
+                native_root_field_hash(&directory.join("calls/0001-request.json"), "input")
+                    .unwrap();
+            let mut final_request = request.clone();
+            final_request["sequence"] = json!(2);
+            final_request["input"] = json!({"original_input":request["input"],
+                "previous_worksheet":{"unaccepted":true},
+                "native_validation_error":"Actual required field omitted",
+                "instruction":"Correct the original input without inventing facts"});
+            write(&directory.join("calls/0002-request.json"), &final_request);
+            let final_result = json!({"request":final_request,"result":{"Err":QUOTA_CANCELLED},
+                "provider_receipt":{"provider":"google_gemini_api","model":MODEL,
+                    "request":result["provider_receipt"]["request"],"submitted":false,"queue_ms":0,"http_wall_ms":0,
+                    "native_result":{"Err":QUOTA_CANCELLED},"response":{"transport_error":QUOTA_CANCELLED},
+                    "generation_attempts":[{"attempt":1,"submitted":false,"wall_ms":0,"error":QUOTA_CANCELLED}],
+                    "token_count_response":{"http_status":200,"body":{"totalTokens":10}},"reserved_input_tokens":10}});
+            write(&directory.join("calls/0002-result.json"), &final_result);
+            let mut first = load(&directory.join("first-turn.json")).unwrap();
+            first["result"] = json!({"Err":QUOTA_CANCELLED});
+            first["session"]["revision"] = json!(0);
+            first["session"]["method"]["records"] = json!([{"stage":"intake","revision":0,
+                "input":request["input"],"inputSha256":input_sha,"raw":result["result"]["Ok"]["content"],
+                "generation":result["result"]["Ok"],"guideSha256":request["guide_sha256"],
+                "schemaSha256":request["schema_sha256"],"validationError":"Actual required field omitted"}]);
+            first["session"]["method"]["flow"] = json!({"active":[],"jobs":[{
+                "key":format!("{}-0",digest("Controlled native work key")),"stage":"intake","revision":0,
+                "inputSha256":input_sha,"attempts":2,"phase":{"state":"paused","error":QUOTA_CANCELLED}}]});
+            write(&directory.join("first-turn.json"), &first);
+            let mut final_state = load(&directory.join("final.json")).unwrap();
+            final_state["session"] = first["session"].clone();
+            write(&directory.join("final.json"), &final_state);
+            let mut outcome = load(&directory.join("outcome.json")).unwrap();
+            outcome["model_calls"] = json!(2);
+            outcome["grade"] = Value::Null;
+            outcome["deadline_cancelled"] = json!(true);
+            outcome["execution_status"] = json!("deadline_cancelled");
+            outcome["first_turn_execution_completed"] = json!(false);
+            outcome["hurdles"]["reading"]["status"] = json!("unobserved");
+            campaign.outcome(&outcome);
+            write(
+                &campaign.root.join("completed.json"),
+                &json!({"completed":1,"campaign_failures":1}),
+            );
+            let mut exit = load(&campaign.root.join("owner-exit.json")).unwrap();
+            exit["native_exit_code"] = json!(101);
+            write(&campaign.root.join("owner-exit.json"), &exit);
+            campaign.close();
+            campaign
+        }
+
+        fn outcome(&self, outcome: &Value) {
+            write(&self.root.join("cases/a/outcome.json"), outcome);
+            let mut report = load(&self.root.join("report.json")).unwrap();
+            report["cases"][0] = outcome.clone();
+            report["campaign_failures"] = json!(1);
+            write(&self.root.join("report.json"), &report);
+        }
+
         // Used only to author a new controlled closed fixture for negative
         // tests. Production sealing must never update a launcher's closure.
         fn close(&self) {
@@ -1100,6 +1503,252 @@ mod tests {
     }
 
     #[test]
+    fn exact_quota_cancellation_is_provenance_only_and_keeps_native_failure_bytes() {
+        let campaign = Campaign::quota_cancelled();
+        let directory = campaign.root.join("cases/a");
+        let before = tree(&directory).unwrap();
+        let result = seal(&campaign.root, &campaign.closure).unwrap();
+        assert_eq!(result["infrastructure_unobserved_case_ids"], json!(["a"]));
+        let origin = load(&campaign.root.join("case-origins/a.json")).unwrap();
+        assert_eq!(origin["origin"], "infrastructure_unobserved");
+        assert_eq!(origin["archived_answer_replay_allowed"], false);
+        assert_eq!(origin["measurement_use"], "fixture_prompt_provenance_only");
+        assert_eq!(origin["retention_witness"]["base_record_index"], 0);
+        assert_eq!(
+            origin["retention_witness"]["base_request_file"],
+            "calls/0001-request.json"
+        );
+        assert_eq!(origin["retention_witness"]["native_revision"], 0);
+        assert_eq!(
+            origin["retention_witness"]["native_paused_job"],
+            load(&directory.join("first-turn.json")).unwrap()["session"]["method"]["flow"]["jobs"]
+                [0]
+        );
+        assert_eq!(tree(&directory).unwrap(), before);
+        let outcome = load(&directory.join("outcome.json")).unwrap();
+        assert_eq!(outcome["deadline_cancelled"], true);
+        assert_eq!(outcome["first_turn_execution_completed"], false);
+        assert_eq!(outcome["hurdles"]["reading"]["status"], "unobserved");
+        assert!(origin.get("score").is_none());
+        assert_eq!(seal(&campaign.root, &campaign.closure).unwrap(), result);
+    }
+
+    #[test]
+    fn quota_retention_keeps_all_earlier_settled_retry_attempts() {
+        let campaign = Campaign::quota_cancelled();
+        let path = campaign.root.join("cases/a/calls/0001-result.json");
+        let mut result = load(&path).unwrap();
+        let mut final_attempt = result["provider_receipt"]["generation_attempts"][0].clone();
+        final_attempt["attempt"] = json!(2);
+        result["provider_receipt"]["generation_attempts"] = json!([
+            {"attempt":1,"submitted":true,"http_status":500,"body":{"error":{"message":"Settled service failure"}}},
+            final_attempt]);
+        write(&path, &result);
+        let mut outcome = load(&campaign.root.join("cases/a/outcome.json")).unwrap();
+        outcome["hosted_http_requests"] = json!(2);
+        campaign.outcome(&outcome);
+        campaign.close();
+        seal(&campaign.root, &campaign.closure).unwrap();
+        assert_eq!(load(&path).unwrap(), result);
+        assert_eq!(
+            load(&campaign.root.join("cases/a/outcome.json")).unwrap()["hosted_http_requests"],
+            2
+        );
+    }
+
+    #[test]
+    fn submitted_partial_batch_or_unknown_cancellations_are_rejected() {
+        for defect in [
+            "submitted",
+            "attempt_submitted",
+            "count_unknown",
+            "generation_status",
+            "generation_body",
+            "other_error",
+            "batch",
+            "prior_unknown",
+            "partial",
+            "nonterminal",
+        ] {
+            let campaign = Campaign::quota_cancelled();
+            let directory = campaign.root.join("cases/a");
+            let path = directory.join("calls/0002-result.json");
+            let mut result = load(&path).unwrap();
+            match defect {
+                "submitted" => result["provider_receipt"]["submitted"] = json!(true),
+                "attempt_submitted" => {
+                    result["provider_receipt"]["generation_attempts"][0]["submitted"] = json!(true)
+                }
+                "count_unknown" => {
+                    result["provider_receipt"]["token_count_response"]["http_status"] = json!(503)
+                }
+                "generation_status" => {
+                    result["provider_receipt"]["generation_attempts"][0]["http_status"] = json!(200)
+                }
+                "generation_body" => {
+                    result["provider_receipt"]["response"]["body"] = json!({"candidates":[]})
+                }
+                "other_error" => {
+                    result["result"] = json!({"Err":"Transport submission status unknown"});
+                    result["provider_receipt"]["native_result"] = result["result"].clone();
+                }
+                "batch" => {
+                    let mut request = result["request"].clone();
+                    request["tasks"] = json!([["intake", "general", {}, {}]]);
+                    write(&directory.join("calls/0002-request.json"), &request);
+                    result["request"] = request;
+                }
+                "prior_unknown" => {
+                    let earlier = directory.join("calls/0001-result.json");
+                    let mut value = load(&earlier).unwrap();
+                    value["provider_receipt"]["generation_attempts"][0]["error"] =
+                        json!("Uncertain transport");
+                    write(&earlier, &value);
+                }
+                "partial" => fs::remove_file(directory.join("calls/0001-result.json")).unwrap(),
+                "nonterminal" => {
+                    let earlier = directory.join("calls/0001-result.json");
+                    let mut value = load(&earlier).unwrap();
+                    value["result"] = json!({"Err":QUOTA_CANCELLED});
+                    write(&earlier, &value);
+                }
+                _ => unreachable!(),
+            }
+            write(&path, &result);
+            campaign.close();
+            assert!(seal(&campaign.root, &campaign.closure).is_err(), "{defect}");
+            assert!(!campaign.root.join("case-origins").exists());
+        }
+    }
+
+    #[test]
+    fn quota_retention_requires_exact_original_task_and_contiguous_rejections() {
+        for defect in [
+            "revision",
+            "stage",
+            "input_seal",
+            "generation",
+            "guide",
+            "schema",
+            "validation",
+            "attempts",
+            "key",
+            "extra_record",
+            "original_input",
+            "active",
+            "changed_final",
+        ] {
+            let campaign = Campaign::quota_cancelled();
+            let directory = campaign.root.join("cases/a");
+            let first_path = directory.join("first-turn.json");
+            let mut first = load(&first_path).unwrap();
+            match defect {
+                "revision" => first["session"]["method"]["flow"]["jobs"][0]["revision"] = json!(1),
+                "stage" => {
+                    first["session"]["method"]["flow"]["jobs"][0]["stage"] = json!("condition")
+                }
+                "input_seal" => {
+                    first["session"]["method"]["flow"]["jobs"][0]["inputSha256"] =
+                        json!(digest("An unrelated original input"));
+                    first["session"]["method"]["records"][0]["inputSha256"] =
+                        first["session"]["method"]["flow"]["jobs"][0]["inputSha256"].clone();
+                }
+                "generation" => {
+                    first["session"]["method"]["records"][0]["generation"]["content"] =
+                        json!("A different provider output")
+                }
+                "guide" => {
+                    first["session"]["method"]["records"][0]["guideSha256"] =
+                        json!(digest("A different guide"))
+                }
+                "schema" => {
+                    first["session"]["method"]["records"][0]["schemaSha256"] =
+                        json!(digest("A different schema"))
+                }
+                "validation" => {
+                    first["session"]["method"]["records"][0]["validationError"] = Value::Null
+                }
+                "attempts" => first["session"]["method"]["flow"]["jobs"][0]["attempts"] = json!(1),
+                "key" => {
+                    first["session"]["method"]["flow"]["jobs"][0]["key"] =
+                        json!("Not-a-native-task-key-0")
+                }
+                "extra_record" => first["session"]["method"]["records"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"stage":"place"})),
+                "original_input" => {
+                    let path = directory.join("calls/0002-request.json");
+                    let mut request = load(&path).unwrap();
+                    request["input"]["original_input"] = json!({"unrelated":true});
+                    write(&path, &request);
+                    let path = directory.join("calls/0002-result.json");
+                    let mut result = load(&path).unwrap();
+                    result["request"] = request;
+                    write(&path, &result);
+                }
+                "active" => {
+                    first["session"]["method"]["flow"]["active"] = json!(["Unknown active task"])
+                }
+                "changed_final" => {}
+                _ => unreachable!(),
+            }
+            write(&first_path, &first);
+            let mut final_state = load(&directory.join("final.json")).unwrap();
+            final_state["session"] = first["session"].clone();
+            if defect == "changed_final" {
+                final_state["session"]["method"]["flow"]["jobs"][0]["phase"] =
+                    json!({"state":"running"});
+            }
+            write(&directory.join("final.json"), &final_state);
+            campaign.close();
+            assert!(seal(&campaign.root, &campaign.closure).is_err(), "{defect}");
+            assert!(!campaign.root.join("case-origins").exists());
+        }
+    }
+
+    #[test]
+    fn quota_retention_cannot_change_raw_completion_flags_or_error() {
+        for defect in ["deadline", "first_completed", "semantic_abort", "error"] {
+            let campaign = Campaign::quota_cancelled();
+            let directory = campaign.root.join("cases/a");
+            let mut outcome = load(&directory.join("outcome.json")).unwrap();
+            match defect {
+                "deadline" => outcome["deadline_cancelled"] = json!(false),
+                "first_completed" => outcome["first_turn_execution_completed"] = json!(true),
+                "semantic_abort" => outcome["known_native_semantic_abort"] = json!(true),
+                "error" => {
+                    let path = directory.join("first-turn.json");
+                    let mut first = load(&path).unwrap();
+                    first["result"] = json!({"Err":"Another task failed"});
+                    write(&path, &first);
+                }
+                _ => unreachable!(),
+            }
+            campaign.outcome(&outcome);
+            campaign.close();
+            assert!(seal(&campaign.root, &campaign.closure).is_err(), "{defect}");
+        }
+    }
+
+    #[test]
+    fn native_input_digest_keeps_producer_order_float_spelling_and_quoted_whitespace() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("request.json");
+        let input = r#"{"z":0.0,"a":"space and \"quote\" and \\slash","n":[1,{"b":2,"a":3}]}"#;
+        fs::write(&path, format!("{{\n\"nested\":{{\"input\":{{\"wrong\":true}}}},\n\"input\": {input},\n\"later\": false\n}}")).unwrap();
+        assert_eq!(
+            native_root_field_hash(&path, "input").unwrap(),
+            digest(input)
+        );
+        assert_ne!(digest(input.replace("\"z\":0.0", "\"z\":0")), digest(input));
+        fs::write(&path, "{\"input\":{},\"\\u0069nput\":{}}").unwrap();
+        assert!(native_root_field_hash(&path, "input").is_err());
+        fs::write(&path, "{\"nested\":{\"input\":{}}}").unwrap();
+        assert!(native_root_field_hash(&path, "input").is_err());
+    }
+
+    #[test]
     fn retained_service_retries_and_parallel_branch_receipts_remain_supported() {
         for parallel in [false, true] {
             let c = Campaign::new(false, true);
@@ -1141,19 +1790,25 @@ mod tests {
 
     #[test]
     fn live_owner_blocks_publication_even_with_complete_and_consistent_receipts() {
-        let c = Campaign::new(false, true);
-        let mut submitted = load(&c.root.join("submitted.json")).unwrap();
-        submitted["owner_pid"] = json!(std::process::id());
-        write(&c.root.join("submitted.json"), &submitted);
-        let mut exit = load(&c.root.join("owner-exit.json")).unwrap();
-        exit["owner_pid"] = submitted["owner_pid"].clone();
-        exit["submitted_sha256"] = json!(digest(read(&c.root.join("submitted.json")).unwrap()));
-        write(&c.root.join("owner-exit.json"), &exit);
-        c.close();
-        assert!(seal(&c.root, &c.closure)
-            .unwrap_err()
-            .contains("not proven absent"));
-        assert!(!c.root.join("case-origins").exists());
+        for quota in [false, true] {
+            let c = if quota {
+                Campaign::quota_cancelled()
+            } else {
+                Campaign::new(false, true)
+            };
+            let mut submitted = load(&c.root.join("submitted.json")).unwrap();
+            submitted["owner_pid"] = json!(std::process::id());
+            write(&c.root.join("submitted.json"), &submitted);
+            let mut exit = load(&c.root.join("owner-exit.json")).unwrap();
+            exit["owner_pid"] = submitted["owner_pid"].clone();
+            exit["submitted_sha256"] = json!(digest(read(&c.root.join("submitted.json")).unwrap()));
+            write(&c.root.join("owner-exit.json"), &exit);
+            c.close();
+            assert!(seal(&c.root, &c.closure)
+                .unwrap_err()
+                .contains("not proven absent"));
+            assert!(!c.root.join("case-origins").exists());
+        }
     }
 
     #[test]

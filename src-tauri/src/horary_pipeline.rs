@@ -62,6 +62,16 @@ pub struct Record {
 }
 
 pub trait Runtime: Sync {
+    /// An offline/hosted evaluator may stop at native acceptance of the initial
+    /// private extractor. This hook is absent from production builds.
+    #[cfg(test)]
+    fn initial_extractor_target(&self) -> Option<crate::reading_contracts::Method> {
+        None
+    }
+    #[cfg(test)]
+    fn initial_extractor_sequence(&self) -> Option<u64> {
+        None
+    }
     fn device_location(&self) -> Result<Option<LocationCandidate>, String> {
         Ok(None)
     }
@@ -742,7 +752,9 @@ pub(crate) fn run_elicitation(
                     "after_message":session.messages.len(),
                     "reading_executed":false,"conversation_executed":false}));
                 runtime.publish(session)?;
-            } else if session.method.brief.intent != "pause" {
+            } else if runtime.initial_extractor_target().is_none()
+                && session.method.brief.intent != "pause"
+            {
                 crate::horary_conversation::respond(session, runtime)?;
             }
             Ok(())
@@ -894,6 +906,15 @@ fn prepare_reading(
         .consultation
         .as_ref()
         .and_then(|c| c.method());
+    #[cfg(test)]
+    if runtime
+        .initial_extractor_target()
+        .is_some_and(|target| selected != Some(target))
+    {
+        // A different/unresolved classification is not permission to force the
+        // target lesson, fabricate a negative, or pay for unrelated actors.
+        return Ok(None);
+    }
     let focus_selected = selected.is_some_and(|method| {
         !matches!(
             method,
@@ -942,6 +963,28 @@ fn prepare_reading(
             case.frame = contracts::Slot::Missing;
         }
         case.apply(patch, session.messages.len(), &words, false)?;
+        #[cfg(test)]
+        if let Some(target) = runtime.initial_extractor_target() {
+            let record_index = session
+                .method
+                .records
+                .len()
+                .checked_sub(1)
+                .ok_or("Initial extractor acceptance lacks its native record")?;
+            let record = &session.method.records[record_index];
+            let job = session.method.flow.jobs.iter().find(|job| {
+                matches!(job.phase(), step::Phase::Complete { record_index: index } if *index == record_index)
+            }).ok_or("Initial extractor acceptance lacks its completed native job")?;
+            session.audit.push(json!({"event":"initial_extractor_boundary","version":1,
+                "target_method":target,"recognition_phase":"complete_selected_program",
+                "after_message":session.messages.len(),"record_index":record_index,
+                "last_sequence":runtime.initial_extractor_sequence().ok_or("Initial extractor observation lacks its actual call sequence")?,
+                "revision":session.revision,"record_input_sha256":record.input_sha256,
+                "native_job":job,"accepted_consultation":session.method.consultation,
+                "chart_executed":false,"conversation_executed":false,"supplying_executed":false}));
+            runtime.publish(session)?;
+            return Ok(None);
+        }
         let confirmed = case.method();
         if confirmed == selected {
             break;
@@ -2696,10 +2739,43 @@ pub(crate) fn process_examples_at_boundary(
     device_available: bool,
     input_only: bool,
 ) -> Result<Value, String> {
+    process_examples_with_chart(
+        device_available,
+        input_only,
+        !input_only && device_available,
+    )
+}
+
+/// Explicit generator entry: captures the same authored scheduler's native
+/// chart before the documentation-only fixture substitution is enabled.
+#[cfg(test)]
+pub(crate) fn capture_process_reference_chart() -> Result<Value, String> {
+    let mut captured = process_examples_with_chart(true, false, false)?;
+    if captured["canonicalQuestion"] != "Will I get married in the next year?"
+        || captured["chartMomentMs"] != json!(1789387200000.)
+        || captured["nativeDefaults"]["place"] != "device coordinates"
+    {
+        return Err("Authored documentation question or anchor changed; do not mislabel its chart provenance".into());
+    }
+    captured
+        .as_object_mut()
+        .and_then(|object| object.remove("capturedNativeChart"))
+        .filter(Value::is_object)
+        .ok_or_else(|| "Authored scheduler did not produce its native chart".into())
+}
+
+#[cfg(test)]
+fn process_examples_with_chart(
+    device_available: bool,
+    input_only: bool,
+    freeze_documentation_chart: bool,
+) -> Result<Value, String> {
     use std::sync::Mutex;
     struct Fixture {
         dir: tempfile::TempDir,
         requests: Mutex<Vec<Value>>,
+        chart_fixture: Option<crate::process_reference::DocumentationChart>,
+        chart_installed: std::sync::atomic::AtomicBool,
     }
     impl Runtime for Fixture {
         fn generate(
@@ -2803,7 +2879,22 @@ pub(crate) fn process_examples_at_boundary(
                 cold_cache_bytes: None,
             })
         }
-        fn publish(&self, _session: &mut Session) -> Result<(), String> {
+        fn publish(&self, session: &mut Session) -> Result<(), String> {
+            // This Runtime is an authored documentation fixture, not the app
+            // or model evaluator. Fix only its supplied astronomical chart,
+            // before the real scheduler derives specialist facts and prompts.
+            // No prompt, contract, accepted worksheet or output is normalized.
+            if session.chart.is_some()
+                && !self
+                    .chart_installed
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            {
+                if let Some(chart) = &self.chart_fixture {
+                    chart.install(session)?;
+                    self.chart_installed
+                        .store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
             Ok(())
         }
         fn generate_batch(
@@ -2841,6 +2932,10 @@ pub(crate) fn process_examples_at_boundary(
     let runtime = Fixture {
         dir: tempfile::tempdir().map_err(|e| e.to_string())?,
         requests: Mutex::new(Vec::new()),
+        chart_fixture: freeze_documentation_chart
+            .then(crate::process_reference::documentation_chart)
+            .transpose()?,
+        chart_installed: std::sync::atomic::AtomicBool::new(false),
     };
     let mut session = Session::default();
     session.messages.push(Message {
@@ -2892,9 +2987,194 @@ pub(crate) fn process_examples_at_boundary(
             .position(|s| serde_json::to_value(s).unwrap() == r["stage"])
     });
     let mut fixture = json!({"authorship":"Synthetic inputs and authored worksheet outputs, captured from the actual runtime scheduler; no model invoked.","examples":requests,"visibleProposedAnswer":session.sections.last().map(|s|&s.body),"chartMomentMs":session.chart.as_ref().map(|c|&c["timestampMs"]),"canonicalQuestion":session.question,"horizon":session.method.brief.horizon,"inputEvaluationBoundary":session.audit.iter().rev().find(|e|e["event"]=="input_evaluation_boundary"),"nativeDefaults":{"place":if device_available{"device coordinates"}else{"geocoded stated city"},"moment":"1789387200000, understood question receipt instant","noPlaceOrMomentModelCall":true}});
+    if let Some(chart) = &runtime.chart_fixture {
+        fixture["astronomicalFixture"] = chart.provenance();
+    } else if !input_only && device_available {
+        // Returned only by the explicit chart-capture generator. Normal
+        // documentation and input-only/missing-device fixtures omit this.
+        fixture["capturedNativeChart"] = session
+            .chart
+            .clone()
+            .ok_or("Missing native fixture chart")?;
+    }
     if input_only {
         fixture["first_session"] = json!(first_session);
         fixture["accepted_session"] = json!(session);
     }
     Ok(fixture)
+}
+
+#[cfg(test)]
+mod initial_extractor_tests {
+    use super::*;
+    use crate::reading_contracts::Method;
+    use std::sync::Mutex;
+    struct Reader {
+        dir: tempfile::TempDir,
+        calls: Mutex<Vec<Value>>,
+        target: Method,
+        refine: bool,
+    }
+    impl Runtime for Reader {
+        fn initial_extractor_target(&self) -> Option<Method> {
+            Some(self.target)
+        }
+        fn initial_extractor_sequence(&self) -> Option<u64> {
+            Some(self.calls.lock().unwrap().len() as u64)
+        }
+        fn generate(
+            &self,
+            stage: Stage,
+            _matter: Matter,
+            input: &Value,
+            _schema: &Value,
+            _audio: Option<&[u8]>,
+        ) -> Result<NativeGenerationResult, String> {
+            assert_eq!(
+                stage,
+                Stage::Intake,
+                "Fixed actors must not execute in a component evaluation"
+            );
+            self.calls.lock().unwrap().push(input.clone());
+            let original = crate::horary_step::original_input(input);
+            let focused = original["recognition_phase"] == "complete_selected_program";
+            let words = original["latest_words"].as_str().unwrap();
+            let answer = if !focused {
+                json!({"intent":"read","question":words,"frame":{"method":"relationship","facet":"event"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+            } else if self.refine {
+                json!({"intent":"clarify","question":null,"frame":{"method":"contact","facet":"event"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+            } else {
+                json!({"intent":"clarify","question":null,"frame":null,"people":[],"subject":{"name":"Prospective partner","kind":"person","owner_id":"","source_quote":words},
+                    "updates":[{"field":"baseline","value":"hoped_for","quote":words,"mode":"supply"},{"field":"horizon","value":"within the next year","quote":"in the next year","mode":"supply"}],
+                    "heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null})
+            };
+            Ok(NativeGenerationResult {
+                content: answer.to_string(),
+                prompt_tokens: 0,
+                generated_tokens: 0,
+                elapsed_ms: 0,
+                total_wall_ms: None,
+                batch_size: None,
+                lesson_bank_hit: None,
+                lesson_prepare_ms: None,
+                tokens_per_second: 0.,
+                prompt_cache_hit: false,
+                cached_prompt_tokens: 0,
+                prefilled_prompt_tokens: 0,
+                first_token_ms: None,
+                cold_cache_bytes: None,
+            })
+        }
+        fn generate_batch(
+            &self,
+            _tasks: &[(Stage, Matter, Value, Value)],
+        ) -> Result<Vec<NativeGenerationResult>, String> {
+            panic!("No fixed batch actor may execute")
+        }
+        fn publish(&self, _session: &mut Session) -> Result<(), String> {
+            Ok(())
+        }
+        fn check(&self) -> Result<(), String> {
+            if self.calls.lock().unwrap().len() < 4 {
+                Ok(())
+            } else {
+                Err("Authored fixture exceeded its initial boundary".into())
+            }
+        }
+        fn directory(&self) -> &Path {
+            self.dir.path()
+        }
+    }
+    fn run_fixture(target: Method, refine: bool) -> (Session, Vec<Value>) {
+        let reader = Reader {
+            dir: tempfile::tempdir().unwrap(),
+            calls: Mutex::new(vec![]),
+            target,
+            refine,
+        };
+        let mut session = Session::default();
+        let previous = session.clone();
+        session.messages.push(Message {
+            role: "user".into(),
+            text: if refine {
+                "Will Sam contact me?"
+            } else {
+                "Will I get married in the next year?"
+            }
+            .into(),
+        });
+        run_elicitation(
+            &mut session,
+            &reader,
+            &GeocodeState::default(),
+            1789387200000.,
+            None,
+            &previous,
+        )
+        .unwrap();
+        (session, reader.calls.into_inner().unwrap())
+    }
+    #[test]
+    fn initial_boundary_is_after_native_apply_and_before_any_fixed_actor() {
+        let (session, calls) = run_fixture(Method::Relationship, false);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(session.messages.len(), 1);
+        assert!(session.chart.is_none());
+        let event = session
+            .audit
+            .iter()
+            .find(|e| e["event"] == "initial_extractor_boundary")
+            .unwrap();
+        assert_eq!(event["last_sequence"], 2);
+        assert_eq!(event["after_message"], 1);
+        assert_eq!(
+            event["accepted_consultation"],
+            json!(session.method.consultation)
+        );
+        assert_eq!(
+            session
+                .method
+                .consultation
+                .as_ref()
+                .unwrap()
+                .text(crate::reading_contracts::Field::Horizon),
+            Some("within the next year")
+        );
+        let index = event["record_index"].as_u64().unwrap() as usize;
+        assert!(session.method.records[index].validation_error.is_none());
+        assert_eq!(event["native_job"]["phase"]["record_index"], index);
+    }
+    #[test]
+    fn alternate_upstream_method_stays_uninvoked_without_gold_or_guru() {
+        let (session, calls) = run_fixture(Method::Contact, false);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(session.messages.len(), 1);
+        assert!(!session
+            .audit
+            .iter()
+            .any(|e| e["event"] == "initial_extractor_boundary"));
+        assert_eq!(
+            session.method.consultation.as_ref().unwrap().method(),
+            Some(Method::Relationship)
+        );
+    }
+    #[test]
+    fn initial_extractor_owns_sourced_correction_of_provisional_frame() {
+        let (session, calls) = run_fixture(Method::Relationship, true);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(
+            session.method.consultation.as_ref().unwrap().method(),
+            Some(Method::Contact)
+        );
+        let event = session
+            .audit
+            .iter()
+            .find(|e| e["event"] == "initial_extractor_boundary")
+            .unwrap();
+        assert_eq!(event["target_method"], "relationship");
+        assert_eq!(
+            event["accepted_consultation"]["frame"]["observation"]["value"]["method"],
+            "contact"
+        );
+    }
 }

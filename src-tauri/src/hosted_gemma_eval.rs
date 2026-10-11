@@ -24,12 +24,61 @@ const COUNT_ENDPOINT: &str =
 struct TokenWindow {
     reservations: VecDeque<(Instant, u32)>,
     budget: u32,
+    waiting: VecDeque<(u64, u32)>,
+    next_ticket: u64,
 }
 impl TokenWindow {
-    fn reserve(&mut self, now: Instant, tokens: u32) -> Result<Option<Duration>, String> {
+    fn new(budget: u32) -> Self {
+        Self {
+            reservations: VecDeque::new(),
+            budget,
+            waiting: VecDeque::new(),
+            next_ticket: 0,
+        }
+    }
+
+    fn enqueue(&mut self, tokens: u32) -> Result<u64, String> {
+        self.check_size(tokens)?;
+        let ticket = self.next_ticket;
+        self.next_ticket = ticket
+            .checked_add(1)
+            .ok_or("Hosted quota ticket overflow")?;
+        self.waiting.push_back((ticket, tokens));
+        Ok(ticket)
+    }
+
+    fn check_size(&self, tokens: u32) -> Result<(), String> {
         if tokens > self.budget {
             return Err(format!("This prompt needs {tokens} input tokens, above the configured hosted per-minute budget {}; no generation submitted",self.budget));
         }
+        Ok(())
+    }
+
+    /// Admission is FIFO after token counting. A newer small prompt must not
+    /// keep taking the capacity that an older large prompt is waiting for.
+    fn reserve_ticket(&mut self, now: Instant, ticket: u64) -> Result<Option<Duration>, String> {
+        let &(front, tokens) = self.waiting.front().ok_or("Missing hosted quota ticket")?;
+        if ticket != front {
+            if !self.waiting.iter().any(|(id, _)| *id == ticket) {
+                return Err("Missing hosted quota ticket".into());
+            }
+            return Ok(Some(Duration::from_millis(100)));
+        }
+        let wait = self.reserve(now, tokens)?;
+        if wait.is_none() {
+            self.waiting.pop_front();
+        }
+        Ok(wait)
+    }
+
+    fn cancel(&mut self, ticket: u64) {
+        self.waiting.retain(|(id, _)| *id != ticket);
+        // An admitted reservation is deliberately not refunded: provider
+        // uncertainty or later cancellation must not bypass quota accounting.
+    }
+
+    fn reserve(&mut self, now: Instant, tokens: u32) -> Result<Option<Duration>, String> {
+        self.check_size(tokens)?;
         let window = Duration::from_millis(61_000);
         while self
             .reservations
@@ -69,6 +118,18 @@ impl Drop for Permit<'_> {
         if let Ok(mut active) = self.0.active.lock() {
             *active -= 1;
             self.0.changed.notify_one();
+        }
+    }
+}
+
+struct QuotaTicket<'a> {
+    client: &'a Client,
+    ticket: u64,
+}
+impl Drop for QuotaTicket<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut tokens) = self.client.tokens.lock() {
+            tokens.cancel(self.ticket);
         }
     }
 }
@@ -130,10 +191,7 @@ impl Client {
             active: Mutex::new(0),
             changed: Condvar::new(),
             concurrency,
-            tokens: Mutex::new(TokenWindow {
-                reservations: VecDeque::new(),
-                budget,
-            }),
+            tokens: Mutex::new(TokenWindow::new(budget)),
         })
     }
 
@@ -146,7 +204,7 @@ impl Client {
             "credential_in_evidence":false,"automatic_http_retries":true,
             "retry_policy":"At most two retries of completed generation HTTP 500/502/503/504; every attempt retained and token-paced. No retries of uncertain transport, auth, quota, request or model-output errors",
             "input_tokens_per_61_seconds":self.tokens.lock().ok().map(|window|window.budget),
-            "pacing":"Google countTokens before every generation; shared token-window reservations"})
+            "pacing":"Google countTokens before every generation; shared FIFO token-window admission; cancellations remove waiting tickets without refunding admitted reservations"})
     }
 
     fn permit(&self, cancelled: &AtomicBool) -> Result<Permit<'_>, String> {
@@ -209,6 +267,15 @@ impl Client {
     }
 
     fn pace(&self, tokens: u32, cancelled: &AtomicBool) -> Result<(), String> {
+        let ticket = self
+            .tokens
+            .lock()
+            .map_err(|_| "Hosted token limiter unavailable")?
+            .enqueue(tokens)?;
+        let _ticket = QuotaTicket {
+            client: self,
+            ticket,
+        };
         let mut announced = false;
         loop {
             if cancelled.load(Ordering::Acquire) {
@@ -218,14 +285,14 @@ impl Client {
                 .tokens
                 .lock()
                 .map_err(|_| "Hosted token limiter unavailable")?
-                .reserve(Instant::now(), tokens)?;
+                .reserve_ticket(Instant::now(), ticket)?;
             let Some(wait) = wait else {
                 return Ok(());
             };
             if !announced {
                 println!(
                     "{}",
-                    json!({"event":"hosted_token_wait","model":MODEL,"input_tokens":tokens,"initial_wait_ms":wait.as_millis()})
+                    json!({"event":"hosted_token_wait","model":MODEL,"input_tokens":tokens,"initial_wait_ms":wait.as_millis(),"fifo_ticket":ticket})
                 );
                 announced = true;
             }
@@ -555,10 +622,7 @@ fn hosted_truncation_reaches_native_repair_and_usage_does_not_invent_caching() {
 #[test]
 fn token_pacing_reserves_parallel_calls_and_releases_only_expired_windows() {
     let start = Instant::now();
-    let mut window = TokenWindow {
-        reservations: VecDeque::new(),
-        budget: 14_000,
-    };
+    let mut window = TokenWindow::new(14_000);
     assert_eq!(window.reserve(start, 4_000).unwrap(), None);
     assert_eq!(window.reserve(start, 7_000).unwrap(), None);
     assert_eq!(
@@ -580,6 +644,69 @@ fn token_pacing_reserves_parallel_calls_and_releases_only_expired_windows() {
     assert!(window
         .reserve(start + Duration::from_secs(61), 14_001)
         .is_err());
+}
+
+#[test]
+fn fifo_quota_stops_small_repairs_starving_an_older_large_request() {
+    let start = Instant::now();
+    let mut window = TokenWindow::new(14_000);
+    let first = window.enqueue(7_000).unwrap();
+    assert_eq!(window.reserve_ticket(start, first).unwrap(), None);
+    let large = window.enqueue(12_000).unwrap();
+    let small = window.enqueue(4_000).unwrap();
+    assert!(window.reserve_ticket(start, large).unwrap().is_some());
+    // A small repair fits now, but may not jump ahead and perpetuate the wait.
+    assert!(window.reserve_ticket(start, small).unwrap().is_some());
+    let release = start + Duration::from_secs(61);
+    assert!(window.reserve_ticket(release, small).unwrap().is_some());
+    assert_eq!(window.reserve_ticket(release, large).unwrap(), None);
+    assert!(window.reserve_ticket(release, small).unwrap().is_some());
+    assert_eq!(
+        window
+            .reserve_ticket(release + Duration::from_secs(61), small)
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn cancelled_quota_waiter_does_not_block_peers_or_refund_admitted_tokens() {
+    let start = Instant::now();
+    let mut window = TokenWindow::new(14_000);
+    let admitted = window.enqueue(7_000).unwrap();
+    assert_eq!(window.reserve_ticket(start, admitted).unwrap(), None);
+    let cancelled = window.enqueue(12_000).unwrap();
+    let next = window.enqueue(4_000).unwrap();
+    window.cancel(cancelled);
+    assert_eq!(window.reserve_ticket(start, next).unwrap(), None);
+    window.cancel(admitted);
+    window.cancel(next);
+    assert_eq!(window.reservations.len(), 2);
+    let last = window.enqueue(4_000).unwrap();
+    assert!(window.reserve_ticket(start, last).unwrap().is_some());
+    assert!(window.reserve_ticket(start, cancelled).is_err());
+    assert!(window.enqueue(14_001).is_err());
+    assert_eq!(window.waiting.len(), 1);
+}
+
+#[test]
+fn fifo_quota_keeps_parallel_admission_when_capacity_is_available() {
+    let start = Instant::now();
+    let mut window = TokenWindow::new(14_000);
+    let tickets = [3_000, 4_000, 3_000, 4_000].map(|tokens| window.enqueue(tokens).unwrap());
+    for ticket in tickets {
+        assert_eq!(window.reserve_ticket(start, ticket).unwrap(), None);
+    }
+    assert!(window.waiting.is_empty());
+    assert_eq!(window.reservations.len(), 4);
+    let retry = window.enqueue(1_000).unwrap();
+    assert!(window.reserve_ticket(start, retry).unwrap().is_some());
+    assert_eq!(
+        window
+            .reserve_ticket(start + Duration::from_secs(61), retry)
+            .unwrap(),
+        None
+    );
 }
 
 #[test]

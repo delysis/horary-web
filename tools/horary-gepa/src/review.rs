@@ -647,6 +647,9 @@ pub fn evaluate(
     example: &Example,
     evaluation: &Value,
 ) -> Result<Value> {
+    if plan.initial_extractor_observation {
+        return crate::initial_extractor::evaluate(plan, journal, example, evaluation);
+    }
     if !plan
         .training
         .iter()

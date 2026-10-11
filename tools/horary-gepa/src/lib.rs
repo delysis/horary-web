@@ -4,6 +4,7 @@ pub mod campaign;
 pub mod controls;
 pub mod corpus;
 pub mod executable;
+pub mod initial_extractor;
 pub mod journal;
 pub mod metric;
 pub mod native;
@@ -147,6 +148,19 @@ impl Function {
 fn is_zero(value: &u64) -> bool {
     *value == 0
 }
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn verify_origin_use(control_mode: ControlMode, origin: &Value) -> Result<()> {
+    if control_mode == ControlMode::ArchivedCapture
+        && (origin["archived_answer_replay_allowed"] == false
+            || origin["measurement_use"] == "fixture_prompt_provenance_only")
+    {
+        return Err("Provenance-only infrastructure observation cannot provide an archived answer or measurement; use explicit fresh controls".into());
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -280,6 +294,10 @@ pub struct Plan {
     pub function: Function,
     #[serde(default, skip_serializing_if = "Objective::is_default")]
     pub objective: Objective,
+    /// New rounds stop at the actual first extractor boundary. Omission keeps
+    /// historical paid request/review identities and recovery semantics intact.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub initial_extractor_observation: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_method: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -330,6 +348,13 @@ impl Plan {
             .collect())
     }
     pub fn validate(&self) -> Result<()> {
+        if self.initial_extractor_observation
+            && (self.function != Function::InputJourney
+                || self.objective != Objective::ExtractorReliability
+                || self.recovery.is_some())
+        {
+            return Err("Initial extractor observation requires a fresh extractor component round without legacy recovery".into());
+        }
         if self.objective == Objective::ExtractorReliability
             && self.function != Function::InputJourney
         {
@@ -544,6 +569,15 @@ impl Plan {
                     .join(format!("{}.json", example.id)),
                 &example.source_origin_sha256,
             )?;
+            verify_origin_use(
+                self.control_mode,
+                &load(
+                    &self
+                        .campaign
+                        .join("case-origins")
+                        .join(format!("{}.json", example.id)),
+                )?,
+            )?;
             verify(
                 &example
                     .source_case_directory
@@ -599,6 +633,10 @@ impl Plan {
 }
 
 pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -> Result<Plan> {
+    if plan.function == Function::InputJourney && plan.objective == Objective::ExtractorReliability
+    {
+        plan.initial_extractor_observation = true;
+    }
     if plan.function == Function::ReadingJourney
         && (plan.target_stage.is_none()
             || plan.objective != Objective::SelectedStageReliability
@@ -610,7 +648,11 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
         return Err("The editable initial extractor cannot optimize a whole input conversation. Prepare an explicit extractor-reliability objective; keep whole-journey qualification separate.".into());
     }
     if plan.objective == Objective::ExtractorReliability {
-        let calibration = metric::calibration()?;
+        let calibration = if plan.initial_extractor_observation {
+            metric::initial_calibration()?
+        } else {
+            metric::calibration()?
+        };
         fs::create_dir_all(state).map_err(|e| e.to_string())?;
         keep(&state.join("objective-calibration.json"), &calibration)?;
     }
@@ -656,6 +698,7 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
             .join("case-origins")
             .join(format!("{id}.json"));
         let origin = load(&origin_path)?;
+        verify_origin_use(plan.control_mode, &origin)?;
         let initial_sha = origin["files"]["initial.json"]
             .as_str()
             .ok_or("Unsealed initial capture")?;
@@ -983,6 +1026,27 @@ pub async fn run(plan: Plan, state: PathBuf) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provenance_only_origins_cannot_supply_archived_measurements() {
+        for origin in [
+            serde_json::json!({"archived_answer_replay_allowed":false}),
+            serde_json::json!({"measurement_use":"fixture_prompt_provenance_only"}),
+        ] {
+            assert!(verify_origin_use(ControlMode::ArchivedCapture, &origin).is_err());
+            assert!(verify_origin_use(ControlMode::FreshHosted, &origin).is_ok());
+        }
+    }
+
+    #[test]
+    fn legacy_origin_use_remains_unchanged() {
+        assert!(verify_origin_use(ControlMode::ArchivedCapture, &serde_json::json!({})).is_ok());
+        assert!(verify_origin_use(
+            ControlMode::ArchivedCapture,
+            &serde_json::json!({"archived_answer_replay_allowed":true})
+        )
+        .is_ok());
+    }
     #[test]
     fn book_review_context_is_exact_bounded_and_source_hashed() {
         let dir = tempfile::tempdir().unwrap();
@@ -1067,6 +1131,7 @@ mod tests {
             control_mode: ControlMode::ArchivedCapture,
             function: Function::Classification,
             objective: Objective::WholeFunction,
+            initial_extractor_observation: false,
             target_method: None,
             target_stage: None,
             max_review_calls: 0,
@@ -1074,6 +1139,20 @@ mod tests {
             review_book: None,
             qualification: "component test".into(),
         }
+    }
+    #[test]
+    fn legacy_plan_omits_initial_extractor_scope_and_deserializes_unchanged() {
+        let old = serde_json::to_value(plan()).unwrap();
+        assert!(old.get("initial_extractor_observation").is_none());
+        let decoded: Plan = serde_json::from_value(old.clone()).unwrap();
+        assert!(!decoded.initial_extractor_observation);
+        assert_eq!(serde_json::to_value(decoded).unwrap(), old);
+        let mut scoped = plan();
+        scoped.initial_extractor_observation = true;
+        assert!(scoped
+            .validate()
+            .unwrap_err()
+            .contains("Initial extractor observation"));
     }
     #[test]
     fn component_search_preserves_quoted_source_and_actual_signature() {

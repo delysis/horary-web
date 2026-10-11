@@ -18,6 +18,10 @@
       "sha256": "134549449a56b80dddc63a0b6bf1d47f1a502971e76ef466de54554465fc7127"
     },
     {
+      "path": "crates/horary-ai-core/src/ephemeris_coefficients.rs",
+      "sha256": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c"
+    },
+    {
       "path": "crates/horary-ai-core/src/events.rs",
       "sha256": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a"
     },
@@ -47,7 +51,7 @@
     },
     {
       "path": "docs/PROMPT_OPTIMIZATION.md",
-      "sha256": "a0ec05276846370eefce6a1ff3d07371b0dc27afd7fb5cc772ce60fa53505c9c"
+      "sha256": "a78952ad57aa977758e6d3152198d37e76701ce0c72e26ef0521c2e74762aa60"
     },
     {
       "path": "docs/llm-process/adversarial-fixture-provenance.json",
@@ -115,7 +119,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "8b0306bf4e32121921f6fad5790c932c6f0ab2daba4dfacfcb257fbbcf87e16b"
+      "sha256": "63fce37d01653d2cfd3092568aca1adaa5eec9b7a49ae547cfdc46bf046dcf09"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -143,7 +147,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "69d329e1097626fd49d88229dfa058c52fdd15a14eb59a6fc6c26db666a60aa3"
+      "sha256": "4b37923bbf625393749cb09e26e37a390c041de6c3ba274893e89936a22e03f2"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -227,7 +231,7 @@
     },
     {
       "path": "src-tauri/src/hosted_gemma_eval.rs",
-      "sha256": "8e06ba7fc431c1c519764d75071f2efdee9960da4f3f6dbb0287189126dacab4"
+      "sha256": "5325e86b19b5606a6eee22a1555d327608bc3466084a58592f053824654db5cc"
     },
     {
       "path": "src-tauri/src/imported_models.rs",
@@ -275,7 +279,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "48151166464eb2669cfb37267e98872c60e55762ca40e2d919ab940c22ea0a08"
+      "sha256": "c30e6e6ee35f41b7b53d6eff2ea0786286337c814e139afd4c5c31fdc0ee4ac7"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -299,7 +303,7 @@
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
-      "sha256": "e5c99fb14af1bd94f3cf4ddf02008f47c08493034f31fd8a4e74faf12f79d76c"
+      "sha256": "75d3e3ed4b89ecc10f699c9cdc79d76257fb69534ec495c68388bf868efc8f67"
     },
     {
       "path": "src-tauri/src/reading_store.rs",
@@ -350,6 +354,14 @@
       "sha256": "2b9478586c01a105c3984134147aa440e7c1eb07f27295e0ea9999fe9ed999b5"
     },
     {
+      "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
+      "sha256": "e76493098161032cc3f44aa982bb689fd165b1a3517dd66de0c835a28f7892c2"
+    },
+    {
+      "path": "src-tauri/test-fixtures/process-reference-chart.json",
+      "sha256": "b63bc213271c7ed71e9127f36550484794f6904498b116a97db036793afee0c6"
+    },
+    {
       "path": "src-tauri/test-fixtures/readings/core-rubrics.json",
       "sha256": "d1b766082fb7d2f90b7bbbb5021c43b5c3abb01720225daa47cc310ed419a55a"
     },
@@ -387,7 +399,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "2e211d77b8374ff002b9b3f557ddc160d462b06a54156bbd4c5a2dc817d2ec7f"
+      "sha256": "621589d2bdf0fcb68504a9c8311aa94cd233a781d15a628d92e7d1e3afe40f0a"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -399,11 +411,15 @@
     },
     {
       "path": "tools/horary-gepa/src/corpus.rs",
-      "sha256": "d3cfb55d0e0def92cbdfffe7fce7bd67a58ef60628a31e0cf0bd2f1217e0434b"
+      "sha256": "4781c768a3c370855aef6350bd13105c0e555f7008fb56e92b0fa88a3707cc8d"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",
       "sha256": "03b96eccfa8fe9ee3d81c4f7497cc70729866634b5b4656c2efeb64e200603ef"
+    },
+    {
+      "path": "tools/horary-gepa/src/initial_extractor.rs",
+      "sha256": "0fdd59e3485bd06c7c02f0849ae16ca41a79b382ca11788e4a3061c874b78b1a"
     },
     {
       "path": "tools/horary-gepa/src/journal.rs",
@@ -411,23 +427,23 @@
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "97a46549034b99bb187f331044b6db2d6f461e7ab50471797350baf16165a411"
+      "sha256": "d8d67ca7f1158c959eadd14d5892c58394954371aa734fa16f468e4f29f3d7f0"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "08904358d5d4609cd0802811298d0bf9e9442362e9a8cdcb4dbcdf24923d2537"
+      "sha256": "a8c154377f20143361f839c3309f7106a394038d7facb688d08ec314abab2319"
     },
     {
       "path": "tools/horary-gepa/src/metric.rs",
-      "sha256": "bc361e5018628c5fa5046f5012e871faab8524be1ab78b887fb10aa7aeb879e0"
+      "sha256": "54a202686af548b06eb20b6458073bad6f09d0711b03cb1d32482e8341e95285"
     },
     {
       "path": "tools/horary-gepa/src/native.rs",
-      "sha256": "e337016a40ce9f7e08fc369f31c752fb578b04f761b5093221ef12d12ff63af0"
+      "sha256": "c675e82c3d6f8fb1b28f6cfaddb1eed2c224200d1ebb62851bbc10cb4df6876b"
     },
     {
       "path": "tools/horary-gepa/src/reading.rs",
-      "sha256": "8ecb599b5dff2a371332ccb30b6f8876d057114d572d6de7380225bc51d70ab2"
+      "sha256": "17a1c8354a42b202a88bcd99a47493866069e13db733739def89eff19f3a6532"
     },
     {
       "path": "tools/horary-gepa/src/recovery.rs",
@@ -435,15 +451,15 @@
     },
     {
       "path": "tools/horary-gepa/src/review.rs",
-      "sha256": "97db6087148f46c621b8f680ba6a5060190dbff22a24fb523afb64dbcea54c23"
+      "sha256": "4e1fb1aaf716f51490cbafee4636a05a570e38b4bc536ef5b8c0d08cdbe88f96"
     },
     {
       "path": "tools/horary-gepa/src/status.rs",
-      "sha256": "87c905b2899e1a4d1b3026e8052125b14f237205a2346bb357abf5405d8b5cff"
+      "sha256": "d17497d48eab2d020af08ec92d1682966cbf01f7aad9362093701f29131f3576"
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",
-      "sha256": "0df55993e489f75da355db009ef6bf0ba8b29d503c1a4e6fa39e527d2d73dd54"
+      "sha256": "b90fb497071067f7d2d437b64eee142ad4ec297d7c4fb1bb3ab311ca4a24a085"
     },
     {
       "path": "tools/horary-loop/Cargo.lock",

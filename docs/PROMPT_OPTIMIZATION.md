@@ -32,11 +32,11 @@ The Rust `horary-optimize` driver chains one bounded round: discovery training r
 
 [`horary-gepa`](../tools/horary-gepa/README.md) adds a conventional iterative optimizer before that final comparison. It uses the LLM-independent engine from the alpha Rust `dsrust-gepa` port at exact revision `f24adde08c1d8850e4d7079d019643bb40f905cb`; upstream numerical conformance and local adapter checks are separate from model quality. This initial path uses reflective mutation and development selection, with merge disabled. It neither reformats the application's model requests into DSPy prompts nor replaces native acceptance with an optimizer-specific schema.
 
-Two execution targets are available. **Classification** validates a method/facet frame with the actual native executor and same-step repair; authored labels grade it without unrelated chart or prose calls. **Input journey** starts with the original synthetic question, runs the actual information pipeline and conversational reader, and supplies a scripted follow-up only after the matching inquiry or single agreed proposal. It optimizes one method's `intake / complete_selected_program` teaching while every upstream classifier and downstream clarification executes afresh. Its current inspected capture selects a guide, never supplies an accepted fact record to the measurement. An upstream failure remains a failure; gold is not inserted to reach the extractor.
+Three execution targets are available. **Classification** validates a method/facet frame with the actual native executor and same-step repair; authored labels grade it without unrelated chart or prose calls. **Initial extraction** starts with the original synthetic question, runs the actual classifier and selected extraction lesson, and observes the atomic native patch immediately after acceptance. That test-only boundary comes before place, moment, chart, conversational reply or supplying turns. It optimizes one method's `intake / complete_selected_program` teaching. Its current inspected capture selects a guide, never supplies an accepted fact record to the measurement. A target that the classifier never reaches is unobserved; gold is not inserted to reach it. Older input-journey plans retain their full conversational execution and original review identities.
 
-Input journeys use independently validated Codex reviews as well as authored native gates. The reviewer sees one fresh trace, its synthetic rubric and an explicitly bounded selection of exact, hash-bound OCR pages. Classification, elicitation and extraction are scored separately. Scored conversation must cite its observed reply, and pipeline scores must cite actual native state/results; classification and elicitation additionally cite the book. Expected-answer-only scores are rejected. Actor identity, evidence honesty and continuity must each pass in every observed conversational turn; fluent prose cannot compensate for wrong facts. Required-inquiry checks include authored alternative requirements. Withheld or absent supplying replies remain unobserved, and reading must remain unobserved because this adapter generates no interpretation. Reviews have a separate hard reservation budget and exact trace/source/prompt/schema bindings; completed paid answers are reused. Development reviews select candidates but never reach reflection.
+Input reviews have a separate hard reservation budget and exact trace/source/prompt/schema bindings; completed paid answers are reused. New initial-extractor reviews cite the actual accepted consultation or settled rejection, its native records and the original synthetic fixture. They assess sourced facts, actor identity, frame and honest unknowns before fixed stages run. Conversation and interpretation remain unobserved. Historical whole-input reviews retain separate classification, elicitation and extraction scores: observed conversation must cite its reply, native scores cite state/results, and classification and elicitation also cite the book. Actor identity, honesty and continuity remain noncompensating full-journey gates. Neither protocol accepts expected-answer-only scores. Development reviews select candidates but never reach reflection.
 
-Full-reading stage optimization still needs its own execution adapter and validated independent interpretation reviews. None of these component/input checks qualifies interpretation, the local model, voice or a packaged application. A blocked method cannot become a supported reading by optimizing its prompt.
+**Reading-stage journeys** obtain a real `ReadyReading` permit from the original question, then execute the production interpretation pipeline. The independently reviewed objective belongs to one selected specialist stage, while whole-reading source obligations and input/conversation guards remain separate acceptance gates. No accepted worksheet or chart is injected to make that stage reachable. These adapters are implemented; their availability does not establish a measured prompt improvement or a correct complete reading. None of these component checks qualifies the local model, voice or a packaged application. A blocked method cannot become a supported reading by optimizing its prompt.
 
 Each search splits the frozen training pool again: reflection training supplies failures to the writer; separate development cases rank candidates. Original reserved cases stay outside search. GEPA selects a parent and minibatch, Codex revises one actual editable teaching region from native failure feedback, and fresh hosted Gemma evaluates the changed region. Actual protected book quotations and all native/tool contracts remain exact. Completed sealed baseline captures may serve as checked controls only when every classifier and repair prompt/input/schema matches and the native executor consumes the original prefix exactly.
 
@@ -125,25 +125,33 @@ The live trial exercised the Codex reviewer/writer and paired native experiment 
 
 ## Component merit and complete-reading acceptance
 
-New method-scoped input GEPA plans name the `extractor-reliability` objective. Only initial `complete_selected_program` teaching is mutable. A separate independently cited assessment grades its initially accepted facts, known actors, question/frame and honest unknowns against the frozen fixture. Later supplied information cannot retrospectively rescue an incorrect initial record. Fewer focused attempts improve reliability within disjoint semantic score bands; incorrect facts score zero, and no component merit qualifies a reading.
+New method-scoped input GEPA plans name the `extractor-reliability` objective and pin `initial_extractor_observation=true`. Only initial `complete_selected_program` teaching is mutable. A separate independently cited assessment grades its accepted facts, known actors, question/frame and honest unknowns against the frozen fixture. The native component grade excludes fixed chart anchors, readiness and conversation. Its acceptance receipt binds the actual initial target record, consultation revision and input hash. Later supplying calls cannot rescue an incorrect initial record or inflate its repair count. Fewer focused attempts improve reliability within disjoint semantic score bands; incorrect facts score zero, and no component merit qualifies a reading.
+
+A fully settled target rejection at the native call cap is useful negative feedback, with no invented accepted state. Missing, uninvoked, interrupted or uncertain observations stop measurement. Original failed runs and paid review identities remain intact; new protocol identities prevent a changed score from masquerading as a reused historical review.
 
 ```mermaid
 flowchart TD
   P[Immutable plan and explicit editable signature] --> C[Offline sensitivity and safety calibration]
-  C --> I[Fresh original question and native input execution]
-  I --> E[Initially accepted extractor state and actual repair count]
-  E --> J[Independent accepted-state source assessment]
+  C --> I[Fresh original question and actual classification]
+  I --> X[Selected extraction lesson and atomic native validation]
+  X -->|Rejected| V{All provider work settled?}
+  V -->|Yes, within call cap| X
+  V -->|Yes, cap exhausted| F[Actual rejection feedback; no accepted state]
+  V -->|No| U[Unobserved; retain interruption and stop]
+  X -->|Accepted| E[Initial consultation receipt; stop component execution]
+  E --> J[Independent initial-state and fixture assessment]
+  F --> J
   J --> M[Component reliability merit]
   M --> G[GEPA strict improvement and separate development selection]
-  I --> N{Native inputs complete?}
+  E -. Separate production journey .-> N{Native inputs complete?}
   N -->|No| Q[Actual guru inquiry and bound user clarification]
   Q --> I
   N -->|Yes| H[ReadyReading permit]
-  H --> S[Input evaluation stops; closing reply unobserved]
+  H --> S[Legacy input evaluation stops; closing reply unobserved]
   H --> R[Production interpretation then conversational reply]
   G --> A[Fresh whole journey, source and reserved acceptance]
   R --> A
   A --> D[Reviewed promotion]
 ```
 
-The diagram separates optimizer fitness from deployment acceptance. Conversation actor, continuity and honesty guards remain noncompensating at acceptance. The input-only adapter no longer invents a final guru exchange after skipping interpretation. Every proposed overlay still needs the actual production handoff, complete reading/source review and untouched reserved checks. No new hosted semantic improvement is established by calibration or by Rust tests.
+The diagram separates optimizer fitness from deployment acceptance. Conversation actor, continuity and honesty guards remain noncompensating at acceptance. The initial observer generates no guru reply or interpretation. Whole journeys still exercise genuine inquiries, bound supplying turns, device/user anchor selection and the actual handoff into interpretation. Every proposed overlay needs complete reading/source review and untouched reserved checks. No new hosted semantic improvement is established by calibration or Rust tests.

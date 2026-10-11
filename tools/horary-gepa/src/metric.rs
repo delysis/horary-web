@@ -331,6 +331,173 @@ fn extractor_reliability(outcome: &Value, review: Option<&Value>) -> Result<Feed
     )))
 }
 
+fn initial_extractor_reliability(
+    outcome: &Value,
+    review: Option<&Value>,
+) -> Result<Feedback, String> {
+    let observed = &outcome["initial_extractor"];
+    if outcome["id"].as_str().is_none_or(|id| id.is_empty())
+        || outcome["scope"] != "initial_extractor_function_only"
+        || outcome["full_reading"] != false
+        || outcome["execution_status"] != "initial_extractor_observed"
+        || observed["version"] != 1
+        || !matches!(
+            observed["state"].as_str(),
+            Some("accepted" | "native_rejected")
+        )
+        || observed["recognition_phase"] != "complete_selected_program"
+        || observed["all_provider_responses_settled"] != true
+        || observed["request_result_pairs_complete"] != true
+        || outcome["target_function_invoked"] != true
+        || outcome["physical_generation_attempts_complete"] != true
+        || !outcome["infrastructure_error"].is_null()
+        || !outcome["provider_stop"].is_null()
+        || outcome["deadline_cancelled"] != false
+        || outcome["group_cancelled"] != false
+    {
+        return Err(
+            "Uninvoked, uncertain or unobserved initial extraction has no component merit".into(),
+        );
+    }
+    let attempts = observed["initial_target_attempts"]
+        .as_u64()
+        .filter(|n| *n > 0)
+        .ok_or("No actual initial target attempts")?;
+    let review = review.ok_or("Initial extraction correctness is independently unobserved")?;
+    review_identity(outcome, review)?;
+    if review["protocol"] != crate::initial_extractor::VERSION
+        || review["initial_observation_sha256"]
+            != horary_prompt_program::digest(observed.to_string())
+        || review["source_binding_sha256"] != outcome["initial_extractor_source_binding_sha256"]
+        || review["source_binding_sha256"]
+            .as_str()
+            .is_none_or(|hash| hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()))
+        || review["native_initial_pass"] != observed["native_grade"]["semantic_pass"]
+        || review["full_journey_qualified"] != false
+    {
+        return Err(
+            "Independent component review differs from actual initial observation/source authority"
+                .into(),
+        );
+    }
+    let assessment = &review["extractor"];
+    let semantic = dimension(assessment, false)?
+        .ok_or("Initial component source correctness is unobserved")?;
+    if observed["state"] == "native_rejected" {
+        if !observed["accepted_consultation"].is_null()
+            || !observed["native_grade"].is_null()
+            || outcome["known_native_semantic_abort"] != true
+            || semantic != 0
+        {
+            return Err(
+                "Rejected initial extraction cannot invent accepted fields or semantic success"
+                    .into(),
+            );
+        }
+        return Ok(zero(format!("Fully settled initial extractor native rejection after {attempts} actual target attempts. {}. Exact raw outputs and paused native rejection remain available for reflection; no accepted input or reading is claimed.",assessment["reason"].as_str().unwrap_or(""))));
+    }
+    let initial = &observed["native_grade"];
+    if !native_pass(initial, "classification")?
+        || !native_pass(initial, "extraction")?
+        || initial["semantic_pass"] != true
+    {
+        return Ok(zero("The actual initially accepted frame/facts failed their authored component contract; fixed anchor, chart and conversation do not contribute to this grade"));
+    }
+    if semantic == 0 {
+        return Ok(zero(
+            "Independent initial source correctness failed; fewer repairs cannot compensate",
+        ));
+    }
+    Ok(measured((2.*f64::from(semantic)+1./attempts as f64)/5.,false,format!(
+        "Actual initial extractor correctness {semantic}/2; {attempts} initial target attempts. {}. Conversation, supplying turns, chart, source-correct reading and adoption remain unqualified.",assessment["reason"].as_str().unwrap_or(""))))
+}
+
+fn initial_calibration_fixture() -> (Value, Value) {
+    let mut o = serde_json::json!({"id":"calibration","scope":"initial_extractor_function_only","full_reading":false,
+        "execution_status":"initial_extractor_observed","target_function_invoked":true,"physical_generation_attempts_complete":true,
+        "deadline_cancelled":false,"group_cancelled":false,
+        "initial_extractor_source_binding_sha256":"0".repeat(64),
+        "initial_extractor":{"version":1,"state":"accepted","recognition_phase":"complete_selected_program","initial_target_attempts":3,
+            "all_provider_responses_settled":true,"request_result_pairs_complete":true,"accepted_consultation":{"facts":{}},
+            "native_grade":{"semantic_pass":true,"hurdles":{"classification":{"status":"pass"},"extraction":{"status":"pass"}}}},
+        "grade":{"semantic_pass":false},"first_turn_execution_completed":false,"follow_up_execution_completed":false,
+        "target_signature_calls":99,"hurdles":{"classification":{"status":"fail"},"extraction":{"status":"fail"},"elicitation":{"status":"fail"}}});
+    let r = initial_calibration_review(&o, 2);
+    // These are counterfactual later failures only: neither execution nor
+    // native grades are promoted to a complete journey.
+    o["first_turn_execution_completed"] = serde_json::json!(false);
+    (o, r)
+}
+fn initial_calibration_review(o: &Value, score: u8) -> Value {
+    serde_json::json!({"protocol":crate::initial_extractor::VERSION,"case_id":o["id"],
+        "initial_observation_sha256":horary_prompt_program::digest(o["initial_extractor"].to_string()),
+        "source_binding_sha256":o["initial_extractor_source_binding_sha256"],"native_initial_pass":o["initial_extractor"]["native_grade"]["semantic_pass"],
+        "full_journey_qualified":false,"extractor":{"state":"scored","score":score,"reason":"Authored offline source-correctness counterfactual",
+            "evidence":[{"case_id":o["id"],"file":"native-first-turn.json","json_pointer":"/session/method/consultation","sha256":"0".repeat(64)},
+                {"case_id":o["id"],"file":"fixture.json","json_pointer":"","sha256":"0".repeat(64)}]}})
+}
+
+pub fn initial_calibration() -> Result<Value, String> {
+    let (mut o, r) = initial_calibration_fixture();
+    let baseline = grade(&o, Some(&r), "extractor_reliability")?;
+    o["follow_up_execution_completed"] = serde_json::json!(true);
+    o["target_signature_calls"] = serde_json::json!(200);
+    let later_fixed = grade(&o, Some(&r), "extractor_reliability")?;
+    o["initial_extractor"]["initial_target_attempts"] = serde_json::json!(1);
+    let faster = grade(
+        &o,
+        Some(&initial_calibration_review(&o, 2)),
+        "extractor_reliability",
+    )?;
+    let wrong = grade(
+        &o,
+        Some(&initial_calibration_review(&o, 0)),
+        "extractor_reliability",
+    )?;
+    o["initial_extractor"]["native_grade"]["hurdles"]["extraction"]["status"] =
+        serde_json::json!("fail");
+    let native_wrong = grade(
+        &o,
+        Some(&initial_calibration_review(&o, 2)),
+        "extractor_reliability",
+    )?;
+    o["initial_extractor"]["state"] = serde_json::json!("native_rejected");
+    o["initial_extractor"]["accepted_consultation"] = Value::Null;
+    o["initial_extractor"]["native_grade"] = Value::Null;
+    o["known_native_semantic_abort"] = serde_json::json!(true);
+    let rejection = grade(
+        &o,
+        Some(&initial_calibration_review(&o, 0)),
+        "extractor_reliability",
+    )?;
+    o["provider_stop"] = serde_json::json!("uncertain provider request");
+    let uncertainty = grade(
+        &o,
+        Some(&initial_calibration_review(&o, 0)),
+        "extractor_reliability",
+    )
+    .is_err();
+    if baseline.score != later_fixed.score
+        || faster.score <= baseline.score
+        || wrong.score != 0.
+        || native_wrong.score != 0.
+        || rejection.score != 0.
+        || !uncertainty
+        || baseline.qualified
+        || faster.qualified
+    {
+        return Err(
+            "Initial component metric failed attribution/safety calibration; no paid search".into(),
+        );
+    }
+    Ok(
+        serde_json::json!({"version":2,"objective":"extractor_reliability","scope":"initial_extractor_function_only","passed":true,
+        "baseline":baseline,"later_fixed_actor_changes":later_fixed,"fewer_initial_repairs":faster,
+        "wrong_initial_facts":wrong,"authored_native_wrong":native_wrong,"settled_native_rejection":rejection,
+        "uncertainty_rejected":uncertainty,"model_calls":0,"qualification":"Authored offline calibration; no model quality or full-journey qualification"}),
+    )
+}
+
 /// Authored counterfactuals exercise the actual fitness before any paid search.
 /// These are instrumentation checks, never reviews of model-generated answers.
 pub fn calibration() -> Result<Value, String> {
@@ -400,6 +567,15 @@ pub fn grade(
             | "extractor_reliability"
     ) {
         return Err(format!("Unknown frozen optimization target: {target}"));
+    }
+    if outcome["scope"] == "initial_extractor_function_only" {
+        if target != "extractor_reliability" {
+            return Err(
+                "An initial extractor cannot stand in for a journey, conversation or reading"
+                    .into(),
+            );
+        }
+        return initial_extractor_reliability(outcome, independent_review);
     }
     completed(outcome, target)?;
     if target == "input_journey"
@@ -535,6 +711,100 @@ pub fn grade(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn initial_scope_scores_accepted_fields_despite_later_fixed_failures() {
+        let (mut o, r) = initial_calibration_fixture();
+        let baseline = grade(&o, Some(&r), "extractor_reliability").unwrap();
+        o["journey_outcome"] = serde_json::json!({"execution_status":"deadline_cancelled","provider_stop":"fixed later actor",
+            "hurdles":{"classification":{"status":"fail"},"extraction":{"status":"fail"},"elicitation":{"status":"fail"}}});
+        o["follow_up_execution_completed"] = serde_json::json!(false);
+        o["target_signature_calls"] = serde_json::json!(400);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap(),
+            baseline
+        );
+        assert!(!baseline.qualified);
+        assert!(grade(&o, Some(&r), "input_journey").is_err());
+    }
+    #[test]
+    fn initial_native_wrong_fields_cannot_be_rescued_by_later_correct_supply() {
+        let (mut o, _) = initial_calibration_fixture();
+        o["initial_extractor"]["native_grade"]["hurdles"]["extraction"]["status"] =
+            serde_json::json!("fail");
+        o["follow_up_execution_completed"] = serde_json::json!(true);
+        o["grade"]["semantic_pass"] = serde_json::json!(true);
+        let r = initial_calibration_review(&o, 2);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap().score,
+            0.
+        );
+        o["initial_extractor"]["native_grade"]["hurdles"]["extraction"]["status"] =
+            serde_json::json!("pass");
+        o["initial_extractor"]["native_grade"]["hurdles"]["classification"]["status"] =
+            serde_json::json!("fail");
+        let r = initial_calibration_review(&o, 2);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap().score,
+            0.
+        );
+    }
+    #[test]
+    fn settled_initial_native_rejection_is_negative_but_uncertainty_is_not() {
+        let (mut o, _) = initial_calibration_fixture();
+        o["initial_extractor"]["state"] = serde_json::json!("native_rejected");
+        o["initial_extractor"]["accepted_consultation"] = Value::Null;
+        o["initial_extractor"]["native_grade"] = Value::Null;
+        o["known_native_semantic_abort"] = serde_json::json!(true);
+        let r = initial_calibration_review(&o, 0);
+        assert_eq!(
+            grade(&o, Some(&r), "extractor_reliability").unwrap().score,
+            0.
+        );
+        assert!(grade(
+            &o,
+            Some(&initial_calibration_review(&o, 2)),
+            "extractor_reliability"
+        )
+        .is_err());
+        for (field, value) in [
+            ("provider_stop", serde_json::json!("unknown response")),
+            ("deadline_cancelled", serde_json::json!(true)),
+            ("infrastructure_error", serde_json::json!("I/O")),
+            (
+                "physical_generation_attempts_complete",
+                serde_json::json!(false),
+            ),
+            ("target_function_invoked", serde_json::json!(false)),
+        ] {
+            let mut uncertain = o.clone();
+            uncertain[field] = value;
+            assert!(
+                grade(&uncertain, Some(&r), "extractor_reliability").is_err(),
+                "{field}"
+            );
+        }
+    }
+    #[test]
+    fn initial_review_requires_exact_observation_and_source_binding() {
+        let (o, r) = initial_calibration_fixture();
+        assert!(grade(&o, None, "extractor_reliability").is_err());
+        for field in [
+            "protocol",
+            "initial_observation_sha256",
+            "source_binding_sha256",
+        ] {
+            let mut wrong = r.clone();
+            wrong[field] = serde_json::json!("different");
+            assert!(
+                grade(&o, Some(&wrong), "extractor_reliability").is_err(),
+                "{field}"
+            );
+        }
+        let mut unobserved = o.clone();
+        unobserved["initial_extractor"]["state"] = serde_json::json!("unobserved");
+        assert!(grade(&unobserved, Some(&r), "extractor_reliability").is_err());
+        assert_eq!(initial_calibration().unwrap()["passed"], true);
+    }
     use serde_json::json;
 
     fn outcome() -> Value {

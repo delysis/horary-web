@@ -32,6 +32,9 @@ pub fn evaluate(
     if plan.objective == Objective::ExtractorReliability {
         request["objective"] = json!(plan.objective);
     }
+    if plan.initial_extractor_observation {
+        request["initial_extractor_observation"] = json!(true);
+    }
     if plan.function == Function::ReadingJourney {
         request["objective"] = json!(plan.objective);
         request["target_stage"] = json!(plan.target_stage);
@@ -83,6 +86,9 @@ pub fn evaluate(
             || load(&previous.join("request.json"))?["request"] != request
         {
             return Err("Cached measurement belongs to a different logical request".into());
+        }
+        if plan.initial_extractor_observation {
+            crate::initial_extractor::verify_observation(plan, &response)?;
         }
         // The logical operation identity stays identical on deterministic replay.
         // Cache availability changes after the first run; it is execution detail.
@@ -174,6 +180,9 @@ pub fn evaluate(
         task["target_method"] = json!(plan.target_method);
         task["source_origin_sha256"] = json!(example.source_origin_sha256);
         task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+        if plan.initial_extractor_observation {
+            task["initial_extractor_observation"] = json!(true);
+        }
         if plan.function == Function::ReadingJourney {
             task["target_stage"] = json!(plan.target_stage);
             task["source_branch"] = json!(example.source_branch);
@@ -286,6 +295,13 @@ pub fn evaluate(
             "candidate_moment":first["session"]["candidateMomentMs"],
             "source_sha256":digest(read(&native_directory.join("first-turn.json"))?),
             "scope":"Initially accepted state; no supplying-turn checkpoint transplanted"});
+        if plan.initial_extractor_observation {
+            response["initial_accepted_inputs"] = json!({
+                "state":response["outcome"]["initial_extractor"]["state"],
+                "consultation":response["outcome"]["initial_extractor"]["accepted_consultation"],
+                "scope":"Actual initial component boundary; rejected records contain no accepted consultation"});
+            crate::initial_extractor::bind(plan, &mut response)?;
+        }
     }
     journal.finish(&directory, &response)?;
     fs::create_dir_all(cache.parent().ok_or("No cache directory")?)
@@ -317,6 +333,15 @@ fn input_invocation(target: &str, outcome: &Value, first: &Value, count: usize) 
 }
 
 fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
+    let initial_end = if plan.initial_extractor_observation {
+        Some(
+            load(&directory.join("initial-extractor-observation.json"))?["last_sequence"]
+                .as_u64()
+                .ok_or("Missing actual initial extractor boundary")?,
+        )
+    } else {
+        None
+    };
     let mut files = fs::read_dir(directory.join("calls"))
         .map_err(|e| e.to_string())?
         .map(|e| e.map(|e| e.path()).map_err(|e| e.to_string()))
@@ -332,6 +357,14 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
             continue;
         }
         let call = load(&file)?;
+        if let Some(last) = initial_end {
+            let sequence = call["sequence"]
+                .as_u64()
+                .ok_or("Initial request lacks its actual sequence")?;
+            if sequence > last {
+                continue;
+            }
+        }
         if plan.function == Function::ReadingJourney {
             let result_name = name.replace("-request.json", "-result.json");
             let result = load(&directory.join("calls").join(result_name))?;
@@ -365,8 +398,22 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
         {
             let result_name = name.replace("-request.json", "-result.json");
             let result = load(&directory.join("calls").join(result_name))?;
-            calls.push(json!({"input":call["input"],"schema":call["schema"],"guide_sha256":call["guide_sha256"],
-                "prompt_program":call["prompt_program"],"result":result["result"],"source_request_sha256":digest(read(&file)?)}));
+            let mut focused = json!({"input":call["input"],"schema":call["schema"],"guide_sha256":call["guide_sha256"],
+                "prompt_program":call["prompt_program"],"result":result["result"],"source_request_sha256":digest(read(&file)?)});
+            if plan.initial_extractor_observation {
+                focused["sequence"] = call["sequence"].clone();
+                focused["source_request_file"] = json!(format!("calls/{name}"));
+                focused["source_result_file"] = json!(format!(
+                    "calls/{}",
+                    name.replace("-request.json", "-result.json")
+                ));
+                focused["source_result_sha256"] = json!(digest(read(
+                    &directory
+                        .join("calls")
+                        .join(name.replace("-request.json", "-result.json"))
+                )?));
+            }
+            calls.push(focused);
         }
     }
     Ok(calls)
@@ -388,6 +435,9 @@ pub fn inspect(plan: &Plan, state: &Path, example: &Example) -> Result<std::path
         task["target_method"] = json!(plan.target_method);
         task["source_origin_sha256"] = json!(example.source_origin_sha256);
         task["source_fixture_sha256"] = json!(example.source_fixture_sha256);
+        if plan.initial_extractor_observation {
+            task["initial_extractor_observation"] = json!(true);
+        }
         if plan.function == Function::ReadingJourney {
             task["target_stage"] = json!(plan.target_stage);
             task["source_branch"] = json!(example.source_branch);
@@ -556,6 +606,35 @@ fn abort_owned_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn initial_focused_count_excludes_later_supply_but_legacy_keeps_its_trace() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("calls")).unwrap();
+        let input = json!({"recognition_phase":"complete_selected_program","consultation":{"frame":{"state":"resolved",
+            "observation":{"value":{"method":"movable_deal"}}}}});
+        for sequence in [2, 5] {
+            keep(&dir.path().join(format!("calls/{sequence:04}-request.json")),&json!({"sequence":sequence,"stage":"intake","input":input,"schema":{},"guide_sha256":"0".repeat(64),"prompt_program":null})).unwrap();
+            keep(
+                &dir.path().join(format!("calls/{sequence:04}-result.json")),
+                &json!({"result":{"Ok":{"content":"authored"}}}),
+            )
+            .unwrap();
+        }
+        keep(
+            &dir.path().join("initial-extractor-observation.json"),
+            &json!({"last_sequence":2}),
+        )
+        .unwrap();
+        let mut plan = crate::tests::plan();
+        plan.function = Function::InputJourney;
+        plan.target_method = Some("movable_deal".into());
+        assert_eq!(focused_calls(&plan, dir.path()).unwrap().len(), 2);
+        plan.initial_extractor_observation = true;
+        let calls = focused_calls(&plan, dir.path()).unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0]["sequence"], 2);
+        assert_eq!(calls[0]["source_request_file"], "calls/0002-request.json");
+    }
     #[test]
     fn alternate_routes_are_observed_but_missing_target_dispatch_is_an_error() {
         let outcome =

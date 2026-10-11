@@ -243,9 +243,48 @@ fn authentic_permit(snapshot: &Value, focused: &Value) -> bool {
 const SEMANTIC_BUDGET_STOP: &str =
     "Synthetic case call budget exhausted; no successful completion implied";
 
+pub(super) fn provider_responses_settled(calls: &[Value]) -> bool {
+    fn settled(calls: &[Value]) -> Option<()> {
+        for call in calls {
+            let expected = call["request"]["tasks"].as_array().map_or(1, Vec::len);
+            let results = if call["request"]["tasks"].is_array() {
+                call["result"]["Ok"].as_array()?.iter().collect::<Vec<_>>()
+            } else {
+                vec![call["result"].get("Ok")?]
+            };
+            let receipts = if call["provider_receipt"].is_object() {
+                vec![&call["provider_receipt"]]
+            } else {
+                call["provider_receipts"].as_array()?.iter().collect()
+            };
+            if results.len() != expected || receipts.len() != expected {
+                return None;
+            }
+            for (result, receipt) in results.iter().zip(receipts) {
+                let attempts = receipt["generation_attempts"].as_array()?;
+                if receipt["submitted"] != true
+                    || receipt["provider"] != "google_gemini_api"
+                    || receipt["response"]["http_status"] != 200
+                    || receipt["native_result"]["Ok"] != **result
+                    || attempts.is_empty()
+                    || attempts.iter().any(|attempt| {
+                        attempt["submitted"] != true
+                            || !attempt["error"].is_null()
+                            || attempt["http_status"].as_u64().is_none()
+                    })
+                {
+                    return None;
+                }
+            }
+        }
+        Some(())
+    }
+    !calls.is_empty() && settled(calls).is_some()
+}
+
 /// An explicit cap after settled native rejections is a measurable negative.
 /// Cancellation, transport or missing paid observations are never zero scores.
-fn semantic_abort(
+pub(super) fn semantic_abort(
     raw: &Value,
     snapshots: (&Value, &Value),
     calls: &[Value],
@@ -257,40 +296,9 @@ fn semantic_abort(
         || raw["group_cancelled"] == true
         || !raw["provider_stop"].is_null()
         || !raw["infrastructure_error"].is_null()
+        || !provider_responses_settled(calls)
     {
         return None;
-    }
-    for call in calls {
-        let expected = call["request"]["tasks"].as_array().map_or(1, Vec::len);
-        let results = if call["request"]["tasks"].is_array() {
-            call["result"]["Ok"].as_array()?.iter().collect::<Vec<_>>()
-        } else {
-            vec![call["result"].get("Ok")?]
-        };
-        let receipts = if call["provider_receipt"].is_object() {
-            vec![&call["provider_receipt"]]
-        } else {
-            call["provider_receipts"].as_array()?.iter().collect()
-        };
-        if results.len() != expected || receipts.len() != expected {
-            return None;
-        }
-        for (result, receipt) in results.iter().zip(receipts) {
-            let attempts = receipt["generation_attempts"].as_array()?;
-            if receipt["submitted"] != true
-                || receipt["provider"] != "google_gemini_api"
-                || receipt["response"]["http_status"] != 200
-                || receipt["native_result"]["Ok"] != **result
-                || attempts.is_empty()
-                || attempts.iter().any(|attempt| {
-                    attempt["submitted"] != true
-                        || !attempt["error"].is_null()
-                        || attempt["http_status"].as_u64().is_none()
-                })
-            {
-                return None;
-            }
-        }
     }
     let (first, final_state) = snapshots;
     let (name, snapshot, error) =
@@ -580,6 +588,7 @@ fn real_model_reading_function() -> Result<(), String> {
         case.clone(),
         CaseRun {
             full_reading: true,
+            initial_extractor_target: None,
             seconds,
             max_calls,
             dispatcher: None,

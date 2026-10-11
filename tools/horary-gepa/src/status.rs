@@ -95,6 +95,12 @@ fn review_scores(value: &Value) -> Value {
             project(&value["selected_stage"], &["state", "score"]),
         );
     }
+    if value["protocol"] == crate::initial_extractor::VERSION {
+        scores.insert(
+            "initial_extractor".into(),
+            project(&value["extractor"], &["state", "score"]),
+        );
+    }
     Value::Object(scores)
 }
 
@@ -269,6 +275,16 @@ pub fn inspect(root: &Path) -> Result<Value> {
             None
         };
         if let Some(settled) = &response {
+            if plan["initial_extractor_observation"] == true && kind == Some("input_journey") {
+                let check = serde_json::from_value::<crate::Plan>(plan.clone())
+                    .map_err(|e| e.to_string())
+                    .and_then(|p| {
+                        crate::initial_extractor::verify_observation(&p, &settled.response)
+                    });
+                if let Err(error) = check {
+                    errors.push(error);
+                }
+            }
             if settled.artifacts.contains("cache-source.json") {
                 let source = load(&ordinary_path(&directory, "cache-source.json")?)?;
                 if source["type"] == "predecessor_import" {

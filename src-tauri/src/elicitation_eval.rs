@@ -359,6 +359,23 @@ fn grade_at_moment(
     error: Option<&str>,
     default_moment: f64,
 ) -> Grade {
+    grade_input_state(case, session, error, default_moment, false)
+}
+
+/// Only the scoped extractor's authored frame and sourced canonical facts.
+/// Place/moment tools, chart handoff, selected inquiries and guru replies have
+/// not run at this boundary and cannot be component failures or successes.
+fn grade_initial_extractor(case: &Case, session: &Session) -> Grade {
+    grade_input_state(case, session, None, frozen_moment(), true)
+}
+
+fn grade_input_state(
+    case: &Case,
+    session: &Session,
+    error: Option<&str>,
+    default_moment: f64,
+    initial_component: bool,
+) -> Grade {
     use crate::reading_eval::Gate;
     let mut mismatches = Vec::new();
     if let Some(error) = error {
@@ -657,11 +674,36 @@ fn grade_at_moment(
     );
     let mut extraction_failures = mismatches[evidence_start..classification_start].to_vec();
     extraction_failures.extend_from_slice(&mismatches[facts_start..elicitation_start]);
-    extraction_failures.extend_from_slice(&mismatches[handoff_start..reply_start]);
-    let extraction = Gate::checked(extraction_failures, "Authored canonical facts, actor/owner bindings, normalization, chart anchor and native handoff; original quotes are retained by production acceptance");
+    if !initial_component {
+        extraction_failures.extend_from_slice(&mismatches[handoff_start..reply_start]);
+    }
+    let extraction = Gate::checked(
+        extraction_failures,
+        if initial_component {
+            "Initially accepted authored facts, actor/owner bindings and input normalization; fixed anchor, chart, inquiry and conversation are outside this component"
+        } else {
+            "Authored canonical facts, actor/owner bindings, normalization, chart anchor and native handoff; original quotes are retained by production acceptance"
+        },
+    );
     let mut elicitation_failures = mismatches[elicitation_start..handoff_start].to_vec();
     elicitation_failures.extend_from_slice(&mismatches[reply_start..]);
-    let elicitation = Gate::checked(elicitation_failures, "Authored genuine gaps or no gaps, selected reminder and a fresh response; the meaning and fluency of the actual inquiry need independent review");
+    let elicitation = if initial_component {
+        Gate {
+            status: crate::reading_eval::Status::NotRun,
+            failures: vec![],
+            basis: "No conversational elicitation ran at the initial extractor boundary".into(),
+        }
+    } else {
+        Gate::checked(elicitation_failures, "Authored genuine gaps or no gaps, selected reminder and a fresh response; the meaning and fluency of the actual inquiry need independent review")
+    };
+    if initial_component {
+        mismatches = classification
+            .failures
+            .iter()
+            .chain(&extraction.failures)
+            .cloned()
+            .collect();
+    }
     Grade {
         semantic_pass: mismatches.is_empty(),
         mismatches,
@@ -1199,6 +1241,7 @@ struct Reader<'a> {
     dispatcher: Option<mpsc::Sender<BatchCall>>,
     group: Option<usize>,
     program: Option<Arc<horary_prompt_program::Program>>,
+    initial_extractor_target: Option<Method>,
 }
 
 /// Experimental teaching is applied to the actual native request, not to an
@@ -1411,6 +1454,7 @@ impl Drop for Deadline {
 #[derive(Clone)]
 struct CaseRun {
     full_reading: bool,
+    initial_extractor_target: Option<Method>,
     seconds: u64,
     max_calls: u64,
     dispatcher: Option<mpsc::Sender<BatchCall>>,
@@ -1449,6 +1493,12 @@ impl Reader<'_> {
     }
 }
 impl Runtime for Reader<'_> {
+    fn initial_extractor_target(&self) -> Option<Method> {
+        self.initial_extractor_target
+    }
+    fn initial_extractor_sequence(&self) -> Option<u64> {
+        Some(self.sequence.load(Ordering::Acquire))
+    }
     fn device_location(&self) -> Result<Option<LocationCandidate>, String> {
         let sequence = self.device_calls.fetch_add(1, Ordering::AcqRel) + 1;
         let result = self.device_available.then(device);
@@ -3045,6 +3095,9 @@ fn evaluate_case(
     let full_reading = config.full_reading;
     let seconds = config.seconds;
     let max_calls = config.max_calls;
+    if config.full_reading && config.initial_extractor_target.is_some() {
+        return Err("A full reading cannot stop at an extractor component boundary".into());
+    }
     let case_dir = dir.join("cases").join(&case.id);
     fs::create_dir(&case_dir).map_err(|e| e.to_string())?;
     fs::create_dir(case_dir.join("calls")).map_err(|e| e.to_string())?;
@@ -3078,6 +3131,7 @@ fn evaluate_case(
         dispatcher: config.dispatcher.clone(),
         group: config.group,
         program: config.program.clone(),
+        initial_extractor_target: config.initial_extractor_target,
     };
     let mut session = Session::default();
     if case.device_available {
@@ -3136,7 +3190,11 @@ fn evaluate_case(
     let mut follow_up = json!({"status":"not scripted"});
     let mut follow_up_pass: Option<bool> = None;
     let mut follow_up_execution_completed: Option<bool> = None;
-    if let Some(words) = &case.follow_up {
+    if let Some(words) = case
+        .follow_up
+        .as_ref()
+        .filter(|_| config.initial_extractor_target.is_none())
+    {
         let bound_need = scripted_need_is_eligible(&case, &session);
         let proposal = proposal_is_eligible(&case, &first, &session);
         if result.is_ok() && (bound_need || proposal) {
@@ -3343,6 +3401,232 @@ struct CampaignProgress {
     selected_count: usize,
     results: Vec<Value>,
     active_case_ids: Vec<String>,
+}
+
+/// Only the parent writes campaign indexes. Receive real worker returns in
+/// completion order, and keep collecting after an index failure so no already
+/// paid case disappears from the final infrastructure receipt.
+fn collect_hosted_results(
+    receiver: mpsc::Receiver<(String, Result<Value, String>)>,
+    progress: &mut CampaignProgress,
+    mut record: impl FnMut(&CampaignProgress) -> Result<(), String>,
+) -> Vec<String> {
+    let expected: BTreeSet<_> = progress.active_case_ids.iter().cloned().collect();
+    let mut received = BTreeSet::new();
+    let mut errors = Vec::new();
+    for (id, result) in receiver {
+        if !expected.contains(&id) || !received.insert(id.clone()) {
+            errors.push(format!(
+                "Unexpected or duplicate hosted case completion: {id}"
+            ));
+            continue;
+        }
+        match result {
+            Ok(outcome) => {
+                if outcome["id"] != id {
+                    errors.push(format!("Hosted case {id} returned a different recorded identity; its native evidence remains"));
+                    continue;
+                }
+                for field in ["infrastructure_error", "provider_stop"] {
+                    if let Some(error) = outcome[field].as_str() {
+                        errors.push(format!("Hosted case {id}: {error}"));
+                    }
+                }
+                progress.results.push(outcome);
+                progress.active_case_ids.retain(|active| active != &id);
+                if let Err(error) = record(progress) {
+                    errors.push(format!("Hosted report after case {id}: {error}"));
+                }
+            }
+            Err(error) => errors.push(format!("Hosted case {id}: {error}")),
+        }
+    }
+    for id in expected.difference(&received) {
+        errors.push(format!(
+            "Hosted case {id} produced no result message; no completion implied"
+        ));
+    }
+    errors
+}
+
+#[test]
+fn hosted_fast_negative_is_reported_while_a_slow_peer_is_still_blocked() {
+    let directory = tempfile::tempdir().unwrap();
+    let manifest = json!({"selected_count":2,"decoder":"synthetic progress regression; no model"});
+    let fast = json!({"id":"fast","method":"relationship","mode":"explicit",
+        "first_turn_execution_completed":true,"grade":{"semantic_pass":false,"fluidity_review_flags":[]},
+        "follow_up_scripted":false,"follow_up_pass":null,"follow_up_execution_completed":null});
+    let mut progress = CampaignProgress {
+        manifest: Some(manifest.clone()),
+        selected_count: 2,
+        active_case_ids: vec!["slow".into(), "fast".into()],
+        ..CampaignProgress::default()
+    };
+    std::thread::scope(|scope| {
+        let (completed, receiver) = mpsc::channel();
+        let (release, held) = mpsc::channel();
+        let (published, observed) = mpsc::channel();
+        let slow_sender = completed.clone();
+        let slow = scope.spawn(move || {
+            if held.recv().is_ok() {
+                slow_sender
+                    .send(("slow".into(), Ok(json!({"id":"slow"}))))
+                    .unwrap();
+            }
+        });
+        let fast_outcome = fast.clone();
+        let fast_worker = scope.spawn(move || {
+            completed.send(("fast".into(), Ok(fast_outcome))).unwrap();
+        });
+        let monitor = scope.spawn(move || {
+            let (report, pending): (Value, Vec<String>) =
+                observed.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert_eq!(report["completed"], 1);
+            assert_eq!(report["semantic_failures"], 1);
+            assert_eq!(report["cases"][0], fast);
+            assert_eq!(pending, ["slow"]);
+            assert_eq!(
+                report["campaign_state"]["active_or_unfinished_case_ids"],
+                json!(["slow"])
+            );
+            release.send(()).unwrap();
+        });
+        let errors = collect_hosted_results(receiver, &mut progress, |progress| {
+            save_report_state(
+                directory.path(),
+                &manifest,
+                &progress.results,
+                &json!({"status":"running",
+                "active_or_unfinished_case_ids":progress.active_case_ids}),
+            )?;
+            if progress.results.len() == 1 {
+                let report = serde_json::from_slice(
+                    &fs::read(directory.path().join("report.json")).unwrap(),
+                )
+                .unwrap();
+                published
+                    .send((report, progress.active_case_ids.clone()))
+                    .unwrap();
+            }
+            Ok(())
+        });
+        assert!(errors.is_empty(), "{errors:?}");
+        fast_worker.join().unwrap();
+        slow.join().unwrap();
+        monitor.join().unwrap();
+    });
+    assert_eq!(progress.results.len(), 2);
+    assert_eq!(progress.results[0]["id"], "fast");
+    assert_eq!(progress.results[0]["grade"]["semantic_pass"], false);
+    assert!(progress.active_case_ids.is_empty());
+}
+
+#[test]
+fn hosted_panic_and_index_failure_keep_received_cases_without_inventing_missing_results() {
+    let directory = tempfile::tempdir().unwrap();
+    // An actual filesystem obstruction fails report recording, not collection.
+    fs::create_dir(directory.path().join("report.json")).unwrap();
+    let manifest = json!({"selected_count":3,"decoder":"synthetic failure regression; no model"});
+    let received = json!({"id":"received","method":"relationship","mode":"explicit",
+        "first_turn_execution_completed":true,"grade":{"semantic_pass":false,"fluidity_review_flags":[]},
+        "follow_up_scripted":false,"follow_up_pass":null,"follow_up_execution_completed":null});
+    let mut later = received.clone();
+    later["id"] = json!("later");
+    let mut progress = CampaignProgress {
+        manifest: Some(manifest.clone()),
+        selected_count: 3,
+        active_case_ids: vec!["received".into(), "later".into(), "panicked".into()],
+        ..CampaignProgress::default()
+    };
+    let errors = std::thread::scope(|scope| {
+        let (completed, receiver) = mpsc::channel();
+        let (release, held) = mpsc::channel();
+        let (release_later, held_later) = mpsc::channel();
+        let later_sender = completed.clone();
+        let later_outcome = later.clone();
+        let later_worker = scope.spawn(move || {
+            held_later.recv().unwrap();
+            later_sender
+                .send(("later".into(), Ok(later_outcome)))
+                .unwrap();
+        });
+        let failed_sender = completed.clone();
+        let panicked = scope.spawn(move || {
+            let _sender = failed_sender;
+            held.recv().unwrap();
+            panic!("Synthetic hosted worker panic; no model invoked");
+        });
+        let outcome = received.clone();
+        let worker = scope.spawn(move || completed.send(("received".into(), Ok(outcome))).unwrap());
+        let errors = collect_hosted_results(receiver, &mut progress, |progress| {
+            if progress.results.len() == 1 {
+                release.send(()).unwrap();
+                release_later.send(()).unwrap();
+            }
+            save_report_state(
+                directory.path(),
+                &manifest,
+                &progress.results,
+                &json!({"status":"running"}),
+            )
+        });
+        worker.join().unwrap();
+        later_worker.join().unwrap();
+        assert!(panicked.join().is_err());
+        errors
+    });
+    assert!(errors
+        .iter()
+        .any(|e| e.contains("Hosted report after case received")));
+    assert!(errors
+        .iter()
+        .any(|e| e.contains("panicked produced no result message")));
+    assert_eq!(progress.results, [received.clone(), later.clone()]);
+    assert_eq!(progress.active_case_ids, ["panicked"]);
+    assert!(recorded_group(errors, Ok(())).is_err());
+    fs::remove_dir(directory.path().join("report.json")).unwrap();
+    close_interrupted_campaign(
+        directory.path(),
+        &progress,
+        "Recorded worker/index interruption",
+    );
+    let report: Value =
+        serde_json::from_slice(&fs::read(directory.path().join("report.json")).unwrap()).unwrap();
+    assert_eq!(report["cases"], json!([received, later]));
+    assert_eq!(report["semantic_failures"], 2);
+    assert_eq!(
+        report["campaign_state"]["active_or_unfinished_case_ids"],
+        json!(["panicked"])
+    );
+    assert!(!directory.path().join("completed.json").exists());
+}
+
+#[test]
+fn hosted_completion_cannot_relabel_a_pool_case_or_duplicate_its_negative_outcome() {
+    let (sender, receiver) = mpsc::channel();
+    let negative = json!({"id":"owned","grade":{"semantic_pass":false}});
+    sender.send(("owned".into(), Ok(negative.clone()))).unwrap();
+    sender.send(("owned".into(), Ok(negative.clone()))).unwrap();
+    sender
+        .send(("pending".into(), Ok(json!({"id":"different"}))))
+        .unwrap();
+    sender
+        .send(("foreign".into(), Ok(json!({"id":"foreign"}))))
+        .unwrap();
+    drop(sender);
+    let mut progress = CampaignProgress {
+        active_case_ids: vec!["owned".into(), "pending".into()],
+        ..CampaignProgress::default()
+    };
+    let mut reports = 0;
+    let errors = collect_hosted_results(receiver, &mut progress, |_| {
+        reports += 1;
+        Ok(())
+    });
+    assert_eq!(progress.results, [negative]);
+    assert_eq!(progress.active_case_ids, ["pending"]);
+    assert_eq!(reports, 1);
+    assert_eq!(errors.len(), 3);
 }
 
 fn close_interrupted_campaign(dir: &Path, progress: &CampaignProgress, error: &str) -> String {
@@ -3596,6 +3880,7 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
     save_report(dir, &manifest, &progress.results)?;
     let config = CaseRun {
         full_reading,
+        initial_extractor_target: None,
         seconds,
         max_calls,
         dispatcher: None,
@@ -3610,85 +3895,106 @@ fn run_campaign_in(dir: &Path, progress: &mut CampaignProgress) -> Result<usize,
         if source_hashes(root)? != sources {
             return Err("Application source changed during this frozen campaign; earlier receipts remain. Start a new campaign for the changed source.".into());
         }
-        let outcomes = if batch_size == 1 {
-            vec![evaluate_case(&state, dir, group[0].clone(), config.clone())]
-        } else if config.hosted.is_some() {
+        if batch_size > 1 && config.hosted.is_some() {
             // Independent cases retain their own deadlines. The hosted client's
             // four-request limiter also covers each case's analysis branches.
-            std::thread::scope(|scope| {
+            let infrastructure_errors = std::thread::scope(|scope| {
+                let (completed, receiver) = mpsc::channel();
                 let workers = group
                     .iter()
                     .cloned()
                     .map(|case| {
+                        let id = case.id.clone();
+                        let worker_id = id.clone();
                         let config = config.clone();
                         let state_ref = &state;
-                        scope.spawn(move || evaluate_case(state_ref, dir, case, config))
+                        let sender = completed.clone();
+                        let worker = scope.spawn(move || {
+                            let outcome = evaluate_case(state_ref, dir, case, config);
+                            let _ = sender.send((worker_id, outcome));
+                        });
+                        (id, worker)
                     })
                     .collect::<Vec<_>>();
-                workers
-                    .into_iter()
-                    .map(|worker| {
-                        worker
-                            .join()
-                            .unwrap_or_else(|_| Err("A hosted case worker panicked".into()))
-                    })
-                    .collect::<Vec<_>>()
-            })
-        } else {
-            let group_cancelled = Arc::new(AtomicBool::new(false));
-            let group_deadline = Deadline::start(seconds, group_cancelled.clone());
-            let outputs = std::thread::scope(|scope| {
-                let (dispatch, requests) = mpsc::channel();
-                let state_ref = &state;
-                let cancel = group_cancelled.clone();
-                scope.spawn(move || dispatch_batches(state_ref, requests, cancel));
-                let group_config = CaseRun {
-                    dispatcher: Some(dispatch.clone()),
-                    shared_cancelled: Some(group_cancelled.clone()),
-                    group: Some(group_index),
-                    ..config.clone()
-                };
-                let mut workers = Vec::new();
-                for case in group.iter().cloned() {
-                    let config = group_config.clone();
-                    let directory = dir;
-                    workers.push(
-                        scope.spawn(move || evaluate_case(state_ref, directory, case, config)),
-                    );
+                drop(completed);
+                let mut errors = collect_hosted_results(receiver, progress, |progress| {
+                    save_report_state(
+                        dir,
+                        &manifest,
+                        &progress.results,
+                        &json!({"status":"running",
+                        "active_or_unfinished_case_ids":progress.active_case_ids}),
+                    )
+                });
+                for (id, worker) in workers {
+                    if worker.join().is_err() {
+                        errors.push(format!(
+                            "Hosted case {id} worker panicked; no result fabricated"
+                        ));
+                    }
                 }
-                drop(group_config);
-                drop(dispatch);
-                workers
-                    .into_iter()
-                    .map(|worker| {
-                        worker.join().unwrap_or_else(|_| {
-                            Err("An exploration case worker panicked; no completion implied".into())
-                        })
-                    })
-                    .collect::<Vec<_>>()
+                errors
             });
-            drop(group_deadline);
-            outputs
-        };
-        let mut infrastructure_errors = Vec::new();
-        for outcome in outcomes {
-            match outcome {
-                Ok(outcome) => {
-                    if let Some(error) = outcome["infrastructure_error"].as_str() {
-                        infrastructure_errors.push(error.to_owned());
+            recorded_group(infrastructure_errors, Ok(()))?;
+        } else {
+            let outcomes = if batch_size == 1 {
+                vec![evaluate_case(&state, dir, group[0].clone(), config.clone())]
+            } else {
+                let group_cancelled = Arc::new(AtomicBool::new(false));
+                let group_deadline = Deadline::start(seconds, group_cancelled.clone());
+                let outputs = std::thread::scope(|scope| {
+                    let (dispatch, requests) = mpsc::channel();
+                    let state_ref = &state;
+                    let cancel = group_cancelled.clone();
+                    scope.spawn(move || dispatch_batches(state_ref, requests, cancel));
+                    let group_config = CaseRun {
+                        dispatcher: Some(dispatch.clone()),
+                        shared_cancelled: Some(group_cancelled.clone()),
+                        group: Some(group_index),
+                        ..config.clone()
+                    };
+                    let mut workers = Vec::new();
+                    for case in group.iter().cloned() {
+                        let config = group_config.clone();
+                        let directory = dir;
+                        workers.push(
+                            scope.spawn(move || evaluate_case(state_ref, directory, case, config)),
+                        );
                     }
-                    if let Some(error) = outcome["provider_stop"].as_str() {
-                        infrastructure_errors.push(error.to_owned());
+                    drop(group_config);
+                    drop(dispatch);
+                    workers
+                        .into_iter()
+                        .map(|worker| {
+                            worker.join().unwrap_or_else(|_| {
+                                Err("An exploration case worker panicked; no completion implied".into())
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                });
+                drop(group_deadline);
+                outputs
+            };
+            let mut infrastructure_errors = Vec::new();
+            for outcome in outcomes {
+                match outcome {
+                    Ok(outcome) => {
+                        if let Some(error) = outcome["infrastructure_error"].as_str() {
+                            infrastructure_errors.push(error.to_owned());
+                        }
+                        if let Some(error) = outcome["provider_stop"].as_str() {
+                            infrastructure_errors.push(error.to_owned());
+                        }
+                        progress.results.push(outcome);
                     }
-                    progress.results.push(outcome);
+                    Err(error) => infrastructure_errors.push(error),
                 }
-                Err(error) => infrastructure_errors.push(error),
             }
+            recorded_group(
+                infrastructure_errors,
+                save_report(dir, &manifest, &progress.results),
+            )?;
         }
-        recorded_group(
-            infrastructure_errors,
-            save_report(dir, &manifest, &progress.results),
-        )?;
         if source_hashes(root)? != sources {
             return Err("Application source changed during a frozen group; case receipts remain, and no campaign completion is asserted.".into());
         }
@@ -4515,6 +4821,7 @@ fn real_model_classification_function() -> Result<(), String> {
         dispatcher: None,
         group: None,
         program: program.map(Arc::new),
+        initial_extractor_target: None,
     };
     write_new(
         &dir.join("initial.json"),
@@ -4873,6 +5180,7 @@ fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
         dispatcher: None,
         group: None,
         program: None,
+        initial_extractor_target: None,
     };
     let runtime = ClassificationReplayRuntime {
         reader: &reader,
@@ -4902,6 +5210,10 @@ fn classification_replay_runs_native_acceptance_and_gold_without_a_model() {
         .contains("call budget exhausted"));
 }
 
+fn initial_observation_disabled(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct InputJourneyTask {
@@ -4914,6 +5226,8 @@ struct InputJourneyTask {
     source_origin_sha256: String,
     baseline_manifest_sha256: String,
     target_method: Method,
+    #[serde(default, skip_serializing_if = "initial_observation_disabled")]
+    initial_extractor_observation: bool,
     #[serde(default)]
     program_file: Option<PathBuf>,
     #[serde(default)]
@@ -5348,6 +5662,206 @@ fn input_journey_measurement(
     )
 }
 
+fn initial_extractor_measurement(
+    case: &Case,
+    target: Method,
+    raw: &Value,
+    snapshots: (&Value, &Value),
+    calls: &[Value],
+    complete: bool,
+    run_error: Option<&str>,
+) -> Result<Value, String> {
+    let (first, final_state) = snapshots;
+    if raw["full_reading"] != false || !raw["follow_up_execution_completed"].is_null() {
+        return Err(
+            "An initial extractor measurement cannot execute reading or supplying turns".into(),
+        );
+    }
+    let (groups, providers) = input_journey_call_counts(calls)?;
+    let focused: Vec<_> = calls
+        .iter()
+        .filter(|call| {
+            let input = crate::horary_step::original_input(&call["request"]["input"]);
+            let scope = horary_prompt_program::signature("intake", input);
+            call["request"]["stage"] == "intake"
+                && scope.recognition_phase == Some("complete_selected_program")
+                && scope.method == Some(target.name())
+        })
+        .collect();
+    let boundary = first["session"]["audit"].as_array().and_then(|audit| {
+        audit
+            .iter()
+            .rev()
+            .find(|event| event["event"] == "initial_extractor_boundary")
+    });
+    let settled = complete
+        && run_error.is_none()
+        && reading::provider_responses_settled(calls)
+        && raw["deadline_cancelled"] == false
+        && raw["group_cancelled"] == false
+        && raw["infrastructure_error"].is_null()
+        && raw["provider_stop"].is_null();
+    let mut accepted_grade = Value::Null;
+    let mut accepted = Value::Null;
+    let mut abort = Value::Null;
+    let state = if let Some(boundary) =
+        boundary.filter(|_| settled && first["result"].get("Ok").is_some())
+    {
+        let index = boundary["record_index"]
+            .as_u64()
+            .ok_or("Initial boundary lacks its actual record index")?;
+        let record = first["session"]["method"]["records"]
+            .as_array()
+            .and_then(|records| records.get(index as usize))
+            .ok_or("Initial boundary record is absent")?;
+        let original = crate::horary_step::original_input(&record["input"]);
+        let scope = horary_prompt_program::signature("intake", original);
+        let session: Session =
+            serde_json::from_value(first["session"].clone()).map_err(|e| e.to_string())?;
+        if boundary["version"] != 1
+            || boundary["target_method"] != json!(target)
+            || boundary["recognition_phase"] != "complete_selected_program"
+            || boundary["after_message"].as_u64() != Some(session.messages.len() as u64)
+            || boundary["last_sequence"].as_u64() != Some(groups)
+            || boundary["revision"] != first["session"]["revision"]
+            || boundary["record_input_sha256"] != record["inputSha256"]
+            || boundary["accepted_consultation"] != first["session"]["method"]["consultation"]
+            || !record["validationError"].is_null()
+            || record["stage"] != "intake"
+            || scope.recognition_phase != Some("complete_selected_program")
+            || scope.method != Some(target.name())
+            || boundary["chart_executed"] != false
+            || boundary["conversation_executed"] != false
+            || boundary["supplying_executed"] != false
+            || focused.is_empty()
+            || session.chart.is_some()
+            || first["session"] != final_state["session"]
+            || !first["session"]["method"]["flow"]["jobs"]
+                .as_array()
+                .is_some_and(|jobs| {
+                    jobs.iter().any(|job| {
+                        job == &boundary["native_job"]
+                            && job["stage"] == "intake"
+                            && job["revision"] == record["revision"]
+                            && job["phase"]["state"] == "complete"
+                            && job["phase"]["record_index"].as_u64() == Some(index)
+                    })
+                })
+        {
+            return Err(
+                "Initial acceptance is not bound to the actual post-apply native state".into(),
+            );
+        }
+        accepted_grade = serde_json::to_value(grade_initial_extractor(case, &session))
+            .map_err(|e| e.to_string())?;
+        accepted = boundary["accepted_consultation"].clone();
+        "accepted"
+    } else if settled {
+        if let Some(witness) =
+            reading::semantic_abort(raw, snapshots, calls, complete).filter(|witness| {
+                let scope = horary_prompt_program::signature("intake", &witness["original_input"]);
+                witness["stage"] == "intake"
+                    && witness["snapshot"] == "first-turn.json"
+                    && scope.recognition_phase == Some("complete_selected_program")
+                    && scope.method == Some(target.name())
+                    && !focused.is_empty()
+            })
+        {
+            abort = witness;
+            "native_rejected"
+        } else {
+            "unobserved"
+        }
+    } else {
+        "unobserved"
+    };
+    let observed = state != "unobserved";
+    Ok(json!({"id":case.id,"method":case.method,"mode":case.mode,
+        "scope":"initial_extractor_function_only","full_reading":false,
+        "execution_status":if observed {"initial_extractor_observed"}else{"initial_extractor_unobserved"},
+        "initial_extractor":{"version":1,"state":state,"target_method":target,
+            "recognition_phase":"complete_selected_program","boundary":boundary,
+            "accepted_consultation":accepted,"native_grade":accepted_grade,
+            "initial_target_attempts":focused.len(),"last_sequence":groups,
+            "all_provider_responses_settled":settled,"request_result_pairs_complete":complete},
+        "known_native_semantic_abort":state=="native_rejected","semantic_abort_witness":abort,
+        "target_function_invoked":!focused.is_empty(),"target_signature_calls":focused.len(),
+        "journey_outcome":raw,"grade":raw["grade"],"hurdles":raw["hurdles"],
+        "first_turn_execution_completed":raw["first_turn_execution_completed"],
+        "follow_up_execution_completed":null,"follow_up_scripted":case.follow_up.is_some(),"follow_up_pass":null,
+        "input_journey_observed":false,"input_journey_pass":null,
+        "physical_generation_attempts":input_journey_generation_attempts(calls),"physical_generation_attempts_complete":complete,
+        "logical_call_groups":groups,"logical_provider_calls":providers,"model_calls":providers,
+        "provider_stop":raw["provider_stop"],"deadline_cancelled":raw["deadline_cancelled"],"group_cancelled":raw["group_cancelled"],
+        "infrastructure_error":run_error.map(str::to_owned).map_or_else(||raw["infrastructure_error"].clone(),Value::String),
+        "execution_error":first["result"]["Err"],"decoder_mode":"hosted_unconstrained_text",
+        "reading_semantic_review":"unobserved; fixed actors and reading were not executed"}))
+}
+
+#[test]
+fn initial_native_grade_excludes_chart_anchor_readiness_inquiry_and_guru() {
+    let case: Case=serde_json::from_value(json!({"id":"authored-initial-scope","method":"contact","mode":"explicit",
+        "words":"Will Sam contact me this week?","expected":{"facet":"event","ready":true,
+            "facts":[{"field":"horizon","contains":"this week"}]},"source_pages":"Authored offline scope probe","rationale":"No model invoked"})).unwrap();
+    let mut consultation =
+        serde_json::to_value(reading_contracts::Consultation::default()).unwrap();
+    let evidence = json!({"source":"user","turn":1,"quote":case.words});
+    consultation["frame"] = json!({"state":"resolved","observation":{"value":{"method":"contact","facet":"event"},"evidence":evidence}});
+    consultation["facts"]["horizon"] =
+        json!({"state":"resolved","observation":{"value":"this week","evidence":evidence}});
+    let mut session = Session::default();
+    session.method.consultation = Some(serde_json::from_value(consultation).unwrap());
+    session.messages.push(Message {
+        role: "user".into(),
+        text: case.words.clone(),
+    });
+    let initial = grade_initial_extractor(&case, &session);
+    assert!(initial.semantic_pass);
+    assert_eq!(
+        initial.hurdles.elicitation.status,
+        crate::reading_eval::Status::NotRun
+    );
+    assert_eq!(
+        initial.hurdles.reading.status,
+        crate::reading_eval::Status::NotRun
+    );
+    let whole = grade(&case, &session, None);
+    assert!(!whole.semantic_pass);
+    assert_eq!(
+        whole.hurdles.extraction.status,
+        crate::reading_eval::Status::Fail
+    );
+    session.messages.push(Message {
+        role: "assistant".into(),
+        text: "An incorrect fixed conversation".into(),
+    });
+    session.chart = Some(json!({"timestampMs":0}));
+    assert!(grade_initial_extractor(&case, &session).semantic_pass);
+    session
+        .method
+        .consultation
+        .as_mut()
+        .unwrap()
+        .facts
+        .remove(&Field::Horizon);
+    assert!(
+        !grade_initial_extractor(&case, &session).semantic_pass,
+        "Later conversation or chart cannot repair wrong initial facts"
+    );
+}
+
+#[test]
+fn legacy_input_task_omission_keeps_the_original_journey() {
+    let (_, task, _, _, _, _) = input_journey_source_test_fixture();
+    let mut value = serde_json::to_value(task).unwrap();
+    value
+        .as_object_mut()
+        .unwrap()
+        .remove("initial_extractor_observation");
+    let task: InputJourneyTask = serde_json::from_value(value).unwrap();
+    assert!(!task.initial_extractor_observation);
+}
+
 #[test]
 #[ignore = "Fresh hosted input journey: hash-bound HORARY_NEURAL_TASK and HORARY_EVAL_EVIDENCE; Google credential required only for measurement"]
 fn real_model_input_journey_function() -> Result<(), String> {
@@ -5519,9 +6033,7 @@ fn real_model_input_journey_function() -> Result<(), String> {
             file.write_all(bytes).map_err(|error| error.to_string())
         })?;
     }
-    write_new(
-        &dir.join("manifest.json"),
-        &json!({"version":EVALUATOR_VERSION,
+    let mut manifest = json!({"version":EVALUATOR_VERSION,
         "scope":"input_journey_function_only","case_id":case.id,"task":task,
         "task_sha256":horary_prompt_program::digest(&task_bytes),"source_provenance":provenance,
         "repository_sha":git(&root,&["rev-parse","HEAD"])?.trim(),
@@ -5534,8 +6046,16 @@ fn real_model_input_journey_function() -> Result<(), String> {
         "target_signature":{"stage":"intake","recognition_phase":"complete_selected_program","method":task.target_method},
         "inspected_current_target_program":applied,"entry_point":"evaluate_case -> horary_pipeline::run_elicitation",
         "fresh_initial_verified_before_network":true,"captured_checkpoint_reused":false,
-        "fresh_upstream_and_supplying_calls":true,"full_reading":false}),
-    )?;
+        "fresh_upstream_and_supplying_calls":true,"full_reading":false});
+    if task.initial_extractor_observation {
+        manifest["scope"] = json!("initial_extractor_function_only");
+        manifest["fresh_upstream_and_supplying_calls"] = json!(false);
+        manifest["fresh_upstream_calls"] = json!(true);
+        manifest["fresh_supplying_calls"] = json!(false);
+        manifest["stop_boundary"] =
+            json!("initial_extractor_acceptance_or_settled_native_rejection");
+    }
+    write_new(&dir.join("manifest.json"), &manifest)?;
     fs::create_dir(dir.join("cases")).map_err(|error| error.to_string())?;
     let state = NativeLlamaState::default();
     let case_dir = dir.join("cases").join(&case.id);
@@ -5545,6 +6065,9 @@ fn real_model_input_journey_function() -> Result<(), String> {
         case.clone(),
         CaseRun {
             full_reading: false,
+            initial_extractor_target: task
+                .initial_extractor_observation
+                .then_some(task.target_method),
             seconds,
             max_calls,
             dispatcher: None,
@@ -5578,15 +6101,27 @@ fn real_model_input_journey_function() -> Result<(), String> {
         .err()
         .cloned()
         .or_else(|| initial_check.as_ref().err().cloned());
-    let mut outcome = input_journey_measurement(
-        &case,
-        &raw,
-        &first,
-        &final_state,
-        &calls,
-        calls_complete,
-        run_error.as_deref(),
-    )?;
+    let mut outcome = if task.initial_extractor_observation {
+        initial_extractor_measurement(
+            &case,
+            task.target_method,
+            &raw,
+            (&first, &final_state),
+            &calls,
+            calls_complete,
+            run_error.as_deref(),
+        )?
+    } else {
+        input_journey_measurement(
+            &case,
+            &raw,
+            &first,
+            &final_state,
+            &calls,
+            calls_complete,
+            run_error.as_deref(),
+        )?
+    };
     outcome["native_evidence_directory"] = json!(case_dir);
     outcome["trace"] = json!(format!("cases/{}/trace.html", case.id));
     outcome["logical_model_call_cap"] = json!(max_calls);
@@ -5603,22 +6138,39 @@ fn real_model_input_journey_function() -> Result<(), String> {
     outcome["source_origin_sha256"] = json!(task.source_origin_sha256);
     outcome["baseline_manifest_sha256"] = json!(task.baseline_manifest_sha256);
     outcome["fresh_initial_sha256_verified"] = json!(initial_check.is_ok());
-    outcome["target_signature_calls"] = json!(calls
-        .iter()
-        .filter(|call| {
-            let signature = horary_prompt_program::signature("intake", &call["request"]["input"]);
-            call["request"]["stage"] == "intake"
-                && signature.recognition_phase == Some("complete_selected_program")
-                && signature.method == Some(task.target_method.name())
-        })
-        .count());
+    if task.initial_extractor_observation {
+        // Keep the raw whole-journey outcome intact. The scoped observation is
+        // a separate native artifact so the controller can bind this boundary
+        // without mistaking the wrapper outcome for a case-level receipt.
+        write_new(
+            &case_dir.join("initial-extractor-observation.json"),
+            &outcome["initial_extractor"],
+        )
+        .map_err(|error| retain_execution_error(error, run_error.as_deref()))?;
+    }
+    if !task.initial_extractor_observation {
+        outcome["target_signature_calls"] = json!(calls
+            .iter()
+            .filter(|call| {
+                let signature =
+                    horary_prompt_program::signature("intake", &call["request"]["input"]);
+                call["request"]["stage"] == "intake"
+                    && signature.recognition_phase == Some("complete_selected_program")
+                    && signature.method == Some(task.target_method.name())
+            })
+            .count());
+    }
     write_new(&dir.join("calls.json"), &calls)
         .map_err(|error| retain_execution_error(error, run_error.as_deref()))?;
     let mut final_copy = final_state;
     if !final_copy.is_object() {
         final_copy = json!({"session":null});
     }
-    final_copy["scope"] = json!("input_journey_function_only");
+    final_copy["scope"] = json!(if task.initial_extractor_observation {
+        "initial_extractor_function_only"
+    } else {
+        "input_journey_function_only"
+    });
     final_copy["full_reading"] = json!(false);
     final_copy["native_evidence_directory"] = json!(case_dir);
     final_copy["execution_error"] = outcome["execution_error"].clone();
@@ -5667,6 +6219,7 @@ fn input_journey_source_test_fixture() -> (Case, InputJourneyTask, Value, Value,
         source_origin_sha256: "0".repeat(64),
         baseline_manifest_sha256: "1".repeat(64),
         target_method: Method::Contact,
+        initial_extractor_observation: false,
         program_file: None,
         inspect_prompt_only: false,
     };

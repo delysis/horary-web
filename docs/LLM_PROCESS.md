@@ -287,7 +287,7 @@ Run `cargo test --manifest-path src-tauri/Cargo.toml --locked --lib process_refe
 
 ## Exact live lessons and contracts
 
-The complete request examples are in [prompt-examples.json](llm-process/prompt-examples.json). They are captured by an authored fixture driving the real scheduler. [Runtime source](llm-process/runtime-excerpts.md) and [source fingerprints](llm-process/source-manifest.json) make the implementation inspectable. Evidence-ID enums in each contract are specific to the current stage's supplied facts. No whole chart or full chat history is inserted into every task.
+The complete request examples are in [prompt-examples.json](llm-process/prompt-examples.json). They are captured by an authored fixture driving the real scheduler. Only that example's supplied astronomical chart is frozen before facts and prompts are constructed, with its exact anchor, native generator and source hashes recorded in [chart provenance](../src-tauri/test-fixtures/process-reference-chart-provenance.json). A separate calculation parity test uses the existing astronomical tolerance; no prompt, contract or source output is normalized, and the application still calculates its own charts. [Runtime source](llm-process/runtime-excerpts.md) and [source fingerprints](llm-process/source-manifest.json) make the implementation inspectable. Evidence-ID enums in each contract are specific to the current stage's supplied facts. No whole chart or full chat history is inserted into every task.
 
 <a id="lesson-intake"></a>
 

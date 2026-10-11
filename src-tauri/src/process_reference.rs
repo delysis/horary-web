@@ -5,6 +5,219 @@ use serde_json::json;
 use std::path::Path;
 
 const OVERVIEW: &str = include_str!("process_overview.md");
+const CHART_FIXTURE: &str = "src-tauri/test-fixtures/process-reference-chart.json";
+const CHART_PROVENANCE: &str = "src-tauri/test-fixtures/process-reference-chart-provenance.json";
+const CHART_FIXTURE_VERSION: &str = "horary-documentation-chart-2026-10-11.1";
+const CHART_FIXTURE_PURPOSE: &str = "Frozen astronomical input for an authored documentation scheduler fixture; not a model answer, expert qualification or production chart override.";
+const CHART_FIXTURE_GENERATOR: &str =
+    "process_reference::tests::capture_documentation_chart_fixture";
+const CHART_SOURCES: &[&str] = &[
+    "src-tauri/src/horary_pipeline.rs",
+    "src-tauri/src/process_reference.rs",
+    "crates/horary-ai-core/src/astronomy.rs",
+    "crates/horary-ai-core/src/ephemeris_coefficients.rs",
+    "crates/horary-ai-core/src/events.rs",
+    "crates/horary-ai-core/src/book_method.rs",
+];
+// The existing core astronomical parity suite uses this absolute tolerance.
+// Here it checks the frozen input separately; it never normalizes a prompt.
+const CHART_PARITY_TOLERANCE: f64 = 1e-7;
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct ChartAnchor {
+    timestamp_ms: f64,
+    latitude: f64,
+    longitude: f64,
+    timezone: String,
+}
+
+fn chart_anchor() -> ChartAnchor {
+    ChartAnchor {
+        timestamp_ms: 1789387200000.,
+        latitude: 38.657,
+        longitude: -77.249,
+        timezone: "America/New_York".into(),
+    }
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct ChartProvenance {
+    version: String,
+    purpose: String,
+    generator: String,
+    captured_os: String,
+    captured_arch: String,
+    question: String,
+    anchor: ChartAnchor,
+    source_sha256: std::collections::BTreeMap<String, String>,
+    chart_path: String,
+    chart_file_sha256: String,
+    native_chart_input_sha256: String,
+    chart_input_sha256: String,
+}
+
+fn chart_sources(root: &Path) -> Result<std::collections::BTreeMap<String, String>, String> {
+    CHART_SOURCES
+        .iter()
+        .map(|path| {
+            std::fs::read_to_string(root.join(path))
+                .map(|source| ((*path).into(), lessons::digest(&source)))
+                .map_err(|error| format!("{path}: {error}"))
+        })
+        .collect()
+}
+
+fn validate_chart_anchor(chart: &serde_json::Value, anchor: &ChartAnchor) -> Result<(), String> {
+    if chart["timestampMs"].as_f64() != Some(anchor.timestamp_ms)
+        || chart["latitude"].as_f64() != Some(anchor.latitude)
+        || chart["longitude"].as_f64() != Some(anchor.longitude)
+        || chart["houseSystem"] != "Regiomontanus"
+        || chart["zodiac"] != "tropical"
+    {
+        return Err("Documentation chart differs from the exact authored anchor/system".into());
+    }
+    Ok(())
+}
+
+pub(crate) struct DocumentationChart {
+    chart: serde_json::Value,
+    record: ChartProvenance,
+    provenance_sha256: String,
+}
+
+impl DocumentationChart {
+    pub(crate) fn install(&self, session: &mut crate::conversation::Session) -> Result<(), String> {
+        let native = session
+            .chart
+            .as_ref()
+            .ok_or("Documentation chart must follow a real native cast")?;
+        validate_chart_anchor(native, &self.record.anchor)?;
+        let place = session
+            .place
+            .as_ref()
+            .ok_or("Documentation chart needs the actual selected reader place")?;
+        if place.latitude != self.record.anchor.latitude
+            || place.longitude != self.record.anchor.longitude
+            || place.timezone != self.record.anchor.timezone
+        {
+            return Err("Documentation chart cannot replace another reader anchor".into());
+        }
+        session.chart = Some(self.chart.clone());
+        Ok(())
+    }
+
+    pub(crate) fn provenance(&self) -> serde_json::Value {
+        json!({"policy":"Only the supplied astronomical chart is frozen, before native fact derivation and actual prompt construction. Exact teaching/contracts and source checks are unchanged; live astronomical parity is checked separately.",
+            "chart":CHART_FIXTURE,"chartFileSha256":self.record.chart_file_sha256,
+            "chartInputSha256":self.record.chart_input_sha256,"nativeChartInputSha256":self.record.native_chart_input_sha256,
+            "provenance":CHART_PROVENANCE,"provenanceSha256":self.provenance_sha256,
+            "anchor":self.record.anchor,"sourceSha256":self.record.source_sha256,
+            "generator":self.record.generator,"capturedOs":self.record.captured_os,
+            "capturedArch":self.record.captured_arch,"modelInvoked":false})
+    }
+}
+
+fn load_documentation_chart(root: &Path) -> Result<DocumentationChart, String> {
+    let provenance = std::fs::read_to_string(root.join(CHART_PROVENANCE)).map_err(|error| {
+        format!("Missing documentation chart provenance: {error}. Explicitly run {CHART_FIXTURE_GENERATOR} --ignored --nocapture before regenerating references")
+    })?;
+    let record: ChartProvenance =
+        serde_json::from_str(&provenance).map_err(|error| error.to_string())?;
+    if record.version != CHART_FIXTURE_VERSION
+        || record.purpose != CHART_FIXTURE_PURPOSE
+        || record.generator != CHART_FIXTURE_GENERATOR
+        || record.question != "Will I get married in the next year?"
+        || record.anchor != chart_anchor()
+        || record.chart_path != CHART_FIXTURE
+        || record.captured_os.is_empty()
+        || record.captured_arch.is_empty()
+        || record.native_chart_input_sha256.len() != 64
+        || !record
+            .native_chart_input_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || record.source_sha256 != chart_sources(root)?
+    {
+        return Err("Documentation chart provenance or calculation/generator sources changed; explicitly capture a new authored chart before regenerating references".into());
+    }
+    let bytes =
+        std::fs::read_to_string(root.join(CHART_FIXTURE)).map_err(|error| error.to_string())?;
+    if lessons::digest(&bytes) != record.chart_file_sha256 {
+        return Err("Documentation chart bytes do not match their pinned provenance".into());
+    }
+    let chart: serde_json::Value =
+        serde_json::from_str(&bytes).map_err(|error| error.to_string())?;
+    if lessons::digest(&chart.to_string()) != record.chart_input_sha256 {
+        return Err("Parsed documentation chart differs from the captured native input".into());
+    }
+    validate_chart_anchor(&chart, &record.anchor)?;
+    Ok(DocumentationChart {
+        chart,
+        record,
+        provenance_sha256: lessons::digest(&provenance),
+    })
+}
+
+pub(crate) fn documentation_chart() -> Result<DocumentationChart, String> {
+    load_documentation_chart(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("Missing repository root")?,
+    )
+}
+
+/// Compare the supplied chart against a fresh calculation, separately from
+/// exact prompt/source comparisons. Integer and categorical data stay exact;
+/// finite computed numbers use the existing core scientific parity bound.
+fn chart_parity(
+    fixed: &serde_json::Value,
+    live: &serde_json::Value,
+    pointer: &str,
+) -> Result<(), String> {
+    use serde_json::Value;
+    match (fixed, live) {
+        (Value::Object(a), Value::Object(b)) if a.len() == b.len() => {
+            for (key, value) in a {
+                chart_parity(
+                    value,
+                    b.get(key)
+                        .ok_or_else(|| format!("Live chart missing {pointer}/{key}"))?,
+                    &format!("{pointer}/{key}"),
+                )?;
+            }
+            Ok(())
+        }
+        (Value::Array(a), Value::Array(b)) if a.len() == b.len() => {
+            for (index, (a, b)) in a.iter().zip(b).enumerate() {
+                chart_parity(a, b, &format!("{pointer}/{index}"))?;
+            }
+            Ok(())
+        }
+        (Value::Number(a), Value::Number(b)) => {
+            let within_bound = if a.is_i64() || b.is_i64() {
+                a == b
+            } else {
+                a.as_f64().zip(b.as_f64()).is_some_and(|(a, b)| {
+                    a.is_finite() && b.is_finite() && (a - b).abs() < CHART_PARITY_TOLERANCE
+                })
+            };
+            if within_bound {
+                Ok(())
+            } else {
+                Err(format!(
+                    "Chart parity differs at {pointer}: frozen={a}, live={b}"
+                ))
+            }
+        }
+        _ if fixed == live => Ok(()),
+        _ => Err(format!(
+            "Chart structure/testimony differs at {pointer}: frozen={fixed}, live={live}"
+        )),
+    }
+}
+
 const SOURCES: &[&str] = &[
     ".gitattributes",
     "src-tauri/Cargo.toml",
@@ -25,6 +238,8 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/recognition_programs.rs",
     "src-tauri/src/elicitation_eval.rs",
     "src-tauri/src/reading_neural_eval.rs",
+    CHART_FIXTURE,
+    CHART_PROVENANCE,
     "src-tauri/src/deal_training_bank.rs",
     "src-tauri/src/hosted_gemma_eval.rs",
     "src-tauri/src/reading_eval.rs",
@@ -74,6 +289,7 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/src/executable.rs",
     "tools/horary-gepa/src/journal.rs",
     "tools/horary-gepa/src/native.rs",
+    "tools/horary-gepa/src/initial_extractor.rs",
     "tools/horary-gepa/src/teacher.rs",
     "tools/horary-gepa/src/metric.rs",
     "tools/horary-gepa/src/review.rs",
@@ -108,6 +324,7 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/review_progress.rs",
     "crates/horary-ai-core/src/chart_input.rs",
     "crates/horary-ai-core/src/astronomy.rs",
+    "crates/horary-ai-core/src/ephemeris_coefficients.rs",
     "crates/horary-ai-core/src/events.rs",
     "crates/horary-ai-core/src/book_method.rs",
     "src/App.tsx",
@@ -304,7 +521,7 @@ The bank contains only fixed teaching messages, not private question inputs or a
     }
     document.push_str("\n## What Eileen should examine");
     document.push_str(review);
-    document.push_str("\n## Exact live lessons and contracts\n\nThe complete request examples are in [prompt-examples.json](llm-process/prompt-examples.json). They are captured by an authored fixture driving the real scheduler. [Runtime source](llm-process/runtime-excerpts.md) and [source fingerprints](llm-process/source-manifest.json) make the implementation inspectable. Evidence-ID enums in each contract are specific to the current stage's supplied facts. No whole chart or full chat history is inserted into every task.\n\n");
+    document.push_str("\n## Exact live lessons and contracts\n\nThe complete request examples are in [prompt-examples.json](llm-process/prompt-examples.json). They are captured by an authored fixture driving the real scheduler. Only that example's supplied astronomical chart is frozen before facts and prompts are constructed, with its exact anchor, native generator and source hashes recorded in [chart provenance](../src-tauri/test-fixtures/process-reference-chart-provenance.json). A separate calculation parity test uses the existing astronomical tolerance; no prompt, contract or source output is normalized, and the application still calculates its own charts. [Runtime source](llm-process/runtime-excerpts.md) and [source fingerprints](llm-process/source-manifest.json) make the implementation inspectable. Evidence-ID enums in each contract are specific to the current stage's supplied facts. No whole chart or full chat history is inserted into every task.\n\n");
     let mut guides = Vec::new();
     for stage in Stage::ALL {
         let matters: &[Matter] = if stage == Stage::Significators {
@@ -395,6 +612,154 @@ mod tests {
     use super::*;
     fn root() -> &'static Path {
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+    }
+    #[test]
+    #[ignore = "Explicitly capture the authored scheduler's astronomical input; no model or app data"]
+    fn capture_documentation_chart_fixture() {
+        let chart = crate::horary_pipeline::capture_process_reference_chart()
+            .expect("Capture the authored native scheduler chart without freezing");
+        let anchor = chart_anchor();
+        validate_chart_anchor(&chart, &anchor).expect("Exact documentation fixture anchor");
+        let bytes = format!("{}\n", serde_json::to_string_pretty(&chart).unwrap());
+        // Preserve the encoded native chart bytes, and separately bind the
+        // parsed fixture representation that will enter the real prompt
+        // builder. No numeric values are manually rounded or edited.
+        let parsed: serde_json::Value = serde_json::from_str(&bytes).unwrap();
+        chart_parity(&chart, &parsed, "").expect("Native chart serialization parity");
+        let record = ChartProvenance {
+            version: CHART_FIXTURE_VERSION.into(),
+            purpose: CHART_FIXTURE_PURPOSE.into(),
+            generator: CHART_FIXTURE_GENERATOR.into(),
+            captured_os: std::env::consts::OS.into(),
+            captured_arch: std::env::consts::ARCH.into(),
+            question: "Will I get married in the next year?".into(),
+            anchor,
+            source_sha256: chart_sources(root()).unwrap(),
+            chart_path: CHART_FIXTURE.into(),
+            chart_file_sha256: lessons::digest(&bytes),
+            native_chart_input_sha256: lessons::digest(&chart.to_string()),
+            chart_input_sha256: lessons::digest(&parsed.to_string()),
+        };
+        std::fs::write(root().join(CHART_FIXTURE), bytes).unwrap();
+        std::fs::write(
+            root().join(CHART_PROVENANCE),
+            format!("{}\n", serde_json::to_string_pretty(&record).unwrap()),
+        )
+        .unwrap();
+        load_documentation_chart(root()).expect("Revalidate generated chart bytes and provenance");
+        eprintln!("Captured {CHART_FIXTURE} and {CHART_PROVENANCE}; explicitly regenerate the living references next");
+    }
+
+    #[test]
+    fn frozen_documentation_chart_matches_live_native_calculation() {
+        let fixed = load_documentation_chart(root()).unwrap();
+        let anchor = &fixed.record.anchor;
+        let live = horary_ai_core::astronomy::chart(
+            anchor.timestamp_ms,
+            anchor.latitude,
+            anchor.longitude,
+        )
+        .unwrap();
+        validate_chart_anchor(&live, anchor).unwrap();
+        chart_parity(&fixed.chart, &live, "").unwrap();
+    }
+
+    #[test]
+    fn chart_freezing_is_explicit_and_only_for_the_full_documentation_fixture() {
+        let full = crate::horary_pipeline::process_examples().unwrap();
+        assert!(full["astronomicalFixture"].is_object());
+        assert!(full.get("capturedNativeChart").is_none());
+        for (device, input_only) in [(true, true), (false, true), (false, false)] {
+            let live =
+                crate::horary_pipeline::process_examples_at_boundary(device, input_only).unwrap();
+            assert!(live.get("astronomicalFixture").is_none());
+            assert!(live.get("capturedNativeChart").is_none());
+        }
+    }
+
+    #[test]
+    fn chart_parity_does_not_hide_changed_discrete_testimony_or_material_numbers() {
+        let fixed = json!({"degree":12.25,"house":2,"sign":"Aries","events":[{"hours":74.4210021254827,"withinCurrentSigns":true}]});
+        let mut tiny = fixed.clone();
+        tiny["events"][0]["hours"] = json!(74.42100212548267);
+        chart_parity(&fixed, &tiny, "").unwrap();
+        let mut house = fixed.clone();
+        house["house"] = json!(3);
+        assert!(chart_parity(&fixed, &house, "").is_err());
+        let mut sign = fixed.clone();
+        sign["sign"] = json!("Taurus");
+        assert!(chart_parity(&fixed, &sign, "").is_err());
+        let mut event = fixed.clone();
+        event["events"][0]["withinCurrentSigns"] = json!(false);
+        assert!(chart_parity(&fixed, &event, "").is_err());
+        let mut material = fixed.clone();
+        material["degree"] = json!(12.250001);
+        assert!(chart_parity(&fixed, &material, "").is_err());
+    }
+
+    fn fixture_tree() -> tempfile::TempDir {
+        let tree = tempfile::tempdir().unwrap();
+        for file in CHART_SOURCES
+            .iter()
+            .copied()
+            .chain([CHART_FIXTURE, CHART_PROVENANCE])
+        {
+            let destination = tree.path().join(file);
+            std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+            std::fs::copy(root().join(file), destination).unwrap();
+        }
+        tree
+    }
+
+    #[test]
+    fn documentation_chart_rejects_changed_bytes_sources_and_anchor() {
+        let tree = fixture_tree();
+        load_documentation_chart(tree.path()).unwrap();
+        let chart_bytes = std::fs::read_to_string(tree.path().join(CHART_FIXTURE)).unwrap();
+        std::fs::write(tree.path().join(CHART_FIXTURE), format!("{chart_bytes}\n")).unwrap();
+        assert!(load_documentation_chart(tree.path()).is_err());
+        std::fs::write(tree.path().join(CHART_FIXTURE), &chart_bytes).unwrap();
+        let source_path = tree.path().join(CHART_SOURCES[0]);
+        let source = std::fs::read_to_string(&source_path).unwrap();
+        std::fs::write(&source_path, format!("{source}\n")).unwrap();
+        assert!(load_documentation_chart(tree.path()).is_err());
+        std::fs::write(&source_path, source).unwrap();
+        let mut record: ChartProvenance = serde_json::from_str(
+            &std::fs::read_to_string(tree.path().join(CHART_PROVENANCE)).unwrap(),
+        )
+        .unwrap();
+        record.anchor.latitude += 1e-9;
+        std::fs::write(
+            tree.path().join(CHART_PROVENANCE),
+            serde_json::to_string_pretty(&record).unwrap(),
+        )
+        .unwrap();
+        assert!(load_documentation_chart(tree.path()).is_err());
+    }
+
+    #[test]
+    fn documentation_chart_can_only_replace_its_own_actual_cast_anchor() {
+        let fixed = load_documentation_chart(root()).unwrap();
+        let mut session = crate::conversation::Session::default();
+        assert!(fixed.install(&mut session).is_err());
+        session.chart = Some(fixed.chart.clone());
+        session.place = Some(crate::geocode::LocationCandidate {
+            id: "device-location".into(),
+            label: "Near Woodbridge".into(),
+            name: "Woodbridge".into(),
+            country: "US".into(),
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+            provider: "device".into(),
+        });
+        fixed.install(&mut session).unwrap();
+        assert_eq!(session.chart.as_ref(), Some(&fixed.chart));
+        session.chart.as_mut().unwrap()["timestampMs"] = json!(1789387200001.);
+        assert!(fixed.install(&mut session).is_err());
+        session.chart = Some(fixed.chart.clone());
+        session.place.as_mut().unwrap().timezone = "UTC".into();
+        assert!(fixed.install(&mut session).is_err());
     }
     fn json_difference(
         current: &serde_json::Value,

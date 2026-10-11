@@ -85,7 +85,27 @@ pub(crate) fn prepare(
         let mut inputs = json!({"case_id":example.id,"source_request_sha256":example.source_request_sha256,
             "actual_application_input":horary_prompt_program::original_input(&call["input"]),
             "output_contract":call["schema"]});
-        let generated = if plan.function == Function::ReadingJourney {
+        let generated = if plan.initial_extractor_observation {
+            let actual = &evaluation["evaluation"];
+            crate::initial_extractor::verify_observation(plan, actual)?;
+            crate::initial_extractor::verify_review(
+                plan,
+                example,
+                actual,
+                &evaluation["independent_review"],
+            )?;
+            let calls = actual["actual_function_calls"]
+                .as_array()
+                .filter(|calls| !calls.is_empty())
+                .ok_or("Initial reflection lacks target observations")?;
+            inputs = json!({"case_id":example.id,"scope":"initial_extractor_only",
+                "actual_initial_target_inputs":calls.iter().map(|call|json!({"input":call["input"],"schema":call["schema"],
+                    "source_request_sha256":call["source_request_sha256"]})).collect::<Vec<_>>()});
+            json!({"initial_observation":actual["outcome"]["initial_extractor"],
+                "actual_target_outputs":calls.iter().map(|call|json!({"result":call["result"],
+                    "source_result_sha256":call["source_result_sha256"]})).collect::<Vec<_>>(),
+                "native_rejection":actual["outcome"]["semantic_abort_witness"]})
+        } else if plan.function == Function::ReadingJourney {
             let calls = evaluation["evaluation"]["actual_function_calls"]
                 .as_array()
                 .filter(|calls| !calls.is_empty())
@@ -113,6 +133,16 @@ pub(crate) fn prepare(
                 "actual_native_gates":evaluation["evaluation"]["outcome"]["hurdles"],
                 "validated_independent_input_review":evaluation["independent_review"],
                 "actual_focused_calls":evaluation["evaluation"]["actual_function_calls"]});
+        if plan.initial_extractor_observation {
+            feedback["actual_native_gates"] =
+                evaluation["evaluation"]["outcome"]["initial_extractor"]["native_grade"].clone();
+            feedback["validated_initial_extractor_review"] =
+                evaluation["independent_review"].clone();
+            feedback
+                .as_object_mut()
+                .ok_or("Invalid component feedback")?
+                .remove("validated_independent_input_review");
+        }
         if plan.function == Function::ReadingJourney {
             crate::reading::verify_example(example, plan.target_method.as_deref())?;
             feedback["editable_signature"] = json!({"stage":plan.signature().stage,

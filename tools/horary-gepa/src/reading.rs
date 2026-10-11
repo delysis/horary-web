@@ -47,7 +47,7 @@ fn require_measured(evaluation: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Result<()> {
+pub(crate) fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Result<()> {
     if evaluation["outcome"]["known_native_semantic_abort"] != true {
         return Ok(());
     }
@@ -97,6 +97,14 @@ fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Result<()> {
             "Semantic negative differs from its actual rejection and paused native job".into(),
         );
     }
+    let count = verify_settled_calls(directory)?;
+    if witness["observed_call_groups"].as_u64() != Some(count) {
+        return Err("Semantic negative has missing call observations".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn verify_settled_calls(directory: &Path) -> Result<u64> {
     let mut count = 0;
     let mut request_count = 0;
     for entry in fs::read_dir(directory.join("calls")).map_err(|e| e.to_string())? {
@@ -172,13 +180,10 @@ fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Result<()> {
         }
         count += 1;
     }
-    if witness["observed_call_groups"].as_u64() != Some(count)
-        || count == 0
-        || request_count != count
-    {
+    if count == 0 || request_count != count {
         return Err("Semantic negative has missing call observations".into());
     }
-    Ok(())
+    Ok(count)
 }
 
 /// Normalize one captured branch without manufacturing an input or a result.
