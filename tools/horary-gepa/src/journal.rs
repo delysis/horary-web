@@ -27,6 +27,28 @@ impl Journal {
         self._lock.try_clone().map_err(|error| error.to_string())
     }
     pub fn open(root: &Path, plan: &Plan) -> Result<Self> {
+        Self::open_bounded(
+            root,
+            plan,
+            plan.max_teacher_calls,
+            plan.max_review_calls,
+            plan.max_physical_generation_attempts,
+        )
+    }
+    pub(crate) fn open_verification(
+        root: &Path,
+        plan: &impl serde::Serialize,
+        max_review: u64,
+    ) -> Result<Self> {
+        Self::open_bounded(root, plan, 0, max_review, 0)
+    }
+    fn open_bounded(
+        root: &Path,
+        plan: &impl serde::Serialize,
+        max_teacher: u64,
+        max_review: u64,
+        max_physical: u64,
+    ) -> Result<Self> {
         fs::create_dir_all(root.join("operations")).map_err(|error| error.to_string())?;
         keep(&root.join("plan.json"), plan)?;
         let lock = fs::OpenOptions::new()
@@ -42,9 +64,9 @@ impl Journal {
             root: root.into(),
             next: 0,
             plan_sha256: digest(read(&root.join("plan.json"))?),
-            max_teacher: plan.max_teacher_calls,
-            max_review: plan.max_review_calls,
-            max_physical: plan.max_physical_generation_attempts,
+            max_teacher,
+            max_review,
+            max_physical,
             _lock: lock,
         })
     }
@@ -78,6 +100,9 @@ impl Journal {
             u64::from(new_submission),
             0,
         )
+    }
+    pub(crate) fn begin_complete_journey_review(&mut self, request: &Value) -> Result<Operation> {
+        self.begin_cost("codex_complete_journey_review", request, 0, 1, 0)
     }
     fn begin_cost(
         &mut self,

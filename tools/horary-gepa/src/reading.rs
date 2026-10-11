@@ -210,12 +210,18 @@ pub fn captured_task(request: &Value, branch: Option<usize>) -> Result<Value> {
         let guide = prompt[0]["content"]
             .as_str()
             .ok_or("Reading branch has no system guide")?;
-        Ok(
-            json!({"stage":task[0],"matter":task[1],"input":task[2],"schema":task[3],
+        let mut capture = json!({"stage":task[0],"matter":task[1],"input":task[2],"schema":task[3],
             "prompt":prompt,"prompt_program":programs[branch],"guide_sha256":digest(guide),
-            "schema_sha256":digest(task[3].to_string()),"prompt_sha256":digest(prompt.to_string())}),
-        )
+            "schema_sha256":digest(task[3].to_string()),"prompt_sha256":digest(prompt.to_string())});
+        if let Some(protocol) = request.get("executor_guide_identity") {
+            horary_prompt_program::captured_record_guide_sha256(request, Some(branch))?;
+            capture["executor_guide_identity"] = protocol.clone();
+        }
+        Ok(capture)
     } else if request["tasks"].is_null() && request["stage"].is_string() {
+        if request.get("executor_guide_identity").is_some() {
+            horary_prompt_program::captured_record_guide_sha256(request, None)?;
+        }
         Ok(request.clone())
     } else {
         Err("Reading capture requires an explicit native branch or a single task".into())
@@ -310,7 +316,7 @@ pub fn verify_invocation(plan: &Plan, outcome: &Value, calls: &[Value]) -> Resul
 }
 
 /// These obligations are evaluator/judge data. None is passed to Gemma.
-fn rubric_obligations(rubric: &Value) -> Result<BTreeMap<String, Value>> {
+pub(crate) fn rubric_obligations(rubric: &Value) -> Result<BTreeMap<String, Value>> {
     let mut obligations = BTreeMap::new();
     for (field, prefix) in [
         ("context_requirements", "context"),
@@ -377,20 +383,60 @@ fn packet(plan: &Plan, example: &Example, evaluation: &Value) -> Result<Packet> 
             .ok_or("Reading native evidence directory is missing")?,
     );
     verify_semantic_abort(evaluation, &directory)?;
+    let mut packet = observed_packet(PacketInput {
+        case: &example.id,
+        directory: &directory,
+        fixture: &example.source_case_directory.join("fixture.json"),
+        rubric: &example.source_case_directory.join("reading-rubric.json"),
+        book: plan
+            .review_book
+            .as_ref()
+            .ok_or("Reading review lacks pinned source text")?
+            .excerpts()?,
+        outcome: &evaluation["outcome"],
+        focused: evaluation["actual_function_calls"]
+            .as_array()
+            .ok_or("Missing focused calls")?,
+        include_records: false,
+    })?;
+    packet.context["version"] = json!(VERSION);
+    packet.context["case_id"] = json!(example.id);
+    packet.context["target_stage"] = json!(plan.target_stage);
+    packet.context["target_method"] = json!(plan.target_method);
+    packet.context["search_pool"] = json!(if plan.training.iter().any(|e| e.id == example.id) {
+        "reflection_training"
+    } else {
+        "development_selection_only"
+    });
+    packet.context["receipt_table"] = json!(packet.refs);
+
+    packet.context["projection"] = json!("Exact selected-stage inputs/results, every actual result, accepted document worksheets/facts, original and final conversation and native handoff witnesses. Other request inputs, repeated system teaching and provider wire bodies are explicitly omitted and hash-pinned in trace_inventory; complete originals remain sealed. No withheld fixture words establish a turn or an interpretation.");
+    if packet.context.to_string().len() > 1_000_000 {
+        return Err("Independent reading packet exceeds 1MB; evidence is not truncated and no paid judge is submitted".into());
+    }
+    Ok(packet)
+}
+
+pub(crate) struct PacketInput<'a> {
+    pub case: &'a str,
+    pub directory: &'a Path,
+    pub fixture: &'a Path,
+    pub rubric: &'a Path,
+    pub book: Value,
+    pub outcome: &'a Value,
+    pub focused: &'a [Value],
+    pub include_records: bool,
+}
+
+/// Shared exact native/source projection; no selected-stage metadata is invented.
+pub(crate) fn observed_packet(input: PacketInput<'_>) -> Result<Packet> {
+    let directory = input.directory;
     let mut packet = Packet::new();
-    packet.source(
-        "fixture.json",
-        read(&example.source_case_directory.join("fixture.json"))?,
-        &[""],
-    )?;
-    let rubric_bytes = read(&example.source_case_directory.join("reading-rubric.json"))?;
+    packet.source("fixture.json", read(input.fixture)?, &[""])?;
+    let rubric_bytes = read(input.rubric)?;
     let rubric = serde_json::from_slice(&rubric_bytes).map_err(|e| e.to_string())?;
     packet.source("reading-rubric.json", rubric_bytes, &[""])?;
-    let book = plan
-        .review_book
-        .as_ref()
-        .ok_or("Reading review lacks pinned source text")?
-        .excerpts()?;
+    let book = input.book;
     packet.source(
         "book-source.json",
         serde_json::to_vec(&book).map_err(|e| e.to_string())?,
@@ -398,7 +444,7 @@ fn packet(plan: &Plan, example: &Example, evaluation: &Value) -> Result<Packet> 
     )?;
     packet.source(
         "native-outcome.json",
-        serde_json::to_vec(&evaluation["outcome"]).map_err(|e| e.to_string())?,
+        serde_json::to_vec(input.outcome).map_err(|e| e.to_string())?,
         &[""],
     )?;
     let mut inventory = Vec::new();
@@ -415,6 +461,9 @@ fn packet(plan: &Plan, example: &Example, evaluation: &Value) -> Result<Packet> 
             "/session/sections",
             "/session/facts",
         ];
+        if input.include_records {
+            pointers.push("/session/method/records");
+        }
         if snapshot.pointer("/session/method/flow").is_some() {
             pointers.push("/session/method/flow");
         }
@@ -433,9 +482,8 @@ fn packet(plan: &Plan, example: &Example, evaluation: &Value) -> Result<Packet> 
         }
         packet.source(&format!("native-{name}"), bytes, &pointers)?;
     }
-    let focused: BTreeSet<_> = evaluation["actual_function_calls"]
-        .as_array()
-        .ok_or("Missing focused calls")?
+    let focused: BTreeSet<_> = input
+        .focused
         .iter()
         .flat_map(|call| {
             [
@@ -471,30 +519,16 @@ fn packet(plan: &Plan, example: &Example, evaluation: &Value) -> Result<Packet> 
         }
     }
     for evidence in packet.refs.values_mut() {
-        evidence.case_id = example.id.clone();
+        evidence.case_id = input.case.to_owned();
     }
-    packet.context["version"] = json!(VERSION);
-    packet.context["case_id"] = json!(example.id);
-    packet.context["target_stage"] = json!(plan.target_stage);
-    packet.context["target_method"] = json!(plan.target_method);
-    packet.context["search_pool"] = json!(if plan.training.iter().any(|e| e.id == example.id) {
-        "reflection_training"
-    } else {
-        "development_selection_only"
-    });
-    packet.context["receipt_table"] = json!(packet.refs);
     packet.context["reading_obligations"] = json!(rubric_obligations(&rubric)?);
     packet.context["trace_inventory"] = json!(inventory);
-    packet.context["projection"] = json!("Exact selected-stage inputs/results, every actual result, accepted document worksheets/facts, original and final conversation and native handoff witnesses. Other request inputs, repeated system teaching and provider wire bodies are explicitly omitted and hash-pinned in trace_inventory; complete originals remain sealed. No withheld fixture words establish a turn or an interpretation.");
-    if packet.context.to_string().len() > 1_000_000 {
-        return Err("Independent reading packet exceeds 1MB; evidence is not truncated and no paid judge is submitted".into());
-    }
     Ok(packet)
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum ObligationState {
+pub(crate) enum ObligationState {
     Fulfilled,
     Failed,
     NotApplicable,
@@ -502,11 +536,11 @@ enum ObligationState {
 }
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Obligation {
-    id: String,
-    state: ObligationState,
-    reason: String,
-    evidence: Vec<Evidence>,
+pub(crate) struct Obligation {
+    pub(crate) id: String,
+    pub(crate) state: ObligationState,
+    pub(crate) reason: String,
+    pub(crate) evidence: Vec<Evidence>,
 }
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -607,6 +641,47 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, body: Value) -> Result
     {
         return Err("Selected-stage merit must cite its actual focused generation result".into());
     }
+    let interpretation = evaluation["final"]["session"]["method"]["result"]["result"] == "judgment";
+    validate_journey(
+        packet,
+        evaluation,
+        JourneyReview {
+            first_turn: &body.first_turn,
+            follow_up: body.follow_up.as_ref(),
+            pipeline: &body.pipeline,
+            obligations: &body.obligations,
+            findings: &body.findings,
+            qualification: &body.qualification,
+        },
+        interpretation,
+    )?;
+    let mut review = serde_json::to_value(body).map_err(|e| e.to_string())?;
+    review["case_id"] = json!(case);
+    review["version"] = json!(VERSION);
+    review["native_evaluation_sha256"] = json!(digest(evaluation.to_string()));
+    review["native_target_stage"] = evaluation["outcome"]["target_stage"].clone();
+    review["native_interpretation_observed"] = json!(interpretation);
+    Ok(review)
+}
+
+pub(crate) struct JourneyReview<'a> {
+    pub first_turn: &'a Rubric,
+    pub follow_up: Option<&'a Rubric>,
+    pub pipeline: &'a PipelineReview,
+    pub obligations: &'a [Obligation],
+    pub findings: &'a [Finding],
+    pub qualification: &'a str,
+}
+
+pub(crate) fn validate_journey(
+    packet: &Packet,
+    evaluation: &Value,
+    body: JourneyReview<'_>,
+    interpretation: bool,
+) -> Result<()> {
+    let case = evaluation["outcome"]["id"]
+        .as_str()
+        .ok_or("No native reading case id")?;
     for (value, inquiry) in body.pipeline.dimensions() {
         dimension(packet, case, value, inquiry, true)?;
     }
@@ -669,7 +744,7 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, body: Value) -> Result
             }
         }
     }
-    let interpretation = evaluation["final"]["session"]["method"]["result"]["result"] == "judgment";
+
     if !interpretation && body.pipeline.reading.state != ScoreState::Unobserved {
         return Err(
             "A needs-information or expert-review boundary is not an observed interpretation"
@@ -680,7 +755,7 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, body: Value) -> Result
         .as_object()
         .ok_or("No source reading obligations")?;
     let mut ids = BTreeSet::new();
-    for obligation in &body.obligations {
+    for obligation in body.obligations {
         if !expected.contains_key(&obligation.id)
             || !ids.insert(&obligation.id)
             || obligation.reason.trim().is_empty()
@@ -720,7 +795,7 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, body: Value) -> Result
     if body.findings.len() > 3 || body.qualification.trim().is_empty() {
         return Err("Reading review needs bounded findings and an explicit qualification".into());
     }
-    for finding in &body.findings {
+    for finding in body.findings {
         if finding.summary.trim().is_empty()
             || !["prompt", "native_code", "infrastructure", "none"]
                 .contains(&finding.repair_owner.as_str())
@@ -729,13 +804,20 @@ fn validate_expanded(packet: &Packet, evaluation: &Value, body: Value) -> Result
         }
         citations(packet, case, &finding.evidence, false, false)?;
     }
-    let mut review = serde_json::to_value(body).map_err(|e| e.to_string())?;
-    review["case_id"] = json!(case);
-    review["version"] = json!(VERSION);
-    review["native_evaluation_sha256"] = json!(digest(evaluation.to_string()));
-    review["native_target_stage"] = evaluation["outcome"]["target_stage"].clone();
-    review["native_interpretation_observed"] = json!(interpretation);
-    Ok(review)
+    Ok(())
+}
+
+pub(crate) fn journey_schema() -> Value {
+    let mut value = schema();
+    value["properties"]
+        .as_object_mut()
+        .expect("Known schema")
+        .remove("selected_stage");
+    value["required"]
+        .as_array_mut()
+        .expect("Known schema")
+        .retain(|field| field != "selected_stage");
+    value
 }
 
 fn validate(packet: &Packet, evaluation: &Value, mut answer: Value) -> Result<Value> {
@@ -968,6 +1050,33 @@ pub fn evaluate(
 mod tests {
     use super::*;
     use crate::{Objective, ReadingStage};
+
+    #[test]
+    fn batch_capture_preserves_effective_protocol_and_legacy_projection_shape() {
+        let mut request = json!({"tasks":[["condition","other",{},{}]],
+            "prompts":[[{"role":"system","content":"Actual synthetic condition teaching"}]],
+            "prompt_program":[{"original_guide_sha256":digest("Original synthetic condition teaching"),
+                "replacement_guide_sha256":digest("Actual synthetic condition teaching")}]});
+        let legacy = captured_task(&request, Some(0)).unwrap();
+        assert!(legacy.get("executor_guide_identity").is_none());
+        assert_eq!(
+            horary_prompt_program::captured_record_guide_sha256(&legacy, None).unwrap(),
+            digest("Original synthetic condition teaching")
+        );
+        request["executor_guide_identity"] = json!(horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE);
+        let mut effective = captured_task(&request, Some(0)).unwrap();
+        assert_eq!(
+            horary_prompt_program::captured_record_guide_sha256(&effective, None).unwrap(),
+            digest("Actual synthetic condition teaching")
+        );
+        effective
+            .as_object_mut()
+            .unwrap()
+            .remove("executor_guide_identity");
+        assert_eq!(effective, legacy);
+        request["executor_guide_identity"] = json!("unknown-future-protocol");
+        assert!(captured_task(&request, Some(0)).is_err());
+    }
 
     fn rubric() -> Value {
         json!({"context_requirements":[],"required_roles":[{"role":"querent"}],

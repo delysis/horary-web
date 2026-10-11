@@ -1266,17 +1266,7 @@ fn trial_prompt(
     schema: &Value,
     program: Option<&horary_prompt_program::Program>,
 ) -> Result<(String, Option<horary_prompt_program::Applied>), String> {
-    let prompt = crate::horary_contract::prompt(stage, matter, input, schema)?;
-    let Some(program) = program else {
-        return Ok((prompt, None));
-    };
-    let mut messages: Value = serde_json::from_str(&prompt).map_err(|e| e.to_string())?;
-    let applied = horary_prompt_program::apply_messages(
-        program,
-        horary_prompt_program::signature(stage.name(), input),
-        &mut messages,
-    )?;
-    Ok((messages.to_string(), applied))
+    crate::horary_contract::prompt_with_program(stage, matter, input, schema, program)
 }
 
 fn experiment_origin(program: &Value) -> Result<Value, String> {
@@ -1506,6 +1496,10 @@ impl Reader<'_> {
     }
 }
 impl Runtime for Reader<'_> {
+    fn guide_for(&self, stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
+        crate::horary_contract::resolved_guide_for(stage, matter, input, self.program.as_deref())
+            .map(|(guide, _)| guide)
+    }
     fn initial_extractor_target(&self) -> Option<Method> {
         self.initial_extractor_target
     }
@@ -1542,6 +1536,7 @@ impl Runtime for Reader<'_> {
             "schema":schema,"input":input,
             "guide_sha256":horary_lessons::digest(messages[0]["content"].as_str().ok_or("Missing actual system teaching")?),
             "baseline_guide_sha256":horary_lessons::digest(&crate::horary_contract::guide_for(stage,matter,input)?),
+            "executor_guide_identity":horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE,
             "prompt_program":applied,
             "prompt_sha256":horary_lessons::digest(&prompt),
             "schema_sha256":horary_lessons::digest(&schema.to_string()),
@@ -1635,6 +1630,7 @@ impl Runtime for Reader<'_> {
         let request = json!({"sequence":sequence,"tasks":tasks,"prompts":prompts.iter()
             .map(|(p,_)|serde_json::from_str::<Value>(p)).collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?,
             "prompt_program":prepared.iter().map(|(_,applied)|applied).collect::<Vec<_>>(),
+            "executor_guide_identity":horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE,
             "provider":self.hosted.as_ref().map(|client|client.metadata()),
             "decoder":if self.hosted.is_some(){"hosted parallel unconstrained text branches; prompt contracts and native acceptance unchanged"}else{"production unconstrained independent analysis batch"}});
         write_new(

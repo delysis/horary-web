@@ -37,6 +37,7 @@ dirs = "6"
 log = "0.4"
 sysinfo = { version = "0.38.4", default-features = false, features = ["system"] }
 horary-ai-core = { path = "../crates/horary-ai-core" }
+horary-prompt-program = { path = "../crates/horary-prompt-program" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri = { version = "2.11.3", features = [] }
@@ -48,7 +49,6 @@ llama-native-types = { git = "https://github.com/delysis/native-platform.git", r
 
 [dev-dependencies]
 quick-xml = "=0.39.4"
-horary-prompt-program = { path = "../crates/horary-prompt-program" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 speech = { version = "=0.8.7", default-features = false, features = ["async"] }

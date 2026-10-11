@@ -284,6 +284,7 @@ const SOURCES: &[&str] = &[
     "tools/horary-gepa/src/controls.rs",
     "tools/horary-gepa/src/campaign.rs",
     "tools/horary-gepa/src/corpus.rs",
+    "tools/horary-gepa/src/complete_journey.rs",
     "tools/horary-gepa/src/reading.rs",
     "tools/horary-gepa/src/main.rs",
     "tools/horary-gepa/src/executable.rs",

@@ -1,6 +1,7 @@
 //! GEPA owns the search. Horary owns prompts, truth, validation and receipts.
 #![forbid(unsafe_code)]
 pub mod campaign;
+pub mod complete_journey;
 pub mod controls;
 pub mod corpus;
 pub mod executable;

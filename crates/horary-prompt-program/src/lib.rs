@@ -12,6 +12,85 @@ pub fn digest(bytes: impl AsRef<[u8]>) -> String {
     format!("{:x}", Sha256::digest(bytes.as_ref()))
 }
 
+/// New captures bind executor/cache records to the actual system teaching.
+/// Without this opt-in marker, historical overlays retain their original/base
+/// record identity; their Applied receipt still proves the changed request.
+pub const EFFECTIVE_GUIDE_CAPTURE: &str = "effective-system-v1";
+
+pub fn captured_record_guide_sha256(
+    request: &serde_json::Value,
+    branch: Option<usize>,
+) -> Result<String, String> {
+    let protocol = request.get("executor_guide_identity");
+    if protocol.is_some_and(|protocol| protocol.as_str() != Some(EFFECTIVE_GUIDE_CAPTURE)) {
+        return Err("Unknown captured executor guide identity".into());
+    }
+    let (prompt, applied) = if let Some(index) = branch {
+        let tasks = request["tasks"]
+            .as_array()
+            .ok_or("No captured guide batch")?;
+        let prompts = request["prompts"]
+            .as_array()
+            .ok_or("No captured batch prompts")?;
+        let programs = request["prompt_program"]
+            .as_array()
+            .ok_or("No captured batch teaching receipts")?;
+        if tasks.is_empty()
+            || tasks.len() > 4
+            || prompts.len() != tasks.len()
+            || programs.len() != tasks.len()
+            || index >= tasks.len()
+        {
+            return Err("Captured guide branch does not match its actual batch".into());
+        }
+        (&prompts[index], &programs[index])
+    } else {
+        if !request["tasks"].is_null() {
+            return Err("A captured guide batch requires an explicit branch".into());
+        }
+        (&request["prompt"], &request["prompt_program"])
+    };
+    let guide = prompt[0]["content"]
+        .as_str()
+        .filter(|guide| !guide.is_empty())
+        .ok_or("Captured guide lacks actual system teaching")?;
+    if prompt[0]["role"] != "system" {
+        return Err("Captured guide is not the actual system message".into());
+    }
+    let effective = digest(guide);
+    if branch.is_none()
+        && request
+            .get("guide_sha256")
+            .is_some_and(|sha| sha != &effective)
+    {
+        return Err("Captured guide hash differs from actual system teaching".into());
+    }
+    let original = if applied.is_null() {
+        effective.clone()
+    } else {
+        if applied["replacement_guide_sha256"] != effective {
+            return Err("Captured Applied teaching differs from the actual guide".into());
+        }
+        applied["original_guide_sha256"]
+            .as_str()
+            .filter(|value| sha(value))
+            .ok_or("Captured Applied teaching lacks its original guide hash")?
+            .to_owned()
+    };
+    if branch.is_none()
+        && request
+            .get("baseline_guide_sha256")
+            .is_some_and(|sha| sha != &original)
+    {
+        return Err("Captured base guide differs from its Applied identity".into());
+    }
+    Ok(if protocol.is_some() {
+        effective
+    } else {
+        original
+    })
+}
+
 /// Protected quotations may occur between editable lessons. Method-specific
 /// teaching appended after a quotation remains available to the optimizer.
 pub struct GuideParts<'a> {
@@ -400,6 +479,86 @@ pub fn apply_messages(
     };
     first["content"] = serde_json::Value::String(replacement);
     Ok(Some(receipt))
+}
+
+#[cfg(test)]
+mod capture_identity_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn overlaid() -> serde_json::Value {
+        json!({"stage":"condition","input":{},
+            "prompt":[{"role":"system","content":"Actual changed teaching"}],
+            "guide_sha256":digest("Actual changed teaching"),
+            "baseline_guide_sha256":digest("Original teaching"),
+            "prompt_program":{"original_guide_sha256":digest("Original teaching"),
+                "replacement_guide_sha256":digest("Actual changed teaching")}})
+    }
+
+    #[test]
+    fn historical_overlay_record_keeps_original_identity_and_new_capture_is_effective() {
+        let mut request = overlaid();
+        let original = request.clone();
+        assert_eq!(
+            captured_record_guide_sha256(&request, None).unwrap(),
+            digest("Original teaching")
+        );
+        assert_eq!(request, original);
+        request["executor_guide_identity"] = json!(EFFECTIVE_GUIDE_CAPTURE);
+        assert_eq!(
+            captured_record_guide_sha256(&request, None).unwrap(),
+            digest("Actual changed teaching")
+        );
+    }
+
+    #[test]
+    fn each_batch_branch_keeps_its_own_guide_identity() {
+        let mut request = json!({"tasks":[["condition","other",{},{}],["reception","other",{},{}]],
+            "prompts":[[{"role":"system","content":"Actual changed teaching"}],
+                [{"role":"system","content":"Unchanged other branch"}]],
+            "prompt_program":[overlaid()["prompt_program"],null]});
+        assert_eq!(
+            captured_record_guide_sha256(&request, Some(0)).unwrap(),
+            digest("Original teaching")
+        );
+        assert_eq!(
+            captured_record_guide_sha256(&request, Some(1)).unwrap(),
+            digest("Unchanged other branch")
+        );
+        request["executor_guide_identity"] = json!(EFFECTIVE_GUIDE_CAPTURE);
+        assert_eq!(
+            captured_record_guide_sha256(&request, Some(0)).unwrap(),
+            digest("Actual changed teaching")
+        );
+        assert_eq!(
+            captured_record_guide_sha256(&request, Some(1)).unwrap(),
+            digest("Unchanged other branch")
+        );
+        assert!(captured_record_guide_sha256(&request, None).is_err());
+        assert!(captured_record_guide_sha256(&request, Some(2)).is_err());
+    }
+
+    #[test]
+    fn unknown_protocol_and_changed_actual_or_applied_identity_fail_closed() {
+        for change in 0..5 {
+            let mut request = overlaid();
+            request["executor_guide_identity"] = json!(EFFECTIVE_GUIDE_CAPTURE);
+            match change {
+                0 => request["executor_guide_identity"] = json!("future-unknown"),
+                1 => request["prompt"][0]["role"] = json!("user"),
+                2 => request["guide_sha256"] = json!(digest("Wrong request guide")),
+                3 => {
+                    request["prompt_program"]["replacement_guide_sha256"] =
+                        json!(digest("Wrong applied guide"))
+                }
+                _ => request["baseline_guide_sha256"] = json!(digest("Wrong original guide")),
+            }
+            assert!(
+                captured_record_guide_sha256(&request, None).is_err(),
+                "mutation {change}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

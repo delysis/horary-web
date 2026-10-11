@@ -156,14 +156,34 @@ pub fn prompt(
     input: &Value,
     schema: &Value,
 ) -> Result<String, String> {
+    prompt_with_program(stage, matter, input, schema, qualified_program()).map(|(prompt, _)| prompt)
+}
+
+// Promotion is a reviewed source change, not runtime configuration. No teaching
+// has been qualified for production; the default therefore remains unchanged.
+fn qualified_program() -> Option<&'static horary_prompt_program::Program> {
+    None
+}
+
+pub(crate) fn prompt_with_program(
+    stage: Stage,
+    matter: Matter,
+    input: &Value,
+    schema: &Value,
+    program: Option<&horary_prompt_program::Program>,
+) -> Result<(String, Option<horary_prompt_program::Applied>), String> {
+    let (fixed, applied) = resolved_guide_for(stage, matter, input, program)?;
+    Ok((prompt_with_guide(input, schema, fixed), applied))
+}
+
+fn prompt_with_guide(input: &Value, schema: &Value, fixed: String) -> String {
     // Stable teaching and stable contract precede changing data. No whole chart
     // or conversation history is smuggled into this prefix.
-    let fixed = guide_for(stage, matter, input)?;
     if input.get("original_input").is_some() && input.get("native_validation_error").is_some() {
         // Present repair as a rejected answer followed by native feedback.
         // Keeping the bad worksheet beside accepted input in one example-like
         // JSON object encouraged small models to copy the same mistake.
-        return Ok(json!([
+        return json!([
             {"role":"system","content":fixed},
             {"role":"user","content":json!({"input":crate::horary_step::original_input(input),"worksheet_contract":schema}).to_string()},
             {"role":"assistant","content":input["previous_worksheet"].to_string()},
@@ -172,12 +192,36 @@ pub fn prompt(
                 "instruction":"Your preceding answer was REJECTED. None of its proposed changes were saved. Produce the complete corrected object using the original input and the output contract. Make the specific correction requested by the native validation error; do not repeat the forbidden entry. Do not change the person's question or ask them to correct your output.",
                 "worksheet_contract":schema
             }).to_string()}
-        ]).to_string());
+        ]).to_string();
     }
-    Ok(json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string())
+    json!([{"role":"system","content":fixed},{"role":"user","content":json!({"input":input,"worksheet_contract":schema}).to_string()}]).to_string()
 }
 
 pub fn guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
+    resolved_guide_for(stage, matter, input, qualified_program()).map(|(guide, _)| guide)
+}
+
+pub(crate) fn resolved_guide_for(
+    stage: Stage,
+    matter: Matter,
+    input: &Value,
+    program: Option<&horary_prompt_program::Program>,
+) -> Result<(String, Option<horary_prompt_program::Applied>), String> {
+    let guide = base_guide_for(stage, matter, input)?;
+    let Some(program) = program else {
+        return Ok((guide, None));
+    };
+    program.validate()?;
+    match program.apply(
+        horary_prompt_program::signature(stage.name(), input),
+        &guide,
+    )? {
+        Some((guide, applied)) => Ok((guide, Some(applied))),
+        None => Ok((guide, None)),
+    }
+}
+
+fn base_guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
     let original = crate::horary_step::original_input(input);
     if stage == Stage::Intake {
         let case = serde_json::from_value::<crate::reading_contracts::Consultation>(
@@ -198,6 +242,154 @@ pub fn guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String, 
         guide.push_str(&crate::reading_contracts::method_guide(method));
     }
     Ok(guide)
+}
+
+#[cfg(test)]
+pub(crate) fn synthetic_teaching_program(
+    stage: Stage,
+    input: &Value,
+    annotation: &str,
+) -> horary_prompt_program::Program {
+    use horary_prompt_program::{digest, Evidence, Override, Program};
+    let guide = base_guide_for(stage, Matter::Other, input).unwrap();
+    Program {
+        version: 1,
+        id: "synthetic-effective-guide".into(),
+        baseline_manifest_sha256: digest("synthetic-manifest"),
+        overrides: vec![Override {
+            stage: stage.name().into(), recognition_phase: None, method: None,
+            expected_guide_sha256: digest(&guide),
+            replacement_text: format!("Synthetic offline teaching annotation: {annotation}. This checks provenance only and makes no model-quality claim.\n{guide}"),
+            edits: vec![],
+        }],
+        rationale: "Offline guide identity regression".into(),
+        evidence: vec![Evidence { case_id: "synthetic-training".into(), file: "synthetic.json".into(), json_pointer: "".into(), sha256: digest("synthetic-source") }],
+        training_case_ids: vec!["synthetic-training".into()], holdout_case_ids: vec!["synthetic-holdout".into()],
+    }
+}
+
+#[cfg(test)]
+mod effective_guide_tests {
+    use super::*;
+
+    #[test]
+    fn inactive_production_seam_is_byte_identical_to_baseline() {
+        assert!(qualified_program().is_none());
+        for stage in [
+            Stage::Intake,
+            Stage::Place,
+            Stage::Moment,
+            Stage::Condition,
+            Stage::Reception,
+        ] {
+            let original =
+                json!({"recognition_phase":"classify_question","synthetic_fact":"retained"});
+            for input in [
+                original.clone(),
+                json!({"original_input":original,"previous_worksheet":{"rejected":true},"native_validation_error":"Synthetic rejection"}),
+            ] {
+                let schema = schema_for(stage, Matter::Other, &[]);
+                assert_eq!(
+                    guide_for(stage, Matter::Other, &input).unwrap(),
+                    base_guide_for(stage, Matter::Other, &input).unwrap()
+                );
+                assert_eq!(
+                    prompt(stage, Matter::Other, &input, &schema).unwrap(),
+                    prompt_with_guide(
+                        &input,
+                        &schema,
+                        base_guide_for(stage, Matter::Other, &input).unwrap()
+                    )
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn shared_teaching_resolution_preserves_source_schema_facts_and_repair_messages() {
+        let original = json!({"reading_request":{"binding":{"frame":{"method":"movable_deal"}}},"synthetic_fact":"retained exactly"});
+        let schema = schema_for(Stage::Condition, Matter::Other, &[]);
+        let program = synthetic_teaching_program(Stage::Condition, &original, "selected lesson");
+        for input in [
+            original.clone(),
+            json!({"original_input":original,"previous_worksheet":{"wrong":"answer"},"native_validation_error":"Synthetic exact native rejection"}),
+        ] {
+            let baseline: Value = serde_json::from_str(
+                &prompt(Stage::Condition, Matter::Other, &input, &schema).unwrap(),
+            )
+            .unwrap();
+            let (actual, applied) = prompt_with_program(
+                Stage::Condition,
+                Matter::Other,
+                &input,
+                &schema,
+                Some(&program),
+            )
+            .unwrap();
+            let actual: Value = serde_json::from_str(&actual).unwrap();
+            let (guide, same_applied) =
+                resolved_guide_for(Stage::Condition, Matter::Other, &input, Some(&program))
+                    .unwrap();
+            assert_eq!(actual[0]["content"], guide);
+            assert_eq!(applied, same_applied);
+            assert_eq!(
+                &actual.as_array().unwrap()[1..],
+                &baseline.as_array().unwrap()[1..]
+            );
+            assert_eq!(
+                horary_prompt_program::guide_parts(actual[0]["content"].as_str().unwrap())
+                    .unwrap()
+                    .quoted_source,
+                horary_prompt_program::guide_parts(baseline[0]["content"].as_str().unwrap())
+                    .unwrap()
+                    .quoted_source
+            );
+            assert_eq!(
+                applied.unwrap().replacement_guide_sha256,
+                lessons::digest(&guide)
+            );
+        }
+    }
+
+    #[test]
+    fn nonmatching_selectors_leave_bytes_unchanged_and_stale_teaching_is_an_error() {
+        let input = json!({"consultation":{"frame":{"state":"resolved","observation":{"value":{"method":"movable_deal"}}}},"recognition_phase":"complete_selected_program"});
+        let mut program = synthetic_teaching_program(Stage::Intake, &input, "scoped lesson");
+        program.overrides[0].method = Some("movable_deal".into());
+        program.overrides[0].recognition_phase = Some("complete_selected_program".into());
+        let schema = schema_for(Stage::Intake, Matter::Other, &[]);
+        for change in ["phase", "method", "stage"] {
+            let mut other = input.clone();
+            let stage = if change == "stage" {
+                Stage::Place
+            } else {
+                Stage::Intake
+            };
+            if change == "phase" {
+                other["recognition_phase"] = json!("update_selected_program");
+            }
+            if change == "method" {
+                other["consultation"]["frame"]["observation"]["value"]["method"] = json!("rental");
+            }
+            let (actual, applied) =
+                prompt_with_program(stage, Matter::Other, &other, &schema, Some(&program)).unwrap();
+            assert_eq!(
+                actual,
+                prompt(stage, Matter::Other, &other, &schema).unwrap()
+            );
+            assert!(applied.is_none());
+        }
+        program.overrides[0].expected_guide_sha256 = lessons::digest("A changed base guide");
+        assert!(prompt_with_program(
+            Stage::Intake,
+            Matter::Other,
+            &input,
+            &schema,
+            Some(&program)
+        )
+        .unwrap_err()
+        .contains("stale"));
+    }
 }
 
 fn bounded_strings(value: &Value) -> bool {

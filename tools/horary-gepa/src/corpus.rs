@@ -669,7 +669,10 @@ fn native_attempts(directory: &Path) -> Result<Vec<NativeAttempt>> {
                 input: input.clone(),
                 generation: generation.clone(),
                 input_sha: native_field_hash(&path, &input_fields)?,
-                guide_sha,
+                guide_sha: horary_prompt_program::captured_record_guide_sha256(
+                    &request,
+                    tasks.map(|_| index),
+                )?,
                 schema_sha,
             });
         }
@@ -928,7 +931,8 @@ fn bind_quota_task(
                 || record["input"] != request["input"]
                 || record["generation"] != result["result"]["Ok"]
                 || record["raw"] != result["result"]["Ok"]["content"]
-                || record["guideSha256"] != request["guide_sha256"]
+                || record["guideSha256"]
+                    != horary_prompt_program::captured_record_guide_sha256(&request, None)?
                 || record["schemaSha256"] != request["schema_sha256"]
                 || record["inputSha256"]
                     != native_root_field_hash(
@@ -1177,6 +1181,15 @@ fn verify_pins(
 /// Materialize compatible `case-origins` for one fresh closed hosted campaign.
 /// This is evidence sealing only: no inference, recovery, score or truth claim.
 pub fn seal(campaign: &Path, closure_path: &Path) -> Result<Value> {
+    closed(campaign, closure_path, true)
+}
+
+/// Recheck an already materialized corpus without ever publishing origins.
+pub(crate) fn verify_closed_existing(campaign: &Path, closure_path: &Path) -> Result<Value> {
+    closed(campaign, closure_path, false)
+}
+
+fn closed(campaign: &Path, closure_path: &Path, publish: bool) -> Result<Value> {
     let campaign = ordinary(campaign, true)?;
     let closure_path = ordinary(closure_path, false)?;
     let closure_sha = digest(read(&closure_path)?);
@@ -1430,6 +1443,9 @@ pub fn seal(campaign: &Path, closure_path: &Path) -> Result<Value> {
             return Err("Existing case origins are changed or partial; preserve them".into());
         }
     } else {
+        if !publish {
+            return Err("A complete-journey review needs already sealed case origins; verification never creates them".into());
+        }
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|e| e.to_string())?
@@ -1463,15 +1479,15 @@ pub fn seal(campaign: &Path, closure_path: &Path) -> Result<Value> {
 }
 
 #[cfg(all(test, unix))]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     // Controlled receipt fixtures exercise sealing, not model quality. No test
     // contacts Google, runs the native application or reads a credential.
-    struct Campaign {
+    pub(crate) struct Campaign {
         _temp: tempfile::TempDir,
-        root: PathBuf,
-        closure: PathBuf,
+        pub(crate) root: PathBuf,
+        pub(crate) closure: PathBuf,
     }
 
     fn write(path: &Path, value: &Value) {
@@ -1486,7 +1502,7 @@ mod tests {
     }
 
     impl Campaign {
-        fn new(semantic_failure: bool, full: bool) -> Self {
+        pub(crate) fn new(semantic_failure: bool, full: bool) -> Self {
             let temp = tempfile::tempdir().unwrap();
             let root = fs::canonicalize(temp.path()).unwrap();
             let directory = root.join("cases/a");
@@ -1725,11 +1741,14 @@ mod tests {
             let directory = campaign.root.join("cases/a");
             let mut request = load(&directory.join("calls/0001-request.json")).unwrap();
             request["stage"] = json!("intake");
+            request["prompt"][0]["content"] = json!("Controlled actual guide");
             request["guide_sha256"] = json!(digest("Controlled actual guide"));
             request["schema_sha256"] = json!(digest(request["schema"].to_string()));
             write(&directory.join("calls/0001-request.json"), &request);
             let mut result = load(&directory.join("calls/0001-result.json")).unwrap();
             result["request"] = request.clone();
+            let config = result["provider_receipt"]["request"]["generationConfig"].clone();
+            result["provider_receipt"]["request"] = wire(&request["prompt"], &config).unwrap();
             write(&directory.join("calls/0001-result.json"), &result);
             let input_sha =
                 native_root_field_hash(&directory.join("calls/0001-request.json"), "input")
@@ -1791,7 +1810,7 @@ mod tests {
 
         // Used only to author a new controlled closed fixture for negative
         // tests. Production sealing must never update a launcher's closure.
-        fn close(&self) {
+        pub(crate) fn close(&self) {
             let submitted = load(&self.root.join("submitted.json")).unwrap();
             let manifest = load(&self.root.join("manifest.json")).unwrap();
             let mut files = Hashes::new();
@@ -1807,6 +1826,12 @@ mod tests {
                 files.insert(
                     "reading-rubrics.json".into(),
                     digest(read(&self.root.join("reading-rubrics.json")).unwrap()),
+                );
+            }
+            if !manifest["prompt_program"].is_null() {
+                files.insert(
+                    "prompt-program.json".into(),
+                    digest(read(&self.root.join("prompt-program.json")).unwrap()),
                 );
             }
             write(
@@ -1851,6 +1876,46 @@ mod tests {
             load(&c.root.join("case-origins/a.json")).unwrap()["fresh_corpus"]["native_exit_code"],
             101
         );
+    }
+
+    #[test]
+    fn effective_capture_requires_actual_record_guide_and_preserves_legacy_applied_identity() {
+        let campaign = Campaign::new(true, true);
+        let directory = campaign.root.join("cases/a");
+        let path = directory.join("calls/0001-request.json");
+        let mut request = load(&path).unwrap();
+        let original = request["guide_sha256"].clone();
+        request["prompt"][0]["content"] = json!("Actual selected synthetic teaching");
+        request["guide_sha256"] = json!(digest("Actual selected synthetic teaching"));
+        request["baseline_guide_sha256"] = original.clone();
+        request["prompt_program"] = json!({"original_guide_sha256":original,
+            "replacement_guide_sha256":request["guide_sha256"]});
+        let result_path = directory.join("calls/0001-result.json");
+        let mut result = load(&result_path).unwrap();
+        let config = result["provider_receipt"]["request"]["generationConfig"].clone();
+        result["provider_receipt"]["request"] = wire(&request["prompt"], &config).unwrap();
+        result["request"] = request.clone();
+        write(&path, &request);
+        write(&result_path, &result);
+        let mut first = load(&directory.join("first-turn.json")).unwrap();
+        // Historical overlays label Record with the original guide; Applied
+        // separately binds the actual request. Never relabel those old files.
+        semantic_stop(&directory, &first, &first["result"]["Err"]).unwrap();
+        request["executor_guide_identity"] = json!(horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE);
+        result["request"] = request.clone();
+        write(&path, &request);
+        write(&result_path, &result);
+        assert!(semantic_stop(&directory, &first, &first["result"]["Err"]).is_err());
+        first["session"]["method"]["records"][0]["guideSha256"] = request["guide_sha256"].clone();
+        campaign.snapshots(&first);
+        semantic_stop(&directory, &first, &first["result"]["Err"]).unwrap();
+        campaign.close();
+        seal(&campaign.root, &campaign.closure).unwrap();
+        request["executor_guide_identity"] = json!("unknown-future-protocol");
+        write(&path, &request);
+        result["request"] = request;
+        write(&result_path, &result);
+        assert!(semantic_stop(&directory, &first, &first["result"]["Err"]).is_err());
     }
 
     #[test]

@@ -169,9 +169,15 @@ fn source_binding(plan: &Plan, evaluation: &Value) -> Result<Value> {
                 != hashes.get(&request_name).map(String::as_str)
             || projected["source_result_sha256"].as_str()
                 != hashes.get(&result_name).map(String::as_str)
-            || ["input", "schema", "guide_sha256", "prompt_program"]
-                .iter()
-                .any(|key| projected[*key] != request[*key])
+            || [
+                "input",
+                "schema",
+                "guide_sha256",
+                "prompt_program",
+                "executor_guide_identity",
+            ]
+            .iter()
+            .any(|key| projected[*key] != request[*key])
             || projected["result"] != result["result"]
         {
             return Err(
@@ -190,6 +196,7 @@ fn source_binding(plan: &Plan, evaluation: &Value) -> Result<Value> {
         let record = records.get(index).ok_or("Absent accepted initial record")?;
         let original = horary_prompt_program::original_input(&record["input"]);
         let last = targeted.last().ok_or("No initial target response")?;
+        verify_record_guide(&last.0, record)?;
         if index + 1 != records.len()
             || first["result"].get("Ok").is_none()
             || boundary["version"] != 1
@@ -259,6 +266,7 @@ fn source_binding(plan: &Plan, evaluation: &Value) -> Result<Value> {
         crate::reading::verify_semantic_abort(evaluation, &directory)?;
         let record = records.last().ok_or("No target rejection record")?;
         let last = targeted.last().ok_or("No target rejection result")?;
+        verify_record_guide(&last.0, record)?;
         if record["input"] != last.0["input"] || record["generation"] != last.1["result"]["Ok"] {
             return Err("Rejected target record is not bound to its actual paid generation".into());
         }
@@ -271,6 +279,20 @@ fn source_binding(plan: &Plan, evaluation: &Value) -> Result<Value> {
     Ok(
         json!({"version":1,"initial_observation_sha256":digest(observed.to_string()),"sources":hashes}),
     )
+}
+
+fn verify_record_guide(request: &Value, record: &Value) -> Result<()> {
+    // Old component observations did not require guide metadata; preserve their
+    // binding shape. Where captured, retain the old base identity explicitly.
+    if request.get("executor_guide_identity").is_some() || record.get("guideSha256").is_some() {
+        let expected = horary_prompt_program::captured_record_guide_sha256(request, None)?;
+        if record["guideSha256"] != expected {
+            return Err(
+                "Initial native record differs from its captured executor guide identity".into(),
+            );
+        }
+    }
+    Ok(())
 }
 
 pub fn bind(plan: &Plan, evaluation: &mut Value) -> Result<()> {
@@ -706,6 +728,62 @@ mod tests {
             json!({"invented":"later supplying fact"});
         put(dir.path(), "first-turn.json", &changed);
         assert!(verify_observation(&plan, &evaluation).is_err());
+    }
+
+    #[test]
+    fn effective_initial_capture_binds_actual_guide_without_relabeling_legacy_overlay() {
+        let (dir, plan, mut evaluation) = fixture(false);
+        let request_file = dir.path().join("calls/0002-request.json");
+        let result_file = dir.path().join("calls/0002-result.json");
+        let mut request = load(&request_file).unwrap();
+        request["prompt"] = json!([{"role":"system","content":"Effective synthetic teaching"}]);
+        request["guide_sha256"] = json!(digest("Effective synthetic teaching"));
+        request["baseline_guide_sha256"] = json!(digest("Base synthetic teaching"));
+        request["prompt_program"] = json!({"original_guide_sha256":digest("Base synthetic teaching"),"replacement_guide_sha256":digest("Effective synthetic teaching")});
+        let mut first = load(&dir.path().join("first-turn.json")).unwrap();
+        for effective in [false, true] {
+            if effective {
+                request["executor_guide_identity"] =
+                    json!(horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE);
+            }
+            put(dir.path(), "calls/0002-request.json", &request);
+            let mut result = load(&result_file).unwrap();
+            result["request"] = request.clone();
+            put(dir.path(), "calls/0002-result.json", &result);
+            let projected = &mut evaluation["actual_function_calls"][0];
+            for field in ["guide_sha256", "prompt_program", "executor_guide_identity"] {
+                if let Some(value) = request.get(field) {
+                    projected[field] = value.clone();
+                }
+            }
+            projected["source_request_sha256"] = json!(digest(read(&request_file).unwrap()));
+            projected["source_result_sha256"] = json!(digest(read(&result_file).unwrap()));
+            let expected = if effective {
+                "Effective synthetic teaching"
+            } else {
+                "Base synthetic teaching"
+            };
+            first["session"]["method"]["records"][0]["guideSha256"] = json!(digest(expected));
+            put(dir.path(), "first-turn.json", &first);
+            put(
+                dir.path(),
+                "final.json",
+                &json!({"session":first["session"]}),
+            );
+            bind(&plan, &mut evaluation).unwrap();
+            verify_observation(&plan, &evaluation).unwrap();
+        }
+        first["session"]["method"]["records"][0]["guideSha256"] =
+            json!(digest("Base synthetic teaching"));
+        put(dir.path(), "first-turn.json", &first);
+        put(
+            dir.path(),
+            "final.json",
+            &json!({"session":first["session"]}),
+        );
+        assert!(bind(&plan, &mut evaluation)
+            .unwrap_err()
+            .contains("executor guide identity"));
     }
     #[test]
     fn initial_settled_native_rejection_is_bound_without_accepted_state() {

@@ -380,12 +380,16 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
                 } else {
                     result["result"].clone()
                 };
-                calls.push(json!({"stage":task["stage"],"branch":branch,"sequence":call["sequence"],
+                let mut focused = json!({"stage":task["stage"],"branch":branch,"sequence":call["sequence"],
                     "input":task["input"],"schema":task["schema"],"guide_sha256":task["guide_sha256"],
                     "prompt_program":task["prompt_program"],"result":observed_result,
                     "source_request_file":format!("calls/{name}"),"source_request_sha256":digest(read(&file)?),
                     "source_result_file":format!("calls/{}",name.replace("-request.json","-result.json")),
-                    "source_result_sha256":digest(read(&directory.join("calls").join(name.replace("-request.json","-result.json")))?)}));
+                    "source_result_sha256":digest(read(&directory.join("calls").join(name.replace("-request.json","-result.json")))?)});
+                if let Some(protocol) = task.get("executor_guide_identity") {
+                    focused["executor_guide_identity"] = protocol.clone();
+                }
+                calls.push(focused);
             }
             continue;
         }
@@ -400,6 +404,10 @@ fn focused_calls(plan: &Plan, directory: &Path) -> Result<Vec<Value>> {
             let result = load(&directory.join("calls").join(result_name))?;
             let mut focused = json!({"input":call["input"],"schema":call["schema"],"guide_sha256":call["guide_sha256"],
                 "prompt_program":call["prompt_program"],"result":result["result"],"source_request_sha256":digest(read(&file)?)});
+            if let Some(protocol) = call.get("executor_guide_identity") {
+                horary_prompt_program::captured_record_guide_sha256(&call, None)?;
+                focused["executor_guide_identity"] = protocol.clone();
+            }
             if plan.initial_extractor_observation {
                 focused["sequence"] = call["sequence"].clone();
                 focused["source_request_file"] = json!(format!("calls/{name}"));
@@ -606,6 +614,47 @@ fn abort_owned_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn focused_capture_retains_explicit_effective_identity_without_changing_legacy_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("calls")).unwrap();
+        let input = json!({"recognition_phase":"complete_selected_program","consultation":{"frame":{"state":"resolved",
+            "observation":{"value":{"method":"movable_deal"}}}}});
+        let path = dir.path().join("calls/0001-request.json");
+        let mut request = json!({"sequence":1,"stage":"intake","input":input,"schema":{},
+            "prompt":[{"role":"system","content":"Actual synthetic teaching"}],
+            "guide_sha256":digest("Actual synthetic teaching"),
+            "prompt_program":{"original_guide_sha256":digest("Original synthetic teaching"),
+                "replacement_guide_sha256":digest("Actual synthetic teaching")}});
+        keep(&path, &request).unwrap();
+        keep(
+            &dir.path().join("calls/0001-result.json"),
+            &json!({"result":{"Ok":{"content":"authored"}}}),
+        )
+        .unwrap();
+        let mut plan = crate::tests::plan();
+        plan.function = Function::InputJourney;
+        plan.target_method = Some("movable_deal".into());
+        let legacy = focused_calls(&plan, dir.path()).unwrap().remove(0);
+        assert!(legacy.get("executor_guide_identity").is_none());
+        request["executor_guide_identity"] = json!(horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE);
+        fs::write(&path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+        let mut current = focused_calls(&plan, dir.path()).unwrap().remove(0);
+        assert_eq!(
+            current["executor_guide_identity"],
+            horary_prompt_program::EFFECTIVE_GUIDE_CAPTURE
+        );
+        current
+            .as_object_mut()
+            .unwrap()
+            .remove("executor_guide_identity");
+        current["source_request_sha256"] = legacy["source_request_sha256"].clone();
+        assert_eq!(current, legacy);
+        request["executor_guide_identity"] = json!("unknown-future-protocol");
+        fs::write(&path, serde_json::to_vec_pretty(&request).unwrap()).unwrap();
+        assert!(focused_calls(&plan, dir.path()).is_err());
+    }
+
     #[test]
     fn initial_focused_count_excludes_later_supply_but_legacy_keeps_its_trace() {
         let dir = tempfile::tempdir().unwrap();

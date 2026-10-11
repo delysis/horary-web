@@ -62,6 +62,11 @@ pub struct Record {
 }
 
 pub trait Runtime: Sync {
+    /// The guide identity used by dispatch, records and native data reuse.
+    /// An evaluator's explicit teaching must resolve through this same boundary.
+    fn guide_for(&self, stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
+        crate::horary_contract::guide_for(stage, matter, input)
+    }
     /// An offline/hosted evaluator may stop at native acceptance of the initial
     /// private extractor. This hook is absent from production builds.
     #[cfg(test)]

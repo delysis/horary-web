@@ -20,9 +20,10 @@ fn generate(
     audio: Option<&[u8]>,
 ) -> Result<(Result<Checked, String>, Record), String> {
     runtime.check()?;
+    let guide_sha256 = lessons::digest(&runtime.guide_for(stage, matter, &input)?);
     let contract = step::response_schema_for(stage, matter, &input, facts);
     let result = runtime.generate(stage, matter, &input, &contract, audio)?;
-    evaluate(stage, matter, input, contract, result, facts)
+    evaluate(stage, matter, input, contract, result, facts, guide_sha256)
 }
 
 fn evaluate(
@@ -32,6 +33,7 @@ fn evaluate(
     contract: Value,
     result: NativeGenerationResult,
     facts: &[Fact],
+    guide_sha256: String,
 ) -> Result<(Result<Checked, String>, Record), String> {
     let parsed = decode_json(&result.content);
     let checked = parsed
@@ -43,7 +45,7 @@ fn evaluate(
     let record = Record {
         stage,
         revision: 0,
-        guide_sha256: lessons::digest(&crate::horary_contract::guide_for(stage, matter, &input)?),
+        guide_sha256,
         schema_sha256: lessons::digest(&contract.to_string()),
         input_sha256: lessons::digest(&input.to_string()),
         input,
@@ -196,8 +198,8 @@ pub(crate) fn execute(
             Stage::Intake | Stage::Explanation | Stage::Conversation
         )
     {
-        if let Some((data, index)) = cached_data(session, stage, &original, facts)? {
-            let key = work_key(session, stage, &original, facts)?;
+        if let Some((data, index)) = cached_data(session, runtime, stage, &original, facts)? {
+            let key = work_key(session, runtime, stage, &original, facts)?;
             session
                 .method
                 .flow
@@ -207,7 +209,7 @@ pub(crate) fn execute(
             return Ok(Some(data));
         }
     }
-    let mut key = work_key(session, stage, &original, facts)?;
+    let mut key = work_key(session, runtime, stage, &original, facts)?;
     if matches!(
         stage,
         Stage::Intake | Stage::Explanation | Stage::Conversation
@@ -279,25 +281,24 @@ fn work_input(session: &Session, stage: Stage, mut input: Value) -> Value {
 
 fn work_key(
     session: &Session,
+    runtime: &impl Runtime,
     stage: Stage,
     input: &Value,
     facts: &[Fact],
 ) -> Result<String, String> {
-    Ok(lessons::digest(&json!({"stage":stage,"revision":session.revision,"guide":lessons::digest(&crate::horary_contract::guide_for(stage, session.method.brief.matter,input)?),"contract":step::response_schema_for(stage,session.method.brief.matter,input,facts),"input":input,"validationAuthority":step::validation_authority()}).to_string()))
+    Ok(lessons::digest(&json!({"stage":stage,"revision":session.revision,"guide":lessons::digest(&runtime.guide_for(stage, session.method.brief.matter,input)?),"contract":step::response_schema_for(stage,session.method.brief.matter,input,facts),"input":input,"validationAuthority":step::validation_authority()}).to_string()))
 }
 
 fn cached_data(
     session: &Session,
+    runtime: &impl Runtime,
     stage: Stage,
     input: &Value,
     facts: &[Fact],
 ) -> Result<Option<(CheckedData, usize)>, String> {
     let input_hash = lessons::digest(&input.to_string());
-    let guide_hash = lessons::digest(&crate::horary_contract::guide_for(
-        stage,
-        session.method.brief.matter,
-        input,
-    )?);
+    let guide_hash =
+        lessons::digest(&runtime.guide_for(stage, session.method.brief.matter, input)?);
     let schema_hash = lessons::digest(
         &step::response_schema_for(stage, session.method.brief.matter, input, facts).to_string(),
     );
@@ -346,8 +347,8 @@ pub(crate) fn execute_batch(
     for (index, (stage, input, facts)) in tasks.iter().enumerate() {
         let input = work_input(session, *stage, input.clone());
         step::prerequisites(*stage, &input)?;
-        let key = work_key(session, *stage, &input, facts)?;
-        if let Some((data, record_index)) = cached_data(session, *stage, &input, facts)? {
+        let key = work_key(session, runtime, *stage, &input, facts)?;
+        if let Some((data, record_index)) = cached_data(session, runtime, *stage, &input, facts)? {
             session
                 .method
                 .flow
@@ -384,6 +385,16 @@ pub(crate) fn execute_batch(
             )
         })
         .collect();
+    // Capture each actual runtime guide before dispatch. A stale teaching
+    // program must stop before any native or hosted generation is submitted.
+    let guide_hashes = requests
+        .iter()
+        .map(|(stage, matter, input, _)| {
+            runtime
+                .guide_for(*stage, *matter, input)
+                .map(|guide| lessons::digest(&guide))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let batch = runtime.generate_batch(&requests)?;
     if batch.len() != pending.len() {
         return Err("An independent task is missing from the batch.".into());
@@ -391,10 +402,19 @@ pub(crate) fn execute_batch(
     let mut repairs = Vec::new();
     // Receive EVERY case before repairing one. Good sibling data and rejected
     // proposals survive cancellation or failure in a later repair.
-    for ((index, key, stage, input, facts), generation) in pending.into_iter().zip(batch) {
+    for (((index, key, stage, input, facts), generation), guide_sha256) in
+        pending.into_iter().zip(batch).zip(guide_hashes)
+    {
         let contract = step::response_schema_for(stage, matter, &input, facts);
-        let (checked, record) =
-            evaluate(stage, matter, input.clone(), contract, generation, facts)?;
+        let (checked, record) = evaluate(
+            stage,
+            matter,
+            input.clone(),
+            contract,
+            generation,
+            facts,
+            guide_sha256,
+        )?;
         match receive(session, runtime, &key, checked, record)? {
             Received::Complete(data) => values[index] = Some(*data),
             Received::AwaitingUser => {}
@@ -426,6 +446,232 @@ pub(crate) fn ask_pending(session: &mut Session) {
                     crate::reading_contracts::need_key(&pending.request.field, case).ok();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod effective_guide_tests {
+    use super::*;
+    use std::{path::Path, sync::Mutex};
+
+    struct TestRuntime {
+        dir: tempfile::TempDir,
+        program: Option<horary_prompt_program::Program>,
+        prompts: Mutex<Vec<Value>>,
+    }
+    impl TestRuntime {
+        fn new(program: Option<horary_prompt_program::Program>) -> Self {
+            Self {
+                dir: tempfile::tempdir().unwrap(),
+                program,
+                prompts: Mutex::new(vec![]),
+            }
+        }
+    }
+    fn worksheet(stage: Stage) -> Value {
+        match stage {
+            Stage::Place => {
+                json!({"mode":"select","place_id":"synthetic-place","query":"","clarification":"","basis":"A supplied synthetic candidate"})
+            }
+            Stage::Moment => {
+                json!({"mode":"now","local_time":"","occurrence":"","clarification":"","basis":"The supplied synthetic receipt moment"})
+            }
+            _ => panic!("Unexpected synthetic stage"),
+        }
+    }
+    impl Runtime for TestRuntime {
+        fn guide_for(&self, stage: Stage, matter: Matter, input: &Value) -> Result<String, String> {
+            crate::horary_contract::resolved_guide_for(stage, matter, input, self.program.as_ref())
+                .map(|(guide, _)| guide)
+        }
+        fn generate(
+            &self,
+            stage: Stage,
+            matter: Matter,
+            input: &Value,
+            schema: &Value,
+            _audio: Option<&[u8]>,
+        ) -> Result<NativeGenerationResult, String> {
+            let (prompt, _) = crate::horary_contract::prompt_with_program(
+                stage,
+                matter,
+                input,
+                schema,
+                self.program.as_ref(),
+            )?;
+            self.prompts
+                .lock()
+                .unwrap()
+                .push(serde_json::from_str(&prompt).unwrap());
+            Ok(NativeGenerationResult {
+                content: worksheet(stage).to_string(),
+                prompt_tokens: 0,
+                generated_tokens: 0,
+                elapsed_ms: 0,
+                total_wall_ms: None,
+                batch_size: None,
+                lesson_bank_hit: None,
+                lesson_prepare_ms: None,
+                tokens_per_second: 0.,
+                prompt_cache_hit: false,
+                cached_prompt_tokens: 0,
+                prefilled_prompt_tokens: 0,
+                first_token_ms: None,
+                cold_cache_bytes: None,
+            })
+        }
+        fn generate_batch(
+            &self,
+            tasks: &[(Stage, Matter, Value, Value)],
+        ) -> Result<Vec<NativeGenerationResult>, String> {
+            tasks
+                .iter()
+                .map(|(stage, matter, input, schema)| {
+                    self.generate(*stage, *matter, input, schema, None)
+                })
+                .collect()
+        }
+        fn publish(&self, _session: &mut Session) -> Result<(), String> {
+            Ok(())
+        }
+        fn check(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn directory(&self) -> &Path {
+            self.dir.path()
+        }
+    }
+    fn input() -> Value {
+        json!({"candidates":[{"id":"synthetic-place"}]})
+    }
+
+    #[test]
+    fn changed_effective_teaching_invalidates_work_and_accepted_data_without_changing_input() {
+        let input = input();
+        let prior = TestRuntime::new(Some(crate::horary_contract::synthetic_teaching_program(
+            Stage::Place,
+            &input,
+            "earlier selected teaching",
+        )));
+        let current = TestRuntime::new(Some(crate::horary_contract::synthetic_teaching_program(
+            Stage::Place,
+            &input,
+            "later selected teaching",
+        )));
+        let (checked, record) = generate(
+            &prior,
+            Stage::Place,
+            Matter::Other,
+            input.clone(),
+            &[],
+            None,
+        )
+        .unwrap();
+        assert!(matches!(checked.unwrap(), Checked::Data(_)));
+        let mut session = Session::default();
+        session.method.records.push(record);
+        assert!(cached_data(&session, &prior, Stage::Place, &input, &[])
+            .unwrap()
+            .is_some());
+        assert!(cached_data(&session, &current, Stage::Place, &input, &[])
+            .unwrap()
+            .is_none());
+        assert_ne!(
+            work_key(&session, &prior, Stage::Place, &input, &[]).unwrap(),
+            work_key(&session, &current, Stage::Place, &input, &[]).unwrap()
+        );
+        assert_eq!(session.method.records[0].input, input);
+        assert!(current.prompts.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn single_repair_and_batch_records_hash_each_actual_system_message() {
+        let original = input();
+        let mut program = crate::horary_contract::synthetic_teaching_program(
+            Stage::Place,
+            &original,
+            "place lesson",
+        );
+        program.overrides.extend(
+            crate::horary_contract::synthetic_teaching_program(
+                Stage::Moment,
+                &original,
+                "moment lesson",
+            )
+            .overrides,
+        );
+        let runtime = TestRuntime::new(Some(program));
+        let repair = repair_input(
+            Stage::Place,
+            &original,
+            json!({"wrong":"rejected"}),
+            "Synthetic native rejection".into(),
+        );
+        let (_, record) =
+            generate(&runtime, Stage::Place, Matter::Other, repair, &[], None).unwrap();
+        let requests = runtime.prompts.lock().unwrap();
+        assert_eq!(
+            record.guide_sha256,
+            lessons::digest(requests[0][0]["content"].as_str().unwrap())
+        );
+        assert_eq!(requests[0][2]["role"], "assistant");
+        drop(requests);
+        runtime.prompts.lock().unwrap().clear();
+        let mut session = Session::default();
+        let values = execute_batch(
+            &mut session,
+            &runtime,
+            &[
+                (Stage::Place, original.clone(), vec![]),
+                (Stage::Moment, original, vec![]),
+            ],
+        )
+        .unwrap();
+        assert!(values.iter().all(Option::is_some));
+        let requests = runtime.prompts.lock().unwrap();
+        assert_eq!(session.method.records.len(), 2);
+        for (record, request) in session.method.records.iter().zip(requests.iter()) {
+            assert_eq!(
+                record.guide_sha256,
+                lessons::digest(request[0]["content"].as_str().unwrap())
+            );
+        }
+        assert_ne!(
+            session.method.records[0].guide_sha256,
+            session.method.records[1].guide_sha256
+        );
+    }
+
+    #[test]
+    fn stale_effective_teaching_stops_single_and_batch_before_generation() {
+        let original = input();
+        let mut program = crate::horary_contract::synthetic_teaching_program(
+            Stage::Place,
+            &original,
+            "stale lesson",
+        );
+        program.overrides[0].expected_guide_sha256 = lessons::digest("Changed original teaching");
+        let runtime = TestRuntime::new(Some(program));
+        assert!(generate(
+            &runtime,
+            Stage::Place,
+            Matter::Other,
+            original.clone(),
+            &[],
+            None
+        )
+        .err()
+        .unwrap()
+        .contains("stale"));
+        assert!(execute_batch(
+            &mut Session::default(),
+            &runtime,
+            &[(Stage::Place, original, vec![])]
+        )
+        .err()
+        .unwrap()
+        .contains("stale"));
+        assert!(runtime.prompts.lock().unwrap().is_empty());
     }
 }
 

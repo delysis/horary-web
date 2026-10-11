@@ -43,6 +43,13 @@ enum Action {
         #[arg(long)]
         closure: PathBuf,
     },
+    /// Credential-free pinning of an already closed full-journey pair.
+    PrepareCompleteJourney(Box<CompletePreparation>),
+    /// Independent bounded review of existing native outputs; never runs a student.
+    VerifyCompleteJourney {
+        #[arg(long)]
+        state: PathBuf,
+    },
     Prepare(Box<Preparation>),
     PrepareRecovery {
         #[arg(long)]
@@ -119,6 +126,37 @@ struct Preparation {
     #[arg(long, value_delimiter = ',')]
     book_ocr_pages: Vec<usize>,
 }
+#[derive(clap::Args)]
+struct CompletePreparation {
+    #[arg(long)]
+    state: PathBuf,
+    #[arg(long)]
+    baseline: PathBuf,
+    #[arg(long)]
+    baseline_closure: PathBuf,
+    #[arg(long)]
+    candidate: PathBuf,
+    #[arg(long)]
+    candidate_closure: PathBuf,
+    #[arg(long)]
+    program: PathBuf,
+    #[arg(long)]
+    program_sha256: String,
+    #[arg(long)]
+    split: PathBuf,
+    #[arg(long)]
+    passages: PathBuf,
+    #[arg(long)]
+    book_source: PathBuf,
+    #[arg(long, value_delimiter = ',')]
+    book_ocr_pages: Vec<usize>,
+    #[arg(long)]
+    codex: PathBuf,
+    #[arg(long)]
+    max_review_calls: u64,
+    #[arg(long, default_value_t = 600)]
+    review_seconds: u64,
+}
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     if let Err(error) = execute(Cli::parse()).await {
@@ -161,6 +199,45 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
         }
         Action::SealCorpus { campaign, closure } => {
             println!("{}", horary_gepa::corpus::seal(&campaign, &closure)?);
+        }
+        Action::PrepareCompleteJourney(options) => {
+            let book = horary_gepa::complete_journey::CompleteReadingBook {
+                sha256: horary_prompt_program::digest(read(&options.book_source)?),
+                file: options.book_source,
+                ocr_pages: options.book_ocr_pages,
+            };
+            let plan = horary_gepa::complete_journey::prepare(
+                horary_gepa::complete_journey::Preparation {
+                    baseline: options.baseline,
+                    baseline_closure: options.baseline_closure,
+                    candidate: options.candidate,
+                    candidate_closure: options.candidate_closure,
+                    program: options.program,
+                    program_sha256: options.program_sha256,
+                    split: options.split,
+                    passages: options.passages,
+                    book,
+                    codex: options.codex,
+                    controller: std::env::current_exe().map_err(|e| e.to_string())?,
+                    max_review_calls: options.max_review_calls,
+                    review_seconds: options.review_seconds,
+                },
+                &options.state,
+            )?;
+            println!(
+                "{}",
+                serde_json::json!({"prepared":options.state,"cases":plan.cases,
+                "max_review_calls":plan.max_review_calls,"student_calls":0,"reflection_calls":0,"paid_calls":0})
+            );
+        }
+        Action::VerifyCompleteJourney { state } => {
+            let plan: horary_gepa::complete_journey::PairPlan =
+                serde_json::from_value(load(&state.join("plan.json"))?)
+                    .map_err(|e| e.to_string())?;
+            println!(
+                "{}",
+                horary_gepa::complete_journey::verify_pair(plan, &state)?
+            );
         }
         Action::Prepare(options) => {
             let Preparation {
