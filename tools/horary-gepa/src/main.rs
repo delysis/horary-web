@@ -45,6 +45,16 @@ enum Action {
     },
     /// Credential-free pinning of an already closed full-journey pair.
     PrepareCompleteJourney(Box<CompletePreparation>),
+    /// Import one exact successful paid answer after a stopped host validation.
+    PrepareCompleteJourneyContinuation {
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+        /// Pinned stopped-owner state, owner/controller PIDs and exit1 receipt.
+        #[arg(long)]
+        owner_receipt: PathBuf,
+    },
     /// Independent bounded review of existing native outputs; never runs a student.
     VerifyCompleteJourney {
         #[arg(long)]
@@ -296,6 +306,24 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 horary_gepa::complete_journey::verify_pair(plan, &state)?
             );
         }
+        Action::PrepareCompleteJourneyContinuation {
+            source,
+            state,
+            owner_receipt,
+        } => {
+            let plan = horary_gepa::complete_journey::prepare_continuation(
+                &source,
+                &state,
+                &owner_receipt,
+                &std::env::current_exe().map_err(|e| e.to_string())?,
+            )?;
+            println!(
+                "{}",
+                serde_json::json!({"prepared":state,"original_paid_answer_reused":true,
+                "inherited_review_calls":1,"remaining_new_review_calls":plan.max_review_calls-1,
+                "new_paid_calls":0,"student_calls":0,"reflection_calls":0})
+            );
+        }
         Action::Prepare(options) => {
             let Preparation {
                 objective,
@@ -477,6 +505,35 @@ mod tests {
         );
         assert_eq!(mapped.book_ocr_pages, vec![1, 2]);
         assert_eq!(mapped.max_review_calls, legacy.max_review_calls);
+    }
+
+    #[test]
+    fn complete_paid_continuation_requires_explicit_source_state_and_closure() {
+        let args = [
+            "horary-gepa",
+            "prepare-complete-journey-continuation",
+            "--source",
+            "/synthetic/stopped",
+            "--state",
+            "/synthetic/new",
+            "--owner-receipt",
+            "/synthetic/direct-tool-closure.json",
+        ];
+        let Action::PrepareCompleteJourneyContinuation {
+            source,
+            state,
+            owner_receipt,
+        } = Cli::try_parse_from(args).unwrap().action
+        else {
+            panic!("Wrong action")
+        };
+        assert_eq!(source, PathBuf::from("/synthetic/stopped"));
+        assert_eq!(state, PathBuf::from("/synthetic/new"));
+        assert_eq!(
+            owner_receipt,
+            PathBuf::from("/synthetic/direct-tool-closure.json")
+        );
+        assert!(Cli::try_parse_from(&args[..6]).is_err());
     }
 
     #[test]

@@ -127,7 +127,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "8ef9b076e8847c9b02c1424273414cbc081b8ec0040b57395fa3242ddf0a1acb"
+      "sha256": "58a741c36ba2fc02f3b9185a6b6906d006aecbf68c2d907e245b7ea9d93b1a52"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -139,7 +139,7 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "8bbcde25124334506ef327ae2496cd7369d1d5c2a6cd25ccdbf36355d5888fdc"
+      "sha256": "fe45e65bfb18878e26abc199cb65e18a136dc388cd889759acd3a4d7bc90cd6c"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
@@ -155,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "2ada0064a6779f84e51cc2008b585c96663082d7d6d60cc4ae3dfe2d7162fb25"
+      "sha256": "f32cbf0b1fa6cb647678f502dd1163016a2620e4b5c0c36e08ca21dfb77272b0"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -227,7 +227,7 @@
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "36197b4ec4a5ba8a9b16b927355810c37dc8d5741e7c9e4b598407d83cd01eb2"
+      "sha256": "8ab52d90945811fcc994c360f0b13cf5296bb55775568e37a99e39da41e69271"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
@@ -283,7 +283,7 @@
     },
     {
       "path": "src-tauri/src/process_overview.md",
-      "sha256": "c0f409544214e9167d3cf2541257a3857c936564a739afb6ade0b0ee21fbedbd"
+      "sha256": "e740ea15b53323b7da93315837fbb389dd14635caa3b4600f1919e1887abe977"
     },
     {
       "path": "src-tauri/src/process_reference.rs",
@@ -307,7 +307,7 @@
     },
     {
       "path": "src-tauri/src/reading_method.rs",
-      "sha256": "d3ff9f8afbad00741058ae650a74be65c2674a29b9e9398157b8b46258683b4a"
+      "sha256": "19d232e8f5080e7334186eeeff029fbfb2beddcd21940c5175256b1b60235f7b"
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
@@ -347,7 +347,7 @@
     },
     {
       "path": "src-tauri/src/worksheet_xml.rs",
-      "sha256": "f4a1c6d0c18d1a189601f4c3cc5225a9fc15dd35f5fc371c6a088e285dcad828"
+      "sha256": "aa0fa4b31c0e25d7181318e6f73ad86482f256ea5c2e63f2a6175c948b0654ce"
     },
     {
       "path": "src-tauri/test-fixtures/elicitation/core.json",
@@ -371,7 +371,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "f27d591f09fc0542c8721b6f773b8e3294803fd517aca3190e9c708757c036fc"
+      "sha256": "3c0d333e4d1aceebaa756f55153350dd8ebbdbdc1eee85d53c7dafa678afb1fe"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
@@ -415,7 +415,7 @@
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "a32327e188f3fa1d122a026d897740ad4207ab6502841251baa6aa61208eead2"
+      "sha256": "cc948a8432c61a2bf7c16084e7f382b0e826a7441cf60ffec12b36eccde213b8"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -423,7 +423,7 @@
     },
     {
       "path": "tools/horary-gepa/src/complete_journey.rs",
-      "sha256": "1cb258276dd2ff0a290601cdbb86077291058fb95d222a206fd352646908dc4d"
+      "sha256": "ca39467b9ba478aa0c8ba0dbaa3afce8390aba8d563067bee82cf10972f353c2"
     },
     {
       "path": "tools/horary-gepa/src/controls.rs",
@@ -431,7 +431,7 @@
     },
     {
       "path": "tools/horary-gepa/src/corpus.rs",
-      "sha256": "8fdcea14d2c146ad2ec987e61049c2e5ec119c8586c234f00ed8c74a4b63b016"
+      "sha256": "84b0f140a6b812ada2f7b07ae27c6cdfe4324ba7beda3a3835766418d4263247"
     },
     {
       "path": "tools/horary-gepa/src/curriculum.rs",
@@ -459,7 +459,7 @@
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "d59f56ffe453c250691e6ab95373458d3238f44bd138dd98a4054d686916e3a2"
+      "sha256": "c84be5eebd2f03138d61453304b52c644ad16cef5aa84950d23b118d52e62a82"
     },
     {
       "path": "tools/horary-gepa/src/memo.rs",
@@ -475,7 +475,7 @@
     },
     {
       "path": "tools/horary-gepa/src/reading.rs",
-      "sha256": "67c0b1fcbb26469daaddb450035d3560aaafdda739c0af5b8cebdbd538b8920f"
+      "sha256": "1ffdceb7c62078ead293a9efa932c8d04d2eb1b951dc37cb30fcee3f56564b60"
     },
     {
       "path": "tools/horary-gepa/src/recovery.rs",

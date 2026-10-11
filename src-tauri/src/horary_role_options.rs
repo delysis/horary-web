@@ -1418,6 +1418,7 @@ mod tests {
             planets: vec![planet.into()],
             condition_facet: None,
             event: None,
+            reception: None,
         })
         .collect()
     }

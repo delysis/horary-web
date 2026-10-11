@@ -16,7 +16,7 @@
     "crates/horary-ai-core/src/book_method.rs": "c8b4dd03e652034e9e43b858a9136c54d73f5b51e59a755c4f9f30678a7c3abd",
     "crates/horary-ai-core/src/ephemeris_coefficients.rs": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c",
     "crates/horary-ai-core/src/events.rs": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a",
-    "src-tauri/src/horary_pipeline.rs": "2ada0064a6779f84e51cc2008b585c96663082d7d6d60cc4ae3dfe2d7162fb25",
+    "src-tauri/src/horary_pipeline.rs": "f32cbf0b1fa6cb647678f502dd1163016a2620e4b5c0c36e08ca21dfb77272b0",
     "src-tauri/src/process_reference.rs": "35c7f8ab20a98fb9c98aa208c07e711a552a5bb1f42e0399f34e91340f8b4677"
   },
   "chart_path": "src-tauri/test-fixtures/process-reference-chart.json",

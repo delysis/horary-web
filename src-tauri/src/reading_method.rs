@@ -33,6 +33,82 @@ pub struct Fact {
     pub condition_facet: Option<horary_ai_core::book_method::ConditionFacet>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<EventCandidate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reception: Option<DirectedReception>,
+}
+
+/// The calculator's directed rows, without a strength sum or assigned meaning.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DirectedReception {
+    pub guest_planet: String,
+    pub host_planet: String,
+    pub qualities: Vec<ReceptionQuality>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ReceptionQuality {
+    pub dignity: ReceptionDignity,
+    pub polarity: ReceptionPolarity,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ReceptionDignity {
+    Domicile,
+    Exaltation,
+    TriplicityRuler,
+    TermRuler,
+    FaceRuler,
+    Detriment,
+    Fall,
+}
+
+impl ReceptionDignity {
+    fn from_native(value: &str) -> Option<Self> {
+        Some(match value {
+            "domicile" => Self::Domicile,
+            "exaltation" => Self::Exaltation,
+            "triplicityRuler" => Self::TriplicityRuler,
+            "termRuler" => Self::TermRuler,
+            "faceRuler" => Self::FaceRuler,
+            "detriment" => Self::Detriment,
+            "fall" => Self::Fall,
+            _ => return None,
+        })
+    }
+
+    fn meaning(self) -> &'static str {
+        match self {
+            Self::Domicile => "positive reception by domicile (major)",
+            Self::Exaltation => "positive reception by exaltation (major, potentially exaggerated)",
+            Self::TriplicityRuler => "positive reception by triplicity",
+            Self::TermRuler => "positive reception by term (minor)",
+            Self::FaceRuler => "positive reception by face (minor)",
+            Self::Detriment => "negative reception by detriment (major)",
+            Self::Fall => "negative reception by fall (major)",
+        }
+    }
+
+    fn polarity(self) -> ReceptionPolarity {
+        match self {
+            Self::Detriment | Self::Fall => ReceptionPolarity::Negative,
+            _ => ReceptionPolarity::Positive,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReceptionPolarity {
+    Positive,
+    Negative,
+}
+
+struct ReceptionRow {
+    dignity: ReceptionDignity,
+    quality: Option<ReceptionQuality>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -45,18 +121,23 @@ pub struct EventCandidate {
 pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
     let mut out = Vec::new();
     let Some(chart) = chart else { return out };
-    let mut add =
-        |kind: &str, label: String, detail: String, planets: Vec<String>, condition_facet| {
-            out.push(Fact {
-                id: format!("e{}", out.len()),
-                kind: kind.into(),
-                label,
-                detail,
-                planets,
-                condition_facet,
-                event: None,
-            });
-        };
+    let mut add = |kind: &str,
+                   label: String,
+                   detail: String,
+                   planets: Vec<String>,
+                   condition_facet,
+                   reception| {
+        out.push(Fact {
+            id: format!("e{}", out.len()),
+            kind: kind.into(),
+            label,
+            detail,
+            planets,
+            condition_facet,
+            event: None,
+            reception,
+        });
+    };
     for body in chart["bodies"].as_array().into_iter().flatten() {
         let Some(name) = body["name"].as_str() else {
             continue;
@@ -81,6 +162,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             format!("{name} at {degree:.3}° {sign}, house {house}, {motion}."),
             vec![name.into()],
             None,
+            None,
         );
     }
     for house in chart["houses"].as_array().into_iter().flatten() {
@@ -100,6 +182,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             ),
             vec![ruler.into()],
             None,
+            None,
         );
     }
     // Own condition and directed reception are different evidence. Keeping
@@ -112,6 +195,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             testimony.detail,
             vec![testimony.planet],
             Some(testimony.facet),
+            None,
         );
     }
     if let Some(detail) = horary_ai_core::book_method::moon_gap_evidence(chart) {
@@ -121,9 +205,10 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             detail,
             vec!["Moon".into()],
             None,
+            None,
         );
     }
-    let mut pairs: std::collections::BTreeMap<(String, String), Vec<String>> =
+    let mut pairs: std::collections::BTreeMap<(String, String), Vec<ReceptionRow>> =
         std::collections::BTreeMap::new();
     for entry in chart["derived"]["receptions"]
         .as_array()
@@ -135,24 +220,37 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             entry["hostPlanet"].as_str(),
             entry["dignity"].as_str(),
         ) {
-            let meaning = match dignity {
-                "domicile" => "positive reception by domicile (major)",
-                "exaltation" => "positive reception by exaltation (major, potentially exaggerated)",
-                "triplicityRuler" => "positive reception by triplicity",
-                "termRuler" => "positive reception by term (minor)",
-                "faceRuler" => "positive reception by face (minor)",
-                "detriment" => "negative reception by detriment (major)",
-                "fall" => "negative reception by fall (major)",
-                _ => continue,
+            let Some(dignity) = ReceptionDignity::from_native(dignity) else {
+                continue;
             };
+            // Historical chart rows may lack polarity. Preserve their original
+            // prose, but only publish a typed pair when every native row agrees.
+            let polarity = match entry["polarity"].as_str() {
+                Some("positive") => Some(ReceptionPolarity::Positive),
+                Some("negative") => Some(ReceptionPolarity::Negative),
+                _ => None,
+            };
+            let quality = polarity
+                .filter(|polarity| *polarity == dignity.polarity())
+                .map(|polarity| ReceptionQuality { dignity, polarity });
             pairs
                 .entry((guest.into(), host.into()))
                 .or_default()
-                .push(meaning.into());
+                .push(ReceptionRow { dignity, quality });
         }
     }
-    for ((guest, host), meanings) in pairs {
-        add("reception",format!("{guest} → {host}"),format!("{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",meanings.join("; ")),vec![guest,host],None);
+    for ((guest, host), rows) in pairs {
+        let meanings: Vec<_> = rows.iter().map(|row| row.dignity.meaning()).collect();
+        let reception = rows
+            .into_iter()
+            .map(|row| row.quality)
+            .collect::<Option<Vec<_>>>()
+            .map(|qualities| DirectedReception {
+                guest_planet: guest.clone(),
+                host_planet: host.clone(),
+                qualities,
+            });
+        add("reception",format!("{guest} → {host}"),format!("{guest} regards {host}: {}. This describes {guest}'s regard for {host}, not the reverse.",meanings.join("; ")),vec![guest,host],None,reception);
     }
     // Bounded, compact event summaries avoid dumping the raw ephemeris into every prompt.
     // Attach typed sign-change data so the worksheet need not guess from prose.
@@ -206,6 +304,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
                 planets: vec![a.into(),b.into()],
                 condition_facet: None,
                 event: Some(EventCandidate { within_current_signs: event["withinCurrentSigns"].as_bool(), astronomical_hours: hours }),
+                reception: None,
             });
         }
     }
@@ -218,6 +317,7 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
             planets,
             condition_facet: None,
             event: None,
+            reception: None,
         });
     };
     let moon = &chart["derived"]["voidOfCourseMoon"];
@@ -363,6 +463,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn typed_reception_preserves_native_direction_qualities_ids_and_prose() {
+        let chart = serde_json::json!({"derived":{"receptions":[
+            {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"exaltation","polarity":"positive"},
+            {"guestPlanet":"Mars","hostPlanet":"Venus","dignity":"detriment","polarity":"negative"},
+            {"guestPlanet":"Mars","hostPlanet":"Venus","dignity":"termRuler","polarity":"positive"},
+            {"guestPlanet":"Jupiter","hostPlanet":"Saturn","dignity":"legacyScore","polarity":"positive"}
+        ]}});
+        let generated = facts(Some(&chart));
+        assert_eq!(generated.len(), 4);
+        assert_eq!(generated[0].id, "e0");
+        assert_eq!(generated[0].label, "Mars → Venus");
+        assert_eq!(generated[0].planets, ["Mars", "Venus"]);
+        assert_eq!(generated[0].detail, "Mars regards Venus: negative reception by detriment (major); positive reception by term (minor). This describes Mars's regard for Venus, not the reverse.");
+        assert_eq!(
+            serde_json::to_value(generated[0].reception.as_ref().unwrap()).unwrap(),
+            serde_json::json!({"guestPlanet":"Mars","hostPlanet":"Venus","qualities":[
+                {"dignity":"detriment","polarity":"negative"},
+                {"dignity":"termRuler","polarity":"positive"}
+            ]})
+        );
+        assert_eq!(generated[1].id, "e1");
+        assert_eq!(generated[1].detail, "Venus regards Mars: positive reception by exaltation (major, potentially exaggerated). This describes Venus's regard for Mars, not the reverse.");
+        assert_eq!(
+            generated[1].reception.as_ref().unwrap().guest_planet,
+            "Venus"
+        );
+        assert_eq!(generated[2].id, "e2");
+        assert_eq!(generated[2].kind, "moon");
+        assert_eq!(generated[3].id, "e3");
+        assert_eq!(generated[3].kind, "boundary");
+        assert!(generated[2..].iter().all(|fact| fact.reception.is_none()));
+    }
+
+    #[test]
+    fn legacy_reception_facts_round_trip_without_invented_payload() {
+        let legacy = serde_json::json!({"id":"e7","kind":"reception","label":"Venus → Mars",
+            "detail":"Historical prose is preserved.","planets":["Venus","Mars"]});
+        let decoded: Fact = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(decoded.reception.is_none());
+        assert_eq!(serde_json::to_value(decoded).unwrap(), legacy);
+
+        let mut current = legacy.clone();
+        current["reception"] = serde_json::json!({"guestPlanet":"Venus","hostPlanet":"Mars",
+            "qualities":[{"dignity":"faceRuler","polarity":"positive"}]});
+        let decoded: Fact = serde_json::from_value(current.clone()).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), current);
+        current["reception"]["qualities"][0]["dignity"] = serde_json::json!("score");
+        assert!(serde_json::from_value::<Fact>(current).is_err());
+    }
+
+    #[test]
+    fn incomplete_native_rows_keep_prose_without_claiming_a_complete_typed_pair() {
+        for polarity in [serde_json::Value::Null, serde_json::json!("negative")] {
+            let chart = serde_json::json!({"derived":{"receptions":[
+                {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"domicile","polarity":"positive"},
+                {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"faceRuler","polarity":polarity}
+            ]}});
+            let generated = facts(Some(&chart));
+            assert_eq!(generated[0].detail, "Venus regards Mars: positive reception by domicile (major); positive reception by face (minor). This describes Venus's regard for Mars, not the reverse.");
+            assert!(generated[0].reception.is_none());
+            assert!(serde_json::to_value(&generated[0])
+                .unwrap()
+                .get("reception")
+                .is_none());
+        }
+    }
+
+    #[test]
     fn condition_facets_are_native_and_legacy_prose_cannot_supply_them() {
         use horary_ai_core::book_method::ConditionFacet;
         let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
@@ -447,6 +615,30 @@ mod tests {
             && f.label == "Mars → Venus"
             && f.detail.contains("term (minor)")
             && !f.detail.contains("domicile")));
+        for fact in facts.iter().filter(|fact| fact.kind == "reception") {
+            let reception = fact.reception.as_ref().unwrap();
+            let qualities = chart["derived"]["receptions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|row| {
+                    row["guestPlanet"] == reception.guest_planet
+                        && row["hostPlanet"] == reception.host_planet
+                })
+                .map(|row| json!({"dignity":row["dignity"],"polarity":row["polarity"]}))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                serde_json::to_value(reception).unwrap()["qualities"],
+                json!(qualities)
+            );
+            assert_eq!(
+                fact.planets,
+                [
+                    reception.guest_planet.clone(),
+                    reception.host_planet.clone()
+                ]
+            );
+        }
         assert!(facts
             .iter()
             .any(|f| f.kind == "event" && f.detail.contains("angular distance")));

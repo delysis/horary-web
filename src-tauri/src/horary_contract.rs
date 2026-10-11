@@ -1218,6 +1218,7 @@ mod shape_feedback_tests {
             planets: Vec::new(),
             condition_facet: None,
             event: None,
+            reception: None,
         });
         let before = value.clone();
         assert_eq!(
@@ -1259,6 +1260,7 @@ mod shape_feedback_tests {
             planets: vec!["Venus".into(), "Mars".into()],
             condition_facet: None,
             event: None,
+            reception: None,
         }];
         let value = json!({"checks":{
             "direction":{"state":"supported","evidence":["e0"],"finding":"Venus regards Mars; this fact does not establish the reverse direction."},

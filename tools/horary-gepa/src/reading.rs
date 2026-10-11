@@ -609,6 +609,51 @@ fn schema() -> Value {
     schema
 }
 
+fn native_witness(packet: &Packet, evidence: &Evidence) -> bool {
+    if evidence.file.starts_with("native-") && evidence.json_pointer.starts_with("/session/")
+        || evidence.file.starts_with("calls/") && evidence.file.ends_with("-result.json")
+    {
+        return true;
+    }
+    // This projection is issued by observed_packet, not by a model. Bind it
+    // back to the exact case snapshot and handoff before using its context.
+    let Some((snapshot, suffix)) = evidence
+        .file
+        .strip_prefix("permit-")
+        .and_then(|name| name.rsplit_once('-'))
+    else {
+        return false;
+    };
+    if !matches!(snapshot, "first-turn.json" | "final.json") || !evidence.json_pointer.is_empty() {
+        return false;
+    }
+    let Some(index) = suffix
+        .strip_suffix(".json")
+        .and_then(|value| value.parse::<usize>().ok())
+    else {
+        return false;
+    };
+    let Some(permit) = packet.sources.iter().find(|s| s.file == evidence.file) else {
+        return false;
+    };
+    let Some(state) = packet
+        .sources
+        .iter()
+        .find(|s| s.file == format!("native-{snapshot}"))
+    else {
+        return false;
+    };
+    permit.value["event"] == "contract_handoff"
+        && permit.value["binding"].is_object()
+        && permit.value["request"]["binding"] == permit.value["binding"]
+        && permit.value["binding"]["question"]
+            .as_str()
+            .is_some_and(|question| {
+                !question.is_empty() && state.value["session"]["question"] == question
+            })
+        && state.value.pointer(&format!("/session/audit/{index}")) == Some(&permit.value)
+}
+
 fn citations(
     packet: &Packet,
     case: &str,
@@ -622,18 +667,57 @@ fn citations(
     for evidence in evidence {
         packet.citation(case, evidence)?;
     }
-    if observed
-        && !evidence.iter().any(|e| {
-            e.file.starts_with("native-") && e.json_pointer.starts_with("/session/")
-                || e.file.starts_with("calls/") && e.file.ends_with("-result.json")
-        })
-    {
+    if observed && !evidence.iter().any(|e| native_witness(packet, e)) {
         return Err("Reading merit requires an actual native output witness; book/rubric alone is not behavior".into());
     }
     if book && !evidence.iter().any(|e| e.file == "book-source.json") {
         return Err("Source-correct reading judgment requires the pinned textbook witness".into());
     }
     Ok(())
+}
+
+fn absence_witness(packet: &Packet, evidence: &Evidence) -> bool {
+    let Some(source) = packet.sources.iter().find(|s| s.file == evidence.file) else {
+        return false;
+    };
+    let Some(value) = source.value.pointer(&evidence.json_pointer) else {
+        return false;
+    };
+    match (evidence.file.as_str(), evidence.json_pointer.as_str()) {
+        ("native-first-turn.json" | "native-final.json", "/session/messages") => value
+            .as_array()
+            .is_some_and(|messages| !messages.iter().any(|m| m["role"] == "assistant")),
+        ("native-first-turn.json" | "native-final.json", "/session/method/result") => {
+            value.is_null()
+                || matches!(
+                    value["result"].as_str(),
+                    Some("limited" | "needs_information" | "expert_review")
+                )
+        }
+        ("native-first-turn.json" | "native-final.json", "/session/method/records") => {
+            value.as_array().is_some_and(|records| {
+                !records.iter().any(|r| {
+                    r["stage"] == "judgment"
+                        && r.get("validationError").is_some_and(Value::is_null)
+                        && r.get("worksheet").is_some_and(Value::is_object)
+                })
+            })
+        }
+        ("native-observability.json", "/observed") => value
+            .as_object()
+            .is_some_and(|fields| fields.values().any(|v| v == false)),
+        ("native-outcome.json", "") => {
+            let actual = &value["grade"]["actual"];
+            actual
+                .get("conversation_reply_observed")
+                .is_some_and(|v| v == false)
+                || actual.get("native_result").is_some_and(Value::is_null)
+                || actual
+                    .get("input_handoff_boundary")
+                    .is_some_and(|v| v == false)
+        }
+        _ => false,
+    }
 }
 fn dimension(
     packet: &Packet,
@@ -800,23 +884,42 @@ pub(crate) fn validate_journey(
             );
         }
         if matches!(obligation.state, ObligationState::NotApplicable)
-            && (obligation.id.starts_with("forbidden:")
-                || matches!(
-                    obligation.id.as_str(),
-                    "answer:must_address" | "answer:uncertainty"
-                ))
+            && matches!(
+                obligation.id.as_str(),
+                "answer:must_address" | "answer:uncertainty"
+            )
         {
             return Err(
                 "Unconditional answer and inference boundaries cannot be marked N/A".into(),
             );
         }
-        citations(
-            packet,
-            case,
-            &obligation.evidence,
-            !matches!(obligation.state, ObligationState::Unobserved),
-            true,
-        )?;
+        let unobserved = matches!(obligation.state, ObligationState::Unobserved);
+        citations(packet, case, &obligation.evidence, !unobserved, !unobserved)?;
+        if unobserved
+            && obligation.id.starts_with("answer:")
+            && !obligation
+                .evidence
+                .iter()
+                .any(|e| absence_witness(packet, e))
+        {
+            return Err(
+                "Unobserved answer obligation requires an actual native absence witness".into(),
+            );
+        }
+        if unobserved
+            && !obligation.id.starts_with("answer:")
+            && !obligation.evidence.iter().any(|e| {
+                native_witness(packet, e)
+                    || matches!(
+                        (e.file.as_str(), e.json_pointer.as_str()),
+                        ("native-outcome.json", "") | ("native-observability.json", "/observed")
+                    )
+            })
+        {
+            return Err(
+                "Unknown source obligation requires its actual case-bound native context".into(),
+            );
+        }
         if !interpretation
             && obligation.id.starts_with("answer:")
             && !matches!(obligation.state, ObligationState::Unobserved)
@@ -1207,6 +1310,368 @@ mod tests {
             "obligations":obligations,"findings":[],"qualification":"Synthetic source validation only"})
     }
 
+    fn unobserved_reading_review() -> (Packet, Value, Value) {
+        let old = packet_for_review();
+        let mut packet = Packet::new();
+        for source in &old.sources {
+            if source.file == "native-final.json" {
+                continue;
+            }
+            let pointers = old
+                .refs
+                .values()
+                .filter(|e| e.file == source.file)
+                .map(|e| e.json_pointer.as_str())
+                .collect::<Vec<_>>();
+            packet
+                .source(&source.file, source.bytes.clone(), &pointers)
+                .unwrap();
+        }
+        packet
+            .source(
+                "native-final.json",
+                serde_json::to_vec(&json!({"session":{
+            "messages":[{"role":"user","text":"Original question"}],
+            "method":{"result":null,"records":[],"consultation":{"people":{}}},"place":{"label":"An unrelated location"}}}))
+                .unwrap(),
+                &[
+                    "/session/messages",
+                    "/session/method/result",
+                    "/session/method/records",
+                    "/session/method/consultation",
+                    "/session/place",
+                ],
+            )
+            .unwrap();
+        for evidence in packet.refs.values_mut() {
+            evidence.case_id = "synthetic".into();
+        }
+        packet.context["reading_obligations"] = old.context["reading_obligations"].clone();
+        let absence = serde_json::to_value(
+            packet
+                .refs
+                .values()
+                .find(|e| {
+                    e.file == "native-final.json" && e.json_pointer == "/session/method/result"
+                })
+                .unwrap(),
+        )
+        .unwrap();
+        let mut body = source_body(&packet);
+        body["pipeline"]["reading"] = json!({"state":"unobserved","score":null,
+            "reason":"No actual judgment was delivered","evidence":[absence]});
+        for obligation in body["obligations"].as_array_mut().unwrap() {
+            if obligation["id"].as_str().unwrap().starts_with("answer:") {
+                obligation["state"] = json!("unobserved");
+                obligation["evidence"] = json!([absence]);
+            }
+        }
+        let mut evaluation = evaluation();
+        evaluation["final"]["session"]["method"]["result"] = Value::Null;
+        (packet, evaluation, body)
+    }
+
+    #[test]
+    fn unobserved_obligations_require_native_absence_not_a_textbook_or_unrelated_field() {
+        let (packet, evaluation, body) = unobserved_reading_review();
+        validate_expanded(&packet, &evaluation, body.clone()).unwrap();
+        for reference in packet.refs.values().filter(|e| {
+            e.file == "book-source.json"
+                || e.file == "native-final.json" && e.json_pointer == "/session/place"
+        }) {
+            let mut bad = body.clone();
+            bad["obligations"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|o| o["id"] == "answer:must_address")
+                .unwrap()["evidence"] = json!([reference]);
+            assert!(validate_expanded(&packet, &evaluation, bad)
+                .unwrap_err()
+                .contains("actual native absence witness"));
+        }
+        let mut bad = body;
+        bad["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|o| o["id"] == "answer:must_address")
+            .unwrap()["evidence"][0]["sha256"] = json!(digest("foreign source"));
+        assert!(validate_expanded(&packet, &evaluation, bad).is_err());
+    }
+
+    #[test]
+    fn observed_obligations_still_require_exact_native_and_book_witnesses() {
+        let (packet, evaluation, body) = unobserved_reading_review();
+        for file in ["book-source.json", "calls/0001-result.json"] {
+            let mut bad = body.clone();
+            let reference = packet.refs.values().find(|e| e.file == file).unwrap();
+            bad["obligations"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|o| o["id"] == "role:00")
+                .unwrap()["evidence"] = json!([reference]);
+            assert!(
+                validate_expanded(&packet, &evaluation, bad).is_err(),
+                "{file}"
+            );
+        }
+    }
+
+    #[test]
+    fn conditional_inference_applicability_is_source_judged_but_mandatory_answers_cannot_be_na() {
+        let (mut packet, evaluation, mut body) = unobserved_reading_review();
+        packet.context["reading_obligations"]["forbidden:00"] =
+            json!("Drop a source-identified named counterparty during repair.");
+        let native = packet
+            .refs
+            .values()
+            .find(|e| {
+                e.file == "native-final.json" && e.json_pointer == "/session/method/consultation"
+            })
+            .unwrap();
+        let book = packet
+            .refs
+            .values()
+            .find(|e| e.file == "book-source.json")
+            .unwrap();
+        let conditional = body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|o| o["id"] == "forbidden:00")
+            .unwrap();
+        conditional["state"] = json!("not_applicable");
+        conditional["reason"] =
+            json!("No named counterparty was supplied, so the preservation condition is absent.");
+        conditional["evidence"] = json!([book, native]);
+        validate_expanded(&packet, &evaluation, body.clone()).unwrap();
+        for id in ["answer:must_address", "answer:uncertainty"] {
+            let mut bad = body.clone();
+            let original = body["obligations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|o| o["id"] == "forbidden:00")
+                .unwrap()["evidence"]
+                .clone();
+            let obligation = bad["obligations"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|o| o["id"] == id)
+                .unwrap();
+            obligation["state"] = json!("not_applicable");
+            obligation["evidence"] = original;
+            assert!(validate_expanded(&packet, &evaluation, bad)
+                .unwrap_err()
+                .contains("Unconditional answer"));
+        }
+    }
+
+    #[test]
+    fn delivered_judgment_or_reply_is_not_an_absence_witness() {
+        let packet = packet_for_review();
+        let reply = packet
+            .refs
+            .values()
+            .find(|e| e.file == "native-final.json")
+            .unwrap();
+        assert!(!absence_witness(&packet, reply));
+        let (mut packet, _, _) = unobserved_reading_review();
+        let result = packet
+            .refs
+            .values()
+            .find(|e| e.json_pointer == "/session/method/result")
+            .unwrap()
+            .clone();
+        packet
+            .sources
+            .iter_mut()
+            .find(|s| s.file == result.file)
+            .unwrap()
+            .value["session"]["method"]["result"] = json!({"result":"judgment"});
+        assert!(!absence_witness(&packet, &result));
+    }
+
+    #[test]
+    fn projected_native_permit_requires_its_exact_case_handoff_not_a_filename() {
+        let mut packet = Packet::new();
+        let binding = json!({"question":"The original question","case_revision":3});
+        let permit = json!({"event":"contract_handoff","binding":binding,
+            "request":{"binding":binding,"anchor":{"timestamp_ms":123}}});
+        packet
+            .source(
+                "book-source.json",
+                serde_json::to_vec(&json!({"source":"book"})).unwrap(),
+                &[""],
+            )
+            .unwrap();
+        packet
+            .source(
+                "native-final.json",
+                serde_json::to_vec(&json!({"session":{
+            "question":"The original question","audit":[permit]}}))
+                .unwrap(),
+                &["/session/audit/0"],
+            )
+            .unwrap();
+        packet
+            .source(
+                "permit-final.json-0.json",
+                serde_json::to_vec(&permit).unwrap(),
+                &[""],
+            )
+            .unwrap();
+        for e in packet.refs.values_mut() {
+            e.case_id = "synthetic".into();
+        }
+        let book = packet
+            .refs
+            .values()
+            .find(|e| e.file == "book-source.json")
+            .unwrap()
+            .clone();
+        let handoff = packet
+            .refs
+            .values()
+            .find(|e| e.file == "permit-final.json-0.json")
+            .unwrap()
+            .clone();
+        citations(
+            &packet,
+            "synthetic",
+            &[book.clone(), handoff.clone()],
+            true,
+            true,
+        )
+        .unwrap();
+        let mut foreign = handoff.clone();
+        foreign.case_id = "foreign".into();
+        assert!(citations(&packet, "synthetic", &[book.clone(), foreign], true, true).is_err());
+        packet
+            .sources
+            .iter_mut()
+            .find(|s| s.file == "native-final.json")
+            .unwrap()
+            .value["session"]["question"] = json!("A different question");
+        assert!(citations(
+            &packet,
+            "synthetic",
+            &[book.clone(), handoff.clone()],
+            true,
+            true
+        )
+        .is_err());
+        packet
+            .sources
+            .iter_mut()
+            .find(|s| s.file == "native-final.json")
+            .unwrap()
+            .value["session"]["question"] = json!("The original question");
+        packet
+            .sources
+            .iter_mut()
+            .find(|s| s.file == "native-final.json")
+            .unwrap()
+            .value["session"]["audit"][0]["request"]["anchor"]["timestamp_ms"] = json!(124);
+        assert!(citations(&packet, "synthetic", &[book, handoff], true, true).is_err());
+    }
+
+    #[test]
+    fn unknown_non_answer_inference_uses_actual_context_without_fabricated_absence() {
+        let (mut packet, evaluation, mut body) = unobserved_reading_review();
+        let context = serde_json::to_value(
+            packet
+                .refs
+                .values()
+                .find(|e| {
+                    e.file == "native-final.json"
+                        && e.json_pointer == "/session/method/consultation"
+                })
+                .unwrap(),
+        )
+        .unwrap();
+        let book = serde_json::to_value(
+            packet
+                .refs
+                .values()
+                .find(|e| e.file == "book-source.json")
+                .unwrap(),
+        )
+        .unwrap();
+        let row = body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r["id"].as_str().unwrap().starts_with("forbidden:"))
+            .unwrap();
+        row["state"] = json!("unobserved");
+        row["reason"] = json!("Native context does not establish an unseen source edit");
+        row["evidence"] = json!([book.clone(), context]);
+        validate_expanded(&packet, &evaluation, body.clone()).unwrap();
+        packet
+            .source(
+                "native-observability.json",
+                serde_json::to_vec(&json!({"observed":{"elicitation":false,"reading":false}}))
+                    .unwrap(),
+                &["/observed"],
+            )
+            .unwrap();
+        for reference in packet.refs.values_mut() {
+            reference.case_id = "synthetic".into();
+        }
+        let observation = serde_json::to_value(
+            packet
+                .refs
+                .values()
+                .find(|e| e.file == "native-observability.json")
+                .unwrap(),
+        )
+        .unwrap();
+        body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r["id"].as_str().unwrap().starts_with("forbidden:"))
+            .unwrap()["evidence"] = json!([observation]);
+        validate_expanded(&packet, &evaluation, body.clone()).unwrap();
+        packet
+            .source(
+                "native-outcome.json",
+                serde_json::to_vec(&json!({"id":"synthetic","grade":{"state":"unknown"}})).unwrap(),
+                &[""],
+            )
+            .unwrap();
+        for reference in packet.refs.values_mut() {
+            reference.case_id = "synthetic".into();
+        }
+        let outcome = serde_json::to_value(
+            packet
+                .refs
+                .values()
+                .find(|e| e.file == "native-outcome.json")
+                .unwrap(),
+        )
+        .unwrap();
+        body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r["id"].as_str().unwrap().starts_with("forbidden:"))
+            .unwrap()["evidence"] = json!([outcome]);
+        validate_expanded(&packet, &evaluation, body.clone()).unwrap();
+        let row = body["obligations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|r| r["id"].as_str().unwrap().starts_with("forbidden:"))
+            .unwrap();
+        row["evidence"] = json!([book]);
+        assert!(validate_expanded(&packet, &evaluation, body).is_err());
+    }
+
     #[test]
     fn component_merit_survives_unrelated_conversation_failure_without_qualification() {
         let evaluation = evaluation();
@@ -1254,18 +1719,8 @@ mod tests {
     }
     #[test]
     fn observed_stage_obligations_survive_a_later_failure_without_inventing_an_answer() {
-        let packet = packet_for_review();
-        let mut evaluation = evaluation();
-        evaluation["final"]["session"]["method"]["result"] = Value::Null;
+        let (packet, mut evaluation, mut body) = unobserved_reading_review();
         evaluation["outcome"]["hurdles"]["reading"]["status"] = json!("fail");
-        let mut body = source_body(&packet);
-        body["pipeline"]["reading"]["state"] = json!("unobserved");
-        body["pipeline"]["reading"]["score"] = Value::Null;
-        for obligation in body["obligations"].as_array_mut().unwrap() {
-            if obligation["id"].as_str().unwrap().starts_with("answer:") {
-                obligation["state"] = json!("unobserved");
-            }
-        }
         let validated = validate_expanded(&packet, &evaluation, body.clone()).unwrap();
         let feedback = grade(&evaluation, &validated).unwrap();
         assert_eq!(feedback.score, 1.0);

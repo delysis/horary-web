@@ -285,6 +285,34 @@ fn input_handoff_boundary(session: &Session) -> bool {
     input_handoff_binding(session).is_some()
 }
 
+/// Acquisition can finish before a specialist fails. This is not the
+/// elicitation-only boundary, a conversational reply, or a completed reading.
+fn current_reading_handoff_binding(session: &Session) -> Option<Value> {
+    let case = session.method.consultation.as_ref()?;
+    let last_user = session.messages.iter().rposition(|m| m.role == "user")? + 1;
+    if case.changes.last()?.turn != last_user {
+        return None; // A new, unaccepted utterance cannot inherit old readiness.
+    }
+    let chart = session.chart.as_ref()?;
+    session.place.as_ref()?;
+    let anchor = current_anchor(session)?;
+    if chart["timestampMs"].as_f64() != Some(anchor.timestamp_ms) {
+        return None;
+    }
+    let ready = reading_contracts::ReadyReading::prepare(case, anchor).ok()?;
+    let binding = serde_json::to_value(ready.binding()).ok()?;
+    let request = serde_json::to_value(ready.input()).ok()?;
+    session
+        .audit
+        .iter()
+        .any(|event| {
+            event["event"] == "contract_handoff"
+                && event["binding"] == binding
+                && event["request"] == request
+        })
+        .then_some(binding)
+}
+
 #[derive(Debug, Serialize)]
 struct Grade {
     semantic_pass: bool,
@@ -680,6 +708,9 @@ fn grade_input_state(
     let reply = latest_reply_after_user(session).unwrap_or_default();
     let input_binding = input_handoff_binding(session);
     let input_handoff = input_binding.is_some();
+    let acquisition_binding = current_reading_handoff_binding(session);
+    let acquisition_complete = expected_needs.is_empty() && acquisition_binding.is_some();
+    let delivery_start = mismatches.len();
     if reply.trim().is_empty() && !input_handoff {
         mismatches.push("No conversational reply was delivered".into());
     }
@@ -702,7 +733,10 @@ fn grade_input_state(
         },
     );
     let mut elicitation_failures = mismatches[elicitation_start..handoff_start].to_vec();
-    elicitation_failures.extend_from_slice(&mismatches[reply_start..]);
+    elicitation_failures.extend_from_slice(&mismatches[reply_start..delivery_start]);
+    if !acquisition_complete {
+        elicitation_failures.extend_from_slice(&mismatches[delivery_start..]);
+    }
     let elicitation = if initial_component {
         Gate {
             status: crate::reading_eval::Status::NotRun,
@@ -729,6 +763,7 @@ fn grade_input_state(
             "canonical_deal_party":consultation.and_then(|c| c.deal_party_binding()),
             "reply":reply,"conversation_reply_observed":!reply.trim().is_empty(),
             "input_handoff_boundary":input_handoff,"input_handoff_binding":input_binding,
+            "input_acquisition_complete":acquisition_complete,"reading_handoff_binding":acquisition_binding,
             "native_result":session.method.result}),
         fluidity_review_flags: flags,
         human_fluidity_review:
@@ -2652,6 +2687,87 @@ fn a_later_reading_failure_does_not_erase_successful_input_hurdles() {
     assert_eq!(graded.hurdles.extraction.status, Status::Pass);
     assert_eq!(graded.hurdles.elicitation.status, Status::Pass);
     assert_eq!(graded.hurdles.reading.status, Status::Fail);
+}
+
+#[test]
+fn a_current_reading_handoff_retains_acquisition_without_inventing_delivery() {
+    use crate::reading_eval::Status;
+    let fixture = crate::horary_pipeline::process_examples_at_boundary(true, true).unwrap();
+    let mut session: Session = serde_json::from_value(fixture["accepted_session"].clone()).unwrap();
+    session
+        .audit
+        .retain(|event| event["event"] != "input_evaluation_boundary");
+    let case = scheduler_handoff_case(false);
+    let error = "The specialist did not complete";
+    let graded = with_reading_grade(
+        grade_at_moment(&case, &session, Some(error), 1789387200000.),
+        &session,
+        true,
+        Some(error),
+    );
+    assert!(current_reading_handoff_binding(&session).is_some());
+    assert_eq!(graded.actual["input_handoff_boundary"], false);
+    assert_eq!(graded.actual["input_acquisition_complete"], true);
+    assert_eq!(graded.actual["conversation_reply_observed"], false);
+    assert_eq!(graded.hurdles.classification.status, Status::Pass);
+    assert_eq!(graded.hurdles.extraction.status, Status::Pass);
+    assert_eq!(graded.hurdles.elicitation.status, Status::Pass);
+    assert_eq!(graded.hurdles.reading.status, Status::Fail);
+    assert!(!graded.semantic_pass);
+    assert!(graded
+        .mismatches
+        .iter()
+        .any(|error| error == "No conversational reply was delivered"));
+}
+
+#[test]
+fn acquisition_cannot_reuse_a_stale_or_partial_reading_handoff() {
+    let fixture = crate::horary_pipeline::process_examples_at_boundary(true, true).unwrap();
+    let session: Session = serde_json::from_value(fixture["accepted_session"].clone()).unwrap();
+    assert!(current_reading_handoff_binding(&session).is_some());
+    for defect in [
+        "request",
+        "binding",
+        "revision",
+        "new_user",
+        "unaccepted_turn",
+        "no_chart",
+        "no_place",
+    ] {
+        let mut changed = session.clone();
+        let event = changed
+            .audit
+            .iter_mut()
+            .find(|event| event["event"] == "contract_handoff")
+            .unwrap();
+        match defect {
+            "request" => event["request"]["inputs"] = json!({}),
+            "binding" => event["binding"]["input_sha256"] = json!("0".repeat(64)),
+            "revision" => changed.method.consultation.as_mut().unwrap().revision += 1,
+            "new_user" => changed.messages.push(Message {
+                role: "user".into(),
+                text: "Actually, a different concern.".into(),
+            }),
+            "unaccepted_turn" => {
+                changed
+                    .method
+                    .consultation
+                    .as_mut()
+                    .unwrap()
+                    .changes
+                    .last_mut()
+                    .unwrap()
+                    .turn = 0
+            }
+            "no_chart" => changed.chart = None,
+            "no_place" => changed.place = None,
+            _ => unreachable!(),
+        }
+        assert!(
+            current_reading_handoff_binding(&changed).is_none(),
+            "{defect}"
+        );
+    }
 }
 
 #[test]

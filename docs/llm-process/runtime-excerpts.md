@@ -314,8 +314,8 @@ fn explain(session: &mut Session, runtime: &impl Runtime, words: &str) -> Result
         .cloned()
         .collect();
     if !native_context.is_null() {
-        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),condition_facet:None,event:None });
-        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),condition_facet:None,event:None });
+        facts.push(Fact { id:"chart.moment".into(),kind:"chart_context".into(),label:"The chart's actual moment".into(),detail:format!("The existing chart uses {} in {} (instant {}). This is the question's recorded moment, not the reported event date.",native_context["local_civil_time"],native_context["timezone"],native_context["timestamp_ms"]),planets:Vec::new(),condition_facet:None,event:None,reception:None });
+        facts.push(Fact { id:"chart.place".into(),kind:"chart_context".into(),label:"The chart's actual place".into(),detail:format!("The existing chart was cast for {}. A place mentioned as the event venue is not confirmation that the reader is there.",native_context["reader_place"]["label"]),planets:Vec::new(),condition_facet:None,event:None,reception:None });
     }
     let input = json!({"brief":reading_brief(&session.method.brief),"follow_up_words":words,"focus":focus,
         "chart_context":native_context,"reading_complete":session.sections.iter().any(|section|section.method_stage == Some(Stage::Judgment)),
@@ -1388,6 +1388,73 @@ fn prepare_reading(
     Ok(Some(ready))
 }
 
+#[derive(Serialize)]
+struct AcceptedReceptionRole {
+    role_index: usize,
+    selected_id: String,
+    label: String,
+    house: Option<u8>,
+    planet: String,
+}
+
+#[derive(Serialize)]
+struct ReceptionRoleEdge {
+    fact_id: String,
+    guest_role_indices: Vec<usize>,
+    host_role_indices: Vec<usize>,
+}
+
+/// Selection IDs and role order come from the same native acceptance permit.
+/// Labels never become IDs, and a shared planet never loses one of its roles.
+fn accepted_reception_roles(data: &CheckedData) -> Result<Vec<AcceptedReceptionRole>, String> {
+    let selections = data.worksheet()["selections"]
+        .as_array()
+        .ok_or("Accepted roles require their native selection worksheet")?;
+    if selections.len() != data.roles().len() {
+        return Err("Accepted native selections and derived roles must remain paired".into());
+    }
+    selections
+        .iter()
+        .zip(data.roles())
+        .enumerate()
+        .map(|(role_index, (selection, role))| {
+            Ok(AcceptedReceptionRole {
+                role_index,
+                selected_id: selection["id"]
+                    .as_str()
+                    .ok_or("An accepted role requires its native selection ID")?
+                    .into(),
+                label: role.label.clone(),
+                house: role.house,
+                planet: role.planet.clone(),
+            })
+        })
+        .collect()
+}
+
+fn reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact]) -> Value {
+    let edges: Vec<_> = facts
+        .iter()
+        .filter(|fact| fact.kind == "reception")
+        .filter_map(|fact| {
+            let reception = fact.reception.as_ref()?;
+            let matching_roles = |planet: &str| {
+                roles
+                    .iter()
+                    .filter(|role| role.planet == planet)
+                    .map(|role| role.role_index)
+                    .collect()
+            };
+            Some(ReceptionRoleEdge {
+                fact_id: fact.id.clone(),
+                guest_role_indices: matching_roles(&reception.guest_planet),
+                host_role_indices: matching_roles(&reception.host_planet),
+            })
+        })
+        .collect();
+    json!({"accepted_roles":roles,"edges":edges})
+}
+
 fn generate_reading(
     session: &mut Session,
     runtime: &impl Runtime,
@@ -1437,6 +1504,7 @@ fn generate_reading(
     if runtime.selected_stage_target() == Some(Stage::Significators) {
         return selected_stage_boundary(session, runtime, &ready, Stage::Significators);
     }
+    let reception_roles = accepted_reception_roles(&assignment)?;
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
     let events = contact_evidence(&all, &roles);
@@ -1455,7 +1523,8 @@ fn generate_reading(
         ),
         (
             Stage::Reception,
-            json!({"reading_request":reading_request,"question":common,"facts":reception}),
+            json!({"reading_request":reading_request,"question":common,"facts":reception,
+                "native_reception":reception_clipboard(&reception_roles,&reception)}),
             reception.clone(),
         ),
         (
@@ -1540,7 +1609,8 @@ fn generate_reading(
         session,
         runtime,
         Stage::Judgment,
-        json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts}),
+        json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
+            "native_reception":reception_clipboard(&reception_roles,&facts)}),
         &facts,
     )?
     else {
@@ -1630,6 +1700,167 @@ fn selected_stage_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reception_binding_fixture() -> (Value, Value, Vec<Fact>) {
+        let facts = reading_method::facts(Some(&json!({
+            "houses":[
+                {"number":1,"degree":0.,"sign":"Sagittarius"},
+                {"number":2,"degree":0.,"sign":"Aquarius"},
+                {"number":7,"degree":0.,"sign":"Gemini"},
+                {"number":8,"degree":0.,"sign":"Cancer"}
+            ],
+            "derived":{"receptions":[
+                {"guestPlanet":"Moon","hostPlanet":"Saturn","dignity":"domicile","polarity":"positive"},
+                {"guestPlanet":"Saturn","hostPlanet":"Jupiter","dignity":"termRuler","polarity":"positive"},
+                {"guestPlanet":"Venus","hostPlanet":"Moon","dignity":"fall","polarity":"negative"}
+            ]}
+        })));
+        let choices = json!([
+            {"id":"querent.self","label":"You","house":1,"natural":null,"basis":"Synthetic principal"},
+            {"id":"goods.actual","label":"Your goods","house":2,"natural":null,"basis":"Synthetic movable goods"},
+            {"id":"party.buyer","label":"Buyer","house":7,"natural":null,"basis":"Synthetic counterparty"},
+            {"id":"recipient.pocket","label":"Your pocket","house":2,"natural":null,"basis":"Synthetic recipient money"},
+            {"id":"buyer.money","label":"Buyer money","house":8,"natural":null,"basis":"Synthetic buyer second house"},
+            {"id":"moon.contextual","label":"Contextual Moon","house":null,"natural":"Moon","basis":"Only if no house claims Moon"}
+        ]);
+        let selections = choices
+            .as_array()
+            .unwrap()
+            .iter()
+            .take(5)
+            .map(|choice| json!({"id":choice["id"],"reason":choice["basis"]}))
+            .collect::<Vec<_>>();
+        (
+            json!({"native_role_options":{"choices":choices,"required_groups":[],
+                "conditional_roles":[],"missing":[],"compare":[]}}),
+            json!({"selections":selections,"summary":"Synthetic bindings, no judgment.","unknowns":[]}),
+            facts,
+        )
+    }
+
+    #[test]
+    fn reception_clipboard_keeps_shared_roles_and_house_claimed_moon() {
+        let (input, worksheet, facts) = reception_binding_fixture();
+        let step::Checked::Data(data) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &worksheet,
+            &input,
+            &facts,
+        )
+        .unwrap() else {
+            panic!("Synthetic role data must pass the actual native boundary");
+        };
+        let roles = accepted_reception_roles(&data).unwrap();
+        let clipboard = reception_clipboard(&roles, &facts);
+        assert_eq!(clipboard["accepted_roles"].as_array().unwrap().len(), 5);
+        assert_eq!(
+            clipboard["accepted_roles"][4],
+            json!({
+                "role_index":4,"selected_id":"buyer.money","label":"Buyer money","house":8,"planet":"Moon"
+            })
+        );
+        assert!(clipboard["accepted_roles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|role| role["house"].is_number()));
+        let moon = facts
+            .iter()
+            .find(|fact| fact.label == "Moon → Saturn")
+            .unwrap();
+        let edge = clipboard["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|edge| edge["fact_id"] == moon.id)
+            .unwrap();
+        assert_eq!(edge["guest_role_indices"], json!([4]));
+        assert_eq!(edge["host_role_indices"], json!([1, 3]));
+        assert_eq!(data.roles()[1].planet, data.roles()[3].planet);
+        let unassigned = facts
+            .iter()
+            .find(|fact| fact.label == "Venus → Moon")
+            .unwrap();
+        let edge = clipboard["edges"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|edge| edge["fact_id"] == unassigned.id)
+            .unwrap();
+        assert_eq!(edge["guest_role_indices"], json!([]));
+        assert_eq!(edge["host_role_indices"], json!([4]));
+        assert_eq!(
+            roles.len(),
+            5,
+            "Evidence does not assign an intermediary role"
+        );
+    }
+
+    #[test]
+    fn reception_clipboard_cannot_bypass_native_role_ids_or_moon_priority() {
+        let (input, worksheet, facts) = reception_binding_fixture();
+        for id in ["Buyer money", "querent.self"] {
+            let mut rejected = worksheet.clone();
+            rejected["selections"][4]["id"] = json!(id);
+            assert!(step::check(
+                Stage::Significators,
+                Matter::Other,
+                &rejected,
+                &input,
+                &facts
+            )
+            .is_err());
+        }
+        let mut competing_moon = worksheet;
+        competing_moon["selections"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({
+                "id":"moon.contextual","reason":"An attempted competing natural role"
+            }));
+        let error = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &competing_moon,
+            &input,
+            &facts,
+        )
+        .err()
+        .unwrap();
+        assert!(error.contains("house ruler has first claim"));
+    }
+
+    #[test]
+    fn historical_prose_and_non_reception_facts_do_not_create_clipboard_edges() {
+        let (input, worksheet, mut facts) = reception_binding_fixture();
+        let step::Checked::Data(data) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &worksheet,
+            &input,
+            &facts,
+        )
+        .unwrap() else {
+            panic!("Expected actual native role acceptance");
+        };
+        let roles = accepted_reception_roles(&data).unwrap();
+        for fact in &mut facts {
+            if fact.kind == "reception" {
+                // Retain the readable prose while simulating historical JSON.
+                fact.reception = None;
+            }
+        }
+        assert_eq!(reception_clipboard(&roles, &facts)["edges"], json!([]));
+        facts[0].reception = Some(reading_method::DirectedReception {
+            guest_planet: "Jupiter".into(),
+            host_planet: "Saturn".into(),
+            qualities: Vec::new(),
+        });
+        assert_eq!(facts[0].kind, "house");
+        assert_eq!(reception_clipboard(&roles, &facts)["edges"], json!([]));
+    }
+
     #[test]
     fn contact_graph_keeps_unassigned_prohibition_and_two_intermediary_witnesses() {
         let make = |id: &str, kind: &str, planets: &[&str], hours: Option<f64>| Fact {
@@ -1643,6 +1874,7 @@ mod tests {
                 within_current_signs: Some(true),
                 astronomical_hours,
             }),
+            reception: None,
         };
         let facts = vec![
             make("party-contact", "event", &["Mars", "Venus"], Some(20.)),
@@ -2084,6 +2316,46 @@ mod tests {
                 json!(["condition", "reception", "contacts"])
             );
         }
+    }
+    #[test]
+    fn actual_scheduler_supplies_reception_clipboard_only_to_reception_and_judgment() {
+        let fixture = process_examples().unwrap();
+        let examples = fixture["examples"].as_array().unwrap();
+        let mut accepted_roles = None;
+        for example in examples {
+            let envelope: Value =
+                serde_json::from_str(example["messages"][1]["content"].as_str().unwrap()).unwrap();
+            let input = &envelope["input"];
+            if matches!(example["stage"].as_str(), Some("reception" | "judgment")) {
+                let clipboard = &input["native_reception"];
+                let roles = clipboard["accepted_roles"].as_array().unwrap();
+                assert!(!roles.is_empty());
+                assert!(roles.iter().enumerate().all(|(index, role)| {
+                    role["role_index"] == json!(index) && role["selected_id"].as_str().is_some()
+                }));
+                if let Some(previous) = &accepted_roles {
+                    assert_eq!(previous, &clipboard["accepted_roles"]);
+                } else {
+                    accepted_roles = Some(clipboard["accepted_roles"].clone());
+                }
+                let facts = input["facts"].as_array().unwrap();
+                let typed_ids = facts
+                    .iter()
+                    .filter(|fact| fact["kind"] == "reception" && fact["reception"].is_object())
+                    .map(|fact| fact["id"].clone())
+                    .collect::<Vec<_>>();
+                let bound_ids = clipboard["edges"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|edge| edge["fact_id"].clone())
+                    .collect::<Vec<_>>();
+                assert_eq!(bound_ids, typed_ids);
+            } else {
+                assert!(input.get("native_reception").is_none());
+            }
+        }
+        assert!(accepted_roles.is_some());
     }
     #[test]
     fn delayed_city_clarification_keeps_the_understood_question_moment() {
@@ -5623,6 +5895,7 @@ mod shape_feedback_tests {
             planets: Vec::new(),
             condition_facet: None,
             event: None,
+            reception: None,
         });
         let before = value.clone();
         assert_eq!(
@@ -5664,6 +5937,7 @@ mod shape_feedback_tests {
             planets: vec!["Venus".into(), "Mars".into()],
             condition_facet: None,
             event: None,
+            reception: None,
         }];
         let value = json!({"checks":{
             "direction":{"state":"supported","evidence":["e0"],"finding":"Venus regards Mars; this fact does not establish the reverse direction."},
@@ -9635,6 +9909,7 @@ mod tests {
             planets: vec![planet.into()],
             condition_facet: None,
             event: None,
+            reception: None,
         })
         .collect()
     }
