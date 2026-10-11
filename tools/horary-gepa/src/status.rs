@@ -329,6 +329,14 @@ pub fn inspect(root: &Path) -> Result<Value> {
                     ) {
                         errors.push(error);
                     }
+                } else if source["type"] == crate::curriculum::IMPORT {
+                    if let Err(error) = crate::curriculum::verify_import(
+                        &source,
+                        &load(&directory.join("request.json"))?,
+                        &settled.response,
+                    ) {
+                        errors.push(error);
+                    }
                 }
             }
         }
@@ -522,6 +530,20 @@ pub fn inspect(root: &Path) -> Result<Value> {
     } else {
         None
     };
+    let curriculum = if plan.get("component_curriculum").is_some() {
+        match serde_json::from_value::<crate::Plan>(plan.clone())
+            .map_err(|e| e.to_string())
+            .and_then(|p| crate::curriculum::status(&p))
+        {
+            Ok(value) => Some(value),
+            Err(error) => {
+                issues.push(format!("Component curriculum is unverified: {error}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
     Ok(
         json!({"state":root,"plan_sha256":plan_sha,"function":plan.get("function").cloned().unwrap_or(json!("classification")),"target_method":plan["target_method"],
         "operation_counts":{"settled":operations.iter().filter(|o|o["state"]=="settled").count(),"unsettled":operations.iter().filter(|o|o["state"]=="unsettled").count(),"unverified":operations.iter().filter(|o|o["state"]=="unverified").count()},
@@ -530,6 +552,7 @@ pub fn inspect(root: &Path) -> Result<Value> {
         "recovery":recovery.map(|r|json!({"predecessor_state":r.predecessor_state,"inherited_reservations":r.inherited_reservations,"source_verified":true,"imports_are_cache_reuse":true})),
         "component_continuation":continuation,
         "paid_review_continuation":paid_continuation,
+        "component_curriculum":curriculum,
         "search_result_present":result_path.exists(),"search_result":result,"owner_exit":owner_exit,"interruption_records":interruptions,"integrity_issues":issues,
         "qualification":"Read-only receipt snapshot; unfinished work may still be running. Reservations are not submitted calls. No retry, promotion or interpretation qualification is authorized by this report."}),
     )

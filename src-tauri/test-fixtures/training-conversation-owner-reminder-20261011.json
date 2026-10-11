@@ -1,0 +1,145 @@
+{
+  "latest_words": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now.",
+  "dialogue": [
+    {
+      "role": "user",
+      "text": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now."
+    }
+  ],
+  "canonical_question": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now.",
+  "consultation": {
+    "catalogue_version": "frawley-reading-contracts-2026-10-10.2",
+    "revision": 2,
+    "question": {
+      "state": "resolved",
+      "observation": {
+        "value": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now.",
+        "evidence": {
+          "source": "user",
+          "turn": 1,
+          "quote": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now."
+        }
+      }
+    },
+    "frame": {
+      "state": "resolved",
+      "observation": {
+        "value": {
+          "method": "movable_deal",
+          "facet": "profit"
+        },
+        "evidence": {
+          "source": "user",
+          "turn": 1,
+          "quote": "Will selling these copper bracelets at the market be worthwhile? I will be the seller, but that does not tell you who owns the bracelets. I am asking my own question from here now."
+        }
+      }
+    },
+    "people": {},
+    "subject": {
+      "state": "resolved",
+      "observation": {
+        "value": {
+          "name": "copper bracelets",
+          "kind": "movable",
+          "owner_id": "",
+          "source_quote": "these copper bracelets"
+        },
+        "evidence": {
+          "source": "user",
+          "turn": 1,
+          "quote": "these copper bracelets"
+        }
+      }
+    },
+    "facts": {
+      "principal_mode": {
+        "state": "resolved",
+        "observation": {
+          "value": "self",
+          "evidence": {
+            "source": "user",
+            "turn": 1,
+            "quote": "I will be the seller"
+          }
+        }
+      },
+      "deal_capacity": {
+        "state": "resolved",
+        "observation": {
+          "value": "sell",
+          "evidence": {
+            "source": "user",
+            "turn": 1,
+            "quote": "selling these copper bracelets"
+          }
+        }
+      },
+      "deal_actor": {
+        "state": "resolved",
+        "observation": {
+          "value": "querent",
+          "evidence": {
+            "source": "user",
+            "turn": 1,
+            "quote": "I will be the seller"
+          }
+        }
+      },
+      "deal_beneficiary": {
+        "state": "resolved",
+        "observation": {
+          "value": "querent",
+          "evidence": {
+            "source": "user",
+            "turn": 1,
+            "quote": "Will selling these copper bracelets at the market be worthwhile?"
+          }
+        }
+      }
+    },
+    "changes": [],
+    "requested": {
+      "kind": "owner"
+    },
+    "additional": [],
+    "device_reader_place": false,
+    "unavailable": []
+  },
+  "reminders": [
+    {
+      "id": "need_0",
+      "key": {
+        "kind": "owner"
+      },
+      "state": "missing",
+      "reason": "This method's role assignment depends on whose subject this is.",
+      "example_question": "Who owns the goods? The seller may be someone else."
+    }
+  ],
+  "method_limit": null,
+  "result": {
+    "result": "needs_information",
+    "need": {
+      "key": {
+        "kind": "owner"
+      },
+      "reason": "This method's role assignment depends on whose subject this is.",
+      "question": "Who owns the goods? The seller may be someone else."
+    }
+  },
+  "chart_context": null,
+  "event_context": {
+    "place": null,
+    "time": null,
+    "use": "These describe the event being judged, not the chart anchor. Ask about them when they matter to understanding or judging the question; device coordinates do not resolve them."
+  },
+  "anchor_policy": "For an ordinary consultation, use the reader's location and when the question became clear. Device place is this app's default reader location, not the event venue. An explicit earlier consultation or corrected reader location requires its own verified anchor.",
+  "chart_state": "not_cast",
+  "state_reminder": "No chart has been cast. Discuss the question or the book's method, never findings from this chart.",
+  "reader_place": null,
+  "device_place_available": true,
+  "specialist_findings": [],
+  "unfinished_requests": [],
+  "authority": "The clipboard owns accepted facts and readiness. This response speaks to the person; it cannot authorize a chart or unsupported judgment."
+}

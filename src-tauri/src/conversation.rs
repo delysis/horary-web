@@ -680,13 +680,11 @@ fn run(
             .push(json!({"interruption":error,"revision":session.revision}));
         session.messages.push(Message {
             role: "assistant".into(),
-            text: if state.cancelled.load(Ordering::Acquire) {
-                "We can pause here. Your chart and completed passages are kept; say ‘continue’ when you’re ready."
-            } else if session.chart.is_some() {
-                "The chart is kept, but the reading hasn't finished. Say ‘continue’ and I'll pick up the unfinished step."
-            } else {
-                "Your question is kept. I couldn't finish this step; say ‘continue’ to try it again."
-            }.into(),
+            text: crate::horary_conversation::interruption_reply(
+                &session,
+                state.cancelled.load(Ordering::Acquire),
+            )
+            .into(),
         });
     }
     state.publish(&mut session, &dir)?;

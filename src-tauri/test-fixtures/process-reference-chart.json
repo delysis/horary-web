@@ -556,36 +556,54 @@
         "condition": "clear",
         "separationDegrees": 41.0849565856187,
         "sameSignAsSun": false,
+        "oppositionOrbDegrees": 138.9150434143813,
+        "oppositionReviewDegrees": 8.0,
+        "oppositionThresholdApproximate": true,
         "planet": "Moon"
       },
       {
         "condition": "underBeams",
         "separationDegrees": 14.262693435865657,
         "sameSignAsSun": false,
+        "oppositionOrbDegrees": 165.73730656413434,
+        "oppositionReviewDegrees": 8.0,
+        "oppositionThresholdApproximate": true,
         "planet": "Mercury"
       },
       {
         "condition": "clear",
         "separationDegrees": 40.49076637760962,
         "sameSignAsSun": false,
+        "oppositionOrbDegrees": 139.50923362239038,
+        "oppositionReviewDegrees": 8.0,
+        "oppositionThresholdApproximate": true,
         "planet": "Venus"
       },
       {
         "condition": "clear",
         "separationDegrees": 60.260990283085164,
         "sameSignAsSun": false,
+        "oppositionOrbDegrees": 119.73900971691484,
+        "oppositionReviewDegrees": 8.0,
+        "oppositionThresholdApproximate": true,
         "planet": "Mars"
       },
       {
         "condition": "clear",
         "separationDegrees": 35.5801176593001,
         "sameSignAsSun": false,
+        "oppositionOrbDegrees": 144.4198823406999,
+        "oppositionReviewDegrees": 8.0,
+        "oppositionThresholdApproximate": true,
         "planet": "Jupiter"
       },
       {
         "condition": "clear",
         "separationDegrees": 159.38395597932535,
         "sameSignAsSun": false,
+        "oppositionOrbDegrees": 20.61604402067465,
+        "oppositionReviewDegrees": 8.0,
+        "oppositionThresholdApproximate": true,
         "planet": "Saturn"
       }
     ],
@@ -974,8 +992,10 @@
     "printedPages": [
       44,
       56,
+      57,
       58,
       59,
+      61,
       71,
       72,
       73,

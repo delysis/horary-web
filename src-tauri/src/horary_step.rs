@@ -589,6 +589,7 @@ pub fn check(
 ) -> Result<Checked, String> {
     if stage == Stage::Conversation {
         let input = original_input(input);
+        crate::horary_conversation::validate_ask(input, value)?;
         horary_contract::validate_shape(value, &crate::horary_conversation::schema(input))?;
         if value["reply"].as_str().is_none_or(|s| s.trim().is_empty()) {
             return Err("The reader must give a nonempty conversational reply.".into());
@@ -906,6 +907,26 @@ fn condition_coverage(value: &Value, input: &Value, facts: &[Fact]) -> Result<()
                 missing.push(format!("Condition review omits {planet} from {check}. Required native testimony (choose a supplied ID for this facet): {testimony}."));
             }
         }
+        for fact in facts.iter().filter(|fact| {
+            fact.kind == "condition"
+                && fact
+                    .condition_facet
+                    .is_some_and(ConditionFacet::requires_context_review)
+                && fact.planets.iter().any(|p| p == planet)
+        }) {
+            let cited = ["ability_to_act", "context_exceptions"]
+                .iter()
+                .any(|check| {
+                    value["checks"][*check]["evidence"]
+                        .as_array()
+                        .is_some_and(|ids| {
+                            ids.iter().any(|id| id.as_str() == Some(fact.id.as_str()))
+                        })
+                });
+            if !cited {
+                missing.push(format!("Condition review omits {planet}'s required contextual testimony from ability_to_act or context_exceptions: {}: {}. Weigh it or explain its contextual relevance; no particular state or verdict is required.", fact.id, fact.detail));
+            }
+        }
     }
     if missing.is_empty() {
         Ok(())
@@ -928,7 +949,7 @@ fn condition_repair_limits(input: &Value, facts: &[Fact]) -> String {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    format!("Allowed states: supported, contradicted, unestablished, not_relevant. Evidence maxima for this input ({limits}); use current IDs only. Optional supporting facts must fit these limits without replacing the required essential or house-capacity testimony.")
+    format!("Allowed states: supported, contradicted, unestablished, not_relevant. Evidence maxima for this input ({limits}); use current IDs only. Optional supporting facts must fit these limits without replacing required native testimony, including supplied retrogradation or Sun-opposition context.")
 }
 
 #[cfg(test)]

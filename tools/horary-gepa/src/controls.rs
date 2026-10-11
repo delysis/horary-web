@@ -18,7 +18,7 @@ const IMPORT: &str = "sealed_baseline_control_import";
 pub(crate) const COMPONENT_IMPORT: &str = "sealed_selected_stage_control_import";
 pub(crate) const COMPONENT_REVIEW_IMPORT: &str = "validated_selected_stage_review_import";
 
-fn ordinary(base: &Path, relative: &str) -> Result<PathBuf> {
+pub(crate) fn ordinary(base: &Path, relative: &str) -> Result<PathBuf> {
     let mut path = base.to_path_buf();
     if relative.is_empty() {
         return Err("Empty baseline artifact path".into());
@@ -38,7 +38,7 @@ fn ordinary(base: &Path, relative: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn sealed(root: &Path, operation: &str) -> Result<(Value, Value)> {
+pub(crate) fn sealed(root: &Path, operation: &str) -> Result<(Value, Value)> {
     let base = ordinary(root, operation)?;
     let seal = load(&ordinary(&base, "completed.json")?)?;
     let artifacts = seal["artifacts"]
@@ -77,7 +77,7 @@ fn sealed(root: &Path, operation: &str) -> Result<(Value, Value)> {
     ))
 }
 
-fn absent(pid: u32) -> Result<()> {
+pub(crate) fn absent(pid: u32) -> Result<()> {
     let output = Command::new("ps")
         .args(["-p", &pid.to_string(), "-o", "pid="])
         .output()
@@ -90,7 +90,7 @@ fn absent(pid: u32) -> Result<()> {
     Ok(())
 }
 
-fn owner_pids(owner: &Value) -> Result<Vec<u32>> {
+pub(crate) fn owner_pids(owner: &Value) -> Result<Vec<u32>> {
     let pid = |v: &Value| {
         v.as_u64()
             .and_then(|p| u32::try_from(p).ok())

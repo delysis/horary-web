@@ -20,6 +20,9 @@ const SIGNS: [&str; 12] = [
 const PLANETS: [&str; 7] = [
     "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
 ];
+// Printed p. 61 says "8 degrees or so": a review threshold, not a precise
+// astronomical boundary or an automatic judgment of the question.
+const SUN_OPPOSITION_REVIEW_DEGREES: f64 = 8.0;
 const DOMICILE: [&str; 12] = [
     "Mars", "Venus", "Mercury", "Moon", "Sun", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
     "Saturn", "Jupiter",
@@ -161,16 +164,24 @@ fn solar_condition(sign: usize, degree: f64, sun: (usize, f64)) -> Value {
         - 180.0)
         .abs();
     let same_sign = sign == sun.0;
+    // Printed p. 61 describes "8 degrees or so" on either side of exact
+    // opposition. Eight degrees is an explicit approximate review policy,
+    // not a certified sharp physical boundary or a verdict on the question.
+    let opposition_orb = 180.0 - distance;
     let condition = if same_sign && distance <= 17.5 / 60.0 {
         "cazimi"
     } else if same_sign && distance <= 8.5 {
         "combust"
     } else if distance <= 17.5 {
         "underBeams"
+    } else if opposition_orb <= SUN_OPPOSITION_REVIEW_DEGREES {
+        "opposingSun"
     } else {
         "clear"
     };
-    json!({"condition":condition,"separationDegrees":distance,"sameSignAsSun":same_sign})
+    json!({"condition":condition,"separationDegrees":distance,"sameSignAsSun":same_sign,
+        "oppositionOrbDegrees":opposition_orb,"oppositionReviewDegrees":SUN_OPPOSITION_REVIEW_DEGREES,
+        "oppositionThresholdApproximate":true})
 }
 
 /// Rebuild method-dependent facts from positions, including on repeat calls.
@@ -304,7 +315,7 @@ pub fn apply(chart: &Value) -> Value {
         object.remove("motionSamples");
     }
     output["bookMethod"] = json!({
-        "profile":"frawley-2005-v1", "printedPages":[44,56,58,59,71,72,73,74,75],
+        "profile":"frawley-2005-v1", "printedPages":[44,56,57,58,59,61,71,72,73,74,75],
         "receptionDirection":"The guest occupies a dignity or debility of the host: read the guest's inclination toward the host. Opposite directions may differ; negative and positive testimony may coexist.",
         "context":"Essential condition is distinct from capacity to act. House capacity, retrogradation and combustion require question context; no summed strength score or automatic veto.",
         "cuspRule":"Within approximately five degrees before the next cusp and in its sign, use that next house for judgement; geometricHouse preserves the unadjusted placement.",
@@ -330,7 +341,15 @@ pub enum ConditionFacet {
     Essential,
     HouseCapacity,
     Solar,
+    SolarOpposition,
+    Retrograde,
     CuspAdvance,
+}
+
+impl ConditionFacet {
+    pub fn requires_context_review(self) -> bool {
+        matches!(self, Self::SolarOpposition | Self::Retrograde)
+    }
 }
 
 pub struct ConditionTestimony {
@@ -372,10 +391,32 @@ pub fn condition_evidence(chart: &Value) -> Vec<ConditionTestimony> {
             );
         }
         if let Some(condition) = body["accidentalDignity"]["solarCondition"].as_str() {
-            add(
-                ConditionFacet::Solar,
-                format!("{name} solar condition {condition}"),
-            );
+            if condition == "opposingSun" {
+                let solar = chart["derived"]["solarConditions"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|entry| entry["planet"] == name && entry["condition"] == "opposingSun");
+                if let Some(orb) = solar
+                    .and_then(|entry| entry["oppositionOrbDegrees"].as_f64())
+                    .filter(|orb| {
+                        orb.is_finite() && (0.0..=SUN_OPPOSITION_REVIEW_DEGREES).contains(orb)
+                    })
+                {
+                    add(ConditionFacet::SolarOpposition, format!("{name} about {orb:.2} degrees from exact Sun opposition, within the book's approximate 8-degree region of severe affliction (printed p. 61). Weigh this in the question's context; no automatic verdict or certified boundary precision."));
+                }
+            } else {
+                add(
+                    ConditionFacet::Solar,
+                    format!("{name} solar condition {condition}"),
+                );
+            }
+        }
+        // Printed p. 57 requires consideration of a retrograde significator;
+        // return can explain it. Direct is normal, not an extra dignity. No
+        // missing flag or Sun/Moon flag may create retrogradation testimony.
+        if !matches!(name, "Sun" | "Moon") && body["retrograde"] == true {
+            add(ConditionFacet::Retrograde, format!("{name} retrograde. Consider whether return or going back is appropriate to this question before judging ability (printed p. 57); retrogradation is not an automatic debility."));
         }
         if let Some(before) = body["cuspAdvance"]["degreesBeforeCusp"].as_f64() {
             add(
@@ -491,6 +532,85 @@ mod tests {
             solar_condition(0, 17.4, (0, 0.0))["condition"],
             "underBeams"
         );
+    }
+
+    #[test]
+    fn sun_opposition_is_an_approximate_eight_degree_review_region_without_cazimi() {
+        for (sign, degree) in [(6, 0.0), (6, 3.85), (6, 8.0), (5, 22.0), (5, 26.15)] {
+            let solar = solar_condition(sign, degree, (0, 0.0));
+            assert_eq!(solar["condition"], "opposingSun");
+            assert_eq!(solar["oppositionReviewDegrees"], 8.0);
+            assert_eq!(solar["oppositionThresholdApproximate"], true);
+        }
+        for (sign, degree) in [(6, 8.01), (5, 21.99)] {
+            assert_eq!(
+                solar_condition(sign, degree, (0, 0.0))["condition"],
+                "clear"
+            );
+        }
+        let wrapped = solar_condition(6, 0.1, (11, 29.9));
+        assert_eq!(wrapped["condition"], "opposingSun");
+        assert!((wrapped["oppositionOrbDegrees"].as_f64().unwrap() - 0.2).abs() < 1e-9);
+        assert_eq!(solar_condition(0, 0.0, (0, 0.0))["condition"], "cazimi");
+        assert_eq!(
+            solar_condition(6, 0.0, (0, 0.0))["condition"],
+            "opposingSun"
+        );
+    }
+
+    #[test]
+    fn native_opposition_and_retrograde_testimony_preserve_context_and_house_capacity() {
+        let chart = apply(&json!({"bodies":[
+            {"name":"Sun","sign":"Aries","degree":0.0,"house":10,"retrograde":false},
+            {"name":"Saturn","sign":"Libra","degree":3.85,"house":4,"retrograde":true},
+            {"name":"Moon","sign":"Libra","degree":0.0,"house":1,"retrograde":false},
+            {"name":"Jupiter","sign":"Cancer","degree":12.0,"house":9,"retrograde":false}
+        ],"derived":{"chartSect":"day"}}));
+        assert_eq!(
+            chart["bodies"][1]["accidentalDignity"]["houseCapacity"],
+            "strong"
+        );
+        assert_eq!(
+            chart["bodies"][1]["accidentalDignity"]["solarCondition"],
+            "opposingSun"
+        );
+        let facts = condition_evidence(&chart);
+        let opposition = facts
+            .iter()
+            .find(|fact| fact.planet == "Saturn" && fact.facet == ConditionFacet::SolarOpposition)
+            .unwrap();
+        assert!(opposition.detail.contains("3.85"));
+        assert!(opposition.detail.contains("approximate 8-degree"));
+        assert!(opposition.detail.contains("no automatic verdict"));
+        let retrograde = facts
+            .iter()
+            .find(|fact| fact.planet == "Saturn" && fact.facet == ConditionFacet::Retrograde)
+            .unwrap();
+        assert!(retrograde.detail.contains("return or going back"));
+        assert!(retrograde.detail.contains("not an automatic debility"));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.planet == "Moon" && fact.facet == ConditionFacet::SolarOpposition));
+        assert!(!facts
+            .iter()
+            .any(|fact| fact.planet == "Jupiter" && fact.facet == ConditionFacet::Retrograde));
+        assert!(chart["bodies"][1]["dignity"].get("score").is_none());
+    }
+
+    #[test]
+    fn unknown_motion_and_missing_sun_do_not_create_contextual_affliction() {
+        let chart =
+            apply(&json!({"bodies":[{"name":"Saturn","sign":"Libra","degree":3.85,"house":4}]}));
+        let facts = condition_evidence(&chart);
+        assert!(!facts
+            .iter()
+            .any(|fact| fact.facet.requires_context_review()));
+        assert!(chart["bodies"][0]["accidentalDignity"]["solarCondition"].is_null());
+        let mut unsupported = chart;
+        unsupported["bodies"][0]["accidentalDignity"]["solarCondition"] = json!("opposingSun");
+        assert!(!condition_evidence(&unsupported)
+            .iter()
+            .any(|fact| fact.facet == ConditionFacet::SolarOpposition));
     }
     #[test]
     fn signed_receptions_peregrine_and_cusp_placement_are_not_scores() {

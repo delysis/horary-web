@@ -1149,6 +1149,12 @@ pub fn evaluate(
                     &load(&dir.join("request.json"))?,
                     &review,
                 )?;
+            } else if source["type"] == crate::curriculum::IMPORT {
+                crate::curriculum::verify_import(
+                    &source,
+                    &load(&dir.join("request.json"))?,
+                    &review,
+                )?;
             }
         }
         verify_review(plan, example, evaluation, &review)?;
@@ -1156,6 +1162,33 @@ pub fn evaluate(
     } else {
         None
     };
+    if cached.is_none() {
+        if let Some((review, source)) =
+            crate::curriculum::review_control(plan, &request, evaluation)?
+        {
+            verify_review(plan, example, evaluation, &review)?;
+            let dir = match journal.begin_reading_review(&request, false)? {
+                Operation::Reused(value) => {
+                    verify_review(plan, example, evaluation, &value)?;
+                    return Ok(value);
+                }
+                Operation::Fresh(dir) => dir,
+            };
+            keep(
+                &dir.join("cache-source.json"),
+                &crate::curriculum::import_receipt(plan, &journal.root, &source)?,
+            )?;
+            journal.finish(&dir, &review)?;
+            fs::create_dir_all(cache.parent().ok_or("No cache parent")?)
+                .map_err(|e| e.to_string())?;
+            keep(
+                &cache,
+                &json!({"operation":dir.strip_prefix(&journal.root).map_err(|e|e.to_string())?,
+                "completed_sha256":digest(read(&dir.join("completed.json"))?)}),
+            )?;
+            return Ok(review);
+        }
+    }
     let dir = match journal.begin_reading_review(&request, cached.is_none())? {
         Operation::Reused(value) => {
             verify_review(plan, example, evaluation, &value)?;

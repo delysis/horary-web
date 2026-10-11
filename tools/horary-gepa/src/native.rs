@@ -25,9 +25,77 @@ fn verify_cached_import(directory: &Path, response: &Value) -> Result<()> {
                 &load(&directory.join("request.json"))?,
                 response,
             )?;
+        } else if source["type"] == crate::curriculum::IMPORT {
+            crate::curriculum::verify_import(
+                &source,
+                &load(&directory.join("request.json"))?,
+                response,
+            )?;
         }
     }
     Ok(())
+}
+
+fn request_body(
+    plan: &Plan,
+    example: &Example,
+    candidate: &Candidate,
+    archival: bool,
+    fixed_receipt: Option<&Value>,
+) -> Value {
+    let mut request = json!({"case":example,"candidate":candidate,"native_executable_sha256":plan.native_executable_sha256,
+        "manifest_sha256":plan.manifest_sha256,"function":plan.function,"target_method":plan.target_method,
+        "scope":plan.function.metric(),"archival_control":archival});
+    if let Some(receipt) = fixed_receipt {
+        request["fixed_program"] = receipt.clone();
+    }
+    if plan.exact_response_memoization {
+        request["exact_response_memoization"] = json!({"version":horary_prompt_program::response_memo::VERSION,
+            "excluded_stage":plan.signature().stage,"qualification":"Component search with exact raw-response reuse; not fresh complete-journey qualification"});
+    }
+    if plan.objective == Objective::ExtractorReliability {
+        request["objective"] = json!(plan.objective);
+    }
+    if plan.initial_extractor_observation {
+        request["initial_extractor_observation"] = json!(true);
+    }
+    if plan.selected_stage_observation {
+        request["selected_stage_observation"] = json!(true);
+    }
+    if plan.function == Function::ReadingJourney {
+        request["objective"] = json!(plan.objective);
+        request["target_stage"] = json!(plan.target_stage);
+    }
+    request
+}
+
+/// The exact production logical identity, without quota reservation or a child.
+pub(crate) fn logical_request(
+    plan: &Plan,
+    example: &Example,
+    candidate: &Candidate,
+) -> Result<Value> {
+    let program = plan.program(candidate)?;
+    let archival = program.is_none() && plan.control_mode == ControlMode::ArchivedCapture;
+    let fixed = plan
+        .fixed_program
+        .as_ref()
+        .map(|_| {
+            crate::fixed::receipt(
+                plan,
+                program
+                    .as_ref()
+                    .ok_or("Fixed teaching has no execution program")?,
+            )
+        })
+        .transpose()?;
+    Ok(request_body(
+        plan,
+        example,
+        candidate,
+        archival,
+        fixed.as_ref(),
+    ))
 }
 
 /// A captured control must pass today's actual executor and exact prompt match.
@@ -53,29 +121,7 @@ pub fn evaluate(
             )
         })
         .transpose()?;
-    let mut request = json!({"case":example,"candidate":candidate,"native_executable_sha256":plan.native_executable_sha256,
-        "manifest_sha256":plan.manifest_sha256,"function":plan.function,"target_method":plan.target_method,
-        "scope":plan.function.metric(),"archival_control":archival});
-    if let Some(receipt) = &fixed_receipt {
-        request["fixed_program"] = receipt.clone();
-    }
-    if plan.exact_response_memoization {
-        request["exact_response_memoization"] = json!({"version":horary_prompt_program::response_memo::VERSION,
-            "excluded_stage":plan.signature().stage,"qualification":"Component search with exact raw-response reuse; not fresh complete-journey qualification"});
-    }
-    if plan.objective == Objective::ExtractorReliability {
-        request["objective"] = json!(plan.objective);
-    }
-    if plan.initial_extractor_observation {
-        request["initial_extractor_observation"] = json!(true);
-    }
-    if plan.selected_stage_observation {
-        request["selected_stage_observation"] = json!(true);
-    }
-    if plan.function == Function::ReadingJourney {
-        request["objective"] = json!(plan.objective);
-        request["target_stage"] = json!(plan.target_stage);
-    }
+    let request = request_body(plan, example, candidate, archival, fixed_receipt.as_ref());
     let cache_key = digest(request.to_string());
     let cache = journal
         .root
@@ -145,6 +191,25 @@ pub fn evaluate(
                 return Ok(response);
             }
         }
+    }
+    if let Some((response, source)) = crate::curriculum::native_control(plan, &request)? {
+        let directory = match journal.begin(plan.function.metric(), &request, 0, 0)? {
+            Operation::Reused(value) => return Ok(value),
+            Operation::Fresh(directory) => directory,
+        };
+        keep(
+            &directory.join("cache-source.json"),
+            &crate::curriculum::import_receipt(plan, &journal.root, &source)?,
+        )?;
+        journal.finish(&directory, &response)?;
+        fs::create_dir_all(cache.parent().ok_or("No cache directory")?)
+            .map_err(|e| e.to_string())?;
+        keep(
+            &cache,
+            &json!({"operation":directory.strip_prefix(&journal.root).map_err(|e|e.to_string())?,
+            "completed_sha256":digest(read(&directory.join("completed.json"))?)}),
+        )?;
+        return Ok(response);
     }
     if let Some(previous) = crate::recovery::native_source(plan, &request)? {
         let response = load(&previous.join("response.json"))?;

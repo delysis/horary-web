@@ -4,6 +4,7 @@ pub mod campaign;
 pub mod complete_journey;
 pub mod controls;
 pub mod corpus;
+pub mod curriculum;
 pub mod executable;
 pub mod fixed;
 pub mod initial_extractor;
@@ -279,6 +280,8 @@ pub struct Plan {
     pub codex_snapshot: Option<executable::Support>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovery: Option<recovery::Recovery>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component_curriculum: Option<curriculum::Pin>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixed_program: Option<fixed::Source>,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -624,6 +627,7 @@ impl Plan {
             }
         }
         selected_stage::preflight(self)?;
+        curriculum::verify_plan(self)?;
         Ok(())
     }
     fn verify_split(&self, split: &Value) -> Result<()> {
@@ -1168,6 +1172,7 @@ mod tests {
             codex_executable_sha256: digest("codex"),
             codex_snapshot: None,
             recovery: None,
+            component_curriculum: None,
             fixed_program: None,
             exact_response_memoization: false,
             guide_sha256: digest(&guide),

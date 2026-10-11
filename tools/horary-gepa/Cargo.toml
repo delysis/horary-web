@@ -25,3 +25,8 @@ tempfile = "3"
 # over immutable executables and trace trees in the development controller.
 [profile.dev.package.sha2]
 opt-level = 3
+
+# Generic digest wrappers are instantiated in this caller, not just sha2.
+# Retain development assertions, overflow checks and every evidence check.
+[profile.dev.package.horary-gepa]
+opt-level = 3

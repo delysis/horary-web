@@ -2289,6 +2289,17 @@ mod selected_stage_execution_tests {
                                 .collect::<Vec<_>>();
                             value["checks"][key]["evidence"] = json!(ids);
                         }
+                        value["checks"]["context_exceptions"]["evidence"] = json!(original
+                            ["facts"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .filter(|fact| matches!(
+                                fact["condition_facet"].as_str(),
+                                Some("retrograde" | "solar_opposition")
+                            ))
+                            .map(|fact| fact["id"].clone())
+                            .collect::<Vec<_>>());
                         if self.reject_first.swap(false, Ordering::AcqRel) {
                             value["checks"]["ability_to_act"]["evidence"] = json!([]);
                         }
@@ -3268,6 +3279,17 @@ fn process_examples_with_chart(
                                 .collect();
                             answer["checks"][key]["evidence"] = json!(ids);
                         }
+                        answer["checks"]["context_exceptions"]["evidence"] = json!(original
+                            ["facts"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter(|fact| matches!(
+                                fact["condition_facet"].as_str(),
+                                Some("retrograde" | "solar_opposition")
+                            ))
+                            .map(|fact| fact["id"].clone())
+                            .collect::<Vec<_>>());
                     }
                     if stage == Stage::Contacts {
                         answer["basis"] = json!("no_candidate_covered");

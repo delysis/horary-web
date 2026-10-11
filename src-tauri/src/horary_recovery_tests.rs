@@ -137,6 +137,20 @@ impl Runtime for Script {
                         .collect();
                     value["checks"][key]["evidence"] = json!(ids);
                 }
+                let contextual_ids: Vec<_> = facts
+                    .iter()
+                    .filter(|fact| {
+                        fact.condition_facet.is_some_and(
+                            horary_ai_core::book_method::ConditionFacet::requires_context_review,
+                        ) && roles.and_then(Value::as_array).is_some_and(|roles| {
+                            roles.iter().any(|role| {
+                                fact.planets.iter().any(|planet| role["planet"] == *planet)
+                            })
+                        })
+                    })
+                    .map(|fact| fact.id.clone())
+                    .collect();
+                value["checks"]["context_exceptions"]["evidence"] = json!(contextual_ids);
                 content = value.to_string();
             }
         }

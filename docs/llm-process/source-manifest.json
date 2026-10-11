@@ -11,7 +11,7 @@
     },
     {
       "path": "crates/horary-ai-core/src/book_method.rs",
-      "sha256": "03f68a9c5f0dd4a54bc14c317ab63327ec9c8d3f6b7f369d12cee60d24d928d6"
+      "sha256": "c8b4dd03e652034e9e43b858a9136c54d73f5b51e59a755c4f9f30678a7c3abd"
     },
     {
       "path": "crates/horary-ai-core/src/chart_input.rs",
@@ -119,7 +119,7 @@
     },
     {
       "path": "src-tauri/src/conversation.rs",
-      "sha256": "7860d64f74624ea9279fcee874a433f372911927efebbd1c48920b164f69fa5c"
+      "sha256": "a24d28c108667cc53b8972f165edc40e252980e68f4e15dd9e9e9636c38ccd54"
     },
     {
       "path": "src-tauri/src/deal_training_bank.rs",
@@ -139,11 +139,11 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "185c1886944c8872c34c46d990f52e438ef1471bec9f4146e76e337b9ebdfaf9"
+      "sha256": "d39b80a15c564d6d14ffff1b5921f69544c1fddb01073aee523baae18520c983"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
-      "sha256": "a0555dcb4c35ba45363ec428ff9a28de3e8553e1eca0c58dace552aa5454c5b9"
+      "sha256": "42b066bb151db522d21a1d37d064735e90913080336e72941a72a929f0b3589b"
     },
     {
       "path": "src-tauri/src/horary_executor.rs",
@@ -155,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "f309d83d3c33543a36537810e0175cd6865136d5697d79a6125d144f25eaf9ab"
+      "sha256": "2ada0064a6779f84e51cc2008b585c96663082d7d6d60cc4ae3dfe2d7162fb25"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -223,7 +223,7 @@
     },
     {
       "path": "src-tauri/src/horary_recovery_tests.rs",
-      "sha256": "152f5f7561e9ca7e3bd3e850fb02b2fc2f558d10a44659f7b44b66eb2d150cd8"
+      "sha256": "01068d9c956778534f70232aa3c3bb5a4196d5da8d8310c3f37586d4f296630c"
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
@@ -231,11 +231,11 @@
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "d2557581ec63174f0ac82eac255a5910f40eb1580468dba546894bb05941be4a"
+      "sha256": "cf9374dff4a8e719e5c21e938715c5114611952bbf8e9c7e987a249fe4e71ab2"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
-      "sha256": "f5fe4a890763f0dfc8f97804a42bfa94ae26ccca5a114294db122b9f2de19bf1"
+      "sha256": "c72ad3f7d0783f58ad40d4063a46dd9af677a2baddf8a96a489711656c867926"
     },
     {
       "path": "src-tauri/src/hosted_gemma_eval.rs",
@@ -287,7 +287,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "08207e92b0fcf5fcf9c96484a5b2c45e86e51c34626e11c225d0a46f7c4d07e0"
+      "sha256": "35c7f8ab20a98fb9c98aa208c07e711a552a5bb1f42e0399f34e91340f8b4677"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -371,11 +371,11 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "212f7b4413642e0360502378fd85150bc1df6c9f33cb1e0f18d2cf2c7a55f75a"
+      "sha256": "f27d591f09fc0542c8721b6f773b8e3294803fd517aca3190e9c708757c036fc"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
-      "sha256": "b63bc213271c7ed71e9127f36550484794f6904498b116a97db036793afee0c6"
+      "sha256": "83f06fd06c828d90efcd849aca92eaad70d02aa9c8f9c25258eddb91b7e99fbd"
     },
     {
       "path": "src-tauri/test-fixtures/readings/core-rubrics.json",
@@ -411,11 +411,11 @@
     },
     {
       "path": "tools/horary-gepa/Cargo.toml",
-      "sha256": "e18c1dec8f2768440e57a34a467596781f9fe46b4de03afb1f3e8df21fc5e430"
+      "sha256": "8e1e761530d0254bc1bb3841f77d13e61a6db8ee047e354a8cf1cf44914823b2"
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "5aa9a80491798a62369d50962bf8b555bf6c2fd1d8ac2f597c3e679d2f4ab45b"
+      "sha256": "986fc6ac7db59353818a7c925ebbac83bd7604f8d31716ae98131e454bf2632e"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -427,11 +427,15 @@
     },
     {
       "path": "tools/horary-gepa/src/controls.rs",
-      "sha256": "b3e332dd657cac818517cb34a826ee50503ccdae9b65fe1d042252912d8d402b"
+      "sha256": "ed44345548a59574a96b4c0c1fff33d8d599b3659ce8169891b2e8b71be6942a"
     },
     {
       "path": "tools/horary-gepa/src/corpus.rs",
       "sha256": "8fdcea14d2c146ad2ec987e61049c2e5ec119c8586c234f00ed8c74a4b63b016"
+    },
+    {
+      "path": "tools/horary-gepa/src/curriculum.rs",
+      "sha256": "aa2465274baf66020f766e5a7229bb703a5e6bfd291a42308c26f0eb4864610d"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",
@@ -447,15 +451,15 @@
     },
     {
       "path": "tools/horary-gepa/src/journal.rs",
-      "sha256": "011c9d6f6c5fb5e812736f2c20bef0d554b2e8acffc99c0b4445cfaa8bee4635"
+      "sha256": "64ae726a3bfb8d86b3f78788d1341f656bfdf690769a701f54f07c9504fd888e"
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "767a83a66da079ec4753b0e750529711ea67b7e8027ebd4c05311834f8eb0c99"
+      "sha256": "7a3b5875f76a0d5ff5820a1f8d5f51073a871bfaae80cb4b80a36e4054d52bfb"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "7f3d42aa80a974da0968e863b4e733ea562be8d50436223dc45b15dcb5b04357"
+      "sha256": "41815ca436ae27f80e22672af6109e4166e2ecd3647c5a97eea24cfa80579e06"
     },
     {
       "path": "tools/horary-gepa/src/memo.rs",
@@ -467,7 +471,7 @@
     },
     {
       "path": "tools/horary-gepa/src/native.rs",
-      "sha256": "25a3cd85c9c44e1ec49fb22623031b5440a01088d4696aa7c64a03b272abf657"
+      "sha256": "4eeea08fbb70f1ea895767a0bbba95e33b94c99676d35653950d1e6e0a0045ef"
     },
     {
       "path": "tools/horary-gepa/src/reading.rs",
@@ -483,11 +487,11 @@
     },
     {
       "path": "tools/horary-gepa/src/selected_stage.rs",
-      "sha256": "e081a62f1697e3e953318db3354d297e88f3312b1d98960bae7c6dd3b1d8113e"
+      "sha256": "f0b1e23376890b75ced8b6edd3e854fcfc98ff6aa3fdf7d06eb569f2a7bd7b1c"
     },
     {
       "path": "tools/horary-gepa/src/status.rs",
-      "sha256": "7b2360374c60919dc7855a5ad734f4f378d0d688833b42b1d9207e4eca906f38"
+      "sha256": "a2218f142a9b6ea739fca2044c834895a622ec6fbb7d0de0ec3ef7abbbe597e3"
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",

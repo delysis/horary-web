@@ -76,6 +76,16 @@ enum Action {
         #[arg(long)]
         paid_review_source: Option<PathBuf>,
     },
+    /// Separate bounded component experiment, preserving an uninvoked source journey.
+    PrepareComponentCurriculum {
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+        /// Source-hashed external settlement of the original unscored operation.
+        #[arg(long)]
+        settlement: PathBuf,
+    },
     Run {
         #[arg(long)]
         state: PathBuf,
@@ -331,7 +341,7 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
             let plan=Plan {version:match function {Function::Classification=>1,Function::InputJourney=>2,Function::ReadingJourney=>3},engine_rev:ENGINE_REV.into(),controller_executable:std::env::current_exe().map_err(|error|error.to_string())?,controller_executable_sha256:String::new(),campaign:std::fs::canonicalize(campaign).map_err(|error|error.to_string())?,
                 manifest_sha256:String::new(),split_file:std::fs::canonicalize(split).map_err(|error|error.to_string())?,split_sha256:String::new(),
                 native_executable:std::fs::canonicalize(native_executable).map_err(|error|error.to_string())?,native_executable_sha256:String::new(),
-                codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,fixed_program,exact_response_memoization,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
+                codex:std::fs::canonicalize(codex).map_err(|error|error.to_string())?,codex_executable_sha256:String::new(),codex_snapshot:None,recovery:None,component_curriculum:None,fixed_program,exact_response_memoization,guide:String::new(),guide_sha256:String::new(),seed:BTreeMap::new(),training:vec![],development:vec![],reserved_ids:vec![],
                 max_metric_calls,max_teacher_calls,max_physical_generation_attempts,logical_calls_per_function,function_seconds,teacher_seconds,rng_seed:seed,wait_owner_pid,control_mode,
                 function,objective,initial_extractor_observation:false,selected_stage_observation,target_method,target_stage,max_review_calls,review_seconds:if function==Function::Classification {0} else {review_seconds},review_book,
                 qualification:if function == Function::Classification {
@@ -370,6 +380,24 @@ async fn execute(cli: Cli) -> horary_gepa::Result<()> {
                 "new_paid_calls":0,"reused_controls":4,"actual_writer_stdin_preflight":true,
                 "new_bounded_experiment":{"teacher":plan.max_teacher_calls,"review":plan.max_review_calls,
                     "physical_attempt_reservations":plan.max_physical_generation_attempts}})
+            );
+        }
+        Action::PrepareComponentCurriculum {
+            source,
+            state,
+            settlement,
+        } => {
+            let controller = std::env::current_exe().map_err(|e| e.to_string())?;
+            let plan = horary_gepa::curriculum::prepare(&source, &state, &settlement, &controller)?;
+            println!(
+                "{}",
+                serde_json::json!({"prepared":state,"source":source,"new_paid_calls":0,
+                "training":plan.training.iter().map(|e|&e.id).collect::<Vec<_>>(),
+                "development":plan.development.iter().map(|e|&e.id).collect::<Vec<_>>(),
+                "soft_metric_cap":plan.max_metric_calls,"maximum_metric_observations":6,
+                "remaining_hard_budgets":{"physical":plan.max_physical_generation_attempts,
+                "reviews":plan.max_review_calls,"teacher":plan.max_teacher_calls},
+                "qualification":plan.qualification})
             );
         }
         Action::Run { state } => {

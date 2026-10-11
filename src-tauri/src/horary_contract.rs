@@ -204,6 +204,8 @@ fn condition_evidence_budget(
                             Some(
                                 ConditionFacet::HouseCapacity
                                     | ConditionFacet::Solar
+                                    | ConditionFacet::SolarOpposition
+                                    | ConditionFacet::Retrograde
                                     | ConditionFacet::CuspAdvance
                             )
                         )
@@ -221,14 +223,14 @@ fn condition_evidence_budget(
         .map(|fact| fact.id.as_str())
         .collect::<std::collections::BTreeSet<_>>()
         .len();
-    // Each traditional body supplies one position and at most four typed
+    // Each traditional body supplies one position and at most five typed
     // condition facets. Context additionally has a lunar-gap/status fact and
     // the calculation boundary. Neither repeated roles nor duplicate IDs
     // increase the budget, and missing calculations add no capacity.
     let maximum = match check {
         "own_dignity" => PLANETS.len() * 2,
-        "ability_to_act" => PLANETS.len() * 4,
-        "context_exceptions" => PLANETS.len() * 5 + 3,
+        "ability_to_act" => PLANETS.len() * 5,
+        "context_exceptions" => PLANETS.len() * 6 + 3,
         _ => 0,
     };
     supplied.min(maximum)

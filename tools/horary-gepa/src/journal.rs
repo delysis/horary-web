@@ -171,6 +171,12 @@ impl Journal {
                         &identity,
                         &load(&directory.join("response.json"))?,
                     )?;
+                } else if source["type"] == crate::curriculum::IMPORT {
+                    crate::curriculum::verify_import(
+                        &source,
+                        &identity,
+                        &load(&directory.join("response.json"))?,
+                    )?;
                 }
             }
             println!(
