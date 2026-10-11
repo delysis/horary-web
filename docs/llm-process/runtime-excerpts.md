@@ -1398,10 +1398,12 @@ struct AcceptedReceptionRole {
 }
 
 #[derive(Serialize)]
-struct ReceptionRoleEdge {
-    fact_id: String,
+struct ReceptionRoleEdge<'a> {
+    fact_id: &'a str,
     guest_role_indices: Vec<usize>,
     host_role_indices: Vec<usize>,
+    guest_roles: Vec<&'a AcceptedReceptionRole>,
+    host_roles: Vec<&'a AcceptedReceptionRole>,
 }
 
 /// Selection IDs and role order come from the same native acceptance permit.
@@ -1442,13 +1444,16 @@ fn reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact]) -> Value
                 roles
                     .iter()
                     .filter(|role| role.planet == planet)
-                    .map(|role| role.role_index)
-                    .collect()
+                    .collect::<Vec<_>>()
             };
+            let guest_roles = matching_roles(&reception.guest_planet);
+            let host_roles = matching_roles(&reception.host_planet);
             Some(ReceptionRoleEdge {
-                fact_id: fact.id.clone(),
-                guest_role_indices: matching_roles(&reception.guest_planet),
-                host_role_indices: matching_roles(&reception.host_planet),
+                fact_id: &fact.id,
+                guest_role_indices: guest_roles.iter().map(|role| role.role_index).collect(),
+                host_role_indices: host_roles.iter().map(|role| role.role_index).collect(),
+                guest_roles,
+                host_roles,
             })
         })
         .collect();
@@ -1777,6 +1782,19 @@ mod tests {
             .unwrap();
         assert_eq!(edge["guest_role_indices"], json!([4]));
         assert_eq!(edge["host_role_indices"], json!([1, 3]));
+        assert_eq!(
+            edge["guest_roles"],
+            json!([{
+                "role_index":4,"selected_id":"buyer.money","label":"Buyer money","house":8,"planet":"Moon"
+            }])
+        );
+        assert_eq!(
+            edge["host_roles"],
+            json!([
+                {"role_index":1,"selected_id":"goods.actual","label":"Your goods","house":2,"planet":"Saturn"},
+                {"role_index":3,"selected_id":"recipient.pocket","label":"Your pocket","house":2,"planet":"Saturn"}
+            ])
+        );
         assert_eq!(data.roles()[1].planet, data.roles()[3].planet);
         let unassigned = facts
             .iter()
@@ -1790,11 +1808,80 @@ mod tests {
             .unwrap();
         assert_eq!(edge["guest_role_indices"], json!([]));
         assert_eq!(edge["host_role_indices"], json!([4]));
+        assert_eq!(edge["guest_roles"], json!([]));
+        assert_eq!(edge["host_roles"], json!([clipboard["accepted_roles"][4]]));
         assert_eq!(
             roles.len(),
             5,
             "Evidence does not assign an intermediary role"
         );
+    }
+
+    #[test]
+    fn reception_edges_resolve_every_side_to_exact_accepted_rows() {
+        let (input, worksheet, facts) = reception_binding_fixture();
+        let step::Checked::Data(data) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &worksheet,
+            &input,
+            &facts,
+        )
+        .unwrap() else {
+            panic!("Expected actual native role acceptance");
+        };
+        let roles = accepted_reception_roles(&data).unwrap();
+        let clipboard = reception_clipboard(&roles, &facts);
+        let rows = clipboard["accepted_roles"].as_array().unwrap();
+        let edges = clipboard["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 3);
+        for edge in edges {
+            let fact = facts
+                .iter()
+                .find(|fact| edge["fact_id"] == fact.id)
+                .unwrap();
+            let reception = fact.reception.as_ref().unwrap();
+            for (direct, indices, planet) in [
+                ("guest_roles", "guest_role_indices", &reception.guest_planet),
+                ("host_roles", "host_role_indices", &reception.host_planet),
+            ] {
+                let expected = rows
+                    .iter()
+                    .filter(|role| role["planet"] == *planet)
+                    .collect::<Vec<_>>();
+                assert_eq!(edge[direct], json!(expected));
+                let expected_indices = expected
+                    .iter()
+                    .map(|role| role["role_index"].clone())
+                    .collect::<Vec<_>>();
+                assert_eq!(edge[indices], json!(expected_indices));
+                for row in edge[direct].as_array().unwrap() {
+                    let index = row["role_index"].as_u64().unwrap() as usize;
+                    assert_eq!(row, &rows[index]);
+                    assert_eq!(row["selected_id"], worksheet["selections"][index]["id"]);
+                    assert_eq!(row["label"], data.roles()[index].label);
+                    assert_eq!(row["house"], json!(data.roles()[index].house));
+                    assert_eq!(row["planet"], data.roles()[index].planet);
+                }
+            }
+        }
+        let unassigned = reading_method::facts(Some(&json!({
+            "derived":{"receptions":[
+                {"guestPlanet":"Moon","hostPlanet":"Venus","dignity":"fall","polarity":"negative"},
+                {"guestPlanet":"Venus","hostPlanet":"Mars","dignity":"domicile","polarity":"positive"}
+            ]}
+        })));
+        let clipboard = reception_clipboard(&roles, &unassigned);
+        let edges = clipboard["edges"].as_array().unwrap();
+        assert_eq!(edges.len(), 2);
+        assert_eq!(edges[0]["guest_roles"], json!([rows[4]]));
+        assert_eq!(edges[0]["guest_role_indices"], json!([4]));
+        for edge in edges {
+            assert_eq!(edge["host_roles"], json!([]));
+            assert_eq!(edge["host_role_indices"], json!([]));
+        }
+        assert_eq!(edges[1]["guest_roles"], json!([]));
+        assert_eq!(edges[1]["guest_role_indices"], json!([]));
     }
 
     #[test]
@@ -2351,6 +2438,20 @@ mod tests {
                     .map(|edge| edge["fact_id"].clone())
                     .collect::<Vec<_>>();
                 assert_eq!(bound_ids, typed_ids);
+                for edge in clipboard["edges"].as_array().unwrap() {
+                    for (direct, indices) in [
+                        ("guest_roles", "guest_role_indices"),
+                        ("host_roles", "host_role_indices"),
+                    ] {
+                        let expected = edge[indices]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|index| &roles[index.as_u64().unwrap() as usize])
+                            .collect::<Vec<_>>();
+                        assert_eq!(edge[direct], json!(expected));
+                    }
+                }
             } else {
                 assert!(input.get("native_reception").is_none());
             }
