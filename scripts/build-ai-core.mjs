@@ -4,6 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+
+// Wrap all requested WASM targets once; generated JS/WASM products are retained.
+if (process.platform === 'darwin' && process.env.RUST_JANITOR_ACTIVE !== '1') {
+    const janitor = process.env.HOME && join(process.env.HOME, 'Library/Application Support/RustTargetJanitor/rust-target-janitor');
+    if (janitor && existsSync(janitor)) {
+        const result = spawnSync(process.execPath, [join(root, 'scripts/with-build-cleanup.mjs'), process.execPath, ...process.argv.slice(1)], { stdio: 'inherit' });
+        if (result.error) throw result.error;
+        process.exit(result.status ?? 1);
+    }
+}
 const crateDir = join(root, 'crates', 'horary-ai-core');
 const targets = {
     web: {

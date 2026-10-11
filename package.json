@@ -23,14 +23,18 @@
     "build:ai-core": "node scripts/build-ai-core.mjs all",
     "build:ai-core:web": "node scripts/build-ai-core.mjs web",
     "build:ai-core:node": "node scripts/build-ai-core.mjs node",
-    "check:ai-core": "cargo fmt --check --manifest-path crates/horary-ai-core/Cargo.toml && cargo test --manifest-path crates/horary-ai-core/Cargo.toml && cargo clippy --manifest-path crates/horary-ai-core/Cargo.toml -- -D warnings",
-    "check:tauri": "npm run check:ai-core && cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
-    "check:all": "npm run check && npm run test:coverage && npm audit && npm run check:tauri",
+    "check:ai-core": "node scripts/with-build-cleanup.mjs npm run check:ai-core:commands",
+    "check:tauri": "node scripts/with-build-cleanup.mjs npm run check:tauri:commands",
+    "check:all": "node scripts/with-build-cleanup.mjs npm run check:all:commands",
     "check:release-assets": "node scripts/check-release-assets.mjs",
     "check:native-llama": "node scripts/check-native-llama.mjs",
     "check:horary-readings": "node scripts/check-horary-readings.mjs",
     "tauri": "tauri",
-    "tauri:build:release": "tauri build --config src-tauri/tauri.release.conf.json"
+    "tauri:build:release": "node scripts/with-build-cleanup.mjs npm run tauri:build:release:commands",
+    "check:ai-core:commands": "cargo fmt --check --manifest-path crates/horary-ai-core/Cargo.toml && cargo test --manifest-path crates/horary-ai-core/Cargo.toml && cargo clippy --manifest-path crates/horary-ai-core/Cargo.toml -- -D warnings",
+    "check:tauri:commands": "npm run check:ai-core && cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
+    "check:all:commands": "npm run check && npm run test:coverage && npm audit && npm run check:tauri",
+    "tauri:build:release:commands": "tauri build --config src-tauri/tauri.release.conf.json"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
