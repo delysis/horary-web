@@ -159,6 +159,18 @@ impl Journal {
                         &identity,
                         &load(&directory.join("response.json"))?,
                     )?;
+                } else if source["type"] == crate::controls::COMPONENT_IMPORT {
+                    crate::controls::verify_component_import(
+                        &source,
+                        &identity,
+                        &load(&directory.join("response.json"))?,
+                    )?;
+                } else if source["type"] == crate::controls::COMPONENT_REVIEW_IMPORT {
+                    crate::controls::verify_component_review_import(
+                        &source,
+                        &identity,
+                        &load(&directory.join("response.json"))?,
+                    )?;
                 }
             }
             println!(

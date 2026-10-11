@@ -15,6 +15,21 @@ use std::{
     time::{Duration, Instant},
 };
 
+fn verify_cached_import(directory: &Path, response: &Value) -> Result<()> {
+    let file = directory.join("cache-source.json");
+    if file.exists() {
+        let source = load(&file)?;
+        if source["type"] == crate::controls::COMPONENT_IMPORT {
+            crate::controls::verify_component_import(
+                &source,
+                &load(&directory.join("request.json"))?,
+                response,
+            )?;
+        }
+    }
+    Ok(())
+}
+
 /// A captured control must pass today's actual executor and exact prompt match.
 /// A candidate always performs fresh hosted generation. Accepted specialist
 /// checkpoints are never transplanted from a control into a changed program.
@@ -104,6 +119,7 @@ pub fn evaluate(
             )?;
         }
         let response = load(&previous.join("response.json"))?;
+        verify_cached_import(&previous, &response)?;
         if response["cache_identity"] != cache_key
             || load(&previous.join("request.json"))?["request"] != request
         {
@@ -755,6 +771,25 @@ fn abort_owned_child(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn later_component_cache_reuse_rechecks_original_closure_pins() {
+        let source = tempfile::tempdir().unwrap();
+        let cached = tempfile::tempdir().unwrap();
+        let plan = source.path().join("plan.json");
+        fs::write(&plan, "{}").unwrap();
+        keep(&cached.path().join("request.json"), &json!({})).unwrap();
+        keep(&cached.path().join("cache-source.json"), &json!({
+            "type":crate::controls::COMPONENT_IMPORT,"source_operation":"operations/00000",
+            "new_paid_reservations":0,"source_state":source.path(),"source_plan_sha256":digest("{}")
+        })).unwrap();
+        fs::write(&plan, "{\"closure_drift\":true}").unwrap();
+        let error = verify_cached_import(cached.path(), &json!({})).unwrap_err();
+        assert!(error.contains("Source changed"), "{error}");
+        assert!(error.contains("plan.json"), "{error}");
+        // This check precedes reserving/submitting a new operation or returning
+        // a cached score; it requires no provider key or native child.
+        assert!(!cached.path().join("reservation.json").exists());
+    }
     #[test]
     fn focused_capture_retains_explicit_effective_identity_without_changing_legacy_fields() {
         let dir = tempfile::tempdir().unwrap();

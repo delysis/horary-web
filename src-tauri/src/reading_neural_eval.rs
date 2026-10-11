@@ -360,7 +360,11 @@ pub(super) fn provider_responses_settled(calls: &[Value]) -> bool {
     !calls.is_empty() && settled(calls).is_some()
 }
 
-/// An explicit cap after settled native rejections is a measurable negative.
+pub(super) fn native_rejection_stop(error: &str) -> bool {
+    error == SEMANTIC_BUDGET_STOP || error == horary_prompt_program::rejection_cycle::STOP
+}
+
+/// A proved cycle or explicit cap after settled native rejections is observed.
 /// Cancellation, transport or missing paid observations are never zero scores.
 pub(super) fn semantic_abort(
     raw: &Value,
@@ -379,20 +383,41 @@ pub(super) fn semantic_abort(
         return None;
     }
     let (first, final_state) = snapshots;
-    let (name, snapshot, error) =
-        if final_state["follow_up"]["result"]["Err"] == SEMANTIC_BUDGET_STOP {
-            (
-                "final.json",
-                final_state,
-                final_state["follow_up"]["result"]["Err"].as_str()?,
-            )
-        } else if first["result"]["Err"] == SEMANTIC_BUDGET_STOP {
-            ("first-turn.json", first, first["result"]["Err"].as_str()?)
-        } else {
-            return None;
-        };
+    let (name, snapshot, error) = if final_state["follow_up"]["result"]["Err"]
+        .as_str()
+        .is_some_and(native_rejection_stop)
+    {
+        (
+            "final.json",
+            final_state,
+            final_state["follow_up"]["result"]["Err"].as_str()?,
+        )
+    } else if first["result"]["Err"]
+        .as_str()
+        .is_some_and(native_rejection_stop)
+    {
+        ("first-turn.json", first, first["result"]["Err"].as_str()?)
+    } else {
+        return None;
+    };
     let records = snapshot["session"]["method"]["records"].as_array()?;
-    let (index, record) = records.iter().enumerate().next_back()?;
+    let cycle = if error == horary_prompt_program::rejection_cycle::STOP {
+        let event = snapshot["session"]["audit"]
+            .as_array()?
+            .iter()
+            .rev()
+            .find(|event| event["event"] == "stage_no_progress")?;
+        let proof =
+            horary_prompt_program::rejection_cycle::verify(&snapshot["session"], event).ok()?;
+        Some((event, proof))
+    } else {
+        None
+    };
+    let (index, record) = if let Some((_, proof)) = &cycle {
+        (proof.record_index, records.get(proof.record_index)?)
+    } else {
+        records.iter().enumerate().next_back()?
+    };
     let rejection = record["validationError"]
         .as_str()
         .filter(|error| !error.is_empty())?;
@@ -405,16 +430,24 @@ pub(super) fn semantic_abort(
             job["stage"] == record["stage"]
                 && job["revision"] == record["revision"]
                 && job["inputSha256"] == input_sha
+                && cycle
+                    .as_ref()
+                    .is_none_or(|(_, proof)| job["key"] == proof.key)
                 && job["phase"]["state"] == "paused"
                 && job["phase"]["error"] == error
         })?;
-    Some(
-        json!({"snapshot":name,"record_index":index,"stage":record["stage"],
+    let mut witness = json!({"snapshot":name,"record_index":index,"stage":record["stage"],
         "revision":record["revision"],"input_sha256":input_sha,"original_input":original,"validation_error":rejection,
         "paused_job":job,"stop":error,"all_provider_responses_settled":true,
         "request_result_pairs_complete":true,"observed_call_groups":calls.len(),
-        "qualification":"Fully observed bounded native validation failure; no uncertain provider call was converted to a score."}),
-    )
+        "qualification":"Fully observed bounded native validation failure; no uncertain provider call was converted to a score."});
+    if let Some((event, _)) = cycle {
+        witness["stop_kind"] = json!("no_progress");
+        witness["no_progress"] = event.clone();
+        witness["qualification"] = json!("Observed repeated native rejection of identical bound work; this task remains unfinished. No budget exhaustion or successful completion is implied.");
+        horary_prompt_program::rejection_cycle::verify_stop(snapshot, &witness).ok()?;
+    }
+    Some(witness)
 }
 
 fn apply_memo_accounting(
@@ -501,13 +534,18 @@ fn measurement(
         .or(first["result"]["Err"].as_str())
         .or(final_state["follow_up"]["result"]["Err"].as_str());
     let abort = run_error
-        .is_none_or(|error| error == SEMANTIC_BUDGET_STOP)
+        .is_none_or(native_rejection_stop)
         .then(|| semantic_abort(raw, snapshots, calls, complete))
         .flatten();
     if let Some(witness) = abort {
+        let no_progress = witness["stop_kind"] == "no_progress";
         outcome["known_native_semantic_abort"] = json!(true);
         outcome["semantic_abort_witness"] = witness;
-        outcome["execution_status"] = json!("observed_native_validation_exhaustion");
+        outcome["execution_status"] = json!(if no_progress {
+            "observed_native_no_progress"
+        } else {
+            "observed_native_validation_exhaustion"
+        });
         outcome["infrastructure_error"] = Value::Null;
     } else if !complete || error.is_some() {
         outcome["execution_status"] = json!("reading_executor_interrupted");

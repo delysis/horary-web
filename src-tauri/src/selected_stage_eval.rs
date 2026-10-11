@@ -44,17 +44,14 @@ pub(super) fn measurement(
                 })
                 .map(|event| (name, snapshot, event))
         });
-    let abort = (settled
-        && error.is_none_or(|e| {
-            e == "Synthetic case call budget exhausted; no successful completion implied"
-        }))
-    .then(|| super::reading::semantic_abort(raw, snapshots, calls, complete))
-    .flatten()
-    .filter(|witness| {
-        witness["stage"] == json!(stage)
-            && horary_prompt_program::signature(stage.name(), &witness["original_input"]).method
-                == Some(method.name())
-    });
+    let abort = (settled && error.is_none_or(super::reading::native_rejection_stop))
+        .then(|| super::reading::semantic_abort(raw, snapshots, calls, complete))
+        .flatten()
+        .filter(|witness| {
+            witness["stage"] == json!(stage)
+                && horary_prompt_program::signature(stage.name(), &witness["original_input"]).method
+                    == Some(method.name())
+        });
     let mut observation = json!({"version":1,"target_stage":stage,"target_method":method,
         "state":"unobserved","all_provider_responses_settled":settled,
         "request_result_pairs_complete":complete,"target_attempts":focused.len(),
@@ -301,6 +298,111 @@ mod tests {
         snapshot["session"]["method"]["flow"]["jobs"][0]["inputSha256"] = json!("unrelated");
         assert_eq!(
             measure(&raw, &snapshot, &calls)["selected_stage"]["state"],
+            "unobserved"
+        );
+    }
+
+    fn repeated_rejection_sample() -> (Value, Value, Vec<Value>) {
+        let (raw, mut snapshot, original_calls) = sample();
+        let original_record = snapshot["session"]["method"]["records"][0].clone();
+        let input = original_record["input"].clone();
+        let mut records = Vec::new();
+        let mut calls = Vec::new();
+        let mut audit = vec![snapshot["session"]["audit"][0].clone()];
+        for (i, proposal) in [json!({"bad":"A"}), json!({"bad":"B"}), json!({"bad":"A"})]
+            .into_iter()
+            .enumerate()
+        {
+            let error = if i == 1 {
+                "Native rejection B"
+            } else {
+                "Native rejection A"
+            };
+            let actual_input = if i == 0 {
+                input.clone()
+            } else {
+                json!({"original_input":input})
+            };
+            let generation = json!({"content":proposal.to_string()});
+            let mut record = original_record.clone();
+            record["input"] = actual_input.clone();
+            record["inputSha256"] = json!(horary_prompt_program::digest(actual_input.to_string()));
+            record["worksheet"] = proposal.clone();
+            record["raw"] = json!(proposal.to_string());
+            record["generation"] = generation.clone();
+            record["validationError"] = json!(error);
+            records.push(record);
+            let mut call = original_calls[0].clone();
+            call["request"]["sequence"] = json!(i + 1);
+            call["request"]["input"] = actual_input;
+            call["result"]["Ok"] = generation.clone();
+            call["provider_receipt"]["native_result"]["Ok"] = generation;
+            calls.push(call);
+            audit.push(
+                json!({"event":"stage_transition","stage":"condition","key":"synthetic-work-key",
+                "recordIndex":i,"to":if i==2 {"paused"} else {"repairing"}}),
+            );
+        }
+        let event = json!({"event":"stage_no_progress","version":1,"key":"synthetic-work-key","stage":"condition","revision":1,
+            "firstRecordIndex":0,"recordIndex":2,"inputSha256":original_record["inputSha256"],
+            "guideSha256":original_record["guideSha256"],"schemaSha256":original_record["schemaSha256"],
+            "firstRawSha256":horary_prompt_program::digest(records[0]["raw"].as_str().unwrap()),
+            "rawSha256":horary_prompt_program::digest(records[2]["raw"].as_str().unwrap()),
+            "validationErrorSha256":horary_prompt_program::digest("Native rejection A")});
+        audit.push(event);
+        snapshot["result"] = json!({"Err":horary_prompt_program::rejection_cycle::STOP});
+        snapshot["session"]["method"]["records"] = json!(records);
+        snapshot["session"]["method"]["flow"]["jobs"][0]["phase"] =
+            json!({"state":"paused","error":horary_prompt_program::rejection_cycle::STOP});
+        snapshot["session"]["audit"] = json!(audit);
+        (raw, snapshot, calls)
+    }
+
+    #[test]
+    fn proved_cycle_is_a_settled_target_rejection_without_budget_or_reading_claim() {
+        let (raw, snapshot, calls) = repeated_rejection_sample();
+        let value = measure(&raw, &snapshot, &calls);
+        assert_eq!(value["selected_stage"]["state"], "native_rejected");
+        assert_eq!(value["semantic_abort_witness"]["stop_kind"], "no_progress");
+        assert_eq!(
+            value["semantic_abort_witness"]["no_progress"]["firstRecordIndex"],
+            0
+        );
+        assert_eq!(value["semantic_abort_witness"]["record_index"], 2);
+        assert_eq!(value["full_reading"], false);
+        assert_eq!(value["hurdles"]["reading"]["status"], "not_run");
+        assert_eq!(value["selected_stage"]["target_attempts"], 3);
+        for uncertain in ["deadline_cancelled", "group_cancelled"] {
+            let mut interrupted = raw.clone();
+            interrupted[uncertain] = json!(true);
+            assert_eq!(
+                measure(&interrupted, &snapshot, &calls)["selected_stage"]["state"],
+                "unobserved"
+            );
+        }
+        let mut bad = snapshot.clone();
+        bad["session"]["audit"]
+            .as_array_mut()
+            .unwrap()
+            .last_mut()
+            .unwrap()["firstRawSha256"] = json!("0".repeat(64));
+        assert_eq!(
+            measure(&raw, &bad, &calls)["selected_stage"]["state"],
+            "unobserved"
+        );
+        let mut uncertain = calls.clone();
+        uncertain[2]["provider_receipt"]["generation_attempts"][0]["error"] =
+            json!("Transport uncertainty");
+        assert_eq!(
+            measure(&raw, &snapshot, &uncertain)["selected_stage"]["state"],
+            "unobserved"
+        );
+        let mut uninvoked = calls;
+        for call in &mut uninvoked {
+            call["request"]["stage"] = json!("reception");
+        }
+        assert_eq!(
+            measure(&raw, &snapshot, &uninvoked)["selected_stage"]["state"],
             "unobserved"
         );
     }

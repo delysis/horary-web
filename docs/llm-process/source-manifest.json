@@ -39,11 +39,15 @@
     },
     {
       "path": "crates/horary-prompt-program/src/lib.rs",
-      "sha256": "05361f6f08302d68c3f7665475e4697ee57f4f245a6fcfb478dfad4109f2edda"
+      "sha256": "d4872f8cd46610a5a4c434db591a50222e73bf61e9ca8834811171b0fd872189"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/rejection_cycle.rs",
+      "sha256": "b45ba7d0e05132ef5c7f508d5f5493332e10f3e8326f3a9ec9c2cfef97bd49f5"
     },
     {
       "path": "crates/horary-prompt-program/src/response_memo.rs",
-      "sha256": "f9662fd20d2181ca2a0708568c6cef8a788595719d68b3873c31b84daed7c3f7"
+      "sha256": "9c26515b088a394d7b7dabcfe4341b0c315ae803413909512e4b13ba9eb00552"
     },
     {
       "path": "docs/ELICITATION_EVALUATION.md",
@@ -123,7 +127,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "c8e922704be3f959c111ffd68ce50af84b697ba7610d694e74a3e1b679253454"
+      "sha256": "8ef9b076e8847c9b02c1424273414cbc081b8ec0040b57395fa3242ddf0a1acb"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -143,7 +147,7 @@
     },
     {
       "path": "src-tauri/src/horary_executor.rs",
-      "sha256": "2fdb5f2dece2e860a45095ed0f292518a2b89ef2d5cc92200a310652c78af736"
+      "sha256": "664ad570d5e7afa82ec0093e1dd39603a782c3afffeacf04f9a92a75186c0bf2"
     },
     {
       "path": "src-tauri/src/horary_lessons.rs",
@@ -151,7 +155,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "5b1ac27b073acbb3ef05c2c02cf3a95cedf9d203c07275630f567acf1345b59f"
+      "sha256": "f309d83d3c33543a36537810e0175cd6865136d5697d79a6125d144f25eaf9ab"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -219,7 +223,7 @@
     },
     {
       "path": "src-tauri/src/horary_recovery_tests.rs",
-      "sha256": "5c9caacf75794fd712d4d5a707f13b65e6c53d2d0ee2078bf0fcb803d4d8203b"
+      "sha256": "152f5f7561e9ca7e3bd3e850fb02b2fc2f558d10a44659f7b44b66eb2d150cd8"
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
@@ -227,7 +231,7 @@
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "31321fff1663f3d945171395991a1d377b59352b0d56b7048faed978bcba89ec"
+      "sha256": "d2557581ec63174f0ac82eac255a5910f40eb1580468dba546894bb05941be4a"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
@@ -283,7 +287,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "9afeaa962aaa627ac7f87a40093fbda856b58ce48eaef60a06ee04ee37376ab6"
+      "sha256": "08207e92b0fcf5fcf9c96484a5b2c45e86e51c34626e11c225d0a46f7c4d07e0"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -307,7 +311,7 @@
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
-      "sha256": "8b6703b7ab29475894a7233b6c3db7d3713b36ca8fd60e8f3498d58a92ca8652"
+      "sha256": "571b078fb806bc61f3794cffac5ea120eb6bda369608d40e3fc4d023d2640f61"
     },
     {
       "path": "src-tauri/src/reading_store.rs",
@@ -319,7 +323,7 @@
     },
     {
       "path": "src-tauri/src/response_memo_tests.rs",
-      "sha256": "b764b2e5fabe5f9ed7235d0bd2d51c4c6f148a38ed7fa23f8f533dde40819a3f"
+      "sha256": "604ac851d862e6199d6a2bb3972814f948ff0aeb7a6b3c4b8c3dd53d4ce5d1e4"
     },
     {
       "path": "src-tauri/src/review_progress.rs",
@@ -327,7 +331,7 @@
     },
     {
       "path": "src-tauri/src/selected_stage_eval.rs",
-      "sha256": "fd6dfa4f44683dd9a3faf55311de41ca3359abb530bf9ae29dfe165aa397d620"
+      "sha256": "584279a070bdb45e4834ed7215370666d4ac3afbeda936ae2a227dfa54c38bba"
     },
     {
       "path": "src-tauri/src/tool_formats.rs",
@@ -367,7 +371,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "d1f5e874abeaf7f60c446217e92765439a4ce5dbc0485f5f39ceeca16ea948c3"
+      "sha256": "212f7b4413642e0360502378fd85150bc1df6c9f33cb1e0f18d2cf2c7a55f75a"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
@@ -407,11 +411,11 @@
     },
     {
       "path": "tools/horary-gepa/Cargo.toml",
-      "sha256": "8d45146db3ad7ef6418361ff91da6fa5aef12ed4e384791776c60f995d34f303"
+      "sha256": "e18c1dec8f2768440e57a34a467596781f9fe46b4de03afb1f3e8df21fc5e430"
     },
     {
       "path": "tools/horary-gepa/README.md",
-      "sha256": "89873966e99e6bb26515515acc558cd17a55021d09325e55bf305ac395f4ef73"
+      "sha256": "5aa9a80491798a62369d50962bf8b555bf6c2fd1d8ac2f597c3e679d2f4ab45b"
     },
     {
       "path": "tools/horary-gepa/src/campaign.rs",
@@ -423,11 +427,11 @@
     },
     {
       "path": "tools/horary-gepa/src/controls.rs",
-      "sha256": "c412c1bfbe65f949b05342264662e8ff6e6031fb7a1a46ec3cedfb29047148d0"
+      "sha256": "b3e332dd657cac818517cb34a826ee50503ccdae9b65fe1d042252912d8d402b"
     },
     {
       "path": "tools/horary-gepa/src/corpus.rs",
-      "sha256": "1024735f2ff523132b0f6e44a0e2e5357768faf36534bdfaecc0fc7a7ba09f16"
+      "sha256": "8fdcea14d2c146ad2ec987e61049c2e5ec119c8586c234f00ed8c74a4b63b016"
     },
     {
       "path": "tools/horary-gepa/src/executable.rs",
@@ -443,15 +447,15 @@
     },
     {
       "path": "tools/horary-gepa/src/journal.rs",
-      "sha256": "8dbba5be6ffc6ab6ded05d2dc8949c1ab729d737fc0139173e60d6ed646007cd"
+      "sha256": "011c9d6f6c5fb5e812736f2c20bef0d554b2e8acffc99c0b4445cfaa8bee4635"
     },
     {
       "path": "tools/horary-gepa/src/lib.rs",
-      "sha256": "da2f55c41af63c178e55d0fb13a2b8352bbca6855d7cf0f1946d9a2d62377015"
+      "sha256": "767a83a66da079ec4753b0e750529711ea67b7e8027ebd4c05311834f8eb0c99"
     },
     {
       "path": "tools/horary-gepa/src/main.rs",
-      "sha256": "66a3cca830c9e6f520dceb438be926a39c71d9557ec305c9ee74993956e0a1dc"
+      "sha256": "7f3d42aa80a974da0968e863b4e733ea562be8d50436223dc45b15dcb5b04357"
     },
     {
       "path": "tools/horary-gepa/src/memo.rs",
@@ -463,11 +467,11 @@
     },
     {
       "path": "tools/horary-gepa/src/native.rs",
-      "sha256": "a48f83b3d9c77436349f869a18a23a9538c52b5d80c332917a4b30c1b8ccaeff"
+      "sha256": "25a3cd85c9c44e1ec49fb22623031b5440a01088d4696aa7c64a03b272abf657"
     },
     {
       "path": "tools/horary-gepa/src/reading.rs",
-      "sha256": "e4c0d5151f9c69a2f8e894f5f1af1ae4244f8ef3c488ce7f5446adcabd81102c"
+      "sha256": "67c0b1fcbb26469daaddb450035d3560aaafdda739c0af5b8cebdbd538b8920f"
     },
     {
       "path": "tools/horary-gepa/src/recovery.rs",
@@ -479,11 +483,11 @@
     },
     {
       "path": "tools/horary-gepa/src/selected_stage.rs",
-      "sha256": "4dca1cffcafcc86fd86d0b6263d45cf9687ce25112b087751f79b37bb5256490"
+      "sha256": "e081a62f1697e3e953318db3354d297e88f3312b1d98960bae7c6dd3b1d8113e"
     },
     {
       "path": "tools/horary-gepa/src/status.rs",
-      "sha256": "4891b26352dc746385ab8c8641ec8bc73f93195b7fddfa2146b8dc29a940ce8b"
+      "sha256": "7b2360374c60919dc7855a5ad734f4f378d0d688833b42b1d9207e4eca906f38"
     },
     {
       "path": "tools/horary-gepa/src/teacher.rs",

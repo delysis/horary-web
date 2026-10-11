@@ -20,3 +20,8 @@ horary-loop = { path = "../horary-loop" }
 tempfile = "3"
 
 [workspace]
+
+# Evidence verification remains mandatory; avoid slow unoptimized SHA rounds
+# over immutable executables and trace trees in the development controller.
+[profile.dev.package.sha2]
+opt-level = 3

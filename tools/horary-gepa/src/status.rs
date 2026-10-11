@@ -313,6 +313,22 @@ pub fn inspect(root: &Path) -> Result<Value> {
                     ) {
                         errors.push(error);
                     }
+                } else if source["type"] == crate::controls::COMPONENT_IMPORT {
+                    if let Err(error) = crate::controls::verify_component_import(
+                        &source,
+                        &load(&directory.join("request.json"))?,
+                        &settled.response,
+                    ) {
+                        errors.push(error);
+                    }
+                } else if source["type"] == crate::controls::COMPONENT_REVIEW_IMPORT {
+                    if let Err(error) = crate::controls::verify_component_review_import(
+                        &source,
+                        &load(&directory.join("request.json"))?,
+                        &settled.response,
+                    ) {
+                        errors.push(error);
+                    }
                 }
             }
         }
@@ -457,12 +473,63 @@ pub fn inspect(root: &Path) -> Result<Value> {
     } else {
         0
     };
+    let continuation = if root.join("component-continuation.json").exists() {
+        let receipt = load(&ordinary_path(root, "component-continuation.json")?)?;
+        let check = (|| {
+            if load(&ordinary_path(root, "operations/00000/cache-source.json")?)? != receipt {
+                return Err("Component continuation differs from its sealed import".into());
+            }
+            crate::controls::verify_component_import(
+                &receipt,
+                &load(&ordinary_path(root, "operations/00000/request.json")?)?,
+                &load(&ordinary_path(root, "operations/00000/response.json")?)?,
+            )
+        })();
+        match check {
+            Ok(()) => Some(json!({"source_state":receipt["source_state"],
+                "inherited_physical_reservations":receipt["inherited_physical_reservations"],
+                "inherited_review_reservations":receipt["inherited_review_reservations"].as_u64().unwrap_or(0),
+                "source_verified":true,"reuse_is_not_a_new_observation":true})),
+            Err(error) => {
+                issues.push(format!("Component continuation is unverified: {error}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let paid_continuation = if root.join("paid-review-continuation.json").exists() {
+        let receipt = load(&ordinary_path(root, "paid-review-continuation.json")?)?;
+        let check = (|| {
+            if load(&ordinary_path(root, "operations/00001/cache-source.json")?)? != receipt {
+                return Err("Paid continuation differs from its sealed import".into());
+            }
+            crate::controls::verify_component_review_import(
+                &receipt,
+                &load(&ordinary_path(root, "operations/00001/request.json")?)?,
+                &load(&ordinary_path(root, "operations/00001/response.json")?)?,
+            )
+        })();
+        match check {
+            Ok(()) => Some(json!({"source_state":receipt["source_state"],
+                "inherited_review_reservations":1,"new_paid_reservations":0,
+                "source_verified":true,"reuse_is_not_a_new_observation":true})),
+            Err(error) => {
+                issues.push(format!("Paid review continuation is unverified: {error}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
     Ok(
         json!({"state":root,"plan_sha256":plan_sha,"function":plan.get("function").cloned().unwrap_or(json!("classification")),"target_method":plan["target_method"],
         "operation_counts":{"settled":operations.iter().filter(|o|o["state"]=="settled").count(),"unsettled":operations.iter().filter(|o|o["state"]=="unsettled").count(),"unverified":operations.iter().filter(|o|o["state"]=="unverified").count()},
         "budgets":budgets,"observed_native_attempts":{"settled_unique_functions":unique_native,"physical_attempts":actual_attempts,"cache_reuses":native_cache_reuse,"excludes_unsettled_calls":true},"review_cache_reuses":review_cache_reuse,
         "operations":operations,"measurements":measurements,"independent_reviews":reviews,
         "recovery":recovery.map(|r|json!({"predecessor_state":r.predecessor_state,"inherited_reservations":r.inherited_reservations,"source_verified":true,"imports_are_cache_reuse":true})),
+        "component_continuation":continuation,
+        "paid_review_continuation":paid_continuation,
         "search_result_present":result_path.exists(),"search_result":result,"owner_exit":owner_exit,"interruption_records":interruptions,"integrity_issues":issues,
         "qualification":"Read-only receipt snapshot; unfinished work may still be running. Reservations are not submitted calls. No retry, promotion or interpretation qualification is authorized by this report."}),
     )

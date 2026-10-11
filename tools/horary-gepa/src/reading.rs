@@ -22,20 +22,36 @@ const VERSION: &str = "horary-independent-reading-review-2026-10-10.1";
 const SEMANTIC_BUDGET_STOP: &str =
     "Synthetic case call budget exhausted; no successful completion implied";
 
+fn native_rejection_stop(witness: &Value) -> Option<&str> {
+    match witness["stop"].as_str()? {
+        SEMANTIC_BUDGET_STOP if witness.get("stop_kind").is_none() => Some(SEMANTIC_BUDGET_STOP),
+        horary_prompt_program::rejection_cycle::STOP if witness["stop_kind"] == "no_progress" => {
+            Some(horary_prompt_program::rejection_cycle::STOP)
+        }
+        _ => None,
+    }
+}
+
 fn require_measured(evaluation: &Value) -> Result<()> {
     let outcome = &evaluation["outcome"];
     if outcome["known_native_semantic_abort"] != true {
         return crate::metric::require_completed(outcome, "reading_journey");
     }
     let witness = &outcome["semantic_abort_witness"];
-    if outcome["execution_status"] != "observed_native_validation_exhaustion"
+    let no_progress = witness["stop_kind"] == "no_progress";
+    let expected_status = if no_progress {
+        "observed_native_no_progress"
+    } else {
+        "observed_native_validation_exhaustion"
+    };
+    if outcome["execution_status"] != expected_status
         || outcome["full_reading"] != true
         || outcome["physical_generation_attempts_complete"] != true
         || !outcome["infrastructure_error"].is_null()
         || !outcome["provider_stop"].is_null()
         || outcome["deadline_cancelled"] == true
         || outcome["group_cancelled"] == true
-        || witness["stop"] != SEMANTIC_BUDGET_STOP
+        || native_rejection_stop(witness).is_none()
         || witness["all_provider_responses_settled"] != true
         || witness["request_result_pairs_complete"] != true
         || witness["validation_error"]
@@ -57,12 +73,17 @@ pub(crate) fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Res
         .filter(|name| matches!(*name, "first-turn.json" | "final.json"))
         .ok_or("Semantic negative lacks an exact native snapshot")?;
     let snapshot = load(&directory.join(name))?;
+    let stop = native_rejection_stop(witness).ok_or("Unknown native rejection stop")?;
     let records = snapshot["session"]["method"]["records"]
         .as_array()
         .filter(|records| !records.is_empty())
         .ok_or("Semantic negative lacks its native record")?;
-    let record = records.last().ok_or("No native rejection record")?;
-    let index = records.len() - 1;
+    let index = if stop == horary_prompt_program::rejection_cycle::STOP {
+        horary_prompt_program::rejection_cycle::verify_stop(&snapshot, witness)?.record_index
+    } else {
+        records.len() - 1
+    };
+    let record = records.get(index).ok_or("No native rejection record")?;
     let original = horary_prompt_program::original_input(&record["input"]);
     let stopped = if name == "first-turn.json" {
         &snapshot["result"]["Err"]
@@ -79,7 +100,7 @@ pub(crate) fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Res
         // Native serde preserves object order; the controller sorts it. Bind
         // the exact native digest and decoded original input independently.
         || witness["original_input"] != *original
-        || *stopped != SEMANTIC_BUDGET_STOP
+        || *stopped != stop
         || witness["paused_job"]["stage"] != record["stage"]
         || witness["paused_job"]["revision"] != record["revision"]
         || witness["paused_job"]["inputSha256"] != witness["input_sha256"]
@@ -89,7 +110,7 @@ pub(crate) fn verify_semantic_abort(evaluation: &Value, directory: &Path) -> Res
                 jobs.iter().any(|job| {
                     job == &witness["paused_job"]
                         && job["phase"]["state"] == "paused"
-                        && job["phase"]["error"] == SEMANTIC_BUDGET_STOP
+                        && job["phase"]["error"] == stop
                 })
             })
     {
@@ -1312,6 +1333,40 @@ mod tests {
         evaluation["outcome"]["deadline_cancelled"] = json!(false);
         evaluation["outcome"]["semantic_abort_witness"]["all_provider_responses_settled"] =
             json!(false);
+        assert!(grade(&evaluation, &review(&evaluation)).is_err());
+    }
+
+    #[test]
+    fn no_progress_stop_is_distinct_from_budget_exhaustion_and_uncertain_work() {
+        let mut evaluation = evaluation();
+        evaluation["outcome"]["execution_status"] = json!("observed_native_no_progress");
+        evaluation["outcome"]["first_turn_execution_completed"] = json!(false);
+        evaluation["outcome"]["known_native_semantic_abort"] = json!(true);
+        evaluation["outcome"]["physical_generation_attempts_complete"] = json!(true);
+        evaluation["outcome"]["target_stage"] = json!("judgment");
+        // This metric-level test follows source authentication. It must not
+        // reinterpret this distinct stop as a successful reading or a cap.
+        evaluation["outcome"]["semantic_abort_witness"] = json!({"stage":"judgment",
+            "stop":horary_prompt_program::rejection_cycle::STOP,"stop_kind":"no_progress",
+            "all_provider_responses_settled":true,"request_result_pairs_complete":true,
+            "validation_error":"Actual repeated native rejection"});
+        let feedback = grade(&evaluation, &review(&evaluation)).unwrap();
+        assert_eq!(feedback.score, 0.0);
+        assert!(!feedback.qualified);
+        for field in ["deadline_cancelled", "group_cancelled"] {
+            let mut bad = evaluation.clone();
+            bad["outcome"][field] = json!(true);
+            assert!(grade(&bad, &review(&bad)).is_err(), "{field}");
+        }
+        for (field, value) in [
+            ("stop", json!(SEMANTIC_BUDGET_STOP)),
+            ("stop_kind", Value::Null),
+        ] {
+            let mut bad = evaluation.clone();
+            bad["outcome"]["semantic_abort_witness"][field] = value;
+            assert!(grade(&bad, &review(&bad)).is_err(), "{field}");
+        }
+        evaluation["outcome"]["execution_status"] = json!("observed_native_validation_exhaustion");
         assert!(grade(&evaluation, &review(&evaluation)).is_err());
     }
 

@@ -11,6 +11,9 @@
 //! settled. One exact terminal intake quota-wait cancellation before submission may be
 //! retained as infrastructure-unobserved fixture/prompt provenance only, with
 //! archived answer replay explicitly forbidden; it is never a semantic result.
+//! A proved repeated native rejection may also close unfinished work. Its
+//! exact cycle and every paid sibling must be retained; it is not a budget
+//! exhaustion, an accepted worksheet or a successful reading.
 //!
 //! Before sealing, the launcher writes a CORPUS_VERSION closure with campaign,
 //! submitted_sha256, owner_exit_sha256, native_executable and its SHA256,
@@ -681,15 +684,37 @@ fn native_attempts(directory: &Path) -> Result<Vec<NativeAttempt>> {
 }
 
 fn semantic_stop(directory: &Path, snapshot: &Value, error: &Value) -> Result<Value> {
-    if *error != SEMANTIC_STOP {
-        return Err("Stop is not the exact settled native call-budget boundary".into());
-    }
+    let cycle = if *error == horary_prompt_program::rejection_cycle::STOP {
+        let audit = snapshot["session"]["audit"]
+            .as_array()
+            .ok_or("No-progress stop has no native audit")?;
+        let index = audit
+            .iter()
+            .rposition(|event| event["event"] == "stage_no_progress")
+            .ok_or("No-progress stop has no native witness")?;
+        let proof =
+            horary_prompt_program::rejection_cycle::verify(&snapshot["session"], &audit[index])?;
+        if audit[index + 1..]
+            .iter()
+            .any(|event| event["event"] == "stage_transition" && event["to"] == "running")
+        {
+            return Err("No-progress witness was followed by another native dispatch".into());
+        }
+        Some((&audit[index], proof))
+    } else if *error == SEMANTIC_STOP {
+        None
+    } else {
+        return Err("Stop is not an exact settled native rejection boundary".into());
+    };
     let records = snapshot["session"]["method"]["records"]
         .as_array()
         .filter(|records| !records.is_empty())
         .ok_or("Semantic stop has no invoked native rejection")?;
+    let record_index = cycle
+        .as_ref()
+        .map_or(records.len() - 1, |(_, proof)| proof.record_index);
     let record = records
-        .last()
+        .get(record_index)
         .ok_or("Semantic stop has no final native record")?;
     let revision = snapshot["session"]["revision"]
         .as_u64()
@@ -754,7 +779,10 @@ fn semantic_stop(directory: &Path, snapshot: &Value, error: &Value) -> Result<Va
             job["stage"] == stage
                 && job["revision"] == revision
                 && job["inputSha256"] == base["inputSha256"]
-                && job["phase"] == json!({"state":"paused","error":SEMANTIC_STOP})
+                && job["phase"] == json!({"state":"paused","error":error})
+                && cycle
+                    .as_ref()
+                    .is_none_or(|(_, proof)| job["key"] == proof.key)
         })
         .collect::<Vec<_>>();
     if paused.len() != 1 {
@@ -779,7 +807,7 @@ fn semantic_stop(directory: &Path, snapshot: &Value, error: &Value) -> Result<Va
     }
     let mut previous: Option<&Value> = None;
     let mut rejected = 0usize;
-    for candidate in &records[base_index..] {
+    for candidate in &records[base_index..=record_index] {
         if candidate["stage"] != stage || candidate["revision"] != revision {
             continue;
         }
@@ -825,11 +853,15 @@ fn semantic_stop(directory: &Path, snapshot: &Value, error: &Value) -> Result<Va
             "Semantic stop stage {stage} native attempts differ from its rejected lineage"
         ));
     }
-    Ok(
-        json!({"record_index":records.len()-1,"base_record_index":base_index,
+    let mut bound = json!({"record_index":record_index,"base_record_index":base_index,
         "original_input_sha256":base["inputSha256"],"paused_job":job,
-        "stage":stage,"revision":revision,"observed_rejected_attempts":rejected}),
-    )
+        "stage":stage,"revision":revision,"observed_rejected_attempts":rejected});
+    if let Some((event, _)) = cycle {
+        bound["stop_kind"] = json!("no_progress");
+        bound["stop"] = error.clone();
+        bound["no_progress"] = event.clone();
+    }
+    Ok(bound)
 }
 
 fn bind_quota_task(
@@ -1098,15 +1130,28 @@ fn case(
     } else {
         None
     };
+    let no_progress = first_stop
+        .as_ref()
+        .into_iter()
+        .chain(follow_stop.as_ref())
+        .any(|stop| stop["stop_kind"] == "no_progress");
+    let terminal_status = if no_progress {
+        matches!(
+            outcome["execution_status"].as_str(),
+            Some("execution_error" | "observed_native_no_progress")
+        )
+    } else {
+        matches!(
+            outcome["execution_status"].as_str(),
+            Some("completed" | "call_budget_exhausted" | "observed_native_validation_exhaustion")
+        )
+    };
     if (first_completed && first["result"].get("Ok").is_none())
         || (supplying
             && follow_completed.as_bool() == Some(true)
             && final_state["follow_up"]["result"].get("Ok").is_none())
         || (!supplying && !follow_completed.is_null())
-        || !matches!(
-            outcome["execution_status"].as_str(),
-            Some("completed" | "call_budget_exhausted" | "observed_native_validation_exhaustion")
-        )
+        || !terminal_status
     {
         return Err(format!("Case {id} native terminal outcome is an unknown interruption, not a settled semantic observation"));
     }
@@ -1122,15 +1167,25 @@ fn case(
         let records = snapshot["session"]["method"]["records"]
             .as_array()
             .ok_or("No native semantic records")?;
-        let record = records.last().ok_or("No native semantic rejection")?;
-        if witness["record_index"].as_u64() != Some(records.len() as u64 - 1)
+        let index = stop["record_index"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or("No bound native semantic record")?;
+        let record = records.get(index).ok_or("No native semantic rejection")?;
+        let stopped = if stop["stop_kind"] == "no_progress" {
+            horary_prompt_program::rejection_cycle::verify_stop(snapshot, witness)?;
+            horary_prompt_program::rejection_cycle::STOP
+        } else {
+            SEMANTIC_STOP
+        };
+        if witness["record_index"].as_u64() != Some(index as u64)
             || witness["stage"] != record["stage"]
             || witness["revision"] != record["revision"]
             || witness["validation_error"] != record["validationError"]
             || witness["original_input"] != *original_input(&record["input"])
             || witness["input_sha256"] != stop["original_input_sha256"]
             || witness["paused_job"] != stop["paused_job"]
-            || witness["stop"] != SEMANTIC_STOP
+            || witness["stop"] != stopped
             || !snapshot["session"]["method"]["flow"]["jobs"]
                 .as_array()
                 .is_some_and(|jobs| jobs.contains(&witness["paused_job"]))
@@ -1733,6 +1788,106 @@ pub(crate) mod tests {
             write(&directory.join("final.json"), &final_state);
         }
 
+        fn no_progress(late_sibling: Option<bool>, wrapped: bool) -> Self {
+            let campaign = Self::semantic_repairs(false, false);
+            let directory = campaign.root.join("cases/a");
+            let mut first = load(&directory.join("first-turn.json")).unwrap();
+            let base = first["session"]["method"]["records"][0].clone();
+            let key = first["session"]["method"]["flow"]["jobs"][0]["key"].clone();
+            let request_path = directory.join("calls/0003-request.json");
+            let result_path = directory.join("calls/0003-result.json");
+            let mut request = load(&request_path).unwrap();
+            let mut result = load(&result_path).unwrap();
+            let original_request = request.clone();
+            let output = base["generation"].clone();
+            let mut receipt = result["provider_receipt"].clone();
+            let body = json!({"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":output["content"]}]}}]});
+            receipt["native_result"] = json!({"Ok":output});
+            receipt["response"]["body"] = body.clone();
+            receipt["generation_attempts"][0]["body"] = body;
+            if let Some(rejected) = late_sibling {
+                let sibling_input =
+                    json!({"source_question":base["input"]["source_question"],"late_sibling":true});
+                request = json!({"sequence":3,"tasks":[["condition","other",original_request["input"],original_request["schema"]],
+                    ["reception","other",sibling_input,original_request["schema"]]],
+                    "prompts":[original_request["prompt"],original_request["prompt"]],"prompt_program":[null,null],
+                    "provider":original_request["provider"],"decoder":"hosted parallel unconstrained text branches"});
+                result = json!({"request":request,"result":{"Ok":[output,output]},"provider_receipts":[receipt,receipt]});
+                write(&request_path, &request);
+                let mut sibling = base.clone();
+                sibling["stage"] = json!("reception");
+                sibling["input"] = sibling_input;
+                sibling["inputSha256"] =
+                    json!(native_field_hash(&request_path, &["tasks", "1", "2"]).unwrap());
+                sibling["validationError"] = if rejected {
+                    json!("Sibling omitted native evidence")
+                } else {
+                    Value::Null
+                };
+                first["session"]["method"]["records"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(sibling.clone());
+                first["session"]["method"]["flow"]["jobs"].as_array_mut().unwrap().push(json!({
+                    "key":digest("Controlled late reception sibling"),"stage":"reception","revision":1,
+                    "inputSha256":sibling["inputSha256"],"attempts":1,
+                    "phase":if rejected {json!({"state":"repairing","error":"Sibling omitted native evidence"})}
+                        else {json!({"state":"complete","record_index":3})}}));
+            } else {
+                result["result"]["Ok"] = output.clone();
+                result["provider_receipt"] = receipt;
+            }
+            write(&request_path, &request);
+            write(&result_path, &result);
+            let repeated = &mut first["session"]["method"]["records"][2];
+            repeated["generation"] = output.clone();
+            repeated["raw"] = output["content"].clone();
+            repeated["worksheet"] = base["worksheet"].clone();
+            repeated["validationError"] = base["validationError"].clone();
+            repeated["inputSha256"] = json!(if late_sibling.is_some() {
+                native_field_hash(&request_path, &["tasks", "0", "2"])
+            } else {
+                native_root_field_hash(&request_path, "input")
+            }
+            .unwrap());
+            let event = json!({"event":"stage_no_progress","version":1,"key":key,"stage":"condition","revision":1,
+                "firstRecordIndex":0,"recordIndex":2,"inputSha256":base["inputSha256"],
+                "guideSha256":base["guideSha256"],"schemaSha256":base["schemaSha256"],
+                "firstRawSha256":digest(base["raw"].as_str().unwrap()),"rawSha256":digest(repeated["raw"].as_str().unwrap()),
+                "validationErrorSha256":digest(repeated["validationError"].as_str().unwrap())});
+            first["session"]["method"]["flow"]["jobs"][0]["phase"] =
+                json!({"state":"paused","error":horary_prompt_program::rejection_cycle::STOP});
+            first["session"]["audit"] = json!([
+                {"event":"stage_transition","stage":"condition","key":key,"recordIndex":0,"to":"repairing"},
+                {"event":"stage_transition","stage":"condition","key":key,"recordIndex":1,"to":"repairing"},
+                event,{"event":"stage_transition","stage":"condition","key":key,"recordIndex":2,"to":"paused"}]);
+            if let Some(rejected) = late_sibling {
+                first["session"]["audit"].as_array_mut().unwrap().push(json!({"event":"stage_transition","stage":"reception",
+                    "key":digest("Controlled late reception sibling"),"recordIndex":3,"to":if rejected {"repairing"}else{"complete"}}));
+            }
+            first["result"] = json!({"Err":horary_prompt_program::rejection_cycle::STOP});
+            campaign.snapshots(&first);
+            let mut outcome = load(&directory.join("outcome.json")).unwrap();
+            outcome["execution_status"] = json!(if wrapped {
+                "observed_native_no_progress"
+            } else {
+                "execution_error"
+            });
+            outcome["hosted_http_requests"] = json!(if late_sibling.is_some() { 4 } else { 3 });
+            if wrapped {
+                let record = &first["session"]["method"]["records"][2];
+                outcome["known_native_semantic_abort"] = json!(true);
+                outcome["semantic_abort_witness"] = json!({"snapshot":"first-turn.json","record_index":2,"stage":"condition","revision":1,
+                    "validation_error":record["validationError"],"original_input":original_input(&record["input"]),
+                    "input_sha256":base["inputSha256"],"paused_job":first["session"]["method"]["flow"]["jobs"][0],
+                    "stop":horary_prompt_program::rejection_cycle::STOP,"stop_kind":"no_progress","no_progress":event,
+                    "all_provider_responses_settled":true,"request_result_pairs_complete":true,"observed_call_groups":3});
+            }
+            campaign.outcome(&outcome);
+            campaign.close();
+            campaign
+        }
+
         // The final intake attempt was counted by the native runtime, but
         // Google generation was never submitted. Earlier answers are settled
         // native rejections of this same original task, not a completed result.
@@ -1940,6 +2095,107 @@ pub(crate) mod tests {
                 load(&directory.join("outcome.json")).unwrap()["grade"]["semantic_pass"],
                 false
             );
+        }
+    }
+
+    #[test]
+    fn no_progress_full_case_seals_both_witness_shapes_and_all_paid_siblings_without_regrading() {
+        for wrapped in [false, true] {
+            for sibling in [None, Some(false), Some(true)] {
+                let campaign = Campaign::no_progress(sibling, wrapped);
+                let directory = campaign.root.join("cases/a");
+                let first = load(&directory.join("first-turn.json")).unwrap();
+                let bound = semantic_stop(&directory, &first, &first["result"]["Err"]).unwrap();
+                assert_eq!(bound["record_index"], 2);
+                assert_eq!(bound["base_record_index"], 0);
+                assert_eq!(bound["observed_rejected_attempts"], 3);
+                assert_eq!(bound["stop_kind"], "no_progress");
+                assert_eq!(bound["no_progress"]["firstRecordIndex"], 0);
+                let before = tree(&directory).unwrap();
+                seal(&campaign.root, &campaign.closure).unwrap();
+                assert_eq!(tree(&directory).unwrap(), before);
+                let outcome = load(&directory.join("outcome.json")).unwrap();
+                assert_eq!(outcome["grade"]["semantic_pass"], false);
+                assert_eq!(
+                    outcome["execution_status"],
+                    if wrapped {
+                        "observed_native_no_progress"
+                    } else {
+                        "execution_error"
+                    }
+                );
+                assert_eq!(outcome["model_calls"], 3);
+                assert_eq!(
+                    outcome["hosted_http_requests"],
+                    if sibling.is_some() { 4 } else { 3 }
+                );
+                if sibling == Some(true) {
+                    assert_eq!(
+                        first["session"]["method"]["flow"]["jobs"][1]["phase"]["state"],
+                        "repairing"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_progress_corpus_rejects_unproved_stale_uncertain_or_mislabelled_stops() {
+        for defect in [
+            "raw_proof",
+            "no_audit",
+            "foreign_job",
+            "missing_paid_sibling",
+            "missing_result",
+            "uncertain_http",
+            "deadline",
+            "unknown_error",
+            "budget_label",
+            "later_dispatch",
+            "outer_index",
+        ] {
+            let campaign = Campaign::no_progress(Some(false), true);
+            let directory = campaign.root.join("cases/a");
+            let mut first = load(&directory.join("first-turn.json")).unwrap();
+            let mut outcome = load(&directory.join("outcome.json")).unwrap();
+            match defect {
+                "raw_proof" => first["session"]["audit"][2]["rawSha256"] = json!("0".repeat(64)),
+                "no_audit" => first["session"]["audit"] = json!([]),
+                "foreign_job" => {
+                    first["session"]["method"]["flow"]["jobs"][0]["key"] =
+                        json!(digest("foreign job"))
+                }
+                "missing_paid_sibling" => {
+                    first["session"]["method"]["records"]
+                        .as_array_mut()
+                        .unwrap()
+                        .pop();
+                }
+                "missing_result" => {
+                    fs::remove_file(directory.join("calls/0003-result.json")).unwrap();
+                }
+                "uncertain_http" => {
+                    let path = directory.join("calls/0003-result.json");
+                    let mut result = load(&path).unwrap();
+                    result["provider_receipts"][1]["generation_attempts"][0]["error"] =
+                        json!("Uncertain transport");
+                    write(&path, &result);
+                }
+                "deadline" => outcome["deadline_cancelled"] = json!(true),
+                "unknown_error" => first["result"] = json!({"Err":"Unknown interruption"}),
+                "budget_label" => outcome["execution_status"] = json!("call_budget_exhausted"),
+                "later_dispatch" => first["session"]["audit"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!({"event":"stage_transition","to":"running"})),
+                "outer_index" => outcome["semantic_abort_witness"]["record_index"] = json!(3),
+                _ => unreachable!(),
+            }
+            campaign.snapshots(&first);
+            campaign.outcome(&outcome);
+            campaign.close();
+            assert!(seal(&campaign.root, &campaign.closure).is_err(), "{defect}");
+            assert!(!campaign.root.join("case-origins").exists(), "{defect}");
         }
     }
 

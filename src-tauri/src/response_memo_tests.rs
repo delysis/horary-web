@@ -83,7 +83,13 @@ impl Offline {
                 if path.is_dir() {
                     tree(root, &path, files);
                 } else {
-                    files.push(json!({"file":path.strip_prefix(root).unwrap(),"sha256":horary_prompt_program::digest(fs::read(path).unwrap())}));
+                    let relative = path
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .replace('\\', "/");
+                    files.push(json!({"file":relative,"sha256":horary_prompt_program::digest(fs::read(path).unwrap())}));
                 }
             }
         }

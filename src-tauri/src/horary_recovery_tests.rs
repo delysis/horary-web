@@ -367,16 +367,33 @@ fn session() -> Session {
 }
 
 #[test]
-fn every_role_rejection_returns_to_the_same_step_until_data_is_delivered() {
+fn distinct_role_rejections_return_to_the_same_step_until_data_is_delivered() {
     let mut session = session();
     know_bob(&mut session);
     let facts = reading_method::facts(session.chart.as_ref());
     let input = json!({"brief":reading_brief(&session.method.brief),"house_rulers_and_positions":facts,"native_role_options":role_options(&session)});
-    let mut invalid = roles();
-    invalid["selections"].as_array_mut().unwrap().remove(1);
+    // Each rejected proposal makes a different role error. Repeating one
+    // unchanged rejection has its own no-progress pause regression.
+    let mut invalid = Vec::new();
+    for missing in [1, 2, 0] {
+        let mut proposal = roles();
+        proposal["selections"]
+            .as_array_mut()
+            .unwrap()
+            .remove(missing);
+        invalid.push(proposal);
+    }
+    let mut duplicate = roles();
+    let bob = duplicate["selections"][1].clone();
+    duplicate["selections"].as_array_mut().unwrap().push(bob);
+    invalid.push(duplicate);
+    let mut invented = roles();
+    invented["selections"][2]["id"] = json!("stranger.self");
+    invalid.push(invented);
     let script = Script::new(
-        (0..5)
-            .map(|_| (Stage::Significators, invalid.clone()))
+        invalid
+            .into_iter()
+            .map(|proposal| (Stage::Significators, proposal))
             .chain([(Stage::Significators, roles())])
             .collect(),
     );
@@ -394,8 +411,12 @@ fn every_role_rejection_returns_to_the_same_step_until_data_is_delivered() {
     assert!(session.method.records[..5].iter().all(|record| record
         .validation_error
         .as_ref()
+        .is_some_and(|error| !error.is_empty())));
+    assert!(session.method.records[0]
+        .validation_error
+        .as_ref()
         .unwrap()
-        .contains("Missing required role: select exactly one")));
+        .contains("Missing required role: select exactly one"));
     let job = session.method.flow.jobs.last().unwrap();
     assert_eq!(job.attempts, 6);
     assert!(matches!(job.phase(), step::Phase::Complete { .. }));

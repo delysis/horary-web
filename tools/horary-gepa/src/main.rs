@@ -66,6 +66,16 @@ enum Action {
         #[arg(long)]
         state: PathBuf,
     },
+    /// Reuse one settled student control after a stopped review preflight.
+    PrepareComponentContinuation {
+        #[arg(long)]
+        source: PathBuf,
+        #[arg(long)]
+        state: PathBuf,
+        /// Revalidate a completed paid judge whose original host parser failed.
+        #[arg(long)]
+        paid_review_source: Option<PathBuf>,
+    },
     Run {
         #[arg(long)]
         state: PathBuf,
@@ -174,6 +184,23 @@ async fn main() {
 }
 async fn execute(cli: Cli) -> horary_gepa::Result<()> {
     match cli.action {
+        Action::PrepareComponentContinuation {
+            source,
+            state,
+            paid_review_source,
+        } => {
+            let controller = std::env::current_exe().map_err(|e| e.to_string())?;
+            let plan = horary_gepa::controls::prepare_component_continuation(
+                &source,
+                &state,
+                &controller,
+                paid_review_source.as_deref(),
+            )?;
+            println!(
+                "Prepared unchanged {} component with retained observations and zero new paid calls",
+                plan.signature().stage
+            );
+        }
         Action::Calibrate => {
             println!("{}", horary_gepa::metric::calibration()?);
         }

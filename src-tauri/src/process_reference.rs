@@ -263,6 +263,7 @@ const SOURCES: &[&str] = &[
     "crates/horary-prompt-program/src/lib.rs",
     "crates/horary-prompt-program/src/comparison.rs",
     "crates/horary-prompt-program/src/response_memo.rs",
+    "crates/horary-prompt-program/src/rejection_cycle.rs",
     "tools/horary-loop/Cargo.toml",
     "tools/horary-loop/Cargo.lock",
     "tools/horary-loop/README.md",

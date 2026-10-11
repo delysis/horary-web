@@ -34,9 +34,15 @@ pub fn native_outcome_is_settled(outcome: &Value) -> bool {
     }
     let rejected = || {
         let witness = &outcome["semantic_abort_witness"];
+        let stop = witness["stop"].as_str();
+        let known = (stop == Some(NATIVE_VALIDATION_STOP) && witness.get("stop_kind").is_none())
+            || (stop == Some(crate::rejection_cycle::STOP)
+                && witness["stop_kind"] == "no_progress"
+                && witness["no_progress"]["event"] == "stage_no_progress"
+                && witness["no_progress"]["version"] == 1);
         outcome["known_native_semantic_abort"] == true
-            && outcome["execution_error"] == NATIVE_VALIDATION_STOP
-            && witness["stop"] == NATIVE_VALIDATION_STOP
+            && known
+            && outcome["execution_error"] == witness["stop"]
             && witness["all_provider_responses_settled"] == true
             && witness["request_result_pairs_complete"] == true
             && witness["validation_error"]
@@ -55,9 +61,11 @@ pub fn native_outcome_is_settled(outcome: &Value) -> bool {
                 && outcome.get("execution_error").is_some_and(Value::is_null)
                 && outcome["known_native_semantic_abort"] != true
         }
-        Some("observed_native_validation_exhaustion") => {
+        Some("observed_native_validation_exhaustion" | "observed_native_no_progress") => {
             outcome["scope"] == "reading_journey_function_only"
                 && outcome["full_reading"] == true
+                && ((outcome["execution_status"] == "observed_native_no_progress")
+                    == (outcome["semantic_abort_witness"]["stop_kind"] == "no_progress"))
                 && rejected()
         }
         Some("selected_stage_observed") => {
@@ -421,7 +429,7 @@ fn maps(source: &Source, id: &str) -> Result<(BTreeMap<String, String>, String)>
                 }
             }
             if files.get("response.json").map(String::as_str) != seal["response_sha256"].as_str()
-                || files.get("response.json").is_none()
+                || !files.contains_key("response.json")
             {
                 return Err("Native response is not bound by both completion seals".into());
             }
@@ -451,6 +459,16 @@ fn maps(source: &Source, id: &str) -> Result<(BTreeMap<String, String>, String)>
                 return Err(
                     "Memo operation is not a completed same-case reading measurement".into(),
                 );
+            }
+            if response["outcome"]["semantic_abort_witness"]["stop_kind"] == "no_progress" {
+                let witness = &response["outcome"]["semantic_abort_witness"];
+                let name = witness["snapshot"]
+                    .as_str()
+                    .filter(|name| matches!(*name, "first-turn.json" | "final.json"))
+                    .ok_or("No-progress memo source lacks its snapshot")?;
+                let snapshot =
+                    pinned(source, &files, &format!("native/cases/{id}/{name}"))?.value()?;
+                crate::rejection_cycle::verify_stop(&snapshot, witness)?;
             }
             (files, format!("native/cases/{id}"))
         }
@@ -870,6 +888,47 @@ mod tests {
             "all_provider_responses_settled":true,"request_result_pairs_complete":true,
             "target_attempts":2});
         outcome
+    }
+
+    #[test]
+    fn no_progress_memo_source_requires_a_sealed_exact_native_cycle_not_a_flag() {
+        let directory = Directory::new();
+        let _ = source(&directory.0, vec![]);
+        let (session, event) = crate::rejection_cycle::tests::session();
+        let record = &session["method"]["records"][2];
+        let witness = json!({"snapshot":"first-turn.json","record_index":2,"stage":"condition","revision":7,
+            "input_sha256":event["inputSha256"],"original_input":crate::original_input(&record["input"]),
+            "validation_error":record["validationError"],"stop":crate::rejection_cycle::STOP,"stop_kind":"no_progress",
+            "paused_job":session["method"]["flow"]["jobs"][0],"no_progress":event,
+            "all_provider_responses_settled":true,"request_result_pairs_complete":true});
+        let mut outcome = rejected_outcome();
+        outcome["execution_status"] = json!("observed_native_no_progress");
+        outcome["execution_error"] = json!(crate::rejection_cycle::STOP);
+        outcome["semantic_abort_witness"] = witness;
+        let snapshot = json!({"result":{"Err":crate::rejection_cycle::STOP},"session":session});
+        write(
+            &directory.0.join("native/cases/synthetic/first-turn.json"),
+            &snapshot,
+        );
+        write(
+            &directory.0.join("response.json"),
+            &json!({"outcome":outcome}),
+        );
+        let source = seal(&directory.0);
+        assert!(native_outcome_is_settled(&outcome));
+        maps(&source, "synthetic").unwrap();
+        let mut bad = snapshot;
+        bad["session"]["method"]["records"][2]["validationError"] = Value::Null;
+        write(
+            &directory.0.join("native/cases/synthetic/first-turn.json"),
+            &bad,
+        );
+        assert!(maps(&source, "synthetic").is_err());
+        let resealed = seal(&directory.0);
+        assert!(maps(&resealed, "synthetic").is_err());
+        let mut bad = outcome;
+        bad["deadline_cancelled"] = json!(true);
+        assert!(!native_outcome_is_settled(&bad));
     }
     fn source(root: &Path, calls: Vec<(Value, Value)>) -> (Source, Index) {
         let case = root.join("native/cases/synthetic");

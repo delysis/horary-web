@@ -47,7 +47,11 @@ impl Phase {
         ("awaiting_user", "running", "reply to the waiting task"),
         ("running", "complete", "bound CheckedData permit"),
         ("running", "paused", "cancellation or backend interruption"),
-        ("repairing", "paused", "cancellation between attempts"),
+        (
+            "repairing",
+            "paused",
+            "cancellation or repeated native rejection",
+        ),
         ("paused", "running", "resume unfinished work"),
         (
             "awaiting_user",
@@ -207,6 +211,22 @@ impl Journal {
 
     pub fn reject(&mut self, key: &str, error: String) -> Result<(), String> {
         self.running(key)?.transition(Phase::Repairing { error })?;
+        self.active.retain(|active| active != key);
+        Ok(())
+    }
+
+    /// A repeated rejection pauses only its owner. Other paid batch results
+    /// must still enter their running jobs and retain their own records.
+    pub fn pause_job(&mut self, key: &str, error: String) -> Result<(), String> {
+        let job = self
+            .jobs
+            .iter_mut()
+            .find(|job| job.key == key)
+            .ok_or("No step owns this pause")?;
+        if !matches!(job.phase, Phase::Running | Phase::Repairing { .. }) {
+            return Err("Only running or repairing work can pause".into());
+        }
+        job.transition(Phase::Paused { error })?;
         self.active.retain(|active| active != key);
         Ok(())
     }

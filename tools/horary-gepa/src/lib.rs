@@ -623,6 +623,7 @@ impl Plan {
                 reading::verify_example(example, self.target_method.as_deref())?;
             }
         }
+        selected_stage::preflight(self)?;
         Ok(())
     }
     fn verify_split(&self, split: &Value) -> Result<()> {
@@ -860,6 +861,12 @@ pub fn prepare(mut plan: Plan, state: &Path, train: &[String], dev: &[String]) -
     plan.split_sha256 = digest(read(&plan.split_file)?);
     plan.native_executable_sha256 = digest(read(&plan.native_executable)?);
     plan.controller_executable_sha256 = digest(read(&plan.controller_executable)?);
+    if plan.selected_stage_observation {
+        keep(
+            &state.join("selected-stage-source-preflight.json"),
+            &selected_stage::preflight_receipt(&plan)?,
+        )?;
+    }
     let snapshot = executable::snapshot_codex(&plan.codex, state)?;
     plan.codex = snapshot.executable;
     plan.codex_snapshot = Some(snapshot.support);

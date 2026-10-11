@@ -3445,7 +3445,7 @@ fn evaluate_case(
     let result = execute(&mut session, frozen_moment(), &previous);
     let mut execution_error = result.as_ref().err().cloned();
     if let Err(error) = &result {
-        session.method.flow.pause(error.clone());
+        crate::horary_executor::pause_after_error(&mut session, error.clone());
         note_case_error(&case.id, "first_turn", error);
     }
     let mut evidence_error = result
@@ -3491,7 +3491,7 @@ fn evaluate_case(
             let next = execute(&mut session, frozen_moment() + 60_000., &previous);
             if let Err(error) = &next {
                 execution_error = Some(error.clone());
-                session.method.flow.pause(error.clone());
+                crate::horary_executor::pause_after_error(&mut session, error.clone());
                 note_case_error(&case.id, "follow_up", error);
             }
             if let Some(error) = next
@@ -5149,7 +5149,7 @@ fn real_model_classification_function() -> Result<(), String> {
     drop(deadline);
     let error = result.as_ref().err().cloned();
     if let Some(error) = &error {
-        session.method.flow.pause(error.clone());
+        crate::horary_executor::pause_after_error(&mut session, error.clone());
     }
     let turn = result
         .as_ref()

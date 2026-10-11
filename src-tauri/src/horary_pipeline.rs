@@ -733,7 +733,7 @@ pub fn run(
         Ok(())
     });
     if let Err(error) = &result {
-        session.method.flow.pause(error.clone());
+        crate::horary_executor::pause_after_error(session, error.clone());
         runtime.publish(session)?;
     }
     result
@@ -783,7 +783,7 @@ pub(crate) fn run_elicitation(
             Ok(())
         });
     if let Err(error) = &result {
-        session.method.flow.pause(error.clone());
+        crate::horary_executor::pause_after_error(session, error.clone());
         runtime.publish(session)?;
     }
     result

@@ -29,7 +29,7 @@ flowchart TB
   awaiting_user -->|reply to the waiting task| running
   running -->|bound CheckedData permit| complete
   running -->|cancellation or backend interruption| paused
-  repairing -->|cancellation between attempts| paused
+  repairing -->|cancellation or repeated native rejection| paused
   paused -->|resume unfinished work| running
   awaiting_user -->|changed task input; no completion implied| superseded
   repairing -->|changed task input| superseded

@@ -93,6 +93,97 @@ enum Received {
     Complete(Box<CheckedData>),
     AwaitingUser,
     Rejected { proposal: Value, error: String },
+    NoProgress,
+}
+
+/// Pipeline error handlers must not turn a proved local stop into a pause of
+/// unrelated work. A string alone is insufficient: retain the current native
+/// witness and reject stale witnesses followed by another dispatch.
+pub(crate) fn pause_after_error(session: &mut Session, error: String) {
+    let local_stop = error == horary_prompt_program::rejection_cycle::STOP
+        && session
+            .audit
+            .iter()
+            .rposition(|event| event["event"] == "stage_no_progress")
+            .is_some_and(|index| {
+                !session.audit[index + 1..]
+                    .iter()
+                    .any(|event| event["event"] == "stage_transition" && event["to"] == "running")
+                    && serde_json::to_value(&*session).ok().is_some_and(|value| {
+                        horary_prompt_program::rejection_cycle::verify(
+                            &value,
+                            &session.audit[index],
+                        )
+                        .is_ok_and(|proof| proof.revision == session.revision)
+                    })
+            });
+    if !local_stop {
+        session.method.flow.pause(error);
+    }
+}
+
+fn repeated_rejection(session: &Session, key: &str, index: usize) -> Result<Option<Value>, String> {
+    use horary_prompt_program::rejection_cycle::{same_rejection, Witness};
+    let repeated = session
+        .method
+        .records
+        .get(index)
+        .ok_or("Missing new rejection record")?;
+    let value = serde_json::to_value(repeated).map_err(|error| error.to_string())?;
+    for transition in &session.audit {
+        if transition["event"] != "stage_transition"
+            || transition["key"] != key
+            || transition["to"] != "repairing"
+        {
+            continue;
+        }
+        let Some(first_index) = transition["recordIndex"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| *n < index)
+        else {
+            continue;
+        };
+        let Some(first) = session.method.records.get(first_index) else {
+            continue;
+        };
+        if !same_rejection(
+            &serde_json::to_value(first).map_err(|error| error.to_string())?,
+            &value,
+        ) {
+            continue;
+        }
+        let job = session
+            .method
+            .flow
+            .jobs
+            .iter()
+            .find(|job| job.key == key)
+            .ok_or("No native owner of the repeated rejection")?;
+        return serde_json::to_value(Witness {
+            event: "stage_no_progress".into(),
+            version: 1,
+            key: key.into(),
+            stage: repeated.stage.name().into(),
+            revision: repeated.revision,
+            first_record_index: first_index,
+            record_index: index,
+            input_sha256: job.input_sha256.clone(),
+            guide_sha256: repeated.guide_sha256.clone(),
+            schema_sha256: repeated.schema_sha256.clone(),
+            first_raw_sha256: lessons::digest(&first.raw),
+            raw_sha256: lessons::digest(&repeated.raw),
+            validation_error_sha256: lessons::digest(
+                repeated
+                    .validation_error
+                    .as_deref()
+                    .ok_or("No repeated native error")?,
+            ),
+        })
+        .map(Some)
+        .map_err(|error| error.to_string());
+    }
+    Ok(None)
 }
 
 /// All actual model results, including batch cases, enter the same acceptance
@@ -174,7 +265,16 @@ fn receive(
         }
         Err(error) => {
             session.method.flow.reject(key, error.clone())?;
-            ("repairing", Received::Rejected { proposal, error })
+            if let Some(witness) = repeated_rejection(session, key, record_index)? {
+                session
+                    .method
+                    .flow
+                    .pause_job(key, horary_prompt_program::rejection_cycle::STOP.into())?;
+                session.audit.push(witness);
+                ("paused", Received::NoProgress)
+            } else {
+                ("repairing", Received::Rejected { proposal, error })
+            }
         }
     };
     session.audit.push(json!({"event":"stage_transition","stage":stage,"key":key,"to":to,"recordIndex":record_index}));
@@ -252,6 +352,7 @@ pub(crate) fn execute(
             Received::Rejected { proposal, error } => {
                 input = repair_input(stage, &original, proposal, error)
             }
+            Received::NoProgress => return Err(horary_prompt_program::rejection_cycle::STOP.into()),
         }
     }
 }
@@ -400,6 +501,7 @@ pub(crate) fn execute_batch(
         return Err("An independent task is missing from the batch.".into());
     }
     let mut repairs = Vec::new();
+    let mut no_progress = false;
     // Receive EVERY case before repairing one. Good sibling data and rejected
     // proposals survive cancellation or failure in a later repair.
     for (((index, key, stage, input, facts), generation), guide_sha256) in
@@ -421,7 +523,13 @@ pub(crate) fn execute_batch(
             Received::Rejected { proposal, error } => {
                 repairs.push((index, stage, input, facts, proposal, error))
             }
+            Received::NoProgress => no_progress = true,
         }
+    }
+    if no_progress {
+        // Every paid sibling is now journaled. Halt before further generation;
+        // checked siblings remain complete and other rejections unfinished.
+        return Err(horary_prompt_program::rejection_cycle::STOP.into());
     }
     for (index, stage, input, facts, proposal, error) in repairs {
         values[index] = task(
@@ -702,5 +810,269 @@ mod repair_tests {
         let schema = step::response_schema_for(Stage::Intake, Matter::Other, &repair, &[]);
         assert_eq!(schema["properties"]["intent"]["enum"], json!(["clarify"]));
         assert_eq!(schema["properties"]["question"], json!({"type":"null"}));
+    }
+}
+
+#[cfg(test)]
+mod no_progress_tests {
+    use super::*;
+    use std::{collections::VecDeque, path::Path, sync::Mutex};
+
+    struct Fixture {
+        directory: tempfile::TempDir,
+        answers: Mutex<VecDeque<Result<String, String>>>,
+        calls: Mutex<usize>,
+    }
+    impl Fixture {
+        fn new(answers: &[&str]) -> Self {
+            Self {
+                directory: tempfile::tempdir().unwrap(),
+                answers: Mutex::new(answers.iter().map(|s| Ok((*s).into())).collect()),
+                calls: Mutex::new(0),
+            }
+        }
+    }
+    impl Runtime for Fixture {
+        fn generate(
+            &self,
+            _stage: Stage,
+            _matter: Matter,
+            _input: &Value,
+            _schema: &Value,
+            _audio: Option<&[u8]>,
+        ) -> Result<NativeGenerationResult, String> {
+            *self.calls.lock().unwrap() += 1;
+            let content = self
+                .answers
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or("Unexpected extra generation")??;
+            serde_json::from_value(json!({"content":content,"promptTokens":0,"generatedTokens":0,"elapsedMs":0,
+                "tokensPerSecond":0.0,"promptCacheHit":false,"cachedPromptTokens":0,"prefilledPromptTokens":0,
+                "firstTokenMs":null,"coldCacheBytes":null})).map_err(|e| e.to_string())
+        }
+        fn generate_batch(
+            &self,
+            tasks: &[(Stage, Matter, Value, Value)],
+        ) -> Result<Vec<NativeGenerationResult>, String> {
+            tasks
+                .iter()
+                .map(|(s, m, i, c)| self.generate(*s, *m, i, c, None))
+                .collect()
+        }
+        fn publish(&self, _session: &mut Session) -> Result<(), String> {
+            Ok(())
+        }
+        fn check(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn directory(&self) -> &Path {
+            self.directory.path()
+        }
+    }
+    fn input() -> Value {
+        json!({"candidates":[{"id":"synthetic-place"}]})
+    }
+    const A: &str = "{ incomplete A";
+    const B: &str = "[ incomplete B";
+
+    #[test]
+    fn repeated_rejection_and_two_state_cycle_pause_without_accepting_or_extra_call() {
+        for answers in [vec![A, A], vec![A, B, A]] {
+            let runtime = Fixture::new(&answers);
+            let mut session = Session::default();
+            assert_eq!(
+                execute(&mut session, &runtime, Stage::Place, input(), &[], None)
+                    .err()
+                    .unwrap(),
+                horary_prompt_program::rejection_cycle::STOP
+            );
+            assert_eq!(*runtime.calls.lock().unwrap(), answers.len());
+            assert_eq!(session.method.records.len(), answers.len());
+            assert!(session
+                .method
+                .records
+                .iter()
+                .all(|record| record.validation_error.is_some()));
+            assert!(matches!(
+                session.method.flow.jobs[0].phase(),
+                step::Phase::Paused { .. }
+            ));
+            assert!(session.method.flow.active.is_empty());
+            let witness = session
+                .audit
+                .iter()
+                .find(|event| event["event"] == "stage_no_progress")
+                .unwrap();
+            let proof = horary_prompt_program::rejection_cycle::verify(
+                &serde_json::to_value(&session).unwrap(),
+                witness,
+            )
+            .unwrap();
+            assert_eq!(proof.first_record_index, 0);
+            assert_eq!(proof.record_index, answers.len() - 1);
+            assert!(session.method.result.is_none());
+        }
+    }
+    #[test]
+    fn paid_batch_siblings_are_journaled_and_completed_before_cycle_halt() {
+        let prior = Fixture::new(&[A, A]);
+        let mut session = Session::default();
+        assert!(execute(&mut session, &prior, Stage::Place, input(), &[], None).is_err());
+        let moment = r#"{"mode":"now","local_time":"","occurrence":"","clarification":"","basis":"Synthetic receipt moment"}"#;
+        let runtime = Fixture::new(&[A, moment, B]);
+        assert_eq!(
+            execute_batch(
+                &mut session,
+                &runtime,
+                &[
+                    (Stage::Place, input(), vec![]),
+                    (Stage::Moment, input(), vec![]),
+                    (Stage::Intake, input(), vec![])
+                ]
+            )
+            .err()
+            .unwrap(),
+            horary_prompt_program::rejection_cycle::STOP
+        );
+        assert_eq!(*runtime.calls.lock().unwrap(), 3);
+        assert_eq!(session.method.records.len(), 5);
+        assert!(session.method.records[2].validation_error.is_some());
+        assert!(session.method.records[3].validation_error.is_none());
+        assert!(session.method.records[4].validation_error.is_some());
+        pause_after_error(
+            &mut session,
+            horary_prompt_program::rejection_cycle::STOP.into(),
+        );
+        assert!(matches!(
+            session
+                .method
+                .flow
+                .jobs
+                .iter()
+                .find(|job| job.stage == Stage::Place)
+                .unwrap()
+                .phase(),
+            step::Phase::Paused { .. }
+        ));
+        assert!(matches!(
+            session
+                .method
+                .flow
+                .jobs
+                .iter()
+                .find(|job| job.stage == Stage::Moment)
+                .unwrap()
+                .phase(),
+            step::Phase::Complete { record_index: 3 }
+        ));
+        assert!(matches!(
+            session
+                .method
+                .flow
+                .jobs
+                .iter()
+                .find(|job| job.stage == Stage::Intake)
+                .unwrap()
+                .phase(),
+            step::Phase::Repairing { .. }
+        ));
+        let witness = session
+            .audit
+            .iter()
+            .rev()
+            .find(|e| e["event"] == "stage_no_progress")
+            .unwrap();
+        horary_prompt_program::rejection_cycle::verify(
+            &serde_json::to_value(&session).unwrap(),
+            witness,
+        )
+        .unwrap();
+        pause_after_error(&mut session, "Explicit cancellation".into());
+        assert!(
+            matches!(session.method.flow.jobs.iter().find(|job|job.stage==Stage::Intake).unwrap().phase(),step::Phase::Paused{error} if error=="Explicit cancellation")
+        );
+    }
+    #[test]
+    fn backend_uncertainty_is_not_a_second_native_rejection() {
+        let runtime = Fixture::new(&[A]);
+        runtime
+            .answers
+            .lock()
+            .unwrap()
+            .push_back(Err("Uncertain transport".into()));
+        let mut session = Session::default();
+        assert_eq!(
+            execute(&mut session, &runtime, Stage::Place, input(), &[], None)
+                .err()
+                .unwrap(),
+            "Uncertain transport"
+        );
+        assert_eq!(session.method.records.len(), 1);
+        assert!(!session
+            .audit
+            .iter()
+            .any(|event| event["event"] == "stage_no_progress"));
+    }
+    #[test]
+    fn new_work_binding_can_repair_and_complete_after_an_old_cycle() {
+        let runtime = Fixture::new(&[A, A]);
+        let mut session = Session::default();
+        assert!(execute(&mut session, &runtime, Stage::Place, input(), &[], None).is_err());
+        let valid = r#"{"mode":"select","place_id":"synthetic-place","query":"","clarification":"","basis":"A supplied synthetic candidate"}"#;
+        let runtime = Fixture::new(&[A, valid]);
+        let mut changed = input();
+        changed["new_context"] = json!("Genuine changed task input");
+        assert!(
+            execute(&mut session, &runtime, Stage::Place, changed, &[], None)
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(*runtime.calls.lock().unwrap(), 2);
+        assert!(session
+            .method
+            .records
+            .last()
+            .unwrap()
+            .validation_error
+            .is_none());
+    }
+
+    #[test]
+    fn matching_stop_string_or_stale_witness_cannot_suppress_global_pause() {
+        for stale in [false, true] {
+            let mut session = Session::default();
+            if stale {
+                let runtime = Fixture::new(&[A, A]);
+                assert!(execute(&mut session, &runtime, Stage::Place, input(), &[], None).is_err());
+            }
+            session
+                .method
+                .flow
+                .begin(
+                    "unrelated".into(),
+                    Stage::Moment,
+                    session.revision,
+                    "hash".into(),
+                )
+                .unwrap();
+            session.audit.push(json!({"event":"stage_transition","stage":"moment","key":"unrelated","to":"running"}));
+            pause_after_error(
+                &mut session,
+                horary_prompt_program::rejection_cycle::STOP.into(),
+            );
+            assert!(matches!(
+                session
+                    .method
+                    .flow
+                    .jobs
+                    .iter()
+                    .find(|job| job.key == "unrelated")
+                    .unwrap()
+                    .phase(),
+                step::Phase::Paused { .. }
+            ));
+        }
     }
 }
