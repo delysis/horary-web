@@ -1022,7 +1022,7 @@ fn native_reading_clock_is_bound_to_the_handoff_and_uses_its_anchor_zone() {
     assert_eq!(ready.input()["chart_local_clock"], "2026-10-08T20:30");
     let mut bound = json!({"version":VERSION,"question":ready.binding.question,
         "frame":ready.binding.frame,"subject":ready.subject,"people":ready.people,
-        "inputs":ready.inputs,"anchor":anchor});
+        "inputs":ready.inputs,"anchor":anchor,"contextual_words":ready.contextual_words});
     assert_ne!(
         ready.binding.input_sha256,
         crate::horary_lessons::digest(&bound.to_string()),
