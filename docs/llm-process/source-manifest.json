@@ -847,7 +847,7 @@
     },
     {
       "path": "tools/horary-dspy/src/teachers.rs",
-      "sha256": "653818d36986475f8b4a0f418a72d336fba8cfef34ca2a2ad445462baa61c8f2"
+      "sha256": "8d9a37a54ba64584ae76b84dfc5aa6e82f5d2c79fe4a9abd2ffc256eb58c4c92"
     },
     {
       "path": "tools/horary-gepa/Cargo.lock",

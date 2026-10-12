@@ -13,6 +13,19 @@ use serde_json::{Value, json};
 use std::{fs, io::Write, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
+const SPECIALIZED_ROUTES: &[&str] = &[
+    "embedding",
+    "-tts",
+    "image",
+    "live",
+    "audio",
+    "robotics",
+    "deep-research",
+    "transcribe",
+    "nano-banana",
+    "computer-use",
+];
+
 pub fn is_text_teacher(info: &ModelInfo) -> bool {
     let id = info.name.strip_prefix("models/").unwrap_or_default();
     id.starts_with("gemini-")
@@ -20,17 +33,7 @@ pub fn is_text_teacher(info: &ModelInfo) -> bool {
             .supported_generation_methods
             .iter()
             .any(|m| m == "generateContent")
-        && ![
-            "embedding",
-            "-tts",
-            "image",
-            "live",
-            "audio",
-            "robotics",
-            "deep-research",
-        ]
-        .iter()
-        .any(|kind| id.contains(kind))
+        && !SPECIALIZED_ROUTES.iter().any(|kind| id.contains(kind))
 }
 fn version(info: &ModelInfo) -> (usize, usize) {
     let id = info.name.strip_prefix("models/gemini-").unwrap_or_default();
@@ -57,17 +60,7 @@ pub fn available(listing: &Value) -> Result<Vec<ModelInfo>> {
                 && row["supportedGenerationMethods"]
                     .as_array()
                     .is_some_and(|methods| methods.iter().any(|m| m == "generateContent"))
-                && ![
-                    "embedding",
-                    "-tts",
-                    "image",
-                    "live",
-                    "audio",
-                    "robotics",
-                    "deep-research",
-                ]
-                .iter()
-                .any(|kind| name.contains(kind))
+                && !SPECIALIZED_ROUTES.iter().any(|kind| name.contains(kind))
         })
         .map(|row| serde_json::from_value::<ModelInfo>(row.clone()))
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -236,6 +229,9 @@ mod tests {
             "gemini-embedding-001",
             "gemini-2.5-flash-tts",
             "gemini-2.5-flash-native-audio-preview",
+            "gemini-nano-banana-2.1",
+            "gemini-3.5-transcribe",
+            "gemini-2.5-computer-use-preview-10-2025",
             "gemma-4-26b-a4b-it",
         ]
         .map(info);
