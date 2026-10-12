@@ -456,6 +456,12 @@ pub fn reference_reader_pages(method: &str) -> Result<BTreeSet<usize>> {
         // This is source continuity, not a new universal illness requirement.
         pages.insert(187);
     }
+    if method == "lost_object" {
+        // The thief description on p154 explicitly refers to pp143–145,
+        // including the natural-Mercury/dispositor distinction. Gold source
+        // only: the separately declared compact student baseline is unchanged.
+        pages.extend(143..=145);
+    }
     Ok(pages)
 }
 
@@ -599,6 +605,7 @@ mod source_context_tests {
             BTreeSet::from([188])
         );
         assert!(reference_reader_excerpt_pages("contact").is_empty());
+        assert!((143..=145).all(|p| reference_reader_pages("lost_object").unwrap().contains(&p)));
         assert!(reference_reader_pages("wish").is_err());
         assert!(reference_reader_pages("unclassified").is_err());
     }
