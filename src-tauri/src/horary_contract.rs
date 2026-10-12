@@ -132,7 +132,18 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
                         ]),
                     );
                     fields.insert("answer".into(), text(1000));
-                    fields.insert("evidence".into(), evidence);
+                    // Synthesis can cite evidence from all of its checks. Six
+                    // IDs is not a methodological limit: even a simple job
+                    // reading combines roles, receptions and contacts. Retain
+                    // the exact fact allowlist instead of discarding citations.
+                    fields.insert(
+                        "evidence".into(),
+                        if ids.is_empty() {
+                            evidence
+                        } else {
+                            list(choice(&ids), ids.len())
+                        },
+                    );
                 }
                 _ => {}
             }
@@ -621,17 +632,17 @@ mod repair_message_tests {
             } else {
                 "/properties/evidence"
             };
+            // The shared check is compact, while synthesis retains the larger
+            // union of valid citations without conflating their array limits.
+            assert!(presented["$defs"].get("judgment_evidence").is_none());
+            assert_eq!(presented.pointer(path), original.pointer(path));
+            assert_eq!(presented.pointer(path).unwrap()["maxItems"], 64);
             assert_eq!(
-                presented["$defs"]["judgment_evidence"],
-                *original.pointer(path).unwrap()
+                presented["$defs"]["judgment_check"]["properties"]["evidence"]["maxItems"],
+                6
             );
             assert_eq!(
-                presented.pointer(path).unwrap(),
-                &json!({"$ref":"#/$defs/judgment_evidence"})
-            );
-            assert_eq!(presented["$defs"]["judgment_evidence"]["maxItems"], 6);
-            assert_eq!(
-                presented["$defs"]["judgment_evidence"]["items"]["enum"]
+                presented.pointer(path).unwrap()["items"]["enum"]
                     .as_array()
                     .unwrap()
                     .len(),
@@ -639,6 +650,29 @@ mod repair_message_tests {
             );
             assert!(presented.to_string().len() < original.to_string().len());
         }
+    }
+
+    #[test]
+    fn synthesis_keeps_ten_valid_citations_but_rejects_foreign_ids() {
+        let facts = (0..12)
+            .map(|index| Fact {
+                id: format!("e{index}"),
+                kind: "position".into(),
+                label: "Synthetic native evidence".into(),
+                detail: "No astrological conclusion asserted".into(),
+                planets: vec![],
+                condition_facet: None,
+                event: None,
+                reception: None,
+            })
+            .collect::<Vec<_>>();
+        let schema = schema(Stage::Judgment, &facts);
+        let citations = json!((0..10).map(|index| format!("e{index}")).collect::<Vec<_>>());
+        let contract = &schema["properties"]["evidence"];
+        validate_shape_at(&citations, contract, "$.evidence").unwrap();
+        let mut foreign = citations;
+        foreign[9] = json!("not-in-this-chart");
+        assert!(validate_shape_at(&foreign, contract, "$.evidence").is_err());
     }
 
     #[test]

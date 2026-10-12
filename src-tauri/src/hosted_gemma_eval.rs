@@ -106,6 +106,7 @@ impl TokenWindow {
 pub(crate) struct Client {
     http: reqwest::Client,
     credential: String,
+    local_endpoint: Option<String>,
     active: Mutex<usize>,
     changed: Condvar,
     concurrency: usize,
@@ -188,6 +189,7 @@ impl Client {
         Ok(Self {
             http,
             credential,
+            local_endpoint: None,
             active: Mutex::new(0),
             changed: Condvar::new(),
             concurrency,
@@ -195,7 +197,49 @@ impl Client {
         })
     }
 
+    /// The same application evaluator can use the cached on-device model.
+    /// This opt-in path sends ordinary chat text, with no grammar or schema.
+    pub(crate) fn from_local_endpoint(endpoint: &str, concurrency: usize) -> Result<Self, String> {
+        let url = reqwest::Url::parse(endpoint).map_err(|_| "Invalid local model URL")?;
+        if url.scheme() != "http"
+            || !matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost"))
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.query().is_some()
+            || url.fragment().is_some()
+            || !(1..=4).contains(&concurrency)
+        {
+            return Err(
+                "Local inference requires a loopback HTTP endpoint and one to four slots".into(),
+            );
+        }
+        let http = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(300))
+            .build()
+            .map_err(|_| "Could not construct local model client")?;
+        Ok(Self {
+            http,
+            credential: String::new(),
+            local_endpoint: Some(format!(
+                "{}/chat/completions",
+                endpoint.trim_end_matches('/')
+            )),
+            active: Mutex::new(0),
+            changed: Condvar::new(),
+            concurrency,
+            tokens: Mutex::new(TokenWindow::new(1)),
+        })
+    }
+
     pub(crate) fn metadata(&self) -> Value {
+        if let Some(endpoint) = &self.local_endpoint {
+            return json!({"provider":"local_llama_cpp","id":"gemma-4-12b-it-qat-mtp",
+                "endpoint":endpoint,"decoding":"ordinary unconstrained text plus native validation and repair",
+                "http_concurrency":self.concurrency,"local_inference":true,"temperature":0,
+                "automatic_http_retries":false,"credential_in_evidence":false});
+        }
         json!({"provider":"google_gemini_api","id":MODEL,"endpoint":ENDPOINT,
             "decoding":"hosted unconstrained text; prompt-specified contracts and native acceptance/repair unchanged",
             "thinking_level":"minimal","temperature":0,"seed":0,
@@ -229,7 +273,11 @@ impl Client {
     }
 
     fn redact(&self, text: &str) -> String {
-        text.replace(&self.credential, "[REDACTED]")
+        if self.credential.is_empty() {
+            text.to_owned()
+        } else {
+            text.replace(&self.credential, "[REDACTED]")
+        }
     }
 
     fn post(
@@ -324,6 +372,9 @@ impl Client {
         max_tokens: u32,
         cancelled: Arc<AtomicBool>,
     ) -> Attempt {
+        if let Some(endpoint) = &self.local_endpoint {
+            return self.generate_local(endpoint, prompt, max_tokens, cancelled);
+        }
         let queued = Instant::now();
         let request = match wire_request(prompt, schema, max_tokens) {
             Ok(request) => request,
@@ -431,6 +482,123 @@ impl Client {
             "native_result":result.as_ref().map_err(String::as_str)});
         Attempt { result, receipt }
     }
+
+    fn generate_local(
+        &self,
+        endpoint: &str,
+        prompt: &str,
+        max_tokens: u32,
+        cancelled: Arc<AtomicBool>,
+    ) -> Attempt {
+        let queued = Instant::now();
+        let request = match local_wire_request(prompt, max_tokens) {
+            Ok(request) => request,
+            Err(error) => {
+                return Attempt {
+                    result: Err(error.clone()),
+                    receipt: json!({"submitted":false,"error":error}),
+                }
+            }
+        };
+        let _permit = match self.permit(&cancelled) {
+            Ok(permit) => permit,
+            Err(error) => {
+                return Attempt {
+                    result: Err(error.clone()),
+                    receipt: json!({"request":request,"submitted":false,"error":error}),
+                }
+            }
+        };
+        let queue_ms = queued.elapsed().as_millis();
+        let start = Instant::now();
+        let (result, response) = match self.post(endpoint, &request, &cancelled) {
+            Ok((status, _, raw)) => {
+                let body = serde_json::from_str::<Value>(&raw)
+                    .unwrap_or_else(|_| json!({"invalid_json_body":raw}));
+                let result = if status == 200 {
+                    decode_local_response(&body, start.elapsed().as_millis(), queue_ms)
+                } else {
+                    Err(format!("Local model HTTP {status}: {}", body["error"]))
+                };
+                (result, json!({"http_status":status,"body":body}))
+            }
+            Err(error) => (Err(error.clone()), json!({"transport_error":error})),
+        };
+        let receipt = json!({"provider":"local_llama_cpp","request":request,"submitted":true,
+            "queue_ms":queue_ms,"http_wall_ms":start.elapsed().as_millis(),"response":response,
+            "native_result":result.as_ref().map_err(String::as_str)});
+        Attempt { result, receipt }
+    }
+}
+
+fn local_wire_request(prompt: &str, max_tokens: u32) -> Result<Value, String> {
+    let messages: Value = serde_json::from_str(prompt).map_err(|error| error.to_string())?;
+    let array = messages
+        .as_array()
+        .ok_or("Local prompt must be a message array")?;
+    if array.is_empty()
+        || array.iter().any(|message| {
+            !matches!(
+                message["role"].as_str(),
+                Some("system" | "user" | "assistant")
+            ) || message["content"].as_str().is_none()
+        })
+    {
+        return Err("Local messages need supported roles and text content".into());
+    }
+    Ok(json!({"model":"gemma-4-12b-it-qat-mtp","messages":messages,
+        "max_tokens":max_tokens,"temperature":0,"stream":false,"cache_prompt":true}))
+}
+
+fn decode_local_response(
+    body: &Value,
+    wall_ms: u128,
+    queue_ms: u128,
+) -> Result<NativeGenerationResult, String> {
+    let choices = body["choices"]
+        .as_array()
+        .ok_or("Local response has no choices")?;
+    if choices.len() != 1
+        || !matches!(
+            choices[0]["finish_reason"].as_str(),
+            Some("stop" | "length")
+        )
+    {
+        return Err("Local response did not deliver one text completion".into());
+    }
+    let content = choices[0]["message"]["content"]
+        .as_str()
+        .filter(|text| !text.trim().is_empty())
+        .ok_or("Local response has no answer")?
+        .to_owned();
+    let tokens = |value: &Value| {
+        value
+            .as_u64()
+            .unwrap_or(0)
+            .try_into()
+            .map_err(|_| "Local token count overflow".to_owned())
+    };
+    let prompt_tokens = tokens(&body["usage"]["prompt_tokens"])?;
+    let generated_tokens = tokens(&body["usage"]["completion_tokens"])?;
+    let cached_prompt_tokens = tokens(&body["usage"]["prompt_tokens_details"]["cached_tokens"])?;
+    Ok(NativeGenerationResult {
+        content,
+        prompt_tokens,
+        generated_tokens,
+        elapsed_ms: wall_ms,
+        total_wall_ms: Some(wall_ms + queue_ms),
+        batch_size: None,
+        lesson_bank_hit: None,
+        lesson_prepare_ms: None,
+        tokens_per_second: body["timings"]["predicted_per_second"]
+            .as_f64()
+            .unwrap_or(0.),
+        prompt_cache_hit: cached_prompt_tokens > 0,
+        cached_prompt_tokens,
+        prefilled_prompt_tokens: prompt_tokens.saturating_sub(cached_prompt_tokens),
+        first_token_ms: None,
+        cold_cache_bytes: None,
+    })
 }
 
 type HttpResult = Result<(u16, Option<String>, String), String>;
@@ -588,6 +756,35 @@ fn decode_response(
         first_token_ms: None,
         cold_cache_bytes: None,
     })
+}
+
+#[test]
+fn local_wire_preserves_repair_roles_without_a_schema_or_credentials() {
+    let prompt = json!([
+        {"role":"system","content":"Book-grounded teaching"},
+        {"role":"user","content":"Original question"},
+        {"role":"assistant","content":"Rejected proposal"},
+        {"role":"user","content":"Specific native repair"}
+    ]);
+    let wire = local_wire_request(&prompt.to_string(), 1000).unwrap();
+    assert_eq!(wire["messages"], prompt);
+    assert!(wire.get("response_format").is_none());
+    assert!(wire.get("grammar").is_none());
+    assert!(wire.get("key").is_none());
+    assert!(Client::from_local_endpoint("https://example.com/v1", 1).is_err());
+}
+
+#[test]
+fn local_partial_output_and_observed_cache_use_are_preserved() {
+    let body = json!({"choices":[{"finish_reason":"length","message":{"content":"{\"verdict\":"}}],
+        "usage":{"prompt_tokens":100,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":80}},
+        "timings":{"predicted_per_second":30.,"draft_n":4,"draft_n_accepted":3}});
+    let output = decode_local_response(&body, 500, 20).unwrap();
+    assert_eq!(output.content, "{\"verdict\":");
+    assert_eq!(output.cached_prompt_tokens, 80);
+    assert_eq!(output.prefilled_prompt_tokens, 20);
+    assert_eq!(output.total_wall_ms, Some(520));
+    assert!(output.first_token_ms.is_none());
 }
 
 #[test]

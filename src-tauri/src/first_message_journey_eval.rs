@@ -569,7 +569,7 @@ fn execute(
 }
 
 #[test]
-#[ignore = "Explicit hosted fresh application journey: hash-pinned HORARY_FIRST_MESSAGE_TASK, fresh HORARY_EVAL_EVIDENCE, and invocation-only Google credential locator required"]
+#[ignore = "Explicit fresh model journey: pinned HORARY_FIRST_MESSAGE_TASK, fresh HORARY_EVAL_EVIDENCE, and local endpoint or Google credential locator required"]
 fn real_model_first_message_application_journey() -> Result<(), String> {
     let task_file = PathBuf::from(
         std::env::var_os("HORARY_FIRST_MESSAGE_TASK").ok_or("Set HORARY_FIRST_MESSAGE_TASK")?,
@@ -597,16 +597,23 @@ fn real_model_first_message_application_journey() -> Result<(), String> {
     fs::create_dir(&dir).map_err(|error| error.to_string())?;
     fs::create_dir(dir.join("cases")).map_err(|error| error.to_string())?;
     let dir = dir.canonicalize().map_err(|error| error.to_string())?;
-    let keyfile = PathBuf::from(
-        std::env::var_os("HORARY_GOOGLE_KEY_FILE").ok_or("Set private HORARY_GOOGLE_KEY_FILE")?,
-    );
-    let credential_target = keyfile
-        .canonicalize()
-        .map_err(|_| "Hosted credential unavailable")?;
-    if credential_target.starts_with(&root) || credential_target.starts_with(&dir) {
-        return Err("Keep hosted credentials outside source and evidence".into());
-    }
-    let hosted = Arc::new(crate::hosted_gemma_eval::Client::from_file(&keyfile, 4)?);
+    let local = std::env::var("HORARY_FIRST_MESSAGE_LOCAL_URL").ok();
+    let hosted = Arc::new(if let Some(endpoint) = &local {
+        crate::hosted_gemma_eval::Client::from_local_endpoint(endpoint, 4)?
+    } else {
+        let keyfile = PathBuf::from(
+            std::env::var_os("HORARY_GOOGLE_KEY_FILE")
+                .ok_or("Set private HORARY_GOOGLE_KEY_FILE or HORARY_FIRST_MESSAGE_LOCAL_URL")?,
+        );
+        let credential_target = keyfile
+            .canonicalize()
+            .map_err(|_| "Hosted credential unavailable")?;
+        if credential_target.starts_with(&root) || credential_target.starts_with(&dir) {
+            return Err("Keep hosted credentials outside source and evidence".into());
+        }
+        crate::hosted_gemma_eval::Client::from_file(&keyfile, 4)?
+    });
+    let attempts_per_branch = if local.is_some() { 1 } else { 3 };
     let sources = source_hashes(&root)?;
     let manifest = json!({"version":1,"scope":"fresh_application_first_message_journey",
         "task_sha256":horary_prompt_program::digest(&task_bytes),"task":task,
@@ -619,10 +626,10 @@ fn real_model_first_message_application_journey() -> Result<(), String> {
         "private_expected_data":"No expected method/facts/roles/chart or completed state is injected",
         "qualification":"Native structure plus separately checkpoint-bound classifier method/facet comparison; independent input and source-correct interpretation review remains required",
         "limits":{"native_call_groups_per_case":task.max_calls,"maximum_branches_per_group":4,
-            "completed_http_attempts_per_branch":3,"case_seconds":task.case_seconds,
-            "physical_attempt_reservation":task.max_calls * 4 * 3 * cases.len() as u64,
-            "reservation_basis":"Conservative bound from existing Reader group cap, four-branch guard, and hosted retry policy; observed generation attempts are reported separately"},
-        "provider_limits":"Per-case native call-group budget and deadline; up to four parallel branches and the existing bounded completed-HTTP retries, all token-paced and retained"});
+            "completed_http_attempts_per_branch":attempts_per_branch,"case_seconds":task.case_seconds,
+            "physical_attempt_reservation":task.max_calls * 4 * attempts_per_branch * cases.len() as u64,
+            "reservation_basis":"Reader group cap, four-branch guard and selected transport attempt bound; observed attempts are reported separately"},
+        "provider_limits":if local.is_some(){"Local four-slot generation; no hosted quota pacing or automatic HTTP retries"}else{"Per-case call-group budget and deadline, four parallel branches and bounded completed-HTTP retries, token-paced and retained"}});
     atomic_evidence_file(&dir.join("task.json"), true, |file| {
         file.write_all(&task_bytes)
             .map_err(|error| error.to_string())

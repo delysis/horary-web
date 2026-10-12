@@ -2783,6 +2783,26 @@ fn classification_guide() -> String {
     for (words, method, facet) in [
         ("What about Morgan?", Method::Unclassified, Facet::Unknown),
         (
+            "Will the purchase of my bicycle complete on Monday?",
+            Method::MovableDeal,
+            Facet::Event,
+        ),
+        (
+            "When will the purchase of my bicycle complete?",
+            Method::MovableDeal,
+            Facet::Timing,
+        ),
+        (
+            "Will my father telephone me before Friday?",
+            Method::Contact,
+            Facet::Event,
+        ),
+        (
+            "When will my father telephone me?",
+            Method::Contact,
+            Facet::Timing,
+        ),
+        (
             "They offered me the position; would its hours suit me?",
             Method::JobOffer,
             Facet::Situation,
@@ -2816,6 +2836,7 @@ fn classification_guide() -> String {
             serde_json::to_string(&patch).expect("Classifier example serializes")
         ));
     }
+    text.push_str("\nFINAL FACET CHECK: Identify the unknown being requested, not merely words about time. If the person supplies a date/deadline and asks WILL, the unknown is whether the event occurs within that condition: event. If they ask WHEN and want you to supply a date, the unknown is timing. 'On Monday', 'this week', 'before Friday' and 'within a year' do not turn WILL into WHEN. Preserve those words in the question for the selected extractor. Do not silently turn an exact count into either of these.\n");
     text
 }
 
