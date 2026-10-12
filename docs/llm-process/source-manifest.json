@@ -467,7 +467,7 @@
     },
     {
       "path": "tools/horary-dspy/README.md",
-      "sha256": "e34aceefb9a730c61c31cc821aaf39564ca58364aa4f32f3ef6829244ceaff74"
+      "sha256": "c1c6d4da8709dc735ed82857e44f746408a1b487bdc2e352a369c3f342fab605"
     },
     {
       "path": "tools/horary-dspy/coverage.json",
@@ -847,7 +847,7 @@
     },
     {
       "path": "tools/horary-dspy/src/demo.rs",
-      "sha256": "a8216a4c4e71a664f5f7acf8d2551a47c423448ed107b30f62e5c80e7e3fdf34"
+      "sha256": "923790b20b1784f1610fb44b819e98858f1265520107b314d4edc2acb7b3a7cd"
     },
     {
       "path": "tools/horary-dspy/src/functions.rs",
@@ -855,11 +855,11 @@
     },
     {
       "path": "tools/horary-dspy/src/gold.rs",
-      "sha256": "e900f75234b57cd0a71d1586269440f1672d4960827d2e30109697954ff8146b"
+      "sha256": "d4797264b572f223937452717e9d9375a18dd1aa3c8e76595e17063e95f91d20"
     },
     {
       "path": "tools/horary-dspy/src/google.rs",
-      "sha256": "15c30d0f60d31c8ea108326db63f437cb88a72aca7d2cd4d024518d0edf230b6"
+      "sha256": "dffeccceec6b5a4ea14c39787ff5c2bb766ec31238c931916d1b9d2a7128d54f"
     },
     {
       "path": "tools/horary-dspy/src/journey.rs",
@@ -875,11 +875,11 @@
     },
     {
       "path": "tools/horary-dspy/src/local.rs",
-      "sha256": "180c4edf778706f06ef976f14715b501de19cd422524874cfc7e700d4057b54d"
+      "sha256": "a7710739128a735247d40efef06260b1db5ce4d55aed24e2f9e16a7ba146535d"
     },
     {
       "path": "tools/horary-dspy/src/main.rs",
-      "sha256": "a8e9d2930f15f7069a6680b08edacd6c9353144c072025d4ce2fff8e9cfe8b73"
+      "sha256": "55476aba1849f7ce6f1cac5fea2a3e889fbb3a0ab8e557192cb25214d8445dac"
     },
     {
       "path": "tools/horary-dspy/src/native_export.rs",
@@ -887,7 +887,7 @@
     },
     {
       "path": "tools/horary-dspy/src/optimize.rs",
-      "sha256": "681b562177090a315ce3a3c473642525e06750260507bb1ec2a681e8f35bdd04"
+      "sha256": "00552f9e60c90cb26f66f33706489d67d632ba791b237b32ed5fce12cfc98c6c"
     },
     {
       "path": "tools/horary-dspy/src/preflight.rs",
