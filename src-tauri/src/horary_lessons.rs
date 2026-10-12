@@ -225,6 +225,7 @@ impl Stage {
                 "reception_by_sign",
                 "reception_exaltation",
                 "reception_triplicity",
+                "ambivalent_reception",
                 "same_object_candidates",
                 "moon_object_role",
             ],
@@ -234,6 +235,7 @@ impl Stage {
                 "reception_by_sign",
                 "reception_exaltation",
                 "reception_triplicity",
+                "ambivalent_reception",
                 "relationship_facets",
             ],
             Self::Reception => &[
@@ -242,6 +244,7 @@ impl Stage {
                 "reception_by_sign",
                 "reception_exaltation",
                 "reception_triplicity",
+                "ambivalent_reception",
             ],
             Self::Contacts => &[
                 "occasion_motive_ability",
@@ -353,7 +356,12 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             ]
         }
         (Stage::Judgment, Some(Method::NewJob)) => {
-            vec!["no_forced_certainty", "occasion_motive_ability"]
+            vec![
+                "no_forced_certainty",
+                "occasion_motive_ability",
+                "next_contacts",
+                "ambivalent_reception",
+            ]
         }
         _ => stage.passages(matter).to_vec(),
     };
@@ -372,6 +380,18 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             ],
             _ => &[],
         });
+    }
+    if method == Some(Method::Relationship) {
+        match stage {
+            Stage::Contacts => ids.push("relationship_formalisation"),
+            Stage::Judgment => ids.extend_from_slice(&[
+                "relationship_facets",
+                "relationship_formalisation",
+                "next_contacts",
+                "ambivalent_reception",
+            ]),
+            _ => {}
+        }
     }
     ids
 }
