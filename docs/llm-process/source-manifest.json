@@ -3,7 +3,7 @@
   "sources": [
     {
       "path": ".gitattributes",
-      "sha256": "5f5367f7c325e3ab92d68d82f60172c829870f466357991516083409bb1fa0da"
+      "sha256": "0e80e3c2b22bf681cecf7e47f7517919059620fb6bd0721bdf6d1ceb691ddac3"
     },
     {
       "path": "crates/horary-ai-core/src/anchor_authority.rs",
