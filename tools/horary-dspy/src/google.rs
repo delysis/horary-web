@@ -710,6 +710,7 @@ pub struct Google {
     failed: AtomicBool,
     limiter: Arc<RateLimiter>,
     info: Mutex<Option<ModelInfo>>,
+    input_limit: Option<usize>,
     interactions: bool,
     max_submissions: usize,
     quota_block: Mutex<Option<BlockedModel>>,
@@ -743,6 +744,7 @@ impl Google {
             failed: AtomicBool::new(false),
             limiter: RateLimiter::new(tokens_per_minute)?,
             info: Mutex::new(None),
+            input_limit: None,
             interactions,
             max_submissions: MAX_SUBMISSIONS,
             quota_block: Mutex::new(None),
@@ -782,6 +784,7 @@ impl Google {
             failed: AtomicBool::new(false),
             limiter,
             info: Mutex::new(Some(info)),
+            input_limit: None,
             interactions: false,
             max_submissions,
             quota_block: Mutex::new(None),
@@ -792,6 +795,12 @@ impl Google {
     }
     pub fn limiter(&self) -> Arc<RateLimiter> {
         self.limiter.clone()
+    }
+    /// A run-specific prompt limit, distinct from the provider's listed context.
+    pub fn with_input_limit(mut self, limit: usize) -> Result<Self> {
+        ensure!(limit > 0, "Student input limit must be positive");
+        self.input_limit = Some(limit);
+        Ok(self)
     }
     pub fn with_limiter(mut self, limiter: Arc<RateLimiter>) -> Self {
         self.limiter = limiter;
@@ -1626,13 +1635,17 @@ impl Google {
                 &serde_json::to_vec_pretty(&json!({
                     "model":self.model,"request_key":key,"request":routed,"body":body,
                     "input_tokens":tokens,"configured_input_tokens_per_minute":self.limiter.hint,"pacing":self.limiter.snapshot().await,
-                    "model_input_token_limit":info.input_token_limit,"admitted":tokens<=info.input_token_limit,"generation_submitted":false,
+                    "model_input_token_limit":info.input_token_limit,"admitted":tokens<=info.input_token_limit && self.input_limit.is_none_or(|limit| tokens<=limit),"generation_submitted":false,
+                    "configured_prompt_limit":self.input_limit,
                     "scope":"Read-only provider token count and client admission; not a model response or verified project quota"
                 }))?,
             )?;
         }
         if tokens > info.input_token_limit {
             return Err(self.failure(Disposition::ContextLimit,None,None,false,format!("Prompt has {tokens} input tokens, above listed model context {}. Exact preflight retained at {}",info.input_token_limit,preflight.display())));
+        }
+        if self.input_limit.is_some_and(|limit| tokens > limit) {
+            return Err(self.failure(Disposition::ContextLimit,None,None,false,format!("Prompt has {tokens} input tokens, above this run's strict prompt limit {}. No generation submitted; exact preflight retained at {}",self.input_limit.unwrap(),preflight.display())));
         }
         if routed
             .config
@@ -2420,6 +2433,35 @@ pub(crate) mod tests {
         );
         assert_eq!(model.spent.load(Ordering::Relaxed), 2);
         assert_eq!(mock.requests.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn run_prompt_limit_blocks_before_reservation_and_admits_its_exact_boundary() {
+        for tokens in [6001, 6000] {
+            let mock = Mock::new(vec![Reply::Complete(200, SUCCESS)]);
+            let dir = tempfile::tempdir().unwrap();
+            let request = prompt("Synthetic bounded reading request");
+            let key = counted(dir.path(), &request, tokens);
+            let model = mock
+                .model(dir.path(), 1, 14_000)
+                .with_input_limit(6000)
+                .unwrap();
+            let result = model.forward(&model.http, &request).await;
+            let admitted = tokens == 6000;
+            assert_eq!(result.is_ok(), admitted);
+            assert_eq!(model.budget.spent(), usize::from(admitted));
+            assert_eq!(mock.requests.lock().unwrap().len(), usize::from(admitted));
+            let proof = artifact(dir.path(), &key, "preflight.json");
+            assert_eq!(proof["configured_prompt_limit"], 6000);
+            assert_eq!(proof["admitted"], admitted);
+            if !admitted {
+                let failure = disposition(result.as_ref().unwrap_err()).unwrap();
+                assert_eq!(failure.disposition, Disposition::ContextLimit);
+                assert!(!failure.generation_submitted);
+                assert!(!dir.path().join(format!("{key}.request.json")).exists());
+                assert!(model.limiter.state.lock().await.window.is_empty());
+            }
+        }
     }
 
     #[tokio::test]

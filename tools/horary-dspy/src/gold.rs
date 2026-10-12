@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use dsrust::{
-    Example, Module, Predict,
+    Example, Module, Predict, SignatureSpec,
     example::Prediction,
     lm::{DynChatModel, LmConfig},
 };
@@ -15,6 +15,8 @@ use std::{collections::BTreeMap, fs, path::Path, sync::Arc, time::Duration};
 
 pub const AUTHOR_CALL_CAP: usize = 3360;
 pub const OUTPUT_FIELDS: [&str; 5] = ["status", "answer", "analysis", "evidence", "unresolved"];
+pub const STUDENT_INPUT_LIMIT: usize = 6000;
+pub const CONCISE_BASELINE: &str = "Apply the declared family procedure in source_text to this actual question, accepted consultation and native chart. Preserve parties, roles, direction, supplied values and genuine calculation limits. Return ONLY the five requested field markers, starting with status: answer, need_information or method_limit. Give a useful qualified answer, decisive source-supported reasons and supporting native eIDs; keep the complete worked reading within 300 words. Do not echo inputs, invent missing facts, force an exact date or substitute a rubric/checklist. The demonstration is a worked example, not evidence for the current chart.";
 const AUTHOR_INSTRUCTION: &str = "Produce the actual worked reading, not a rubric or checklist. Preserve the original enquiry and declared parties/capacities. Bind ordinary/turned/natural roles to supplied cusps and literal planets, separating role house from physical house and resolving Moon/shared-ruler collisions. Weigh relevant planet condition/motion and directed mixed receptions. Apply this branch's event/state/location/choice procedure: for events assess relevant occasions, prevention and order, without inventing intermediary identities, missing calculations or later receptions. An approximate or after-ingress candidate is conditional, not automatic occurrence. Time only after establishing an event using moving-perfection travel and defensible contextual units; astronomicalHours are not civil timing. Give a useful qualified direct answer first, concise decisive reasons in analysis, actual native IDs and printed citations in evidence, and genuine remaining limits in unresolved. Honest unavailable calculations can coexist with a useful provisional judgment. Do not force status=answer or exact dates. Return ONLY status, answer, analysis, evidence, unresolved in the requested field markers; no input echoes, rubric reproduction or hidden reasoning transcript. This is a declared component consultation, not an observed application journey.";
 const REVIEW_INSTRUCTION: &str = "Review this actual worked reading against the supplied native rows and full primary book context. Reference_answer and rubric are distinct: the reference is an independently reviewed worked answer, the rubric is a set of criteria. During reference authoring no previous approved reference exists, so assess the proposed answer independently. Accept substantive equivalent readings and legitimate source-supported alternatives, not verbatim matching. Judge correct parties/roles, actual planet-bound conditions, directed/mixed receptions, this branch's relevant procedure and prevention, defensible timing and a coherent useful answer with material limits. Do not require absent calculations, every unrelated technique or every rubric sentence. Do not force an aspect for state/quality questions, exact calendar precision or status=answer. Do not fail a correct reading solely for Frawley's contextual love metaphor or style. Classification/extraction are supplied component inputs and unobserved here: only reading and answer_quality decide passed. If original rubric/software coverage expectations conflict with primary source or available calculations, preserve and identify that conflict in feedback, rather than falsifying the worked answer.";
 
@@ -28,6 +30,18 @@ pub struct WorkedAnswer {
     pub unresolved: String,
 }
 impl WorkedAnswer {
+    fn word_count(&self) -> usize {
+        [
+            &self.status,
+            &self.answer,
+            &self.analysis,
+            &self.evidence,
+            &self.unresolved,
+        ]
+        .into_iter()
+        .map(|field| field.split_whitespace().count())
+        .sum()
+    }
     pub fn from_prediction(prediction: &Prediction) -> Result<Self> {
         serde_json::from_value(json!({
             "status":optimize::text(prediction,"status")?,"answer":optimize::text(prediction,"answer")?,
@@ -548,6 +562,231 @@ fn labeled_predictor(method: &str, labels: &[Example], count: usize) -> Result<P
     Ok(predictor)
 }
 
+fn canonical_review_inputs(example: &Example) -> Result<Example> {
+    let fields: Vec<(String, String)> = serde_json::from_value(
+        example
+            .get("__review_inputs")
+            .cloned()
+            .context("No canonical input witness for concise presentation")?,
+    )?;
+    ensure!(
+        fields.len() == 4
+            && ["source_text", "question", "consultation", "chart_evidence"]
+                .iter()
+                .all(|name| fields.iter().filter(|(field, _)| field == name).count() == 1),
+        "Canonical review witness must contain exactly the four declared inputs"
+    );
+    Ok(Example::new(
+        fields
+            .iter()
+            .map(|(name, value)| (name.clone(), Value::String(value.clone()))),
+    )
+    .with_inputs(["source_text", "question", "consultation", "chart_evidence"]))
+}
+
+pub(crate) fn verify_concise_fixture(example: &Example, method: &str) -> Result<()> {
+    let canonical = canonical_review_inputs(example)?;
+    ensure!(
+        catalogue::concise_reader_inputs(&canonical, method)?.rendered()
+            == example.inputs()?.rendered(),
+        "Concise reader input does not match its canonical native/source witness"
+    );
+    Ok(())
+}
+
+fn concise_fixtures(fixtures: &mut [Fixture], method: &str) -> Result<()> {
+    for fixture in fixtures {
+        let original = fixture.example.inputs()?;
+        let projected = catalogue::concise_reader_inputs(&original, method)?;
+        fixture
+            .example
+            .set("__review_inputs", json!(original.rendered()));
+        fixture
+            .example
+            .set("__concise_student_projection", json!(true));
+        for (name, value) in projected.fields() {
+            fixture.example.set(name, value.clone());
+        }
+        verify_concise_fixture(&fixture.example, method)?;
+    }
+    Ok(())
+}
+
+fn concise_predictor(method: &str, labels: &[Example], count: usize) -> Result<Predict> {
+    let mut predictor = labeled_predictor(method, labels, count)?;
+    predictor.signature.instructions = CONCISE_BASELINE.into();
+    predictor = predictor.with_config(LmConfig {
+        temperature: Some(0.),
+        max_tokens: Some(2048),
+        ..Default::default()
+    });
+    Ok(predictor)
+}
+
+async fn concise_label(
+    fixtures: &[Fixture],
+    method: &str,
+    book: &Book,
+    teacher: Arc<dyn DynChatModel>,
+    directory: &Path,
+) -> Result<Vec<Example>> {
+    fs::create_dir(directory)?;
+    let fixture = fixtures
+        .iter()
+        .find(|fixture| fixture.split == "train")
+        .context("No original TRAIN example for the worked demo")?;
+    let canonical = canonical_review_inputs(&fixture.example)?;
+    let reference: WorkedAnswer = serde_json::from_str(
+        fixture
+            .example
+            .get("__reference_answer")
+            .and_then(Value::as_str)
+            .context("No approved full worked answer")?,
+    )?;
+    let source = catalogue::reference_reader_source(book, method)?;
+    let mut inputs = canonical.clone();
+    inputs.set("source_text", json!(&source));
+    let mut writer = author(method, teacher.clone(), None)?;
+    writer.signature.instructions.push_str(&format!("\n\nCreate a concise actual worked version of this independently approved TRAIN reference. Keep the original question/parties, decisive native testimony and material limits. Use at most 250 words TOTAL across the five output fields. This is not a rubric or checklist. Do not invent a stronger verdict, drop decisive contrary evidence or copy input fields. APPROVED FULL REFERENCE DATA:\n{}",serde_json::to_string(&reference)?));
+    let mut trace = Vec::new();
+    let proposed = writer.forward_traced(inputs, &mut trace).await?;
+    crate::queue::write_json_atomic(&directory.join("author-trace.json"), &json!(trace.iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>()))?;
+    let answer = WorkedAnswer::from_prediction(&proposed)?;
+    crate::queue::write_json_atomic(&directory.join("answer.json"), &json!(answer))?;
+    ensure!(
+        answer.word_count() <= 250,
+        "Received worked demo exceeds the fixed 250-word limit; do not truncate it"
+    );
+    let native = optimize::reading_native_failures(&canonical, &proposed)?;
+    crate::queue::write_json_atomic(
+        &directory.join("native-check.json"),
+        &json!({"failures":native}),
+    )?;
+    ensure!(
+        native.is_empty(),
+        "Concise worked demo has native output/citation failure"
+    );
+    let mut judge = optimize::plain(signatures::JudgeFunction::signature(), teacher);
+    judge.signature.instructions = REVIEW_INSTRUCTION.into();
+    judge = judge.with_config(LmConfig {
+        max_tokens: Some(8192),
+        temperature: Some(0.),
+        ..Default::default()
+    });
+    let review = judge
+        .forward(review_input(
+            &canonical,
+            &answer,
+            fixture
+                .example
+                .get("expected")
+                .context("No private criteria")?,
+            &source,
+            Some(&reference),
+        )?)
+        .await?;
+    crate::queue::write_json_atomic(&directory.join("review.json"), &review_fields(&review))?;
+    ensure!(
+        review_pass(&review)?,
+        "Concise actual worked demo failed independent source/answer review"
+    );
+    let label = answer.labeled_example(&fixture.example.inputs()?)?;
+    crate::queue::write_json_atomic(
+        &directory.join("label.json"),
+        &json!(label.fields().collect::<Vec<_>>()),
+    )?;
+    let displayed_demo = crate::demo::compact(&label)?;
+    crate::queue::write_json_atomic(
+        &directory.join("demonstration.json"),
+        &json!(displayed_demo.fields().collect::<Vec<_>>()),
+    )?;
+    crate::queue::write_json_atomic(
+        &directory.join("source.json"),
+        &json!({"case_id":fixture.example.get("case_id"),"split":"train","fixture_digest":optimize::fixtures_digest(fixtures)?,"book_sha256":crate::book::OCR_SHA256,"teacher_source_sha256":google::digest(&source),"canonical_input_sha256":optimize::input_key(&canonical)?,"projected_input_sha256":optimize::input_key(&fixture.example.inputs()?)?,"demonstration_input_sha256":optimize::input_key(&displayed_demo.inputs()?)?,"reference_answer_sha256":google::digest(serde_json::to_vec(&reference)?),"answer_sha256":google::digest(fs::read(directory.join("answer.json"))?),"review_sha256":google::digest(fs::read(directory.join("review.json"))?),"label_sha256":google::digest(fs::read(directory.join("label.json"))?),"demonstration_sha256":google::digest(fs::read(directory.join("demonstration.json"))?),"reading":"pass","answer_quality":"pass","max_output_words":250,"full_reference_preserved":true,"live_chart_evidence_filtered":false,"demo_evidence_subset_declared":true,"rubrics_are_not_demonstrations":true}),
+    )?;
+    Ok(vec![label])
+}
+
+fn load_concise_label(
+    fixtures: &[Fixture],
+    book: &Book,
+    method: &str,
+    directory: &Path,
+) -> Result<Vec<Example>> {
+    let source: Value = serde_json::from_slice(&fs::read(directory.join("source.json"))?)?;
+    ensure!(
+        source["fixture_digest"] == optimize::fixtures_digest(fixtures)?
+            && source["book_sha256"] == crate::book::OCR_SHA256
+            && source["teacher_source_sha256"]
+                == google::digest(catalogue::reference_reader_source(book, method)?),
+        "Prepared concise demo source/dataset differs"
+    );
+    let fixture = fixtures
+        .iter()
+        .find(|f| f.split == "train" && f.example.get("case_id") == Some(&source["case_id"]))
+        .context("Prepared concise demo is not an original TRAIN case")?;
+    let canonical = canonical_review_inputs(&fixture.example)?;
+    ensure!(
+        source["canonical_input_sha256"] == optimize::input_key(&canonical)?
+            && source["projected_input_sha256"] == optimize::input_key(&fixture.example.inputs()?)?,
+        "Prepared concise demo inputs differ"
+    );
+    let reference: WorkedAnswer = serde_json::from_str(
+        fixture
+            .example
+            .get("__reference_answer")
+            .and_then(Value::as_str)
+            .context("No full reference")?,
+    )?;
+    ensure!(
+        source["reference_answer_sha256"] == google::digest(serde_json::to_vec(&reference)?),
+        "Prepared full reference differs"
+    );
+    for file in ["answer", "review", "label", "demonstration"] {
+        ensure!(
+            source[format!("{file}_sha256")]
+                == google::digest(fs::read(directory.join(format!("{file}.json")))?),
+            "Prepared concise {file} drift"
+        );
+    }
+    let answer: WorkedAnswer = serde_json::from_slice(&fs::read(directory.join("answer.json"))?)?;
+    ensure!(
+        answer.word_count() <= 250,
+        "Prepared worked demo exceeds 250 words"
+    );
+    let prediction = Prediction::new(
+        answer.labeled_example(&canonical)?.labels()?,
+        "Exact received concise worked answer",
+    );
+    ensure!(
+        optimize::reading_native_failures(&canonical, &prediction)?.is_empty(),
+        "Prepared worked demo has absent native citations or invalid status"
+    );
+    let review: Value = serde_json::from_slice(&fs::read(directory.join("review.json"))?)?;
+    ensure!(
+        review["passed"] == true
+            && review["reading"] == "pass"
+            && review["answer_quality"] == "pass",
+        "Prepared demo review did not pass"
+    );
+    let label = answer.labeled_example(&fixture.example.inputs()?)?;
+    ensure!(
+        json!(label.fields().collect::<Vec<_>>())
+            == serde_json::from_slice::<Value>(&fs::read(directory.join("label.json"))?)?,
+        "Prepared label differs from actual worked answer"
+    );
+    let displayed_demo = crate::demo::compact(&label)?;
+    ensure!(
+        source["demonstration_input_sha256"] == optimize::input_key(&displayed_demo.inputs()?)?
+            && json!(displayed_demo.fields().collect::<Vec<_>>())
+                == serde_json::from_slice::<Value>(&fs::read(
+                    directory.join("demonstration.json")
+                )?)?,
+        "Prepared demonstration subset differs"
+    );
+    Ok(vec![label])
+}
+
 async fn count_labeled_inputs(
     fixtures: &[Fixture],
     method: &str,
@@ -558,7 +797,11 @@ async fn count_labeled_inputs(
     student: &StudentSelection<'_>,
 ) -> Result<Value> {
     fs::create_dir(directory)?;
-    let predictor = labeled_predictor(method, labels, 2)?;
+    let predictor = if student.concise {
+        concise_predictor(method, labels, usize::from(!labels.is_empty()))?
+    } else {
+        labeled_predictor(method, labels, 2)?
+    };
     let requests = preflight::reader_requests(fixtures, &predictor)?;
     crate::queue::write_json_atomic(&directory.join("requests.json"), &json!(requests))?;
     let limit = if student.local_url.is_some() {
@@ -587,13 +830,18 @@ async fn count_labeled_inputs(
         let tokens = count["input_tokens"]
             .as_u64()
             .context("No exact provider count")? as usize;
+        let output = if student.concise { 2048 } else { 8192 };
         ensure!(
-            tokens.saturating_add(8192) <= limit,
-            "Two worked examples and generation do not fit the listed context"
+            tokens.saturating_add(output) <= limit,
+            "Worked examples and generation do not fit the listed context"
         );
-        counts.push(json!({"case_id":row["case_id"],"request_sha256":row["request_sha256"],"input_tokens":tokens,"generation_tokens":8192,"fits":true}));
+        ensure!(
+            !student.concise || tokens <= STUDENT_INPUT_LIMIT,
+            "Student request {index} has {tokens} input tokens, above fixed {STUDENT_INPUT_LIMIT}; no generation submitted"
+        );
+        counts.push(json!({"case_id":row["case_id"],"request_sha256":row["request_sha256"],"input_tokens":tokens,"generation_tokens":output,"fits":true}));
     }
-    let result = json!({"method":method,"optimizer":"upstream LabeledFewShot","labeled_training_cases":labels.len(),"demos":2,"input_context_limit":limit,"generation_tokens":8192,"counts":counts,"generation_submitted":false,"reference_and_rubric_private":true,"resident_tokenizer":student.local_url.is_some()});
+    let result = json!({"method":method,"optimizer":"upstream LabeledFewShot","labeled_training_cases":labels.len(),"demos":if student.concise{usize::from(!labels.is_empty())}else{2},"input_context_limit":limit,"strict_prompt_limit":if student.concise{Some(STUDENT_INPUT_LIMIT)}else{None},"generation_tokens":if student.concise{2048}else{8192},"counts":counts,"generation_submitted":false,"reference_and_rubric_private":true,"resident_tokenizer":student.local_url.is_some()});
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     Ok(result)
 }
@@ -602,29 +850,177 @@ pub struct StudentSelection<'a> {
     pub local_url: Option<&'a str>,
     pub model: &'a str,
     pub prior_closure: Option<&'a Path>,
+    pub concise: bool,
+    pub prepare_only: bool,
+    pub prepared: Option<&'a Path>,
 }
 
-fn inherited_consumer_calls(path: Option<&Path>) -> Result<(usize, usize, Value)> {
+fn completed_teacher_seals(directory: &Path, ignored_key: Option<&str>) -> Result<Value> {
+    let mut operations = Vec::new();
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        ensure!(
+            entry.file_type()?.is_dir()
+                && name.len() == 64
+                && name.bytes().all(|b| b.is_ascii_hexdigit()),
+            "Unexpected preparation teacher carrier"
+        );
+        if Some(name.as_str()) == ignored_key {
+            continue;
+        }
+        let path = entry.path();
+        ensure!(
+            serde_json::from_slice::<Value>(&fs::read(path.join("exit.json"))?)?["code"] == 0,
+            "Preparation teacher did not complete"
+        );
+        codex::verify_events(&fs::read_to_string(path.join("events.jsonl"))?)?;
+        let mut files = BTreeMap::new();
+        for file in [
+            "request.json",
+            "prompt.txt",
+            "answer.txt",
+            "events.jsonl",
+            "exit.json",
+            "stderr.log",
+            "response.json",
+        ] {
+            files.insert(file, google::digest(fs::read(path.join(file))?));
+        }
+        operations.push(json!({"source":path,"sealed_files":files}));
+    }
+    Ok(json!(operations))
+}
+
+fn prepared_consumption(
+    directory: &Path,
+    ancestry: &Value,
+    author_plan_sha: &str,
+    codex_path: &Path,
+) -> Result<(usize, usize, Value)> {
+    let plan_bytes = fs::read(directory.join("plan.json"))?;
+    let plan: Value = serde_json::from_slice(&plan_bytes)?;
+    ensure!(
+        plan["concise_student"] == true
+            && plan["prepare_student_only"] == true
+            && plan["method_order"] == json!(["contact"])
+            && plan["author_plan_sha256"] == author_plan_sha
+            && plan["book_sha256"] == crate::book::OCR_SHA256
+            && plan["executable_sha256"] == google::digest(fs::read(std::env::current_exe()?)?)
+            && plan["teaching_sources_sha256"] == json!(optimize::teaching_sources())
+            && plan["codex_executable_sha256"] == google::digest(fs::read(codex_path)?)
+            && plan["prior_consumer"] == *ancestry
+            && plan["per_family_physical_student_cap"] == 64
+            && plan["per_family_physical_teacher_cap"] == 80,
+        "Prepared concise baseline/source/ancestry differs"
+    );
+    let result_bytes = fs::read(directory.join("result.json"))?;
+    let result: Value = serde_json::from_slice(&result_bytes)?;
+    let family = &result["families"][0];
+    ensure!(
+        result["families"]
+            .as_array()
+            .is_some_and(|rows| rows.len() == 1)
+            && family["status"] == "prepared"
+            && family["result"]["phase"] == "prepared_concise_student"
+            && family["result"]["student_calls"] == 0
+            && family["result"]["preflight"]["strict_prompt_limit"] == STUDENT_INPUT_LIMIT
+            && family["result"]["preflight"]["counts"]
+                .as_array()
+                .is_some_and(|rows| rows.len() == 20
+                    && rows.iter().all(|row| row["fits"] == true
+                        && row["input_tokens"]
+                            .as_u64()
+                            .is_some_and(|tokens| tokens <= STUDENT_INPUT_LIMIT as u64))),
+        "Prepared family lacks twenty admitted exact requests"
+    );
+    let student = result["student_physical_calls"]
+        .as_u64()
+        .context("No prepared student deductions")? as usize;
+    let teacher = result["teacher_physical_calls"]
+        .as_u64()
+        .context("No prepared teacher deductions")? as usize;
+    ensure!(
+        student == ancestry["student_physical_calls"].as_u64().unwrap_or(0) as usize
+            && teacher <= 80,
+        "Prepared physical caps differ"
+    );
+    let operations = family["result"]["completed_teacher_operations"].clone();
+    let completed = operations
+        .as_array()
+        .context("No completed preparation teacher carriers")?;
+    ensure!(
+        teacher
+            == ancestry["teacher_physical_calls"].as_u64().unwrap_or(0) as usize + completed.len(),
+        "Prepared teacher deductions differ from actual completed operations"
+    );
+    for operation in completed {
+        let path = Path::new(
+            operation["source"]
+                .as_str()
+                .context("No preparation operation source")?,
+        );
+        ensure!(
+            path.parent() == Some(directory.join("teacher/contact").as_path()),
+            "Prepared operation lies outside its teacher cache"
+        );
+        for (name, sha) in operation["sealed_files"]
+            .as_object()
+            .context("No paid preparation seals")?
+        {
+            ensure!(
+                Path::new(name)
+                    .components()
+                    .all(|part| matches!(part, std::path::Component::Normal(_)))
+                    && sha == &json!(google::digest(fs::read(path.join(name))?)),
+                "Preparation paid carrier drift: {name}"
+            );
+        }
+    }
+    Ok((
+        student,
+        teacher,
+        json!({"path":directory,"plan_sha256":google::digest(plan_bytes),"result_sha256":google::digest(result_bytes),"completed_teacher_operations":operations,"student_physical_calls":student,"teacher_physical_calls":teacher,"scores_imported":false}),
+    ))
+}
+
+fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize, usize, Value)> {
     let Some(path) = path else {
         return Ok((0, 0, Value::Null));
     };
     let bytes = fs::read(path)?;
     let closure: Value = serde_json::from_slice(&bytes)?;
-    ensure!(
-        closure["exact_pids_absent"] == true
-            && closure["uncertain_requests"] == 0
-            && closure["student_normalized_outputs"] == 0
-            && closure["semantic_reviews"] == 0
-            && closure["third_attempt_wait_generation_submitted"] == false,
-        "Only a settled, explicitly stopped no-output consumer can supply deductions"
-    );
-    ensure!(
-        closure["student_physical_calls"] == 2
-            && closure["teacher_physical_calls"] == 0
-            && closure["original_caps"]["student_per_family"] == 64
-            && closure["original_caps"]["teacher_per_family"] == 80,
-        "Prior consumer bounds or deductions differ"
-    );
+    let stopped_local = closure["student_physical_calls_cumulative"] == 3;
+    if stopped_local {
+        ensure!(
+            concise
+                && closure["exact_pids_absent"] == true
+                && closure["reviewer_process_absent"] == true
+                && closure["student_physical_calls_fresh"] == 1
+                && closure["student_physical_calls_inherited_hosted"] == 2
+                && closure["teacher_physical_calls_fresh"] == 1
+                && closure["student_normalized_outputs"] == 1
+                && closure["semantic_reviews"] == 0
+                && closure["unsettled_teacher_operations"] == 1,
+            "Only the explicitly stopped large-input comparison can supply these deductions to a fresh concise baseline"
+        );
+    } else {
+        ensure!(
+            closure["exact_pids_absent"] == true
+                && closure["uncertain_requests"] == 0
+                && closure["student_normalized_outputs"] == 0
+                && closure["semantic_reviews"] == 0
+                && closure["third_attempt_wait_generation_submitted"] == false,
+            "Only a settled, explicitly stopped no-output consumer can supply deductions"
+        );
+        ensure!(
+            closure["student_physical_calls"] == 2
+                && closure["teacher_physical_calls"] == 0
+                && closure["original_caps"]["student_per_family"] == 64
+                && closure["original_caps"]["teacher_per_family"] == 80,
+            "Prior consumer bounds or deductions differ"
+        );
+    }
     let root = Path::new(
         closure["campaign"]
             .as_str()
@@ -645,6 +1041,27 @@ fn inherited_consumer_calls(path: Option<&Path>) -> Result<(usize, usize, Value)
             digest == &json!(google::digest(fs::read(root.join(relative))?)),
             "Stopped carrier drift: {name}"
         );
+    }
+    if stopped_local {
+        let key = closure["reviewer_key"]
+            .as_str()
+            .context("No unsettled reviewer key")?;
+        ensure!(
+            key.len() == 64 && key.bytes().all(|b| b.is_ascii_hexdigit()),
+            "Malformed unsettled reviewer key"
+        );
+        let teacher = root.join("run/teacher/contact").join(key);
+        ensure!(
+            teacher.join("request.json").is_file()
+                && !teacher.join("response.json").exists()
+                && !teacher.join("exit.json").exists(),
+            "Stopped reviewer is not the recorded unsettled request"
+        );
+        return Ok((
+            3,
+            1,
+            json!({"path":path,"sha256":google::digest(bytes),"student_physical_calls":3,"teacher_physical_calls":1,"outputs_and_scores_imported":false,"unsettled_teacher_guard":teacher,"unsettled_teacher_key":key}),
+        ));
     }
     let results = closure["results"]
         .as_array()
@@ -739,13 +1156,35 @@ pub async fn optimize_families(
         vec![selected]
     };
     ensure!(
-        student.prior_closure.is_none() || (student.local_url.is_some() && methods[0] == "contact"),
+        student.prior_closure.is_none()
+            || ((student.local_url.is_some() || student.concise) && methods[0] == "contact"),
         "Stopped hosted Contact work is deducted only from a fresh local Contact-first baseline"
     );
     let (mut student_spent, mut teacher_spent, ancestry) =
-        inherited_consumer_calls(student.prior_closure)?;
+        inherited_consumer_calls(student.prior_closure, student.concise)?;
+    ensure!(
+        !student.prepare_only || (student.concise && selected != "all"),
+        "Concise teacher/admission preparation requires one explicitly selected family"
+    );
+    ensure!(
+        student.prepared.is_none() || student.concise,
+        "Prepared student demonstrations require the concise baseline"
+    );
     fs::create_dir(directory)?;
     let author_plan = fs::read(campaign.join("prepared/plan.json"))?;
+    let prepared_receipt = if let Some(prepared) = student.prepared {
+        let (prior_student, prior_teacher, receipt) = prepared_consumption(
+            prepared,
+            &ancestry,
+            &google::digest(&author_plan),
+            codex_path,
+        )?;
+        student_spent = prior_student;
+        teacher_spent = prior_teacher;
+        receipt
+    } else {
+        Value::Null
+    };
     let listing = if let Some(url) = student.local_url {
         local::validate_url(url)?;
         ensure!(
@@ -763,12 +1202,16 @@ pub async fn optimize_families(
             .await?;
         let rows = slots.as_array().context("No resident slots")?;
         ensure!(
-            rows.len() == 1 && rows[0]["is_processing"] == false,
-            "Resident gold comparison needs its one idle slot"
+            !rows.is_empty() && rows.iter().all(|row| row["is_processing"] == false),
+            "Resident gold comparison requires idle reported slots"
         );
-        let context = rows[0]["n_ctx"]
-            .as_u64()
-            .context("No resident context limit")?;
+        let context = rows
+            .iter()
+            .map(|row| row["n_ctx"].as_u64().context("No resident context limit"))
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .min()
+            .unwrap();
         ensure!(context > 8192, "Resident context cannot fit a reading");
         let models: Value = http
             .get(url.trim_end_matches('/').to_owned() + "/models")
@@ -788,9 +1231,13 @@ pub async fn optimize_families(
     } else {
         google::STUDENT
     };
-    let plan = json!({"method_order":methods,"author_plan_sha256":google::digest(&author_plan),"book_sha256":crate::book::OCR_SHA256,"executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),"teaching_sources_sha256":optimize::teaching_sources(),"per_family_physical_student_cap":64,"per_family_physical_teacher_cap":80,"cumulative_student_cap":64*methods.len(),"cumulative_teacher_cap":80*methods.len(),"soft_metric_calls":24,"stock_optimizers":["LabeledFewShot","GEPA"],"demos":2,"original_split":"12/4/4","student":student_id,"student_local_url":student.local_url,"local_request_timeout_seconds":if student.local_url.is_some(){Some(600)}else{None},"prior_consumer":ancestry,"student_output_tokens":8192,"teacher":"codex-saved-login-tool-free-no-override","teacher_output_tokens":8192,"google_rate_hint":if student.local_url.is_none(){Some(14000)}else{None},"student_concurrency":1,"approval_gate":approval_gate,"automatic_uncertain_replay":false,"application_promoted":false});
+    let plan = json!({"method_order":methods,"author_plan_sha256":google::digest(&author_plan),"book_sha256":crate::book::OCR_SHA256,"executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),"teaching_sources_sha256":optimize::teaching_sources(),"codex_executable_sha256":google::digest(fs::read(codex_path)?),"per_family_physical_student_cap":64,"per_family_physical_teacher_cap":80,"cumulative_student_cap":64*methods.len(),"cumulative_teacher_cap":80*methods.len(),"soft_metric_calls":24,"stock_optimizers":["LabeledFewShot","GEPA"],"demos":if student.concise{1}else{2},"original_split":"12/4/4","student":student_id,"student_local_url":student.local_url,"local_request_timeout_seconds":if student.local_url.is_some(){Some(600)}else{None},"prior_consumer":ancestry,"prepared_student":prepared_receipt,"inherited_student_physical_calls":student_spent,"inherited_teacher_physical_calls":teacher_spent,"concise_student":student.concise,"prepare_student_only":student.prepare_only,"strict_student_input_limit":if student.concise{Some(STUDENT_INPUT_LIMIT)}else{None},"student_output_tokens":if student.concise{2048}else{8192},"teacher":"codex-saved-login-tool-free-no-override","teacher_output_tokens":8192,"google_rate_hint":if student.local_url.is_none(){Some(14000)}else{None},"google_probe_ceiling":if student.concise && student.local_url.is_none(){Some(16000)}else{None},"student_concurrency":1,"approval_gate":approval_gate,"automatic_uncertain_replay":false,"application_promoted":false,"score_scope":"Declared reading component inputs; not extracted original-message application journeys"});
     crate::queue::write_json_atomic(&directory.join("plan.json"), &plan)?;
-    let limiter = google::RateLimiter::new(14000)?;
+    let limiter = if student.concise {
+        google::RateLimiter::with_probe_ceiling(14000, 16000)?
+    } else {
+        google::RateLimiter::new(14000)?
+    };
     let mut results = Vec::new();
     for (family_index, method) in methods.iter().enumerate() {
         let family_gold = campaign.join("run").join(method).join("result.json");
@@ -838,20 +1285,57 @@ pub async fn optimize_families(
             },
             student_spent,
         )?;
-        let teacher_budget = google::CallBudget::seeded(teacher_spent + 80, teacher_spent)?;
+        let teacher_budget = google::CallBudget::seeded(
+            if family_index == 0 {
+                80
+            } else {
+                teacher_spent + 80
+            },
+            teacher_spent,
+        )?;
         let outcome=async {
-            let (fixtures,labels)=reviewed_family(examples,&book,campaign,method)?;
+            let (mut fixtures,mut labels)=reviewed_family(examples,&book,campaign,method)?;
+            let teacher_directory=directory.join("teacher").join(method);
+            if let Some(guard)=ancestry["unsettled_teacher_guard"].as_str().filter(|_|*method=="contact") {
+                let source=Path::new(guard);let destination=teacher_directory.join(source.file_name().context("No old reviewer key")?);
+                fs::create_dir_all(&destination)?;
+                for entry in fs::read_dir(source)? {let entry=entry?;ensure!(entry.file_type()?.is_file(),"Old unobserved guard must contain files only");fs::copy(entry.path(),destination.join(entry.file_name()))?;}
+                crate::queue::write_json_atomic(&family.join("unsettled-review-guard.json"),&json!({"source":source,"destination":destination,"resubmission_allowed":false,"semantic_score_imported":false}))?;
+            }
+            if *method=="contact" && student.prepared.is_some() {
+                for operation in prepared_receipt["completed_teacher_operations"].as_array().context("No prepared paid operations")? {
+                    codex::import_completed(Path::new(operation["source"].as_str().context("No prepared paid operation path")?),&teacher_directory)?;
+                }
+            }
+            let teacher:Arc<dyn DynChatModel>=Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory,80)?.with_budget(teacher_budget.clone()));
+            if student.concise {
+                concise_fixtures(&mut fixtures,method)?;
+                let initial=count_labeled_inputs(&fixtures,method,&[],&http,&listing,&family.join("authored-preflight"),&student).await?;
+                ensure!(initial["counts"].as_array().is_some_and(|rows|rows.len()==20),"Concise current-case preflight must cover all twenty original cases");
+                labels=if let Some(prepared)=student.prepared.filter(|_|*method=="contact") {load_concise_label(&fixtures,&book,method,&prepared.join("contact/concise-demo"))?} else {concise_label(&fixtures,method,&book,teacher.clone(),&family.join("concise-demo")).await?};
+            }
             let preflight=count_labeled_inputs(&fixtures,method,&labels,&http,&listing,&family.join("preflight"),&student).await?;
-            let selected:Arc<dyn DynChatModel>=if let Some(url)=student.local_url { Arc::new(local::LocalStudent::new(url,student.model,&directory.join("student"))?.with_budget(student_budget.clone()).with_timeout(600)?) } else {Arc::new(google::Google::from_listing(serde_json::from_value(listing["student"].clone())?,http.clone(),directory.join("student"),student_budget.clone(),limiter.clone())?)};
-            let models=runner::Models{student:selected,teacher:Arc::new(codex::Codex::new(codex_path.to_path_buf(),directory.join("teacher").join(method),80)?.with_budget(teacher_budget.clone())),student_id:student_id.into(),teacher_id:"codex-saved-login-tool-free-no-override".into()};
+            if student.prepare_only {
+                let operations=completed_teacher_seals(&directory.join("teacher").join(method),ancestry["unsettled_teacher_key"].as_str())?;
+                return Ok(json!({"phase":"prepared_concise_student","method":method,"fixture_digest":optimize::fixtures_digest(&fixtures)?,"demo_count":1,"input_limit":6000,"student_calls":0,"preflight":preflight,"teacher_physical_calls_total":teacher_budget.spent(),"completed_teacher_operations":operations}));
+            }
+            let selected:Arc<dyn DynChatModel>=if let Some(url)=student.local_url {
+                let mut local=local::LocalStudent::new(url,student.model,&family.join("student"))?.with_budget(student_budget.clone()).with_timeout(600)?;
+                if student.concise {local=local.with_input_limit(STUDENT_INPUT_LIMIT)?;}Arc::new(local)
+            } else {
+                let mut google=google::Google::from_listing(serde_json::from_value(listing["student"].clone())?,http.clone(),directory.join("student"),student_budget.clone(),limiter.clone())?;
+                if student.concise {google=google.with_input_limit(STUDENT_INPUT_LIMIT)?;}Arc::new(google)
+            };
+            let models=runner::Models{student:selected,teacher,student_id:student_id.into(),teacher_id:"codex-saved-login-tool-free-no-override".into()};
             crate::queue::write_json_atomic(&family.join("started.json"),&json!({"gold_bank_sha256":google::digest(fs::read(campaign.join("run").join(method).join("answers.jsonl"))?),"fixture_digest":optimize::fixtures_digest(&fixtures)?,"preflight":preflight,"inherited_student_physical_calls":student_spent,"inherited_teacher_physical_calls":teacher_spent,"caps_carried_without_reset":true}))?;
-            optimize::compile_direct_reader_from_gold(&fixtures,method,book.clone(),&models,&family.join("compile"),optimize::CompileOptions{max_metrics:24,bootstrap_demos:0},&reading::direct_reader_baseline(method)?,&labels,2).await
+            let baseline=if student.concise {CONCISE_BASELINE.to_owned()} else {reading::direct_reader_baseline(method)?};
+            optimize::compile_direct_reader_from_gold(&fixtures,method,book.clone(),&models,&family.join("compile"),optimize::CompileOptions{max_metrics:24,bootstrap_demos:0},&baseline,&labels,if student.concise{1}else{2}).await
         }.await;
         student_spent = student_budget.spent();
         teacher_spent = teacher_budget.spent();
         let status = match outcome {
             Ok(result) => {
-                json!({"method":method,"status":"complete","result":result,"student_physical_calls_total":student_spent,"teacher_physical_calls_total":teacher_spent,"application_promoted":false})
+                json!({"method":method,"status":if student.prepare_only{"prepared"}else{"complete"},"result":result,"student_physical_calls_total":student_spent,"teacher_physical_calls_total":teacher_spent,"application_promoted":false})
             }
             Err(error) => {
                 json!({"method":method,"status":"unqualified","error":error.to_string(),"student_physical_calls_total":student_spent,"teacher_physical_calls_total":teacher_spent,"uncertain_key_replayed":false,"semantic_zero_for_missing_work":false})
@@ -963,16 +1447,106 @@ mod tests {
         let mut value = json!({"campaign":directory.path(),"exact_pids_absent":true,"uncertain_requests":0,"student_normalized_outputs":0,"semantic_reviews":0,"third_attempt_wait_generation_submitted":false,"student_physical_calls":2,"teacher_physical_calls":0,"original_caps":{"student_per_family":64,"teacher_per_family":80},"sealed_files":{"received.json":google::digest(b"Synthetic fully received carrier")},"results":[{"physical_call":1,"response_complete":true,"http_status":429},{"physical_call":2,"response_complete":true,"http_status":429}]});
         let path = directory.path().join("closure.json");
         fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
-        let (student, teacher, receipt) = inherited_consumer_calls(Some(&path)).unwrap();
+        let (student, teacher, receipt) = inherited_consumer_calls(Some(&path), false).unwrap();
         assert_eq!((student, teacher), (2, 0));
         assert_eq!(receipt["outputs_and_scores_imported"], false);
         value["results"][1]["response_complete"] = json!(false);
         fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
-        assert!(inherited_consumer_calls(Some(&path)).is_err());
+        assert!(inherited_consumer_calls(Some(&path), false).is_err());
         value["results"][1]["response_complete"] = json!(true);
         value["uncertain_requests"] = json!(1);
         fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
-        assert!(inherited_consumer_calls(Some(&path)).is_err());
+        assert!(inherited_consumer_calls(Some(&path), false).is_err());
+    }
+
+    #[test]
+    fn stopped_large_input_consumer_charges_unknown_review_without_replaying_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let key = "a".repeat(64);
+        let teacher = directory.path().join("run/teacher/contact").join(&key);
+        fs::create_dir_all(&teacher).unwrap();
+        fs::write(teacher.join("request.json"), b"Synthetic unknown request").unwrap();
+        let relative = format!("run/teacher/contact/{key}/request.json");
+        let closure = json!({"campaign":directory.path(),"exact_pids_absent":true,"reviewer_process_absent":true,"student_physical_calls_fresh":1,"student_physical_calls_inherited_hosted":2,"student_physical_calls_cumulative":3,"teacher_physical_calls_fresh":1,"student_normalized_outputs":1,"semantic_reviews":0,"unsettled_teacher_operations":1,"reviewer_key":key,"sealed_files":{relative:google::digest(b"Synthetic unknown request")}});
+        let path = directory.path().join("closure.json");
+        fs::write(&path, serde_json::to_vec(&closure).unwrap()).unwrap();
+        assert!(inherited_consumer_calls(Some(&path), false).is_err());
+        let (student, teacher_count, ancestry) =
+            inherited_consumer_calls(Some(&path), true).unwrap();
+        assert_eq!((student, teacher_count), (3, 1));
+        assert_eq!(
+            ancestry["unsettled_teacher_guard"],
+            teacher.to_string_lossy().as_ref()
+        );
+        assert_eq!(ancestry["outputs_and_scores_imported"], false);
+        fs::write(teacher.join("response.json"), b"Unexpected replacement").unwrap();
+        assert!(inherited_consumer_calls(Some(&path), true).is_err());
+    }
+
+    #[test]
+    fn canonical_judge_inputs_stay_separate_from_projected_student_and_reference_labels() {
+        let canonical = dsrust::input! {source_text:"Canonical compact source",question:"Same actual question",consultation:"Canonical declared facts",chart_evidence:"Full original native table"};
+        let mut fixture = dsrust::input! {source_text:"Short procedure",question:"Same actual question",consultation:"Canonical declared facts",chart_evidence:"Finite concise chart"};
+        fixture.set("__review_inputs", json!(canonical.rendered()));
+        fixture.set("__reference_answer", json!("Private full worked answer"));
+        fixture.set("expected", json!("Private rubric"));
+        assert_eq!(
+            canonical_review_inputs(&fixture).unwrap().rendered(),
+            canonical.rendered()
+        );
+        let student = fixture.inputs().unwrap();
+        assert_eq!(student.len(), 4);
+        assert!(student.get("__reference_answer").is_none());
+        assert_ne!(
+            student.get("chart_evidence"),
+            canonical_review_inputs(&fixture)
+                .unwrap()
+                .get("chart_evidence")
+        );
+        fixture.set(
+            "__review_inputs",
+            json!([
+                ["source_text", "s"],
+                ["question", "q"],
+                ["consultation", "c"],
+                ["chart_evidence", "n"],
+                ["expected", "Do not send this rubric"]
+            ]),
+        );
+        assert!(canonical_review_inputs(&fixture).is_err());
+    }
+
+    #[test]
+    fn concise_native_domain_includes_all_three_tables_and_rejects_source_corruption() {
+        let chart = json!({"presentation":"concise-native-reader-1",
+            "facts":{"columns":["id","kind","label","native_detail"],"rows":[["e1","boundary","Limits","Exact supplied limits"]]},
+            "receptions":{"columns":["id","regarding_planet","regarded_planet","positive_qualities","negative_qualities"],"rows":[["e2","Mars","Saturn",["face"],["fall"]]]},
+            "events":{"columns":["id","endpoint1","endpoint2","aspect","within_current_signs","astronomical_hours","native_current_angular_gap_or_detail","motion"],"rows":[["e3","Moon","Mars","square",true,1.25,"13.369°",null]]}});
+        let mut input = dsrust::input! {chart_evidence:serde_json::to_string(&chart).unwrap()};
+        let mut worked = answer();
+        worked.evidence = "e1 e2 e3".into();
+        let prediction = Prediction::new(
+            worked.labeled_example(&input).unwrap().labels().unwrap(),
+            "Synthetic received reading",
+        );
+        assert!(
+            optimize::reading_native_failures(&input, &prediction)
+                .unwrap()
+                .is_empty()
+        );
+        for changed in ["duplicate", "header", "width"] {
+            let mut corrupt = chart.clone();
+            match changed {
+                "duplicate" => corrupt["events"]["rows"][0][0] = json!("e2"),
+                "header" => corrupt["receptions"]["columns"][0] = json!("guess"),
+                _ => corrupt["facts"]["rows"][0] = json!(["e1", "boundary"]),
+            };
+            input.set(
+                "chart_evidence",
+                json!(serde_json::to_string(&corrupt).unwrap()),
+            );
+            assert!(optimize::reading_native_failures(&input, &prediction).is_err());
+        }
     }
     #[test]
     fn source_gate_binds_complete_gold_records_and_their_received_answers() {

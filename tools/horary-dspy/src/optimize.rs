@@ -98,6 +98,90 @@ pub fn classification_label_failures(
     Ok(errors)
 }
 
+/// The finite native ID domain comes from declared rows, never prose citations.
+pub(crate) fn native_evidence_ids(chart: &Value) -> Result<std::collections::BTreeSet<String>> {
+    let mut ids = std::collections::BTreeSet::new();
+    let mut add = |id: &str| -> Result<()> {
+        ensure!(
+            id.strip_prefix('e').is_some_and(
+                |digits| !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+            ),
+            "Invalid native evidence ID {id}"
+        );
+        ensure!(
+            ids.insert(id.to_owned()),
+            "Duplicate native evidence ID {id}"
+        );
+        Ok(())
+    };
+    if chart["presentation"] == "concise-native-reader-1" {
+        for (name, columns) in [
+            ("facts", &["id", "kind", "label", "native_detail"][..]),
+            (
+                "receptions",
+                &[
+                    "id",
+                    "regarding_planet",
+                    "regarded_planet",
+                    "positive_qualities",
+                    "negative_qualities",
+                ][..],
+            ),
+            (
+                "events",
+                &[
+                    "id",
+                    "endpoint1",
+                    "endpoint2",
+                    "aspect",
+                    "within_current_signs",
+                    "astronomical_hours",
+                    "native_current_angular_gap_or_detail",
+                    "motion",
+                ][..],
+            ),
+        ] {
+            ensure!(
+                chart[name]["columns"] == json!(columns),
+                "Native {name} columns differ"
+            );
+            for row in chart[name]["rows"]
+                .as_array()
+                .with_context(|| format!("No native {name} rows"))?
+            {
+                let row = row
+                    .as_array()
+                    .with_context(|| format!("Malformed native {name} row"))?;
+                ensure!(
+                    row.len() == columns.len(),
+                    "Native {name} row width differs"
+                );
+                add(row[0].as_str().context("Native row ID is not text")?)?;
+            }
+        }
+    } else if let Some(table) = chart["facts"].as_str() {
+        let mut rows = table.lines();
+        ensure!(
+            rows.next() == Some("ID\tKIND\tLABEL\tCALCULATED TESTIMONY"),
+            "Native testimony header differs"
+        );
+        for row in rows {
+            let row = row.splitn(4, '\t').collect::<Vec<_>>();
+            ensure!(row.len() == 4, "Malformed native testimony row");
+            add(row[0])?;
+        }
+    } else if let Some(facts) = chart["native_facts"].as_array() {
+        for fact in facts {
+            add(fact["id"].as_str().context("Native fact lacks an ID")?)?;
+        }
+    }
+    ensure!(
+        !ids.is_empty(),
+        "Reading component lacks native evidence IDs"
+    );
+    Ok(ids)
+}
+
 /// Validate reading output against the exact supplied native chart only.
 pub fn reading_native_failures(input: &Example, prediction: &Prediction) -> Result<Vec<String>> {
     let mut errors = Vec::new();
@@ -107,27 +191,7 @@ pub fn reading_native_failures(input: &Example, prediction: &Prediction) -> Resu
             .and_then(Value::as_str)
             .context("No actual chart")?,
     )?;
-    let mut ids = std::collections::BTreeSet::new();
-    if let Some(table) = chart["facts"].as_str() {
-        ids.extend(
-            table
-                .lines()
-                .skip(1)
-                .filter_map(|row| row.split('\t').next())
-                .map(str::to_owned),
-        );
-    } else if let Some(facts) = chart["native_facts"].as_array() {
-        ids.extend(
-            facts
-                .iter()
-                .filter_map(|fact| fact["id"].as_str())
-                .map(str::to_owned),
-        );
-    }
-    ensure!(
-        !ids.is_empty(),
-        "Reading component lacks native evidence IDs"
-    );
+    let ids = native_evidence_ids(&chart)?;
     let pattern = regex::Regex::new(r"\be[0-9]+\b")?;
     for field in ["answer", "analysis", "evidence", "unresolved"] {
         for found in pattern.find_iter(text(prediction, field)?) {
@@ -434,7 +498,7 @@ impl Graded {
             errors.extend(reading_native_failures(&input, &prediction)?);
         }
         let mut review_input = dsrust::input! {
-            inputs:serde_json::to_string(&input.rendered())?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
+            inputs:serde_json::to_string(&example.get("__review_inputs").cloned().unwrap_or_else(||json!(input.rendered())))?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
         };
         if self.function != "reception" {
             review_input.set("function", json!(self.function));
@@ -1479,14 +1543,20 @@ async fn compile_fixtures_inner(
             function == "reading" && reader_baseline.is_some(),
             "Direct reader requires its declared reading baseline"
         );
+        let concise = fixtures.iter().all(|fixture| {
+            fixture.example.get("__concise_student_projection") == Some(&json!(true))
+        });
         ensure!(
             fixtures.iter().all(|fixture| {
-                fixture.example.get("source_text").and_then(Value::as_str) == Some(&source)
-                    && fixture
-                        .example
-                        .get("__review_source")
-                        .and_then(Value::as_str)
-                        == Some(&reference_source)
+                (if concise {
+                    crate::gold::verify_concise_fixture(&fixture.example, method).is_ok()
+                } else {
+                    fixture.example.get("source_text").and_then(Value::as_str) == Some(&source)
+                }) && fixture
+                    .example
+                    .get("__review_source")
+                    .and_then(Value::as_str)
+                    == Some(&reference_source)
             }),
             "Direct family reader requires the complete book-defined source union"
         );
@@ -1536,7 +1606,15 @@ async fn compile_fixtures_inner(
             predictor.config.max_tokens = Some(8192);
         }
         for predictor in program.named_predictors() {
-            predictor.config.max_tokens = Some(8192);
+            predictor.config.max_tokens = Some(
+                if fixtures.iter().all(|fixture| {
+                    fixture.example.get("__concise_student_projection") == Some(&json!(true))
+                }) {
+                    2048
+                } else {
+                    8192
+                },
+            );
         }
     }
     let optimizable_predictors = if let Some(baseline) = reader_baseline {
@@ -1630,7 +1708,7 @@ async fn compile_fixtures_inner(
         program.save(&directory.join("labeled.json"))?;
         crate::queue::write_json_atomic(
             &directory.join("labeled-source.json"),
-            &json!({"optimizer":"upstream LabeledFewShot", "demos":count,"labeled_training_cases":labels.len(),"source_text_omitted_only_in_demos":true,"rubrics_are_not_outputs":true,"student_generation_output_tokens":8192,"review_output_tokens":8192,"reference_answer_separate_from_rubric":true}),
+            &json!({"optimizer":"upstream LabeledFewShot", "demos":count,"labeled_training_cases":labels.len(),"source_text_omitted_only_in_demos":true,"rubrics_are_not_outputs":true,"student_generation_output_tokens":if fixtures.iter().all(|fixture|fixture.example.get("__concise_student_projection")==Some(&json!(true))){2048}else{8192},"review_output_tokens":8192,"reference_answer_separate_from_rubric":true}),
         )?;
     }
     program.save(&directory.join("baseline-program.json"))?;

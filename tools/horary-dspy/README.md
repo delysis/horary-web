@@ -42,6 +42,26 @@ its two physical quota rejections from the first family's original cap. The
 local model starts a distinct authored/labeled/selected baseline; no hosted
 answer, semantic score or optimizer state is imported.
 
+`--concise-student --prepare-student-only --method contact` creates a fresh
+student presentation: a short source-grounded procedure, finite native tables
+with every live evidence ID and originally supplied motion, and one actual
+TRAIN worked answer of at most 250 words. The teacher derives and independently
+reviews that answer using the full canonical chart, approved reference and book;
+the original gold remains intact. Exact token counts cover all twenty original
+cases first without a demo and then with the demo. Preparation submits no student
+generation. Reuse the approved label with `--prepared-student /preparation/run`;
+its completed teacher carriers and all physical deductions remain bound to the
+same source, input and original caps. The prior unsettled review remains blocked.
+
+Every concise student request, including a later GEPA rewrite, must pass an
+exact whole-wire 6000-input-token ceiling before a physical reservation. Output
+allows 2048 tokens. Only saved demonstrations use a cited-evidence subset with
+explicit omission limits; live charts retain all IDs and actor aliases. The
+independent judge keeps full canonical inputs and primary source. This is a new
+declared component baseline, with no comparison against the stopped large-input
+runs. Contact is the first supported concise procedure; later families require
+their own source-grounded procedure under the same presentation contract.
+
 `evaluate-reception --prepare-only` renders the actual short Predict requests for
 four original Contact training probes without calling a model. The reusable
 function accepts an `AcceptedReceptionRole`-shaped actor clipboard and one exact

@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -97,6 +97,8 @@ pub struct LocalStudent {
     directory: PathBuf,
     budget: Arc<google::CallBudget>,
     failed: AtomicBool,
+    input_limit: Option<usize>,
+    admissions: AtomicUsize,
 }
 impl LocalStudent {
     pub fn new(url: &str, model: &str, directory: &Path) -> Result<Self> {
@@ -125,6 +127,8 @@ impl LocalStudent {
             directory: directory.into(),
             budget: google::CallBudget::new(usize::MAX),
             failed: AtomicBool::new(false),
+            input_limit: None,
+            admissions: AtomicUsize::new(0),
         })
     }
     /// Admission cap shared by every predictor using this resident student.
@@ -143,6 +147,11 @@ impl LocalStudent {
             "Local timeout must be finite and bounded"
         );
         self.model.openai.request_timeout = std::time::Duration::from_secs(seconds);
+        Ok(self)
+    }
+    pub fn with_input_limit(mut self, limit: usize) -> Result<Self> {
+        ensure!(limit > 0, "Student input limit must be positive");
+        self.input_limit = Some(limit);
         Ok(self)
     }
     fn save(&self, ordinal: usize, suffix: &str, value: &serde_json::Value) -> Result<()> {
@@ -168,6 +177,27 @@ impl ChatModel for LocalStudent {
             !self.failed.load(Ordering::SeqCst),
             "Prior local provider failure is retained; no automatic replay"
         );
+        ensure!(
+            self.budget.remaining() > 0,
+            "Local physical-call cap reached; no request submitted"
+        );
+        if let Some(limit) = self.input_limit {
+            let ordinal = self.admissions.fetch_add(1, Ordering::SeqCst) + 1;
+            let directory = self.directory.join(format!("admission-{ordinal:06}"));
+            let count =
+                count_tokens(&self.http, &self.model.openai.base_url, request, &directory).await?;
+            let tokens = count["input_tokens"]
+                .as_u64()
+                .context("No exact resident count")? as usize;
+            crate::queue::write_json_atomic(
+                &directory.join("admission.json"),
+                &json!({"input_tokens":tokens,"strict_prompt_limit":limit,"admitted":tokens<=limit,"generation_submitted":false,"physical_budget_before":self.budget.spent()}),
+            )?;
+            ensure!(
+                tokens <= limit,
+                "Prompt has {tokens} input tokens, above this run's strict prompt limit {limit}; no generation submitted"
+            );
+        }
         let ordinal = self.budget.reserve().ok_or_else(|| {
             anyhow::anyhow!("Local physical-call cap reached; no request submitted")
         })?;
@@ -309,6 +339,48 @@ mod tests {
         assert!(dir.path().join("call-000001.failure.json").exists());
         assert!(!dir.path().join("call-000002.request.json").exists());
     }
+    #[tokio::test]
+    async fn prompt_limit_counts_exact_wire_before_charging_or_generation() {
+        let mock = Mock::new(vec![
+            Reply::Complete(200, r#"{"prompt":"Synthetic rendered request"}"#),
+            Reply::Complete(200, r#"{"tokens":[1,2,3]}"#),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let budget = google::CallBudget::seeded(64, 3).unwrap();
+        let model = LocalStudent::new(&format!("{}/v1", mock.api), MODEL, dir.path())
+            .unwrap()
+            .with_budget(budget.clone())
+            .with_input_limit(2)
+            .unwrap();
+        let request = LmRequest::new(
+            "",
+            vec![LmMessage::user(vec![LmPart::text("Synthetic question")])],
+        );
+        assert!(
+            model
+                .forward(&reqwest::Client::new(), &request)
+                .await
+                .is_err()
+        );
+        assert_eq!(budget.spent(), 3);
+        assert_eq!(mock.requests.lock().unwrap().len(), 2);
+        assert!(
+            mock.requests
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|request| request["path"] != "/v1/chat/completions")
+        );
+        assert!(!dir.path().join("call-000004.request.json").exists());
+        let proof: serde_json::Value = serde_json::from_slice(
+            &fs::read(dir.path().join("admission-000001/admission.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(proof["input_tokens"], 3);
+        assert_eq!(proof["admitted"], false);
+        assert_eq!(proof["physical_budget_before"], 3);
+    }
+
     #[tokio::test]
     async fn resident_preflight_counts_the_exact_wire_messages_without_generation() {
         let mock = Mock::new(vec![

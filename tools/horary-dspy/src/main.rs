@@ -52,6 +52,14 @@ enum Command {
         #[arg(long)]
         prior_consumer_closure: Option<PathBuf>,
         #[arg(long)]
+        concise_student: bool,
+        /// Derive/review one TRAIN label and count exact student requests only.
+        #[arg(long)]
+        prepare_student_only: bool,
+        /// Reuse a source-bound completed concise preparation without repurchase.
+        #[arg(long)]
+        prepared_student: Option<PathBuf>,
+        #[arg(long)]
         output: PathBuf,
     },
     /// Author and independently review all 42 original twenty-case reading banks.
@@ -365,6 +373,9 @@ async fn main() -> Result<()> {
             method,
             watch,
             prior_consumer_closure,
+            concise_student,
+            prepare_student_only,
+            prepared_student,
             output,
         } => {
             ensure!(
@@ -393,6 +404,9 @@ async fn main() -> Result<()> {
                     local_url: args.student_local_url.as_deref(),
                     model: &args.student_model,
                     prior_closure: prior_consumer_closure.as_deref(),
+                    concise: concise_student,
+                    prepare_only: prepare_student_only,
+                    prepared: prepared_student.as_deref(),
                 },
             )
             .await?;

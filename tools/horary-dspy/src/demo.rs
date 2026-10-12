@@ -16,9 +16,13 @@ const OMIT: &[&str] = &[
     "__passed",
     "__review_source",
     "__review_summary_consistent",
+    "__review_inputs",
+    "__reference_answer",
+    "__concise_student_projection",
 ];
 const HEADER: &str = "ID\tKIND\tLABEL\tCALCULATED TESTIMONY";
 const SUBSET: &str = "Demonstration only: native facts retain all cited IDs, planet positions, house cusps, Moon rows and calculation boundaries. Omitted rows are not evidence of absence in the original chart.";
+const CONCISE_SUBSET: &str = "Demonstration evidence subset: all output citations, positions, cusps, supplied conditions, first Moon occasion and calculation boundaries retained. Every actor alias and unknown remains. Omitted rows are not evidence of absence in the full original chart.";
 
 /// Return a separate, compact demonstration while preserving its declared
 /// input/label split. Unknown citations and malformed chart rows fail instead
@@ -29,7 +33,7 @@ pub fn compact(demonstration: &Example) -> Result<Example> {
     let ranges = Regex::new(r"\be([0-9]+)\s*(?:–|—|-)\s*e([0-9]+)\b")?;
     let moon = Regex::new(r"\bMoon\b")?;
     let mut cited = BTreeSet::new();
-    for field in ["evidence", "analysis", "answer"] {
+    for field in ["evidence", "analysis", "answer", "unresolved"] {
         if let Some(value) = demonstration.get(field) {
             let text = value
                 .as_str()
@@ -87,6 +91,9 @@ fn project(value: &Value, cited: &BTreeSet<String>, moon: &Regex) -> Result<Valu
     } else {
         value.clone()
     };
+    if chart["presentation"] == "concise-native-reader-1" {
+        return project_concise(chart, cited, encoded);
+    }
     let chart = chart
         .as_object_mut()
         .context("Demonstration chart_evidence must be an object")?;
@@ -174,6 +181,57 @@ fn project(value: &Value, cited: &BTreeSet<String>, moon: &Regex) -> Result<Valu
     }
 }
 
+fn project_concise(mut chart: Value, cited: &BTreeSet<String>, encoded: bool) -> Result<Value> {
+    let actual = crate::optimize::native_evidence_ids(&chart)?;
+    for id in cited {
+        ensure!(
+            actual.contains(id),
+            "Demonstration cites absent native fact {id}"
+        );
+    }
+    // This is only a saved example. The live oracle retains every native row.
+    // Select an actual earliest supplied lunar occasion without choosing an
+    // applicant, verdict, intermediary or civil timing unit.
+    let events = chart["events"]["rows"]
+        .as_array()
+        .context("No native events")?;
+    let first_moon = events
+        .iter()
+        .filter(|row| row[1] == "Moon" || row[2] == "Moon")
+        .min_by(|a, b| {
+            a[5].as_f64()
+                .unwrap_or(f64::INFINITY)
+                .total_cmp(&b[5].as_f64().unwrap_or(f64::INFINITY))
+        })
+        .map(|row| row[0].clone());
+    let facts = chart["facts"]["rows"]
+        .as_array_mut()
+        .context("No native facts")?;
+    facts.retain(|row| {
+        cited.contains(row[0].as_str().unwrap())
+            || matches!(
+                row[1].as_str(),
+                Some("position" | "house" | "condition" | "moon" | "boundary")
+            )
+    });
+    chart["receptions"]["rows"]
+        .as_array_mut()
+        .context("No native receptions")?
+        .retain(|row| cited.contains(row[0].as_str().unwrap()));
+    chart["events"]["rows"]
+        .as_array_mut()
+        .context("No native events")?
+        .retain(|row| {
+            cited.contains(row[0].as_str().unwrap()) || first_moon.as_ref() == Some(&row[0])
+        });
+    chart["demonstration_projection"] = Value::String(CONCISE_SUBSET.into());
+    if encoded {
+        Ok(Value::String(serde_json::to_string(&chart)?))
+    } else {
+        Ok(chart)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,6 +288,41 @@ mod tests {
 
     fn projected(example: &Example) -> Value {
         serde_json::from_str(example.get("chart_evidence").unwrap().as_str().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn concise_demo_retains_citations_roles_and_first_moon_without_pruning_live_input() {
+        let source = json!({"presentation":"concise-native-reader-1",
+            "facts":{"columns":["id","kind","label","native_detail"],"rows":[["e0","position","Mars","Exact position"],["e1","condition","Moon","Exact motion"],["e2","boundary","Limits","Exact limitations"]]},
+            "receptions":{"columns":["id","regarding_planet","regarded_planet","positive_qualities","negative_qualities"],"rows":[["e3","Mars","Saturn",["face"],["fall"]],["e4","Saturn","Mars",["domicile"],[]]]},
+            "events":{"columns":["id","endpoint1","endpoint2","aspect","within_current_signs","astronomical_hours","native_current_angular_gap_or_detail","motion"],"rows":[["e5","Moon","Mars","square",true,2.5,4.0,null],["e6","Moon","Saturn","trine",false,9.0,8.0,null],["e7","Mars","Saturn","sextile",true,12.0,3.0,["Exact native motion"]]]},
+            "role_reference":{"roles":[["a","Mars"],["b","Saturn"],["c","Saturn"]],"unknowns":["Actual unresolved input"]},"search_limitations":"Exact finite search limits"});
+        let mut raw = reading(source.clone());
+        raw.set("evidence", json!("e3 e7"));
+        raw.set("analysis", json!("Decisive actual testimony."));
+        raw.set("answer", json!("A qualified answer."));
+        raw.set("unresolved", json!("See e4 for contrary testimony."));
+        let before = raw.clone();
+        let compacted = compact(&raw).unwrap();
+        let chart = projected(&compacted);
+        assert_eq!(raw, before);
+        assert_eq!(chart["facts"], source["facts"]);
+        assert_eq!(chart["receptions"], source["receptions"]);
+        assert_eq!(
+            chart["events"]["rows"],
+            json!([source["events"]["rows"][0], source["events"]["rows"][2]])
+        );
+        assert_eq!(chart["role_reference"], source["role_reference"]);
+        assert_eq!(chart["search_limitations"], source["search_limitations"]);
+        assert_eq!(chart["demonstration_projection"], CONCISE_SUBSET);
+        assert_eq!(compact(&compacted).unwrap(), compacted);
+        raw.set("evidence", json!("e999"));
+        assert!(
+            compact(&raw)
+                .unwrap_err()
+                .to_string()
+                .contains("absent native fact e999")
+        );
     }
 
     #[test]
