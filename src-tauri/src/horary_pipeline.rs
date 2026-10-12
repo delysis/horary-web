@@ -139,6 +139,9 @@ fn follow_up_words(session: &Session) -> String {
 }
 
 fn is_resume_request(words: &str) -> bool {
+    if is_chart_request(words) {
+        return true;
+    }
     let words = words
         .trim()
         .trim_end_matches(['.', '!', '?'])
@@ -152,6 +155,39 @@ fn is_resume_request(words: &str) -> bool {
             | "cast the chart"
             | "finish the reading"
             | "continue the reading"
+    )
+}
+
+/// An explicit calculation request is separate from permission to interpret.
+/// Match whole commands so questions about casting, refusals and quoted plans
+/// cannot start a calculation accidentally.
+fn is_chart_request(words: &str) -> bool {
+    let normalized = words
+        .trim()
+        .trim_end_matches(['.', '!', '?'])
+        .to_lowercase();
+    let mut command = normalized.as_str();
+    loop {
+        let next = [
+            "ok ",
+            "okay ",
+            "please ",
+            "can you ",
+            "could you ",
+            "would you ",
+        ]
+        .iter()
+        .find_map(|prefix| command.strip_prefix(prefix));
+        match next {
+            Some(next) => command = next,
+            None => break,
+        }
+    }
+    command = command.strip_suffix(" now").unwrap_or(command);
+    command = command.strip_suffix(" please").unwrap_or(command);
+    matches!(
+        command,
+        "cast the chart" | "cast a chart" | "run the chart" | "run a chart"
     )
 }
 
@@ -1217,10 +1253,18 @@ fn prepare_reading(
         .expect("Consultation installed")
         .plan(None);
     session.audit.push(json!({"event":"contract_plan","catalogueVersion":contracts::VERSION,"caseRevision":session.method.consultation.as_ref().map(|c|c.revision),"plan":plan}));
-    if plan
-        .limitation
-        .as_ref()
-        .is_some_and(|l| l.code == "unsupported_facet")
+    let chart_only_limit = is_chart_request(&words)
+        && session
+            .method
+            .consultation
+            .as_ref()
+            .is_some_and(|case| case.understood())
+        && plan.limitation.is_some();
+    if !chart_only_limit
+        && plan
+            .limitation
+            .as_ref()
+            .is_some_and(|l| l.code == "unsupported_facet")
     {
         contract_limitation(
             session,
@@ -1229,12 +1273,22 @@ fn prepare_reading(
         return Ok(None);
     }
     if let Some(need) = plan.needs.iter().find(|need| {
-        need.key != RequirementKey::ChartPlace || need.state != "native_acquisition_pending"
+        (!chart_only_limit
+            || matches!(
+                need.key,
+                RequirementKey::ChartPlace
+                    | RequirementKey::ChartMoment
+                    | RequirementKey::Field(
+                        contracts::Field::ReaderPlace | contracts::Field::QuestionTime
+                    )
+            ))
+            && (need.key != RequirementKey::ChartPlace
+                || need.state != "native_acquisition_pending")
     }) {
         contract_question(session, need);
         return Ok(None);
     }
-    if let Some(limitation) = &plan.limitation {
+    if let Some(limitation) = plan.limitation.as_ref().filter(|_| !chart_only_limit) {
         contract_limitation(session, limitation);
         return Ok(None);
     }
@@ -1438,6 +1492,14 @@ fn prepare_reading(
         session.sections.clear();
         session.status = "The sky at this question’s moment…".into();
         runtime.publish(session)?;
+    }
+    if chart_only_limit {
+        let limitation = plan.limitation.as_ref().expect("Explicit chart-only limit");
+        session.audit.push(json!({"event":"explicit_chart_calculation",
+            "chart_exists":true,"interpretation_executed":false,"limitation":limitation,
+            "basis":"The person explicitly requested the chart. Calculation does not authorize an unsupported interpretation."}));
+        contract_limitation(session, limitation);
+        return Ok(None);
     }
     let anchor = contracts::Anchor {
         timestamp_ms: timestamp,
@@ -3549,6 +3611,132 @@ mod selected_stage_execution_tests {
     }
     fn execute(target: Option<Stage>, reject_first: bool) -> (Session, Reader, Result<(), String>) {
         execute_with(target, reject_first, JudgmentReply::Answer)
+    }
+
+    #[test]
+    fn explicit_chart_request_calculates_despite_interpretation_limit_and_keeps_anchor() {
+        use crate::reading_contracts as contracts;
+        use contracts::{Consultation, Evidence, Facet, Frame, Method, Observation, Slot};
+        fn resolved<T>(value: T) -> Slot<T> {
+            Slot::Resolved {
+                observation: Observation {
+                    value,
+                    evidence: Evidence::Migration {
+                        detail: "Synthetic chart execution regression".into(),
+                    },
+                },
+            }
+        }
+        for facet in [Facet::Event, Facet::Situation] {
+            let reader = Reader {
+                dir: tempfile::tempdir().unwrap(),
+                target: None,
+                calls: Mutex::new(vec![]),
+                reject_first: AtomicBool::new(false),
+                judgment: JudgmentReply::Answer,
+            };
+            let question = "Will my application launch successfully?";
+            let mut session = Session::default();
+            session.question = question.into();
+            session.method.brief.question = question.into();
+            session.method.consultation = Some(Consultation {
+                question: resolved(question.into()),
+                frame: resolved(Frame {
+                    method: Method::Undertaking,
+                    facet,
+                }),
+                subject: resolved(crate::horary_role_options::Subject {
+                    name: "My application launch".into(),
+                    kind: "other".into(),
+                    owner_id: "querent".into(),
+                    source_quote: "my application".into(),
+                }),
+                ..Default::default()
+            });
+            session.candidates.push(place());
+            session.candidate_moment_ms = Some(1789387200000.);
+            session.messages.push(Message {
+                role: "user".into(),
+                text: "continue".into(),
+            });
+            let previous = session.clone();
+            assert!(prepare_reading(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387300000.,
+                None,
+                &previous
+            )
+            .unwrap()
+            .is_none());
+            assert!(
+                session.chart.is_none(),
+                "An ordinary resume must retain the interpretation limit"
+            );
+            session.messages.push(Message {
+                role: "user".into(),
+                text: "OK can you run the chart now".into(),
+            });
+            let previous = session.clone();
+            assert!(prepare_reading(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387400000.,
+                None,
+                &previous
+            )
+            .unwrap()
+            .is_none());
+            assert_eq!(
+                session.chart.as_ref().unwrap()["timestampMs"],
+                1789387200000.
+            );
+            assert!(matches!(
+                session.method.result,
+                Some(contracts::ReadingResult::Limited { .. })
+            ));
+            assert!(session.sections.is_empty());
+            assert!(
+                reader.calls.lock().unwrap().is_empty(),
+                "No specialist or judgment bypass"
+            );
+            let chart = session.chart.clone();
+            let previous = session.clone();
+            prepare_reading(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387500000.,
+                None,
+                &previous,
+            )
+            .unwrap();
+            assert_eq!(
+                session.chart, chart,
+                "Repeated request keeps the understood question's sky"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_commands_exclude_negation_explanation_and_other_matter() {
+        for words in [
+            "cast the chart",
+            "Please cast the chart",
+            "OK can you run the chart now?",
+        ] {
+            assert!(is_chart_request(words));
+        }
+        for words in [
+            "Don't cast the chart",
+            "Why didn't you cast the chart?",
+            "Can you explain the chart now",
+            "Will I cast the chart successfully?",
+        ] {
+            assert!(!is_chart_request(words));
+        }
     }
     fn execute_with(
         target: Option<Stage>,
