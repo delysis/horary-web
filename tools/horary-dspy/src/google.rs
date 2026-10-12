@@ -133,6 +133,16 @@ impl CallBudget {
             maximum,
         })
     }
+    pub fn seeded(maximum: usize, inherited_spent: usize) -> Result<Arc<Self>> {
+        ensure!(
+            inherited_spent <= maximum,
+            "Inherited physical work exceeds original call cap"
+        );
+        Ok(Arc::new(Self {
+            spent: AtomicUsize::new(inherited_spent),
+            maximum,
+        }))
+    }
     pub fn spent(&self) -> usize {
         self.spent.load(Ordering::Relaxed)
     }

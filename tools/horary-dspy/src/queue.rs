@@ -105,6 +105,10 @@ fn sources() -> BTreeMap<String, String> {
             ("book.rs", include_bytes!("book.rs").as_slice()),
             ("google.rs", include_bytes!("google.rs").as_slice()),
             ("codex.rs", include_bytes!("codex.rs").as_slice()),
+            (
+                "continuation.rs",
+                include_bytes!("continuation.rs").as_slice(),
+            ),
             ("demo.rs", include_bytes!("demo.rs").as_slice()),
             ("main.rs", include_bytes!("main.rs").as_slice()),
             ("lib.rs", include_bytes!("lib.rs").as_slice()),
@@ -289,6 +293,7 @@ pub fn jobs(max_metrics: usize) -> Result<Vec<Job>> {
 }
 
 fn verify(saved: &Plan, examples: &Path, book_path: &Path) -> Result<()> {
+    crate::continuation::verify_configuration(saved)?;
     ensure!(
         saved.version == 1 && saved.bootstrap_demos == 0,
         "Unsupported queue policy"
@@ -313,6 +318,7 @@ fn verify(saved: &Plan, examples: &Path, book_path: &Path) -> Result<()> {
 pub fn verify_composition_plan(directory: &Path) -> Result<Plan> {
     let bytes = fs::read(directory.join("queue-plan.json"))?;
     let plan: Plan = serde_json::from_slice(&bytes)?;
+    crate::continuation::verify_configuration(&plan)?;
     let started: Value = serde_json::from_slice(&fs::read(directory.join("queue-started.json"))?)?;
     ensure!(
         started["plan_sha256"] == google::digest(&bytes),

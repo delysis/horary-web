@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand, ValueEnum};
 use dsrust::{Module, lm::DynChatModel};
 use horary_dspy::{
-    book, catalogue, codex, google, native_export, optimize, preflight, queue, runner, signatures,
-    teachers,
+    book, catalogue, codex, continuation, google, native_export, optimize, preflight, queue,
+    runner, signatures, teachers,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Arc};
@@ -49,6 +49,8 @@ enum Command {
         student_call_cap: usize,
         #[arg(long, default_value_t = 10_000)]
         teacher_call_cap: usize,
+        #[arg(long)]
+        continuation_manifest: Option<PathBuf>,
     },
     /// Execute a sealed queue once; provider clients and caps span every job.
     QueueExecute {
@@ -56,6 +58,19 @@ enum Command {
         examples: PathBuf,
         #[arg(long)]
         plan: PathBuf,
+        #[arg(long)]
+        continuation_manifest: Option<PathBuf>,
+    },
+    /// Inspect source-bound closed work and prepare carrier-only continuation metadata.
+    QueueContinuationInspect {
+        #[arg(long)]
+        parent: PathBuf,
+        #[arg(long)]
+        closure_receipt: PathBuf,
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        review_note: String,
     },
     QueueStatus {
         #[arg(long)]
@@ -175,6 +190,7 @@ async fn main() -> Result<()> {
             student_probe_ceiling,
             student_call_cap,
             teacher_call_cap,
+            continuation_manifest,
         } => {
             ensure!(
                 student_call_cap > 0 && teacher_call_cap > 0,
@@ -201,6 +217,10 @@ async fn main() -> Result<()> {
                 student_call_cap,
                 teacher_call_cap,
                 teacher_tokens_per_minute: 120_000,
+                continuation: continuation_manifest
+                    .as_deref()
+                    .map(continuation::FileSeal::read)
+                    .transpose()?,
             };
             let plan = queue::plan(
                 &examples,
@@ -208,13 +228,24 @@ async fn main() -> Result<()> {
                 max_metric_calls,
                 serde_json::to_value(&configuration)?,
             )?;
+            if let Some(seal) = &configuration.continuation {
+                ensure!(
+                    google::digest(fs::read(&seal.path)?) == seal.sha256,
+                    "Continuation manifest changed"
+                );
+                continuation::verify(&continuation::load(&seal.path)?, &plan)?;
+            }
             // A fresh output prevents changing a live queue's available routes.
             fs::create_dir(&output)?;
             fs::write(output.join("model-listing.json"), bytes)?;
             queue::write_plan(&output, &plan)?;
             println!("{}", serde_json::to_string_pretty(&plan)?);
         }
-        Command::QueueExecute { examples, plan } => {
+        Command::QueueExecute {
+            examples,
+            plan,
+            continuation_manifest,
+        } => {
             let output = plan
                 .parent()
                 .context("Queue plan must have a parent directory")?;
@@ -226,6 +257,27 @@ async fn main() -> Result<()> {
             let saved: queue::Plan = serde_json::from_slice(&fs::read(&plan)?)?;
             let configuration: QueueConfiguration =
                 serde_json::from_value(saved.configuration.clone())?;
+            ensure!(
+                continuation_manifest
+                    .as_deref()
+                    .map(continuation::FileSeal::read)
+                    .transpose()?
+                    == configuration.continuation,
+                "Explicit continuation manifest differs from the sealed queue configuration"
+            );
+            let carried = configuration
+                .continuation
+                .as_ref()
+                .map(|seal| {
+                    ensure!(
+                        google::digest(fs::read(&seal.path)?) == seal.sha256,
+                        "Continuation manifest changed"
+                    );
+                    let manifest = continuation::load(&seal.path)?;
+                    continuation::import(&manifest, &saved, output)?;
+                    Ok::<_, anyhow::Error>(manifest)
+                })
+                .transpose()?;
             let model_bytes = fs::read(output.join("model-listing.json"))?;
             ensure!(
                 google::digest(&model_bytes) == configuration.model_listing_sha256,
@@ -245,8 +297,14 @@ async fn main() -> Result<()> {
                 "Actual available teacher order differs from the sealed configuration"
             );
             let http = google::client(&args.credential_file)?;
-            let student_budget = google::CallBudget::new(configuration.student_call_cap);
-            let teacher_budget = google::CallBudget::new(configuration.teacher_call_cap);
+            let student_budget = google::CallBudget::seeded(
+                configuration.student_call_cap,
+                carried.as_ref().map_or(0, |m| m.student.inherited),
+            )?;
+            let teacher_budget = google::CallBudget::seeded(
+                configuration.teacher_call_cap,
+                carried.as_ref().map_or(0, |m| m.teacher.inherited),
+            )?;
             let student_limiter = google::RateLimiter::with_probe_ceiling(
                 configuration.student_tokens_per_minute,
                 configuration.student_probe_ceiling,
@@ -260,16 +318,39 @@ async fn main() -> Result<()> {
                 student_budget,
                 student_limiter,
             )?);
-            let teacher = pooled_teacher(
-                configuration.teacher,
-                configuration.codex,
-                http,
-                output.join("teacher"),
-                configuration.teacher_call_cap,
-                teacher_budget,
-                &listing,
-                configuration.teacher_tokens_per_minute,
-            )?;
+            let teacher = if let Some(carried) = &carried {
+                ensure!(
+                    matches!(configuration.teacher, Teacher::Pool),
+                    "Continuation requires the original complete text-teacher pool"
+                );
+                let fallback = codex::Codex::new(
+                    configuration.codex.clone(),
+                    output.join("teacher/codex"),
+                    configuration.teacher_call_cap,
+                )?;
+                Arc::new(
+                    teachers::TeacherPool::new(
+                        http,
+                        &listing,
+                        output.join("teacher"),
+                        teacher_budget,
+                        configuration.teacher_tokens_per_minute,
+                        Some(fallback),
+                    )?
+                    .with_start_route(carried.teacher_start_route)?,
+                ) as Arc<dyn DynChatModel>
+            } else {
+                pooled_teacher(
+                    configuration.teacher,
+                    configuration.codex,
+                    http,
+                    output.join("teacher"),
+                    configuration.teacher_call_cap,
+                    teacher_budget,
+                    &listing,
+                    configuration.teacher_tokens_per_minute,
+                )?
+            };
             let models = runner::Models {
                 student,
                 teacher,
@@ -290,6 +371,30 @@ async fn main() -> Result<()> {
             "{}",
             serde_json::to_string_pretty(&queue::status(&output)?)?
         ),
+        Command::QueueContinuationInspect {
+            parent,
+            closure_receipt,
+            examples,
+            review_note,
+        } => {
+            let previous: queue::Plan =
+                serde_json::from_slice(&fs::read(parent.join("run/queue-plan.json"))?)?;
+            let current = queue::plan(
+                &examples,
+                &args.book,
+                previous.requested_metric_calls,
+                previous.configuration.clone(),
+            )?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&continuation::prepare(
+                    &parent,
+                    &closure_receipt,
+                    &current,
+                    &review_note
+                )?)?
+            );
+        }
         Command::Preflight {
             examples,
             models,
@@ -652,6 +757,8 @@ struct QueueConfiguration {
     student_call_cap: usize,
     teacher_call_cap: usize,
     teacher_tokens_per_minute: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    continuation: Option<continuation::FileSeal>,
 }
 #[allow(clippy::too_many_arguments)]
 fn pooled_teacher(

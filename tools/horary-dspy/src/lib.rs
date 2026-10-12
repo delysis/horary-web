@@ -3,6 +3,7 @@ pub mod anchors;
 pub mod book;
 pub mod catalogue;
 pub mod codex;
+pub mod continuation;
 pub mod demo;
 pub mod functions;
 pub mod google;

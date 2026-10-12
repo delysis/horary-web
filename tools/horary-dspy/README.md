@@ -44,6 +44,25 @@ horary-dspy queue-status --output /absolute/path/to/queue
 
 Preflight formats every baseline exchange locally and counts the largest rendered exchange per function by default; `--all-counts` counts every fixture. Sampling does not prove every request's token admission. The actual transport counts every exact request before generation. These checks establish source and execution mechanics, not guaranteed semantic improvement. The plan records nominal function evaluations and hard physical caps. Until observed tokens, waits and latencies arrive, elapsed time is a conditional forecast rather than a promised completion time.
 
+A closed queue with no completed jobs can carry its exact transport caches into a separately reviewed, fresh queue. `queue-continuation-inspect` performs no provider calls: it checks the parent closure receipt, exact owner/child PID absence, complete physical request/body/result identities, the full sealed carrier file sets and actual normalized response counts. Its manifest records reviewed operational source changes, unchanged original cases, splits, book, signatures, schemas and caps, and any changed reading rendering that needs a fresh baseline. The new queue imports carrier files only; it does not import grades, development traces, a partially compiled program or the old start guard. The ordinary pinned compiler runs again and exact settled calls replay through its adapters without repurchasing them. A witnessed unusable HTTP 200/MAX_TOKENS teacher output remains preserved and may use the separately bounded same-route format repair; uncertainty or an existing semantic judgment is not permission to retry.
+
+Prepare the manifest with the final executable, then bind it to both new planning and execution:
+
+```sh
+horary-dspy queue-continuation-inspect --parent /absolute/path/to/closed-campaign \
+  --closure-receipt /absolute/path/to/verified-closure.json \
+  --examples /absolute/path/to/examples --review-note "Reviewed carrier and rendering changes" \
+  > /absolute/path/to/continuation-manifest.json
+horary-dspy queue-plan --examples /absolute/path/to/examples \
+  --models /absolute/path/to/original-model-listing.json --output /absolute/path/to/new-queue \
+  --continuation-manifest /absolute/path/to/continuation-manifest.json
+horary-dspy queue-execute --examples /absolute/path/to/examples \
+  --plan /absolute/path/to/new-queue/queue-plan.json \
+  --continuation-manifest /absolute/path/to/continuation-manifest.json
+```
+
+Inherited student and teacher physical attempts are charged against the original caps, including completed HTTP failures and the unusable teacher output. Their fresh global ordinals continue from the parent; cache hits do not consume new calls. A second execution of the new queue remains forbidden by its own durable start guard. This carrier continuation is intentionally limited to the verified zero-complete-job boundary and cannot grandfather a learned component or establish model-quality improvement.
+
 The pure `export-native` command can create an explicit native-format teaching seed with a source-bound authored mapping. It withholds foreign demonstrations rather than inventing native typed records. The application's separate `real_model_first_message_application_journey` gate starts a default native session with only the original words and fixture device context, optionally using a pinned native candidate. Its full traces still need an independent source review. Neither exporting a seed nor passing the DSPy journey installs or qualifies the production application.
 
 The first actual student reading received a completed Codex review with score 0.75: classification and extraction passed, while reading and answer quality failed. The feedback identified unsupported absence claims, translation/collection omissions and overclaiming from `None` or unknown evidence. Its raw answer remains intact. A validator initially mistook an exact disabled-Code-Mode startup notice for tool execution; the narrow notice check was repaired so that successful paid answer can be reused without resubmission. The repair changes neither the judgment nor the failed reading's qualification.
