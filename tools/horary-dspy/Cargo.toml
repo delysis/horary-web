@@ -9,7 +9,7 @@ publish = false
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
-dsrust = { git = "https://github.com/getlatentic/dsrust", rev = "f24adde08c1d8850e4d7079d019643bb40f905cb" }
+dsrust = { path = "vendor/dsrust" }
 horary-ai-core = { path = "../../crates/horary-ai-core" }
 horary-prompt-program = { path = "../../crates/horary-prompt-program" }
 regex = "1"
@@ -23,3 +23,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"
 tempfile = "3"
 
 [workspace]
+exclude = ["vendor/dsrust"]

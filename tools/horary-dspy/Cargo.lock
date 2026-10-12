@@ -303,7 +303,6 @@ dependencies = [
 [[package]]
 name = "dsrust"
 version = "0.1.0-alpha.2"
-source = "git+https://github.com/getlatentic/dsrust?rev=f24adde08c1d8850e4d7079d019643bb40f905cb#f24adde08c1d8850e4d7079d019643bb40f905cb"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -327,7 +326,6 @@ dependencies = [
 [[package]]
 name = "dsrust-derive"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/getlatentic/dsrust?rev=f24adde08c1d8850e4d7079d019643bb40f905cb#f24adde08c1d8850e4d7079d019643bb40f905cb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -337,7 +335,6 @@ dependencies = [
 [[package]]
 name = "dsrust-gepa"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/getlatentic/dsrust?rev=f24adde08c1d8850e4d7079d019643bb40f905cb#f24adde08c1d8850e4d7079d019643bb40f905cb"
 dependencies = [
  "pyrng",
 ]
@@ -345,7 +342,6 @@ dependencies = [
 [[package]]
 name = "dsrust-tpe"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/getlatentic/dsrust?rev=f24adde08c1d8850e4d7079d019643bb40f905cb#f24adde08c1d8850e4d7079d019643bb40f905cb"
 dependencies = [
  "pyrng",
 ]
@@ -921,7 +917,6 @@ dependencies = [
 [[package]]
 name = "pyrng"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/getlatentic/dsrust?rev=f24adde08c1d8850e4d7079d019643bb40f905cb#f24adde08c1d8850e4d7079d019643bb40f905cb"
 
 [[package]]
 name = "quinn"

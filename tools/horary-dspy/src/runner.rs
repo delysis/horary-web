@@ -10,11 +10,12 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use dsrust::{BootstrapFewShot, Evaluate, GEPA, Module, lm::DynChatModel};
 use serde_json::{Value, json};
-use std::{fs, path::Path, sync::Arc};
+use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
 pub struct Models {
     pub student: Arc<dyn DynChatModel>,
     pub teacher: Arc<dyn DynChatModel>,
     pub teacher_id: String,
+    pub student_id: String,
 }
 
 pub fn methods(selected: &str) -> Result<Vec<&str>> {
@@ -44,7 +45,11 @@ pub fn manifest(
         .get("teacher")
         .and_then(Value::as_str)
         .unwrap_or(google::TEACHER);
-    let receipt = json!({"teacher":teacher,"student":google::STUDENT,"configuration":configuration,
+    let student = configuration
+        .get("student")
+        .and_then(Value::as_str)
+        .unwrap_or(google::STUDENT);
+    let receipt = json!({"teacher":teacher,"student":student,"configuration":configuration,
         "executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),
         "book_sha256":google::digest(fs::read(book_path)?),"dataset_sha256":google::digest(&data),
         "coverage_sha256":google::digest(include_bytes!("../coverage.json")),
@@ -52,6 +57,10 @@ pub fn manifest(
         "catalogue_sha256":google::digest(include_bytes!("catalogue.rs")),
         "journey_sha256":google::digest(include_bytes!("journey.rs")),
         "port_revision":"f24adde08c1d8850e4d7079d019643bb40f905cb",
+        "effective_port_revision":crate::local::PORT_REVISION,
+        "port_predict_sha256":google::digest(include_bytes!("../vendor/dsrust/src/predict.rs")),
+        "port_openai_sha256":google::digest(include_bytes!("../vendor/dsrust/src/lm/openai/mod.rs")),
+        "cargo_lock_sha256":google::digest(include_bytes!("../Cargo.lock")),
         "provider_schema":false,"student_inputs":"original question and actual device context only",
         "case_count":cases.len(),"qualified":false});
     let path = output.join("manifest.json");
@@ -107,7 +116,7 @@ pub async fn run(
     program.save_observations(&output.join("observations.json"))?;
     let result = json!({"method":method,"cases":evaluated.results.len(),"score":if evaluated.failure_count()==0{Some(evaluated.score)}else{None},
         "execution_errors":evaluated.failure_count(),"errors":evaluation_errors(&evaluated),"training_transport_check":training_check,
-        "teacher":models.teacher_id,"student":google::STUDENT,"source_correct_reading_qualified":false,"application_promoted":false});
+        "teacher":models.teacher_id,"student":models.student_id,"source_correct_reading_qualified":false,"application_promoted":false});
     fs::write(
         output.join("result.json"),
         serde_json::to_vec_pretty(&result)?,
@@ -203,7 +212,7 @@ pub async fn optimize(
     let result = json!({"method":method,"examples":cases.len(),"bootstrap_demos":demos,"before_development":before.score,
         "after_development":if after.failure_count()==0{Some(after.score)}else{None},"held_out":if held.failure_count()==0{Some(held.score)}else{None},
         "errors":evaluation_errors(&after).into_iter().chain(evaluation_errors(&held)).collect::<Vec<_>>(),"best_index":search.best_idx,
-        "metric_calls":search.total_num_evals,"iterations":search.iterations,"teacher":models.teacher_id,"student":google::STUDENT,
+        "metric_calls":search.total_num_evals,"iterations":search.iterations,"teacher":models.teacher_id,"student":models.student_id,
         "scope":"complete-first-message DSPy module","application_promoted":false});
     fs::write(
         output.join("result.json"),
@@ -226,6 +235,46 @@ pub fn load_all(directory: &Path) -> Result<Vec<Case>> {
         .map(|banks| banks.into_iter().flatten().collect())
 }
 
+/// A small round selects whole existing cases; it cannot change their split or labels.
+pub fn select_cases(
+    cases: &[Case],
+    training: &[String],
+    development: &[String],
+    test: &[String],
+) -> Result<Vec<Case>> {
+    if training.is_empty() && development.is_empty() && test.is_empty() {
+        return Ok(cases.to_vec());
+    }
+    let mut selected = BTreeSet::new();
+    for (split, ids) in [
+        ("train", training),
+        ("development", development),
+        ("test", test),
+    ] {
+        ensure!(
+            !ids.is_empty(),
+            "Every selected split needs at least one case"
+        );
+        for id in ids {
+            ensure!(selected.insert(id), "Repeated selected case {id}");
+            let case = cases
+                .iter()
+                .find(|case| &case.id == id)
+                .with_context(|| format!("Unknown selected case {id}"))?;
+            ensure!(
+                case.split == split,
+                "Selected case {id} belongs to {}, not {split}",
+                case.split
+            );
+        }
+    }
+    Ok(cases
+        .iter()
+        .filter(|case| selected.contains(&case.id))
+        .cloned()
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +286,27 @@ mod tests {
         assert!(methods("wish").is_err());
         assert!(methods("unclassified").is_err());
         assert!(methods("unknown").is_err());
+    }
+
+    #[test]
+    fn bounded_selection_preserves_cases_and_never_moves_their_splits() {
+        let cases = catalogue::cases(
+            Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/examples")),
+            "contact",
+        )
+        .unwrap();
+        let train = vec![cases[0].id.clone()];
+        let dev = vec![cases[12].id.clone()];
+        let test = vec![cases[16].id.clone()];
+        let selected = select_cases(&cases, &train, &dev, &test).unwrap();
+        assert_eq!(
+            serde_json::to_value(selected).unwrap(),
+            serde_json::to_value(vec![&cases[0], &cases[12], &cases[16]]).unwrap()
+        );
+        assert!(select_cases(&cases, &dev, &train, &test).is_err());
+        assert!(select_cases(&cases, &train, &[], &test).is_err());
+        assert!(select_cases(&cases, &[train[0].clone(), train[0].clone()], &dev, &test).is_err());
+        assert!(select_cases(&cases, &["unknown".into()], &dev, &test).is_err());
+        assert_eq!(select_cases(&cases, &[], &[], &[]).unwrap().len(), 20);
     }
 }

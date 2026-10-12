@@ -113,7 +113,15 @@ impl Graded {
                     student,
                 )?))
             } else {
-                Oracle::Single(plain(signature, student))
+                Oracle::Single(plain(signature, student).with_config(LmConfig {
+                    max_tokens: Some(if function == "classification" {
+                        512
+                    } else {
+                        4096
+                    }),
+                    temperature: Some(0.),
+                    ..Default::default()
+                }))
             },
             judge,
             examples: index,
@@ -163,17 +171,6 @@ impl Graded {
             .examples
             .get(&input_key(&input)?)
             .context("Unknown evaluation input")?;
-        let from = trace.len();
-        let mut prediction = match &self.oracle {
-            Oracle::Single(predictor) => {
-                let prediction = predictor.forward_traced(input.clone(), trace).await?;
-                relabel(trace, from, &self.predictor_name);
-                prediction
-            }
-            Oracle::Reading(program) => program.forward_traced(input.clone(), trace).await?,
-        };
-        let oracle_stages = trace[from..].iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>();
-        self.record(true, &json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"oracle_stages":oracle_stages,"prediction":fields(&prediction),"independently_reviewed":false}))?;
         let source = example
             .get("__review_source")
             .or_else(|| input.get("source_text"))
@@ -181,6 +178,53 @@ impl Graded {
             .or_else(|| input.get("catalogue"))
             .cloned()
             .context("No actual primary context for independent review")?;
+        let from = trace.len();
+        let attempted = match &self.oracle {
+            Oracle::Single(predictor) => {
+                let prediction = predictor.forward_traced(input.clone(), trace).await;
+                relabel(trace, from, &self.predictor_name);
+                prediction
+            }
+            Oracle::Reading(program) => program.forward_traced(input.clone(), trace).await,
+        };
+        let oracle_stages = trace[from..].iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>();
+        let mut prediction = match attempted {
+            Ok(prediction) => prediction,
+            Err(error) => {
+                let Some(observed) = error.downcast_ref::<dsrust::predict::ObservedOutputFailure>()
+                else {
+                    return Err(error);
+                };
+                // The port only creates this type after receiving a response.
+                // Missing output fields are an observed format rejection, with no
+                // fabricated semantic fields and no extra judge or provider call.
+                let raw = observed.response.first_text();
+                let feedback = format!(
+                    "Native output-format rejection: {}. No valid function output was supplied. Fully received model reply:\n{raw}\nSALIENT PRIMARY FRAWLEY CONTEXT FOR THIS QUESTION TYPE:\n{source}",
+                    observed.reason
+                );
+                let mut rejected =
+                    Prediction::new(Example::new(std::iter::empty::<(String, Value)>()), raw)
+                        .with_usage(observed.response.spend());
+                rejected.example.set("__score", json!(0.));
+                rejected.example.set("__passed", json!(false));
+                rejected.example.set("__feedback", json!(feedback));
+                let observation = json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"oracle_stages":oracle_stages,"prediction":fields(&rejected),"received_response":observed.response,"native_failures":[observed.reason],"format_rejection":true,"review":null,"independently_reviewed":false,"review_summary_consistent":true,"review_consistency_scope":"No independent semantic summary exists; deterministic format rejection cannot earn a positive score","score":0.,"passed":false});
+                self.record(true, &observation)?;
+                self.record(false, &observation)?;
+                self.observations
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
+                    .push(observation);
+                eprintln!(
+                    "{} {} received output-format rejection score 0",
+                    self.function,
+                    example.get("case_id").unwrap_or(&Value::Null)
+                );
+                return Ok(rejected);
+            }
+        };
+        self.record(true, &json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"oracle_stages":oracle_stages,"prediction":fields(&prediction),"independently_reviewed":false}))?;
         let mut errors = Vec::new();
         if let Some(failures) = prediction.get("__native_failures") {
             for failure in failures
@@ -607,6 +651,9 @@ fn source_receipt(
 ) -> Result<Value> {
     let mut receipt = json!({"version":1,"method":method,"function":function,"predictor_name":predictor_name(method,function)?,
         "port_revision":crate::native_export::PORT_REVISION,"signatures_sha256":crate::google::digest(include_bytes!("signatures.rs")),
+        "effective_port_revision":crate::local::PORT_REVISION,
+        "port_predict_sha256":crate::google::digest(include_bytes!("../vendor/dsrust/src/predict.rs")),
+        "port_openai_sha256":crate::google::digest(include_bytes!("../vendor/dsrust/src/lm/openai/mod.rs")),
         "declaration_sha256":declaration_digest(method,function)?,"catalogue_sha256":crate::google::digest(include_bytes!("catalogue.rs")),
         "functions_sha256":crate::google::digest(include_bytes!("functions.rs")),"optimizer_source_sha256":crate::google::digest(include_bytes!("optimize.rs")),
         "book_sha256":crate::book::OCR_SHA256,"teaching_sources_sha256":teaching_sources(),"compiled_sha256":crate::google::digest(compiled),"dataset_sha256":dataset_digest});
@@ -1061,7 +1108,7 @@ pub async fn compile_fixtures(
         .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
         .iter()
         .all(|observation| observation["review_summary_consistent"] == true);
-    let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":crate::google::STUDENT,"bootstrap_demos":demos,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
+    let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":models.student_id,"bootstrap_demos":demos,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     ensure!(
         observed,
@@ -1337,6 +1384,60 @@ mod component_tests {
         );
         assert!(teacher.asked().is_empty());
     }
+
+    #[tokio::test]
+    async fn received_format_rejection_reaches_gepa_feedback_without_fabricating_fields_or_blocking_next_case()
+     {
+        let input = classification_input();
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {catalogue:"Observed copied input, no classifier outputs"},
+            classification_reply(),
+        ]));
+        let judge = Arc::new(DummyLM::new([review(
+            "pass",
+            "unobserved",
+            "unobserved",
+            "unobserved",
+            true,
+        )]));
+        let program = Graded::new(
+            "all",
+            "classification",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge.clone(),
+            None,
+        )
+        .unwrap();
+        let rejection = program.forward(input.clone()).await.unwrap();
+        assert_eq!(rejection.get("__score"), Some(&json!(0.)));
+        assert_eq!(rejection.get("__passed"), Some(&json!(false)));
+        for field in ["method", "facet", "branch", "principal", "clarification"] {
+            assert!(rejection.get(field).is_none());
+        }
+        assert!(
+            Graded::feedback(&input, &rejection)
+                .feedback
+                .unwrap()
+                .contains("Observed copied input")
+        );
+        assert!(judge.asked().is_empty());
+        assert!(!program.failed.load(Ordering::SeqCst));
+        let valid = program.forward(input).await.unwrap();
+        assert_eq!(valid.get("__passed"), Some(&json!(true)));
+        assert_eq!(judge.asked().len(), 1);
+        assert_eq!(oracle.asked().len(), 2);
+        assert!(
+            oracle
+                .asked()
+                .iter()
+                .all(|request| request.config.max_tokens == Some(512))
+        );
+        let observations = program.observations.lock().unwrap();
+        assert_eq!(observations[0]["format_rejection"], true);
+        assert!(observations[0]["review"].is_null());
+        assert!(observations[0]["received_response"]["outputs"].is_array());
+    }
     fn saved_component(
         directory: &Path,
         function: &str,
@@ -1449,6 +1550,7 @@ mod component_tests {
             student: oracle.clone(),
             teacher: judge,
             teacher_id: "Synthetic offline model only".into(),
+            student_id: "Synthetic offline".into(),
         };
         let directory = tempfile::tempdir().unwrap();
         let result = compile_fixtures(
@@ -1702,6 +1804,7 @@ mod component_tests {
             student: oracle.clone(),
             teacher: judge,
             teacher_id: "Synthetic offline".into(),
+            student_id: "Synthetic offline".into(),
         };
         let directory = tempfile::tempdir().unwrap();
         let book = Arc::new(Book::fixture());

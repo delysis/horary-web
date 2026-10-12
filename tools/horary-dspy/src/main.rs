@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand, ValueEnum};
 use dsrust::{Module, lm::DynChatModel};
 use horary_dspy::{
-    book, catalogue, classification_export, codex, continuation, google, native_export, optimize,
-    preflight, queue, runner, signatures, teachers,
+    book, catalogue, classification_export, codex, continuation, google, local, native_export,
+    optimize, preflight, queue, runner, signatures, teachers,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Arc};
@@ -26,6 +26,11 @@ struct Args {
     book: PathBuf,
     #[arg(long,default_value=google::CREDENTIAL_FILE)]
     credential_file: PathBuf,
+    /// Select the resident loopback server for this run's student only.
+    #[arg(long)]
+    student_local_url: Option<String>,
+    #[arg(long, default_value = local::MODEL)]
+    student_model: String,
     #[command(subcommand)]
     command: Command,
 }
@@ -181,6 +186,15 @@ enum Command {
         max_metric_calls: usize,
         #[arg(long, default_value_t = 14_000)]
         student_tokens_per_minute: usize,
+        /// Exact existing training IDs for a bounded round; original splits remain fixed.
+        #[arg(long)]
+        training_case: Vec<String>,
+        #[arg(long)]
+        development_case: Vec<String>,
+        #[arg(long)]
+        test_case: Vec<String>,
+        #[arg(long, default_value_t = 2)]
+        bootstrap_demos: usize,
     },
     Optimize {
         #[arg(long)]
@@ -198,6 +212,18 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if let Some(url) = &args.student_local_url {
+        local::validate_url(url)?;
+        ensure!(
+            matches!(
+                &args.command,
+                Command::Run { .. }
+                    | Command::Optimize { .. }
+                    | Command::OptimizeClassification { .. }
+            ),
+            "Local selection applies to run/optimize; sealed hosted queues remain unchanged"
+        );
+    }
     match args.command {
         Command::QueuePlan {
             examples,
@@ -380,6 +406,7 @@ async fn main() -> Result<()> {
                 student,
                 teacher,
                 teacher_id: teacher_identity(configuration.teacher).into(),
+                student_id: google::STUDENT.into(),
             };
             let result = queue::execute(
                 &saved,
@@ -614,17 +641,22 @@ async fn main() -> Result<()> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             let all = banks.iter().flatten().cloned().collect::<Vec<_>>();
+            ensure!(
+                !(cached_student_only && args.student_local_url.is_some()),
+                "Local runs execute the actual student; cached hosted replay remains separate"
+            );
             let teacher_id = teacher_identity(args.teacher);
             runner::manifest(
                 &output,
                 &all,
                 &args.book,
-                serde_json::json!({"command":"run","methods":methods,"teacher":teacher_id,"training_limit":training_limit,"cached_student_only":cached_student_only,"cached_teacher_only":cached_teacher_only}),
+                serde_json::json!({"command":"run","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"methods":methods,"teacher":teacher_id,"training_limit":training_limit,"cached_student_only":cached_student_only,"cached_teacher_only":cached_teacher_only}),
             )?;
             let book = Arc::new(book::Book::open(&args.book)?);
             let http = google::client(&args.credential_file)?;
-            let student = Arc::new(google::Google::new(
-                google::STUDENT,
+            let student = selected_student(
+                args.student_local_url.as_deref(),
+                &args.student_model,
                 http.clone(),
                 output.join("student"),
                 if cached_student_only {
@@ -633,7 +665,7 @@ async fn main() -> Result<()> {
                     240 * methods.len()
                 },
                 student_tokens_per_minute,
-            )?);
+            )?;
             let teacher = teacher_model(
                 args.teacher,
                 args.codex,
@@ -650,6 +682,10 @@ async fn main() -> Result<()> {
                 student,
                 teacher,
                 teacher_id: teacher_id.into(),
+                student_id: student_identity(
+                    args.student_local_url.as_deref(),
+                    &args.student_model,
+                ),
             };
             for (m, cases) in methods.iter().zip(&banks) {
                 let directory = if methods.len() == 1 {
@@ -686,18 +722,19 @@ async fn main() -> Result<()> {
                 &output,
                 &all,
                 &args.book,
-                serde_json::json!({"command":"optimize","methods":methods,"teacher":teacher_identity(args.teacher),"max_metric_calls_per_family":max_metric_calls}),
+                serde_json::json!({"command":"optimize","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"methods":methods,"teacher":teacher_identity(args.teacher),"max_metric_calls_per_family":max_metric_calls}),
             )?;
             let book = Arc::new(book::Book::open(&args.book)?);
             let http = google::client(&args.credential_file)?;
             // All families share the same physical-call bounds and rolling token window.
-            let student = Arc::new(google::Google::new(
-                google::STUDENT,
+            let student = selected_student(
+                args.student_local_url.as_deref(),
+                &args.student_model,
                 http.clone(),
                 output.join("student"),
                 500 * methods.len(),
                 student_tokens_per_minute,
-            )?);
+            )?;
             let teacher = teacher_model(
                 args.teacher,
                 args.codex,
@@ -710,6 +747,10 @@ async fn main() -> Result<()> {
                 student,
                 teacher,
                 teacher_id: teacher_identity(args.teacher).into(),
+                student_id: student_identity(
+                    args.student_local_url.as_deref(),
+                    &args.student_model,
+                ),
             };
             for (m, cases) in methods.iter().zip(&banks) {
                 let directory = if methods.len() == 1 {
@@ -734,44 +775,97 @@ async fn main() -> Result<()> {
             output,
             max_metric_calls,
             student_tokens_per_minute,
+            training_case,
+            development_case,
+            test_case,
+            bootstrap_demos,
         } => {
-            let cases = runner::load_all(&examples)?;
+            let cases = runner::select_cases(
+                &runner::load_all(&examples)?,
+                &training_case,
+                &development_case,
+                &test_case,
+            )?;
             runner::manifest(
                 &output,
                 &cases,
                 &args.book,
-                serde_json::json!({"command":"optimize-classification","teacher":teacher_identity(args.teacher),"max_metric_calls":max_metric_calls}),
+                serde_json::json!({"command":"optimize-classification","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls":max_metric_calls,"bootstrap_demos":bootstrap_demos,"training_case":training_case,"development_case":development_case,"test_case":test_case}),
             )?;
             let book = book::Book::open(&args.book)?;
             let http = google::client(&args.credential_file)?;
-            let student = Arc::new(google::Google::new(
-                google::STUDENT,
+            let student = selected_student(
+                args.student_local_url.as_deref(),
+                &args.student_model,
                 http.clone(),
                 output.join("student"),
                 5000,
                 student_tokens_per_minute,
-            )?);
+            )?;
             let teacher =
                 teacher_model(args.teacher, args.codex, http, output.join("teacher"), 3000).await?;
             let models = runner::Models {
                 student,
                 teacher,
                 teacher_id: teacher_identity(args.teacher).into(),
+                student_id: student_identity(
+                    args.student_local_url.as_deref(),
+                    &args.student_model,
+                ),
             };
-            let result = optimize::compile(
-                &cases,
+            let fixtures = cases
+                .iter()
+                .map(|case| {
+                    Ok(horary_dspy::functions::Fixture {
+                        split: case.split.clone(),
+                        example: catalogue::example(case, "classification", &book)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let result = optimize::compile_fixtures(
+                &fixtures,
                 "all",
                 "classification",
-                &book,
+                Arc::new(book),
                 &models,
                 &output,
-                max_metric_calls,
+                optimize::CompileOptions {
+                    max_metrics: max_metric_calls,
+                    bootstrap_demos,
+                },
             )
             .await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
     }
     Ok(())
+}
+fn student_identity(local_url: Option<&str>, model: &str) -> String {
+    if local_url.is_some() {
+        model.into()
+    } else {
+        google::STUDENT.into()
+    }
+}
+fn selected_student(
+    local_url: Option<&str>,
+    model: &str,
+    http: reqwest::Client,
+    directory: PathBuf,
+    hosted_max_calls: usize,
+    hosted_tokens_per_minute: usize,
+) -> Result<Arc<dyn DynChatModel>> {
+    if let Some(url) = local_url {
+        Ok(Arc::new(local::LocalStudent::new(url, model, &directory)?))
+    } else {
+        Ok(Arc::new(google::Google::new(
+            google::STUDENT,
+            http,
+            directory,
+            hosted_max_calls,
+            hosted_tokens_per_minute,
+        )?))
+    }
 }
 fn teacher_identity(mode: Teacher) -> &'static str {
     match mode {

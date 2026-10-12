@@ -105,6 +105,7 @@ fn sources() -> BTreeMap<String, String> {
             ("book.rs", include_bytes!("book.rs").as_slice()),
             ("reading.rs", include_bytes!("reading.rs").as_slice()),
             ("google.rs", include_bytes!("google.rs").as_slice()),
+            ("local.rs", include_bytes!("local.rs").as_slice()),
             ("codex.rs", include_bytes!("codex.rs").as_slice()),
             (
                 "continuation.rs",
@@ -126,6 +127,18 @@ fn sources() -> BTreeMap<String, String> {
             ),
             ("Cargo.toml", include_bytes!("../Cargo.toml").as_slice()),
             ("Cargo.lock", include_bytes!("../Cargo.lock").as_slice()),
+            (
+                "port/predict.rs",
+                include_bytes!("../vendor/dsrust/src/predict.rs").as_slice(),
+            ),
+            (
+                "port/openai.rs",
+                include_bytes!("../vendor/dsrust/src/lm/openai/mod.rs").as_slice(),
+            ),
+            (
+                "port/provenance.json",
+                include_bytes!("../vendor/dsrust/HORARY-PROVENANCE.json").as_slice(),
+            ),
             (
                 "coverage.json",
                 include_bytes!("../coverage.json").as_slice(),

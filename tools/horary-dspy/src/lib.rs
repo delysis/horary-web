@@ -11,6 +11,7 @@ pub mod google;
 pub mod journey;
 #[cfg(test)]
 mod journey_tests;
+pub mod local;
 // These files belong to the application crate's formatting edition.
 #[rustfmt::skip]
 #[path = "../../../src-tauri/src/reading_method.rs"]

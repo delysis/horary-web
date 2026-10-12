@@ -110,7 +110,7 @@ reading_types! {
 }
 
 #[derive(dsrust::Signature)]
-/// Identify the actual horary matter and the requested aspect of it. A WILL question with a deadline is still an event question. Preserve an exact-count request instead of covertly rewriting it. Distinguish the question's principal from speaker, messenger, owner, operator and beneficiary.
+/// Identify the actual horary matter and the requested aspect of it. A WILL question with a deadline is still an event question. Preserve an exact-count request instead of covertly rewriting it. Distinguish the question's principal from speaker, messenger, owner, operator and beneficiary. Your reply contains ONLY the five output fields method, facet, branch, principal and clarification, using the requested field markers. Start with the method output; never copy the question, conversation or catalogue input into your reply. No preamble or catalogue reproduction.
 pub struct ClassifyQuestion {
     #[input]
     pub question: String,
