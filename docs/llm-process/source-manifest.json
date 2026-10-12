@@ -163,15 +163,19 @@
     },
     {
       "path": "src-tauri/src/horary_lessons.rs",
-      "sha256": "951e5c7fad3263efad8ef15fdbd31b9705a9e98faf5abd8d4a2c1c55ec336ceb"
+      "sha256": "89b6e521822189cbd7c9ab4aff596d76ea4c35b1d022c25a1f44cf04651d2948"
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "01a2011fd34f8063207e2245c168d5400c7bb293a675c4740423c7d1e1d25ff0"
+      "sha256": "e5304a6d792c7304165090d43b5d4446e1d7d8590a1283ae1d0bc0b459247165"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
       "sha256": "075b0431a59347311cf6548811395a5981e55599b8f47a5f87dd054a937d992c"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/contact_answer.md",
+      "sha256": "3fd652a16db2a98d88a6452d47a8afe84cab5753d994e5431e907cadf4e1a0d6"
     },
     {
       "path": "src-tauri/src/horary_prompts/contacts.md",
@@ -219,7 +223,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/passages.json",
-      "sha256": "34c57646aadb3a9f087549af2e792424d29331a28fe8bb6284aec101fc601917"
+      "sha256": "d0948fe5963528b8f5cac1e3bdabbc53253cd7917a13031ec46553c266df5ff6"
     },
     {
       "path": "src-tauri/src/horary_prompts/place.md",
@@ -415,7 +419,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "ae5ecb10e2a03d0a4badf7daf41d87888b8980592cc480ef3ab985e9a137d600"
+      "sha256": "7140367f6663c67b5bffbc2b15082a46a1960e3014426631fa823d961064f53d"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
