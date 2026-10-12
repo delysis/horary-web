@@ -261,20 +261,24 @@ enum Command {
         student_tokens_per_minute: usize,
     },
 }
+fn allows_local_student(command: &Command) -> bool {
+    matches!(
+        command,
+        Command::Run { .. }
+            | Command::Optimize { .. }
+            | Command::OptimizeClassification { .. }
+            | Command::OptimizeReading { .. }
+            | Command::CompareClassification { .. }
+            | Command::CompareContactReference { .. }
+    )
+}
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
     if let Some(url) = &args.student_local_url {
         local::validate_url(url)?;
         ensure!(
-            matches!(
-                &args.command,
-                Command::Run { .. }
-                    | Command::Optimize { .. }
-                    | Command::OptimizeClassification { .. }
-                    | Command::OptimizeReading { .. }
-                    | Command::CompareClassification { .. }
-            ),
+            allows_local_student(&args.command),
             "Local selection applies to run/optimize; sealed hosted queues remain unchanged"
         );
     }
@@ -1200,6 +1204,39 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn released_contact_comparison_passes_local_gate_and_sealed_queue_does_not() {
+        let comparison = Args::try_parse_from([
+            "horary-dspy",
+            "--student-local-url",
+            "http://127.0.0.1:63924/v1",
+            "compare-contact-reference",
+            "--prepared",
+            "synthetic-preparation",
+            "--token-preflight",
+            "synthetic-token-counts",
+            "--output",
+            "synthetic-output",
+        ])
+        .unwrap();
+        assert!(allows_local_student(&comparison.command));
+        let queue = Args::try_parse_from([
+            "horary-dspy",
+            "--student-local-url",
+            "http://127.0.0.1:63924/v1",
+            "queue-execute",
+            "--plan",
+            "synthetic-plan",
+        ])
+        .unwrap();
+        assert!(!allows_local_student(&queue.command));
+    }
 }
 fn student_identity(local_url: Option<&str>, model: &str) -> String {
     if local_url.is_some() {
