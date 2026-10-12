@@ -116,6 +116,8 @@ struct ReceptionRow {
 pub struct EventCandidate {
     pub within_current_signs: Option<bool>,
     pub astronomical_hours: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub perfection_motion: Option<horary_ai_core::events::PerfectionMotion>,
 }
 
 pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
@@ -313,7 +315,13 @@ pub fn facts(chart: Option<&Value>) -> Vec<Fact> {
                 detail: format!("{aspect} candidate in approximately {hours:.2} astronomical hours, {signs}.{distance} This is not the predicted timing of the earthly event."),
                 planets: vec![a.into(),b.into()],
                 condition_facet: None,
-                event: Some(EventCandidate { within_current_signs: event["withinCurrentSigns"].as_bool(), astronomical_hours: hours }),
+                event: Some(EventCandidate {
+                    within_current_signs: event["withinCurrentSigns"].as_bool(),
+                    astronomical_hours: hours,
+                    perfection_motion: event.get("perfectionMotion")
+                        .and_then(|value| serde_json::from_value::<horary_ai_core::events::PerfectionMotion>(value.clone()).ok())
+                        .filter(|motion| motion.body_motion[0].planet == a && motion.body_motion[1].planet == b),
+                }),
                 reception: None,
             });
         }
@@ -575,6 +583,54 @@ mod tests {
             .iter()
             .filter(|fact| fact.kind != "condition")
             .all(|fact| fact.condition_facet.is_none()));
+    }
+
+    #[test]
+    fn per_body_perfection_motion_reaches_facts_without_retrofitting_old_events() {
+        let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+        let raw = chart["derived"]["eventSearch"]["events"]
+            .as_array()
+            .unwrap()
+            .first()
+            .unwrap();
+        let generated = facts(Some(&chart));
+        let event = generated
+            .iter()
+            .find_map(|fact| fact.event.as_ref())
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(event.perfection_motion.as_ref().unwrap()).unwrap(),
+            raw["perfectionMotion"]
+        );
+        for body in &event.perfection_motion.as_ref().unwrap().body_motion {
+            let initial = chart["bodies"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|position| position["name"] == body.planet)
+                .unwrap();
+            assert_eq!(
+                body.chart_longitude_degrees,
+                initial["longitude"].as_f64().unwrap()
+            );
+        }
+        let legacy = json!({"withinCurrentSigns":false,"astronomicalHours":25.});
+        let decoded: EventCandidate = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(decoded.perfection_motion.is_none());
+        assert_eq!(serde_json::to_value(decoded).unwrap(), legacy);
+        let mut foreign = chart.clone();
+        foreign["derived"]["eventSearch"]["events"][0]["perfectionMotion"]["bodyMotion"][0]
+            ["planet"] = json!("Foreign body");
+        let generated = facts(Some(&foreign));
+        assert!(
+            generated
+                .iter()
+                .find_map(|fact| fact.event.as_ref())
+                .unwrap()
+                .perfection_motion
+                .is_none(),
+            "A mismatched body must not acquire native motion authority"
+        );
     }
     use serde_json::json;
     #[test]

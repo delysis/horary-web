@@ -641,6 +641,7 @@ mod tests {
             event: event.then_some(EventCandidate {
                 within_current_signs: Some(true),
                 astronomical_hours: 3.,
+                perfection_motion: None,
             }),
             reception: None,
         }
