@@ -60,6 +60,44 @@ pub(crate) fn text<'a>(prediction: &'a Prediction, name: &str) -> Result<&'a str
         .with_context(|| format!("Missing {name}"))
 }
 
+fn classification_target(example: &Example) -> Result<(&str, &str)> {
+    let expected = example
+        .get("expected")
+        .context("No private classification labels")?;
+    let method = expected["method"]
+        .as_str()
+        .context("No authored classification method")?;
+    let facet = expected["rubric"]["facet"]
+        .as_str()
+        .context("No authored classification facet")?;
+    ensure!(
+        !method.is_empty() && !facet.is_empty(),
+        "Empty authored classification label"
+    );
+    Ok((method, facet))
+}
+
+/// Known labels belong to the metric only. A fluent teacher pass cannot erase
+/// a received method/facet mismatch, and a missing semantic review stays unknown.
+pub fn classification_label_failures(
+    example: &Example,
+    prediction: &Prediction,
+) -> Result<Vec<String>> {
+    let (method, facet) = classification_target(example)?;
+    let mut errors = Vec::new();
+    if text(prediction, "method")? != method {
+        errors.push(format!(
+            "Classification method differs from authored label {method}"
+        ));
+    }
+    if text(prediction, "facet")? != facet {
+        errors.push(format!(
+            "Classification facet differs from authored label {facet}"
+        ));
+    }
+    Ok(errors)
+}
+
 enum Oracle {
     Single(Predict),
     Reading(Box<ReadingProgram>),
@@ -93,6 +131,9 @@ impl Graded {
         };
         let mut index = BTreeMap::new();
         for example in examples {
+            if function == "classification" {
+                classification_target(example)?;
+            }
             ensure!(
                 index
                     .insert(input_key(&example.inputs()?)?, example.clone())
@@ -295,6 +336,7 @@ impl Graded {
             let method = text(&prediction, "method")?;
             let facet = text(&prediction, "facet")?;
             let branch = text(&prediction, "branch")?;
+            errors.extend(classification_label_failures(example, &prediction)?);
             if !signatures::METHODS.contains(&method) {
                 errors.push(format!("Unknown method {method}"));
             } else {
@@ -1244,7 +1286,7 @@ mod component_tests {
         dsrust::example! {score:0.75,passed:passed,classification:classification,extraction:extraction,reading:reading,answer_quality:answer_quality,feedback:"Scripted mechanics review with observed output; not a source-qualified judgment."}
     }
     fn classification_input() -> Example {
-        dsrust::example!{question:"Will I sell my bicycle?",conversation:"[]",catalogue:"Actual declared catalogue only.",case_id:"private-case-id",expected:"PRIVATE GOLD MUST STAY OUT OF ORACLE",__review_source:"Private primary context for the independent reviewer."}
+        dsrust::example!{question:"Will I sell my bicycle?",conversation:"[]",catalogue:"Actual declared catalogue only.",case_id:"private-case-id",expected:json!({"method":"movable_deal","rubric":{"facet":"event","private":"PRIVATE GOLD MUST STAY OUT OF ORACLE"}}),__review_source:"Private primary context for the independent reviewer."}
             .with_inputs(["question","conversation","catalogue"])
     }
     fn classification_reply() -> Example {
@@ -1371,6 +1413,73 @@ mod component_tests {
         );
     }
     #[tokio::test]
+    async fn known_method_and_facet_mismatches_override_but_preserve_a_false_teacher_pass() {
+        for (reply, error) in [
+            (
+                dsrust::example! {method:"property",facet:"event",branch:"purchase_or_sale_completion",principal:"querent",clarification:""},
+                "Classification method differs from authored label movable_deal",
+            ),
+            (
+                dsrust::example! {method:"movable_deal",facet:"timing",branch:"pure_completion",principal:"querent",clarification:""},
+                "Classification facet differs from authored label event",
+            ),
+        ] {
+            let input = classification_input();
+            let oracle = Arc::new(DummyLM::new([reply]));
+            let judge = Arc::new(DummyLM::new([review(
+                "pass",
+                "unobserved",
+                "unobserved",
+                "unobserved",
+                true,
+            )]));
+            let program = Graded::new(
+                "all",
+                "classification",
+                std::slice::from_ref(&input),
+                oracle.clone(),
+                judge.clone(),
+                None,
+            )
+            .unwrap();
+            let output = program.forward(input).await.unwrap();
+            assert_eq!(output.get("__score"), Some(&json!(0.)));
+            assert_eq!(output.get("__passed"), Some(&json!(false)));
+            let observations = program.observations.lock().unwrap();
+            assert_eq!(observations[0]["review"]["classification"], "pass");
+            assert_eq!(observations[0]["review"]["passed"], true);
+            assert!(
+                observations[0]["native_failures"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!(error))
+            );
+            assert_eq!(oracle.asked().len(), 1);
+            assert_eq!(judge.asked().len(), 1);
+            assert!(!oracle.asked()[0].last_message().contains("PRIVATE GOLD"));
+        }
+    }
+    #[tokio::test]
+    async fn missing_private_classification_labels_stop_before_any_submission() {
+        let mut input = classification_input();
+        input.set("expected", json!({"method":"movable_deal"}));
+        let oracle = Arc::new(DummyLM::new([]));
+        let judge = Arc::new(DummyLM::new([]));
+        assert!(
+            Graded::new(
+                "all",
+                "classification",
+                &[input],
+                oracle.clone(),
+                judge.clone(),
+                None
+            )
+            .is_err()
+        );
+        assert!(oracle.asked().is_empty());
+        assert!(judge.asked().is_empty());
+    }
+    #[tokio::test]
     async fn classification_rejects_branch_as_facet_despite_positive_reviewer() {
         let input = classification_input();
         let oracle = Arc::new(DummyLM::new([
@@ -1401,9 +1510,11 @@ mod component_tests {
         assert_eq!(observations[0]["prediction"]["facet"], "person_in_capacity");
         assert_eq!(observations[0]["review"]["classification"], "pass");
         assert_eq!(observations[0]["review"]["passed"], true);
-        assert_eq!(
-            observations[0]["native_failures"],
-            json!(["Unknown trust facet person_in_capacity"])
+        assert!(
+            observations[0]["native_failures"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("Unknown trust facet person_in_capacity"))
         );
     }
     #[tokio::test]
@@ -1437,7 +1548,11 @@ mod component_tests {
     #[tokio::test]
     async fn classification_keeps_valid_facets_subject_to_semantic_review() {
         for facet in catalogue::method_facets("trust").unwrap() {
-            let input = classification_input();
+            let mut input = classification_input();
+            input.set(
+                "expected",
+                json!({"method":"trust","rubric":{"facet":facet}}),
+            );
             let oracle = Arc::new(DummyLM::new([
                 dsrust::example! {method:"trust",facet:facet,branch:"person_in_capacity",principal:"querent",clarification:""},
             ]));
