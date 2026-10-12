@@ -4,6 +4,7 @@ use crate::{
     book::Book,
     catalogue::{self, Case, Fact},
     functions::{self, Fixture},
+    reading::ReadingProgram,
     signatures,
 };
 use anyhow::{Context, Result, ensure};
@@ -59,10 +60,15 @@ pub(crate) fn text<'a>(prediction: &'a Prediction, name: &str) -> Result<&'a str
         .with_context(|| format!("Missing {name}"))
 }
 
-/// Only the oracle predictor is optimizable. The independent criterion does
+enum Oracle {
+    Single(Predict),
+    Reading(Box<ReadingProgram>),
+}
+
+/// Only the oracle program is optimizable. The independent criterion does
 /// not become a second conversational stage with authority to redefine its task.
 pub struct Graded {
-    oracle: Predict,
+    oracle: Oracle,
     judge: Predict,
     examples: BTreeMap<String, Example>,
     function: String,
@@ -78,6 +84,7 @@ impl Graded {
         examples: &[Example],
         student: Arc<dyn DynChatModel>,
         teacher: Arc<dyn DynChatModel>,
+        book: Option<Arc<Book>>,
     ) -> Result<Self> {
         let signature = match function {
             "reading" => signatures::reading(method)?,
@@ -99,7 +106,15 @@ impl Graded {
             .instructions
             .push_str(&functions::grading_instruction(function)?);
         Ok(Self {
-            oracle: plain(signature, student),
+            oracle: if function == "reading" {
+                Oracle::Reading(Box::new(ReadingProgram::new(
+                    method,
+                    book.context("Reading program requires the source-checked book")?,
+                    student,
+                )?))
+            } else {
+                Oracle::Single(plain(signature, student))
+            },
             judge,
             examples: index,
             function: function.into(),
@@ -149,9 +164,16 @@ impl Graded {
             .get(&input_key(&input)?)
             .context("Unknown evaluation input")?;
         let from = trace.len();
-        let mut prediction = self.oracle.forward_traced(input.clone(), trace).await?;
-        relabel(trace, from, &self.predictor_name);
-        self.record(true, &json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"prediction":fields(&prediction),"independently_reviewed":false}))?;
+        let mut prediction = match &self.oracle {
+            Oracle::Single(predictor) => {
+                let prediction = predictor.forward_traced(input.clone(), trace).await?;
+                relabel(trace, from, &self.predictor_name);
+                prediction
+            }
+            Oracle::Reading(program) => program.forward_traced(input.clone(), trace).await?,
+        };
+        let oracle_stages = trace[from..].iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>();
+        self.record(true, &json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"oracle_stages":oracle_stages,"prediction":fields(&prediction),"independently_reviewed":false}))?;
         let source = example
             .get("__review_source")
             .or_else(|| input.get("source_text"))
@@ -160,6 +182,19 @@ impl Graded {
             .cloned()
             .context("No actual primary context for independent review")?;
         let mut errors = Vec::new();
+        if let Some(failures) = prediction.get("__native_failures") {
+            for failure in failures
+                .as_array()
+                .context("Invalid internal native failures")?
+            {
+                errors.push(
+                    failure
+                        .as_str()
+                        .context("Invalid internal native failure")?
+                        .to_owned(),
+                );
+            }
+        }
         if self.function == "extraction" {
             let facts: Vec<Fact> = match serde_json::from_str(text(&prediction, "facts")?) {
                 Ok(facts) => facts,
@@ -315,7 +350,7 @@ impl Graded {
         prediction.example.set("__score", json!(score));
         prediction.example.set("__feedback",json!(format!("Native checks: {errors:?}. Applicable dimensions: {dimensions:?}. Independent summary consistent with those dimensions: {summary_consistent}. Independent review: {feedback}\nSALIENT PRIMARY FRAWLEY CONTEXT FOR THIS QUESTION TYPE:\n{source}")));
         prediction.example.set("__passed", json!(passed));
-        let observation = json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"prediction":fields(&prediction),"review":fields(&review),"native_failures":errors,"applicable_dimensions":dimensions,"review_summary_consistent":summary_consistent,"score":score,"passed":passed});
+        let observation = json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"oracle_stages":oracle_stages,"prediction":fields(&prediction),"review":fields(&review),"native_failures":errors,"applicable_dimensions":dimensions,"review_summary_consistent":summary_consistent,"score":score,"passed":passed});
         self.record(false, &observation)?;
         self.observations
             .lock()
@@ -371,14 +406,17 @@ impl Module for Graded {
         Box::pin(self.guarded(input, trace))
     }
     fn named_predictors(&mut self) -> Vec<NamedPredictor<'_>> {
-        self.oracle
-            .named_predictors()
-            .into_iter()
-            .map(|mut predictor| {
-                predictor.name = self.predictor_name.clone();
-                predictor
-            })
-            .collect()
+        match &mut self.oracle {
+            Oracle::Reading(program) => program.named_predictors(),
+            Oracle::Single(predictor) => predictor
+                .named_predictors()
+                .into_iter()
+                .map(|mut predictor| {
+                    predictor.name = self.predictor_name.clone();
+                    predictor
+                })
+                .collect(),
+        }
     }
 }
 
@@ -404,6 +442,7 @@ pub async fn compile(
         &fixtures,
         method,
         function,
+        Arc::new(book.clone()),
         models,
         directory,
         CompileOptions {
@@ -457,6 +496,7 @@ fn declaration_digest(method: &str, function: &str) -> Result<String> {
 pub fn teaching_sources() -> BTreeMap<String, String> {
     [
         ("book.rs", include_bytes!("book.rs").as_slice()),
+        ("reading.rs", include_bytes!("reading.rs").as_slice()),
         ("anchors.rs", include_bytes!("anchors.rs").as_slice()),
         (
             "coverage.json",
@@ -556,13 +596,45 @@ fn source_receipt(
     compiled: &[u8],
     dataset_digest: &str,
 ) -> Result<Value> {
-    Ok(
-        json!({"version":1,"method":method,"function":function,"predictor_name":predictor_name(method,function)?,
+    let mut receipt = json!({"version":1,"method":method,"function":function,"predictor_name":predictor_name(method,function)?,
         "port_revision":crate::native_export::PORT_REVISION,"signatures_sha256":crate::google::digest(include_bytes!("signatures.rs")),
         "declaration_sha256":declaration_digest(method,function)?,"catalogue_sha256":crate::google::digest(include_bytes!("catalogue.rs")),
         "functions_sha256":crate::google::digest(include_bytes!("functions.rs")),"optimizer_source_sha256":crate::google::digest(include_bytes!("optimize.rs")),
-        "book_sha256":crate::book::OCR_SHA256,"teaching_sources_sha256":teaching_sources(),"compiled_sha256":crate::google::digest(compiled),"dataset_sha256":dataset_digest}),
-    )
+        "book_sha256":crate::book::OCR_SHA256,"teaching_sources_sha256":teaching_sources(),"compiled_sha256":crate::google::digest(compiled),"dataset_sha256":dataset_digest});
+    if function == "reading" {
+        receipt["version"] = json!(crate::reading::VERSION);
+        receipt["program_kind"] = json!("branch_scoped_reading");
+        receipt["predictor_names"] =
+            json!(declarations(method, function)?.keys().collect::<Vec<_>>());
+        receipt["reading_module_sha256"] =
+            json!(crate::google::digest(include_bytes!("reading.rs")));
+        let signature = crate::reading::selector_signature();
+        receipt["branch_declaration_sha256"] = json!(crate::google::digest(serde_json::to_vec(
+            &json!({
+                "signature":dsrust::module::SignatureState::of(&signature),
+                "inputs":signature.inputs.iter().map(|f|json!({"name":f.name,"type":f.annotation()})).collect::<Vec<_>>(),
+                "outputs":signature.outputs.iter().map(|f|json!({"name":f.name,"type":f.annotation()})).collect::<Vec<_>>()
+            })
+        )?));
+    }
+    Ok(receipt)
+}
+
+fn declarations(
+    method: &str,
+    function: &str,
+) -> Result<BTreeMap<String, dsrust::signature::Signature>> {
+    let mut declarations = BTreeMap::from([(
+        predictor_name(method, function)?,
+        declaration(method, function)?,
+    )]);
+    if function == "reading" {
+        declarations.insert(
+            crate::reading::selector_name(method),
+            crate::reading::selector_signature(),
+        );
+    }
+    Ok(declarations)
 }
 
 fn exact_keys(value: &Value, keys: &[&str]) -> Result<()> {
@@ -583,12 +655,11 @@ fn exact_keys(value: &Value, keys: &[&str]) -> Result<()> {
 /// The port intentionally tolerates partial saved state; a composition gate
 /// cannot. Verify source identity, exact predictor membership, ordered fields,
 /// types and demo privacy before changing the existing live predictor.
-pub fn load_component(
-    predictor: &mut Predict,
+fn validated_state(
     path: &Path,
     method: &str,
     function: &str,
-) -> Result<()> {
+) -> Result<dsrust::module::ProgramState> {
     let compiled = fs::read(path)?;
     let receipt: Value = serde_json::from_slice(&fs::read(
         path.parent()
@@ -607,64 +678,81 @@ pub fn load_component(
         "Compiled component source identity differs"
     );
     let value: Value = serde_json::from_slice(&compiled)?;
-    let name = predictor_name(method, function)?;
-    exact_keys(&value, &["metadata", &name])?;
+    let declarations = declarations(method, function)?;
+    let mut keys = vec!["metadata"];
+    keys.extend(declarations.keys().map(String::as_str));
+    exact_keys(&value, &keys)?;
     exact_keys(&value["metadata"], &["dependency_versions"])?;
     exact_keys(&value["metadata"]["dependency_versions"], &["dspy"])?;
-    exact_keys(
-        &value[&name],
-        &["traces", "train", "demos", "signature", "lm"],
-    )?;
-    exact_keys(&value[&name]["signature"], &["instructions", "fields"])?;
-    for field in value[&name]["signature"]["fields"]
-        .as_array()
-        .context("No ordered fields")?
-    {
-        exact_keys(field, &["prefix", "description"])?;
+    for name in declarations.keys() {
+        exact_keys(
+            &value[name],
+            &["traces", "train", "demos", "signature", "lm"],
+        )?;
+        exact_keys(&value[name]["signature"], &["instructions", "fields"])?;
+        for field in value[name]["signature"]["fields"]
+            .as_array()
+            .context("No ordered fields")?
+        {
+            exact_keys(field, &["prefix", "description"])?;
+        }
     }
     let state: dsrust::module::ProgramState = serde_json::from_value(value)?;
     ensure!(
         state.metadata == dsrust::module::Metadata::default(),
         "Pinned DSPy metadata differs"
     );
-    let saved = state.get(&name).context("Required component missing")?;
-    let signature = declaration(method, function)?;
+    for (name, signature) in declarations {
+        let saved = state.get(&name).context("Required component missing")?;
+        ensure!(
+            saved.signature.fields == dsrust::module::SignatureState::of(&signature).fields,
+            "Saved ordered fields differ"
+        );
+        ensure!(
+            !saved.signature.instructions.trim().is_empty()
+                && saved.traces.is_empty()
+                && saved.train.is_empty()
+                && saved.lm.is_none(),
+            "Saved component carries empty teaching or runtime/training state"
+        );
+        let permitted = signature
+            .inputs
+            .iter()
+            .map(|field| field.name.as_str())
+            .chain(signature.outputs.iter().map(|field| field.name.as_str()))
+            .collect::<std::collections::BTreeSet<_>>();
+        for demo in &saved.demos {
+            ensure!(
+                demo.keys().all(|key| permitted.contains(key.as_str()))
+                    && demo.values().all(Value::is_string),
+                "Saved demo contains private/unknown or differently typed fields"
+            );
+            ensure!(
+                signature
+                    .outputs
+                    .iter()
+                    .all(|field| demo.contains_key(&field.name)),
+                "Saved demo lacks required outputs"
+            );
+        }
+    }
+    Ok(state)
+}
+
+fn require_baseline(predictor: &Predict, signature: &dsrust::signature::Signature) -> Result<()> {
     ensure!(
         dsrust::module::SignatureState::of(&predictor.signature)
-            == dsrust::module::SignatureState::of(&signature),
+            == dsrust::module::SignatureState::of(signature),
         "Target predictor is not the baseline declaration"
     );
-    ensure!(
-        saved.signature.fields == dsrust::module::SignatureState::of(&signature).fields,
-        "Saved ordered fields differ"
-    );
-    ensure!(
-        !saved.signature.instructions.trim().is_empty()
-            && saved.traces.is_empty()
-            && saved.train.is_empty()
-            && saved.lm.is_none(),
-        "Saved component carries empty teaching or runtime/training state"
-    );
-    let permitted = signature
-        .inputs
-        .iter()
-        .map(|field| field.name.as_str())
-        .chain(signature.outputs.iter().map(|field| field.name.as_str()))
-        .collect::<std::collections::BTreeSet<_>>();
-    for demo in &saved.demos {
-        ensure!(
-            demo.keys().all(|key| permitted.contains(key.as_str()))
-                && demo.values().all(Value::is_string),
-            "Saved demo contains private/unknown or differently typed fields"
-        );
-        ensure!(
-            signature
-                .outputs
-                .iter()
-                .all(|field| demo.contains_key(&field.name)),
-            "Saved demo lacks required outputs"
-        );
-    }
+    Ok(())
+}
+
+fn restore(
+    predictor: &mut Predict,
+    saved: &dsrust::module::PredictorState,
+    signature: &dsrust::signature::Signature,
+) {
     // All validation precedes mutation. Apply only the exact predictor's fields.
     saved.signature.restore(&mut predictor.signature);
     predictor.demos = saved
@@ -678,6 +766,97 @@ pub fn load_component(
             .with_inputs(signature.inputs.iter().map(|field| field.name.clone()))
         })
         .collect();
+}
+
+/// Both predictors validate before mutation. Older one-Predict reading states
+/// are not silently upgraded to a different executable program.
+pub fn load_reading_component(
+    program: &mut ReadingProgram,
+    path: &Path,
+    method: &str,
+    expected_dataset_sha256: &str,
+) -> Result<()> {
+    require_dataset(path, expected_dataset_sha256)?;
+    let state = validated_state(path, method, "reading")?;
+    let selector = crate::reading::selector_signature();
+    let reader = signatures::reading(method)?;
+    require_baseline(&program.selector, &selector)?;
+    require_baseline(&program.reader, &reader)?;
+    restore(
+        &mut program.selector,
+        state
+            .get(&crate::reading::selector_name(method))
+            .context("No selector")?,
+        &selector,
+    );
+    restore(
+        &mut program.reader,
+        state
+            .get(&predictor_name(method, "reading")?)
+            .context("No reader")?,
+        &reader,
+    );
+    Ok(())
+}
+
+pub fn load_component(
+    predictor: &mut Predict,
+    path: &Path,
+    method: &str,
+    function: &str,
+) -> Result<()> {
+    ensure!(
+        function != "reading",
+        "Standalone reading requires the versioned reading Module loader"
+    );
+    let state = validated_state(path, method, function)?;
+    let signature = declaration(method, function)?;
+    require_baseline(predictor, &signature)?;
+    restore(
+        predictor,
+        state
+            .get(&predictor_name(method, function)?)
+            .context("Required component missing")?,
+        &signature,
+    );
+    Ok(())
+}
+
+/// A fresh Journey owns a classified, validated branch. Validate the whole
+/// reading artifact, then explicitly apply only its reader; the standalone
+/// selector remains in the immutable source artifact and is not executed.
+pub fn load_classified_reader(
+    predictor: &mut Predict,
+    path: &Path,
+    method: &str,
+    expected_dataset_sha256: &str,
+) -> Result<Value> {
+    require_dataset(path, expected_dataset_sha256)?;
+    let state = validated_state(path, method, "reading")?;
+    let signature = signatures::reading(method)?;
+    require_baseline(predictor, &signature)?;
+    let name = predictor_name(method, "reading")?;
+    let selector_name = crate::reading::selector_name(method);
+    let saved_selector = state.get(&selector_name).context("No saved selector")?;
+    let receipt = json!({"reading_module_version":crate::reading::VERSION,"compiled_sha256":crate::google::digest(fs::read(path)?),"applied_predictor":name,"bypassed_predictor":selector_name,"bypassed_predictor_sha256":crate::google::digest(serde_json::to_vec(saved_selector)?),"branch_authority":"Actual fresh Journey classifier; guarded before extraction/chart/reading"});
+    restore(
+        predictor,
+        state.get(&name).context("No saved reader")?,
+        &signature,
+    );
+    Ok(receipt)
+}
+
+fn require_dataset(path: &Path, expected_dataset_sha256: &str) -> Result<()> {
+    let receipt: Value = serde_json::from_slice(&fs::read(
+        path.parent()
+            .context("No component parent")?
+            .join("component-source.json"),
+    )?)?;
+    ensure!(
+        receipt["dataset_sha256"] == expected_dataset_sha256,
+        "Compiled component belongs to a different fixture/input/label/split bank"
+    );
     Ok(())
 }
 
@@ -688,15 +867,7 @@ pub fn load_component_for_dataset(
     function: &str,
     expected_dataset_sha256: &str,
 ) -> Result<()> {
-    let receipt: Value = serde_json::from_slice(&fs::read(
-        path.parent()
-            .context("No component parent")?
-            .join("component-source.json"),
-    )?)?;
-    ensure!(
-        receipt["dataset_sha256"] == expected_dataset_sha256,
-        "Compiled component belongs to a different fixture/input/label/split bank"
-    );
+    require_dataset(path, expected_dataset_sha256)?;
     load_component(predictor, path, method, function)
 }
 
@@ -750,6 +921,7 @@ pub async fn compile_fixtures(
     fixtures: &[Fixture],
     method: &str,
     function: &str,
+    book: Arc<Book>,
     models: &crate::runner::Models,
     directory: &Path,
     options: CompileOptions,
@@ -786,6 +958,7 @@ pub async fn compile_fixtures(
         &all,
         models.student.clone(),
         models.teacher.clone(),
+        Some(book.clone()),
     )?
     .with_stream(directory.join("observations.jsonl"))?;
     program.save(&directory.join("baseline-program.json"))?;
@@ -812,6 +985,7 @@ pub async fn compile_fixtures(
             &all,
             models.teacher.clone(),
             models.teacher.clone(),
+            Some(book),
         )?
         .with_stream(directory.join("teacher-observations.jsonl"))?;
         let mut bootstrap = BootstrapFewShot::new(Graded::metric);
@@ -828,8 +1002,10 @@ pub async fn compile_fixtures(
     program.save(&directory.join("bootstrapped-full.json"))?;
     // Constant primary context is supplied on every real call. Keeping it in
     // every demonstration would repeat entire book chapters without adding data.
-    for demo in &mut program.oracle.demos {
-        *demo = crate::demo::compact(demo)?;
+    for predictor in program.named_predictors() {
+        for demo in predictor.demos {
+            *demo = crate::demo::compact(demo)?;
+        }
     }
     program.save(&directory.join("bootstrapped.json"))?;
     let reflection = Arc::new(ReflectionGuard {
@@ -917,6 +1093,7 @@ mod component_tests {
             std::slice::from_ref(&input),
             oracle.clone(),
             judge.clone(),
+            None,
         )
         .unwrap();
         let output = program.forward(input).await.unwrap();
@@ -945,6 +1122,7 @@ mod component_tests {
             std::slice::from_ref(&input),
             oracle,
             judge,
+            None,
         )
         .unwrap();
         let output = program.forward(input).await.unwrap();
@@ -959,7 +1137,7 @@ mod component_tests {
     }
     #[tokio::test]
     async fn reader_cannot_pass_by_procedure_while_failing_to_answer() {
-        let input=dsrust::example!{question:"Synthetic question.",consultation:"Independent declared inputs.",chart_evidence:"{\"facts\":\"ID\\tKIND\\tLABEL\\tCALCULATED TESTIMONY\\ne1\\tboundary\\tLimits\\tSynthetic supplied boundary.\\n\"}",source_text:"Synthetic primary context.",expected:"Synthetic rubric.",case_id:"synthetic"}
+        let input=dsrust::example!{question:"Synthetic question.",consultation:"{\"facts\":[],\"branch\":\"pure_completion\"}",chart_evidence:"{\"facts\":\"ID\\tKIND\\tLABEL\\tCALCULATED TESTIMONY\\ne1\\tboundary\\tLimits\\tSynthetic supplied boundary.\\n\"}",source_text:"Synthetic primary context.",expected:"Synthetic rubric.",case_id:"synthetic"}
             .with_inputs(["question","consultation","chart_evidence","source_text"]);
         let oracle = Arc::new(DummyLM::new([
             dsrust::example! {status:"answer",answer:"",analysis:"Synthetic e1 observation.",evidence:"e1",unresolved:""},
@@ -977,6 +1155,7 @@ mod component_tests {
             std::slice::from_ref(&input),
             oracle,
             judge,
+            Some(Arc::new(Book::fixture())),
         )
         .unwrap()
         .forward(input)
@@ -1005,6 +1184,7 @@ mod component_tests {
             std::slice::from_ref(&input),
             oracle.clone(),
             judge,
+            None,
         )
         .unwrap();
         let prediction = program.forward(input).await.unwrap();
@@ -1032,6 +1212,7 @@ mod component_tests {
             std::slice::from_ref(&input),
             oracle.clone(),
             judge.clone(),
+            None,
         )
         .unwrap();
         assert!(program.forward(input.clone()).await.is_err());
@@ -1058,11 +1239,15 @@ mod component_tests {
         method: &str,
         mutate: impl FnOnce(&mut Value),
     ) -> PathBuf {
-        let declaration = declaration(method, function).unwrap();
-        let state = dsrust::module::ProgramState::new(BTreeMap::from([(
-            predictor_name(method, function).unwrap(),
-            dsrust::module::PredictorState::of(&declaration, &[]),
-        )]));
+        let state = dsrust::module::ProgramState::new(
+            declarations(method, function)
+                .unwrap()
+                .into_iter()
+                .map(|(name, signature)| {
+                    (name, dsrust::module::PredictorState::of(&signature, &[]))
+                })
+                .collect(),
+        );
         let mut value = serde_json::to_value(state).unwrap();
         mutate(&mut value);
         let bytes = serde_json::to_vec_pretty(&value).unwrap();
@@ -1166,6 +1351,7 @@ mod component_tests {
             &fixtures,
             "all",
             "classification",
+            Arc::new(Book::fixture()),
             &models,
             directory.path(),
             CompileOptions {
@@ -1251,5 +1437,200 @@ mod component_tests {
         let before = fixtures_digest(std::slice::from_ref(&fixture)).unwrap();
         fixture.split = "test".into();
         assert_ne!(before, fixtures_digest(&[fixture]).unwrap());
+    }
+
+    #[tokio::test]
+    async fn learned_selector_failure_is_scored_and_reviewed_without_hiding_full_family_source() {
+        let input = crate::reading::tests::input(json!({"facts":[]}));
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {branch:"not_a_book_branch"},
+        ]));
+        let judge = Arc::new(DummyLM::new([review(
+            "unobserved",
+            "unobserved",
+            "pass",
+            "pass",
+            true,
+        )]));
+        let program = Graded::new(
+            "movable_deal",
+            "reading",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge.clone(),
+            Some(Arc::new(Book::fixture())),
+        )
+        .unwrap();
+        let output = program.forward(input).await.unwrap();
+        assert_eq!(output.get("__score"), Some(&json!(0.0)));
+        assert_eq!(output.get("__passed"), Some(&json!(false)));
+        assert!(!program.failed.load(Ordering::SeqCst));
+        assert_eq!(oracle.asked().len(), 1);
+        assert!(
+            judge.asked()[0]
+                .last_message()
+                .contains("FULL FAMILY REVIEW CONTEXT")
+        );
+        assert!(
+            judge.asked()[0]
+                .last_message()
+                .contains("PRIVATE GOLD MUST NOT REACH THE STUDENT")
+        );
+        assert!(
+            program.observations.lock().unwrap()[0]["native_failures"][0]
+                .as_str()
+                .unwrap()
+                .contains("not_a_book_branch")
+        );
+    }
+    #[test]
+    fn reading_module_version_validates_both_predictors_and_classified_projection_before_mutation()
+    {
+        let directory = tempfile::tempdir().unwrap();
+        let model = Arc::new(DummyLM::new([]));
+        let digest = crate::google::digest("Synthetic fixture corpus");
+        let path = saved_component(directory.path(), "reading", "movable_deal", |value| {
+            value["reading_branch.movable_deal"]["signature"]["instructions"] =
+                json!("Synthetic learned branch instruction.");
+            value["reading.movable_deal"]["signature"]["instructions"] =
+                json!("Synthetic learned reader instruction.");
+        });
+        let mut module =
+            ReadingProgram::new("movable_deal", Arc::new(Book::fixture()), model.clone()).unwrap();
+        load_reading_component(&mut module, &path, "movable_deal", &digest).unwrap();
+        assert_eq!(
+            module.selector.signature.instructions,
+            "Synthetic learned branch instruction."
+        );
+        assert_eq!(
+            module.reader.signature.instructions,
+            "Synthetic learned reader instruction."
+        );
+        let mut reader = plain(signatures::reading("movable_deal").unwrap(), model.clone());
+        let projection =
+            load_classified_reader(&mut reader, &path, "movable_deal", &digest).unwrap();
+        assert_eq!(projection["reading_module_version"], 2);
+        assert_eq!(
+            projection["bypassed_predictor"],
+            "reading_branch.movable_deal"
+        );
+        assert_eq!(
+            reader.signature.instructions,
+            "Synthetic learned reader instruction."
+        );
+        let receipt: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("component-source.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(receipt["version"], 2);
+        assert_eq!(
+            receipt["predictor_names"],
+            json!(["reading.movable_deal", "reading_branch.movable_deal"])
+        );
+        for mutate in [
+            |v: &mut Value| {
+                v.as_object_mut()
+                    .unwrap()
+                    .remove("reading_branch.movable_deal");
+            },
+            |v: &mut Value| {
+                v["reading_branch.movable_deal"]["signature"]["fields"]
+                    .as_array_mut()
+                    .unwrap()
+                    .swap(0, 1);
+            },
+            |v: &mut Value| {
+                v["reading_branch.movable_deal"]["demos"] = json!([{"question":"Synthetic","branch":"pure_completion","expected":"PRIVATE GOLD"}]);
+            },
+            |v: &mut Value| {
+                v["reading.movable_deal"]["lm"] = json!({"key":"forbidden runtime"});
+            },
+        ] {
+            let path = saved_component(directory.path(), "reading", "movable_deal", mutate);
+            let mut module =
+                ReadingProgram::new("movable_deal", Arc::new(Book::fixture()), model.clone())
+                    .unwrap();
+            let before = serde_json::to_value(module.dump_state()).unwrap();
+            assert!(load_reading_component(&mut module, &path, "movable_deal", &digest).is_err());
+            assert_eq!(serde_json::to_value(module.dump_state()).unwrap(), before);
+            let mut reader = plain(signatures::reading("movable_deal").unwrap(), model.clone());
+            let before = reader.signature.instructions.clone();
+            assert!(load_classified_reader(&mut reader, &path, "movable_deal", &digest).is_err());
+            assert_eq!(reader.signature.instructions, before);
+        }
+        let path = saved_component(directory.path(), "reading", "movable_deal", |_| {});
+        let mut reader = plain(signatures::reading("movable_deal").unwrap(), model);
+        assert!(load_component(&mut reader, &path, "movable_deal", "reading").is_err());
+        assert!(
+            load_classified_reader(
+                &mut reader,
+                &path,
+                "movable_deal",
+                &crate::google::digest("Different corpus")
+            )
+            .is_err()
+        );
+    }
+    #[tokio::test]
+    async fn pinned_gepa_compiles_and_reloads_both_reading_predictors_with_observed_phase_receipts()
+    {
+        let fixtures = ["train", "development", "test"].map(|split| {
+            let mut example = crate::reading::tests::input(json!({"facts":[]}));
+            example.set(
+                "question",
+                json!(format!("Synthetic {split}: will this sale complete?")),
+            );
+            example.set("case_id", json!(format!("synthetic-{split}")));
+            Fixture {
+                split: split.into(),
+                example,
+            }
+        });
+        let oracle = Arc::new(DummyLM::new((0..100).flat_map(|_|[
+            dsrust::example! {branch:"pure_completion"},
+            dsrust::example! {status:"method_limit",answer:"Synthetic only.",analysis:"Supplied e1 boundary.",evidence:"e1",unresolved:"Native unknowns remain unknown."},
+        ])));
+        let judge =
+            Arc::new(DummyLM::new((0..100).map(|_| {
+                review("unobserved", "unobserved", "pass", "pass", true)
+            })));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: judge,
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let book = Arc::new(Book::fixture());
+        let result = compile_fixtures(
+            &fixtures,
+            "movable_deal",
+            "reading",
+            book.clone(),
+            &models,
+            directory.path(),
+            CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["component_only"], true);
+        assert_eq!(result["application_promoted"], false);
+        assert_eq!(result["source_correct_reading_qualified"], false);
+        let mut target = ReadingProgram::new("movable_deal", book, oracle).unwrap();
+        load_reading_component(
+            &mut target,
+            &directory.path().join("compiled.json"),
+            "movable_deal",
+            &fixtures_digest(&fixtures).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(target.dump_state().predictors.len(), 2);
+        for phase in ["before.json", "after.json", "held.json"] {
+            let receipt: Value =
+                serde_json::from_slice(&fs::read(directory.path().join(phase)).unwrap()).unwrap();
+            assert_eq!(receipt["execution_errors"], 0);
+        }
     }
 }

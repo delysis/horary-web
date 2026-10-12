@@ -11,6 +11,7 @@ pub const OCR_SHA256: &str = "cd5853df311b12f2ec7fcc612f49b0a5248a5c9b87ef778073
 pub const DEFAULT_OCR: &str = "/Users/george/.codex/evidence/horary-readings-20261008/worker-readable-book-20261009/frawley-ocr.md";
 const CARDS: &str = include_str!("../../../src-tauri/src/horary_prompts/passages.json");
 
+#[derive(Clone)]
 pub struct Book {
     pages: BTreeMap<usize, String>,
     cards: Vec<Value>,

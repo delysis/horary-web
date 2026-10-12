@@ -42,6 +42,7 @@ pub struct Journey {
     component_extractors: BTreeMap<String, Predict>,
     component_readers: BTreeMap<String, Predict>,
     component_sources: BTreeMap<String, String>,
+    reading_component_projections: BTreeMap<String, Value>,
     case_bank_sha256: String,
     labels: BTreeMap<String, Example>,
     stream: Option<PathBuf>,
@@ -82,6 +83,7 @@ impl Journey {
             component_extractors: BTreeMap::new(),
             component_readers: BTreeMap::new(),
             component_sources: BTreeMap::new(),
+            reading_component_projections: BTreeMap::new(),
             case_bank_sha256: crate::google::digest(serde_json::to_vec(cases)?),
             labels,
             stream: None,
@@ -134,15 +136,29 @@ impl Journey {
                 } else {
                     plain(signatures::reading(method)?, self.model.clone())
                 };
-                crate::optimize::load_component_for_dataset(
-                    &mut predictor,
-                    &path,
-                    method,
-                    function,
-                    plan.component_datasets_sha256
-                        .get(&format!("{method}-{function}"))
-                        .context("No sealed component dataset")?,
-                )?;
+                let dataset = plan
+                    .component_datasets_sha256
+                    .get(&format!("{method}-{function}"))
+                    .context("No sealed component dataset")?;
+                if function == "reading" {
+                    self.reading_component_projections.insert(
+                        method.into(),
+                        crate::optimize::load_classified_reader(
+                            &mut predictor,
+                            &path,
+                            method,
+                            dataset,
+                        )?,
+                    );
+                } else {
+                    crate::optimize::load_component_for_dataset(
+                        &mut predictor,
+                        &path,
+                        method,
+                        function,
+                        dataset,
+                    )?;
+                }
                 self.component_sources.insert(
                     format!("{function}.{method}"),
                     crate::google::digest(fs::read(path)?),
@@ -178,7 +194,7 @@ impl Journey {
                 file,
                 "{}",
                 serde_json::to_string(
-                    &json!({"phase":phase,"original_inputs":input.rendered(),"stages":stages,"compiled_components":self.component_sources,"independently_reviewed":false})
+                    &json!({"phase":phase,"original_inputs":input.rendered(),"stages":stages,"compiled_components":self.component_sources,"reading_component_projections":self.reading_component_projections,"independently_reviewed":false})
                 )?
             )?;
             file.sync_data()?;
@@ -416,7 +432,7 @@ impl Journey {
         prediction.example.set("__score", json!(score));
         prediction.example.set("__feedback", json!(feedback));
         prediction.example.set("__passed", json!(passed));
-        let observation = json!({"case_id":label.get("case_id"),"original_inputs":input.rendered(),"stages":stages,"compiled_components":self.component_sources,"review":fields(&review),"native_failures":failures,"score":score,"passed":prediction.get("__passed")});
+        let observation = json!({"case_id":label.get("case_id"),"original_inputs":input.rendered(),"stages":stages,"compiled_components":self.component_sources,"reading_component_projections":self.reading_component_projections,"review":fields(&review),"native_failures":failures,"score":score,"passed":prediction.get("__passed")});
         if let Some(path) = &self.stream {
             use std::io::Write;
             let mut file = fs::OpenOptions::new()

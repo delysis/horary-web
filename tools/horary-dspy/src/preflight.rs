@@ -1,6 +1,6 @@
 //! Read-only budget checks of the port's actual baseline text exchanges.
 //! No student generation, teacher call, optimizer, or semantic score is made.
-use crate::{book::Book, catalogue, functions, google, runner, signatures};
+use crate::{book::Book, catalogue, functions, google, reading, runner, signatures};
 use anyhow::{Context, Result, ensure};
 use dsrust::{
     Example,
@@ -38,7 +38,9 @@ fn request(signature: &Signature, example: &Example) -> Result<LmRequest> {
     )
 }
 
-/// Exact baseline exchanges for every declared fixture, not just one sample.
+/// Exact baseline exchanges for every declared fixture. A standalone reader
+/// has an unobserved branch, so enumerate its possible requests instead of
+/// supplying an expected branch. These are budget alternatives, not executions.
 pub fn requests(directory: &Path, book: &Book) -> Result<Vec<(String, String, LmRequest)>> {
     let mut requests = Vec::new();
     for method in runner::methods("all")? {
@@ -55,7 +57,35 @@ pub fn requests(directory: &Path, book: &Book) -> Result<Vec<(String, String, Lm
                     format!("{method}-{function}")
                 };
                 let example = catalogue::example(&case, function, book)?;
-                requests.push((label, case.id.clone(), request(&signature, &example)?));
+                if function == "reading" {
+                    // Standalone banks deliberately have no gold-derived
+                    // branch annotation. Count the selector and every legal
+                    // reader alternative without pretending any was observed.
+                    requests.push((
+                        label.clone(),
+                        format!("{}:selector", case.id),
+                        request(
+                            &reading::selector_signature(),
+                            &reading::selector_input(&example, method)?,
+                        )?,
+                    ));
+                    for branch in catalogue::coverage_card(method)?["judgment_subbranches"]
+                        .as_array()
+                        .context("No reading branches")?
+                    {
+                        let branch = branch["id"].as_str().context("No branch ID")?;
+                        requests.push((
+                            label.clone(),
+                            format!("{}:reader-alternative:{branch}", case.id),
+                            request(
+                                &signature,
+                                &reading::reader_input(&example, method, branch, book)?,
+                            )?,
+                        ));
+                    }
+                } else {
+                    requests.push((label, case.id.clone(), request(&signature, &example)?));
+                }
             }
         }
     }
@@ -105,9 +135,9 @@ pub async fn run(
     fs::write(
         output.join("inventory.json"),
         serde_json::to_vec_pretty(&json!({
-            "all_formatted_exchanges":total,"schema_constrained":false,"bootstrap_demos":0,
+            "all_formatted_exchanges":total,"schema_constrained":false,"bootstrap_demos":0,"reading_branch_alternatives_are_not_observed_selections":true,
             "functions":inventory.iter().map(|(function, sizes)|json!({"function":function,
-                "cases":sizes.len(),"maximum_request_bytes":sizes.iter().max()})).collect::<Vec<_>>()
+                "formatted_exchanges_or_alternatives":sizes.len(),"maximum_request_bytes":sizes.iter().max()})).collect::<Vec<_>>()
         }))?,
     )?;
     let selected = if all_counts {

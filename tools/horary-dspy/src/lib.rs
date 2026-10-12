@@ -21,6 +21,7 @@ pub mod native_export;
 pub mod optimize;
 pub mod preflight;
 pub mod queue;
+pub mod reading;
 pub mod runner;
 pub mod signatures;
 pub mod teachers;

@@ -103,6 +103,7 @@ fn sources() -> BTreeMap<String, String> {
             ("catalogue.rs", include_bytes!("catalogue.rs").as_slice()),
             ("journey.rs", include_bytes!("journey.rs").as_slice()),
             ("book.rs", include_bytes!("book.rs").as_slice()),
+            ("reading.rs", include_bytes!("reading.rs").as_slice()),
             ("google.rs", include_bytes!("google.rs").as_slice()),
             ("codex.rs", include_bytes!("codex.rs").as_slice()),
             (
@@ -202,15 +203,27 @@ pub fn plan(
     // The GEPA budget is an iteration-boundary bound. Its initial validation
     // alone costs 168 on the mixed 840 bank; 24 would perform no optimization.
     let jobs = jobs(max_metrics)?;
-    let component_fixed_evaluations =
+    let component_fixed_metric_evaluations =
         classifier_development * 3 + (methods.len() * 2 + functions::AUXILIARY.len()) * 12;
+    let component_fixed_evaluations = component_fixed_metric_evaluations + methods.len() * 12;
     let journey_fixed_evaluations = methods.len() * 12;
     let gepa_budget = jobs.iter().map(|job| job.metric_calls).sum::<usize>();
+    let gepa_student_budget = jobs
+        .iter()
+        .map(|job| {
+            job.metric_calls
+                * if job.kind == Kind::Component && job.function == "reading" {
+                    2
+                } else {
+                    1
+                }
+        })
+        .sum::<usize>();
     Ok(Plan {version:1,executable_sha256:google::digest(fs::read(std::env::current_exe()?)?),book_sha256,source_sha256:sources(),banks_sha256:banks(examples)?,case_banks_canonical_sha256,component_datasets_sha256,configuration,
         bootstrap_demos:0,requested_metric_calls:max_metrics,jobs,
         scope:"Conventional pinned DsRust GEPA instruction optimization. The independent judge is not optimized. Candidate components and complete journeys never automatically install in the native app.".into(),
-        reservations:json!({"component_fixed_student_evaluations":component_fixed_evaluations,"journey_fixed_evaluations":journey_fixed_evaluations,"journey_student_functions_per_complete_case":3,"gepa_soft_iteration_metric_budget":gepa_budget,
-            "nominal_student_function_evaluations":component_fixed_evaluations+journey_fixed_evaluations*3+gepa_budget,
+        reservations:json!({"component_fixed_student_evaluations":component_fixed_evaluations,"component_fixed_metric_evaluations":component_fixed_metric_evaluations,"reading_component_student_functions_per_case_up_to":2,"journey_fixed_evaluations":journey_fixed_evaluations,"journey_student_functions_per_complete_case":3,"gepa_soft_iteration_metric_budget":gepa_budget,
+            "nominal_student_function_evaluations":component_fixed_evaluations+journey_fixed_evaluations*3+gepa_student_budget,
             "metric_budget_is_not_a_physical_submission_cap":true,"gepa_budget_can_overshoot_at_iteration_boundary":true,
             "models_and_physical_counters":"One shared student and teacher instance for the whole queue. Every provider retry counts against the same caller-configured caps and token window.",
             "forecast":"A call-count forecast, not elapsed time. Actual token counts, API pacing waits, teacher latency, semantic failures and cache hits determine elapsed time."})})
@@ -237,6 +250,7 @@ pub fn preflight(examples: &Path, book: &Book) -> Result<Value> {
             &examples,
             model.clone(),
             model.clone(),
+            Some(Arc::new(book.clone())),
         )?;
         rows.push(json!({"job":job.id,"function":job.function,"method":job.method,"examples":fixtures.len(),"dataset_sha256":optimize::fixtures_digest(&fixtures)?,"inputs_unique":true,"oracle_calls":0}));
     }
@@ -526,6 +540,7 @@ pub async fn execute(
                         &fixtures,
                         &job.method,
                         &job.function,
+                        book.clone(),
                         models,
                         &output,
                         CompileOptions {

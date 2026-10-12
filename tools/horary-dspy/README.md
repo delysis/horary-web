@@ -6,7 +6,7 @@ This is an experimental optimizer path. It has not been promoted into the produc
 
 ## The complete conventional queue
 
-`queue-plan` seals 130 jobs: one mixed-family classifier, three auxiliary functions, 84 family extraction/reading components and 42 fresh original-message journey gates. Each initial reading family has twenty cases, split 12/4/4. The independent judge is fixed. The queue calls the pinned port's GEPA compiler directly; it does not implement a second optimizer. This first queue optimizes instructions with zero bootstrap demonstrations, an explicit policy that avoids repeating the earlier bulky-bootstrap pilot. The optional older `optimize` command still supports the port's standard bootstrap path and preserves full teacher demonstrations.
+`queue-plan` seals 130 queue tasks: 88 DSPy optimization runs (one mixed-family classifier, three auxiliary functions, 42 extractors and 42 readers), and 42 end-to-end checks. Each initial reading family has twenty cases, split 12/4/4. The independent judge is fixed. The queue calls the pinned port's GEPA compiler directly; it does not implement a second optimizer. This first queue optimizes instructions with zero bootstrap demonstrations, an explicit policy that avoids repeating the earlier bulky-bootstrap pilot. The optional older `optimize` command still supports the port's standard bootstrap path and preserves full teacher demonstrations.
 
 ```mermaid
 flowchart TB
@@ -22,6 +22,23 @@ flowchart TB
 ```
 
 The reading component receives an independently authored accepted consultation and a real native chart. It is labelled as a component, not successful elicitation. The journey gate instead acquires its own facts and calculates its own chart from the actual classifier and extractor outputs. Compiled components must match the queue's executable, teaching sources, exact fixture digest and canonical family bank. The queue rechecks source and fixture identity at each job boundary. Expected method, facts, chart seed and grading rubric never become journey inputs.
+
+The standalone reading component is now the version-2 [ReadingProgram](src/reading.rs), with two optimizable port predictors: `reading_branch.<family>` and `reading.<family>`. When the accepted consultation already contains a valid branch, it calls only the reader. Otherwise its typed, ordinary-text selector receives the original question, accepted consultation and that family's source taxonomy. It selects an actual branch; it cannot borrow a grading label or page-coverage witness. The reader receives the exact existing `catalogue::branch_source` allocation for that branch, including common foundations and cross-chapter passages. Chart evidence and native unknowns pass through unchanged. A received unsupported branch is an observed native rejection, not a transport retry or a guessed route. The independent judge and GEPA feedback retain the complete family source context.
+
+Both reading predictors are saved and source-validated together. Older one-predictor reading artifacts fail the versioned loader. A fresh Journey already owns its classifier's branch, so it validates the complete artifact and explicitly projects the reader, recording the bypassed selector's identity. This projection is source-qualified, not semantic qualification. The native exporter still accepts only a classified Journey's extractor/reader artifact; it rejects a standalone reading Module rather than silently discarding its selector. No candidate is installed automatically.
+
+```mermaid
+flowchart LR
+    input[Original question and accepted consultation] --> branch{Observed valid branch?}
+    branch -- yes --> source[Exact existing branch source]
+    branch -- absent --> select[Optimizable reading_branch predictor]
+    select --> valid{Valid family branch?}
+    valid -- yes --> source
+    valid -- no --> failure[Observed native rejection]
+    source --> reader[Optimizable reading predictor plus unchanged native evidence]
+    reader --> review[Fixed full-family independent review]
+    failure --> review
+```
 
 Function-local dimensions and native checks drive optimization. Inapplicable stages cannot veto a component. Raw independent-summary disagreements remain visible and withhold qualification; they are not rewritten as a win. A completed invalid fact array, unsupported route or invented native citation is an observed rejection with feedback. Missing/interrupted provider evidence remains unknown and stops further submissions. The port's fallback zero for an execution error cannot qualify a search result.
 
@@ -42,7 +59,7 @@ horary-dspy queue-execute --examples /absolute/path/to/examples \
 horary-dspy queue-status --output /absolute/path/to/queue
 ```
 
-Preflight formats every baseline exchange locally and counts the largest rendered exchange per function by default; `--all-counts` counts every fixture. Sampling does not prove every request's token admission. The actual transport counts every exact request before generation. These checks establish source and execution mechanics, not guaranteed semantic improvement. The plan records nominal function evaluations and hard physical caps. Until observed tokens, waits and latencies arrive, elapsed time is a conditional forecast rather than a promised completion time.
+Preflight formats every baseline exchange locally and counts the largest rendered exchange per function by default; `--all-counts` counts every exchange. For a standalone reading whose branch is unobserved, it enumerates the selector and all declared branch-reader alternatives without calling a model or pretending any branch was selected. The inventory distinguishes these alternatives from cases. Sampling and byte sizes do not prove every request's token admission. The actual transport counts every exact request before generation. These checks establish source and execution mechanics, not guaranteed semantic improvement. The plan records nominal function evaluations, up to two student functions per standalone reading, and hard physical caps. Until observed tokens, waits and latencies arrive, elapsed time is a conditional forecast rather than a promised completion time.
 
 A closed queue with no completed jobs can carry its exact transport caches into a separately reviewed, fresh queue. `queue-continuation-inspect` performs no provider calls: it checks the parent closure receipt, exact owner/child PID absence, complete physical request/body/result identities, the full sealed carrier file sets and actual normalized response counts. Its manifest records reviewed operational source changes, unchanged original cases, splits, book, signatures, schemas and caps, and any changed reading rendering that needs a fresh baseline. The new queue imports carrier files only; it does not import grades, development traces, a partially compiled program or the old start guard. The ordinary pinned compiler runs again and exact settled calls replay through its adapters without repurchasing them. A witnessed unusable HTTP 200/MAX_TOKENS teacher output remains preserved and may use the separately bounded same-route format repair; uncertainty or an existing semantic judgment is not permission to retry.
 

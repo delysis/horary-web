@@ -520,6 +520,8 @@ async fn main() -> Result<()> {
                 let sig = signatures::auxiliary(function)?;
                 rows.push(serde_json::json!({"function":function,"instructions":sig.instructions,"inputs":sig.inputs.iter().map(|f|&f.name).collect::<Vec<_>>(),"outputs":sig.outputs.iter().map(|f|&f.name).collect::<Vec<_>>() }));
             }
+            let sig = horary_dspy::reading::selector_signature();
+            rows.push(serde_json::json!({"function":"reading_branch","module_version":horary_dspy::reading::VERSION,"named_predictor":"reading_branch.<family>","instructions":sig.instructions,"inputs":sig.inputs.iter().map(|f|serde_json::json!({"name":f.name,"description":f.desc,"type":f.annotation()})).collect::<Vec<_>>(),"outputs":sig.outputs.iter().map(|f|serde_json::json!({"name":f.name,"description":f.desc,"type":f.annotation()})).collect::<Vec<_>>() }));
             fs::write(output, serde_json::to_vec_pretty(&rows)?)?;
             println!("{} signatures exported", rows.len());
         }

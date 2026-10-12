@@ -178,6 +178,9 @@ fn compiled_state(bytes: &[u8], method: &str) -> Result<ProgramState> {
     Ok(state)
 }
 
+/// Export only the two exact predictors of a classified Journey, preserving the
+/// native baseline. A version-2 standalone reading Module has a branch selector
+/// and is not this artifact; the strict key check rejects silent projection.
 /// Export only two exact selectors, preserving the entire native baseline and
 /// its primary quotations. This never installs a candidate or certifies scores.
 pub fn export(compiled: &[u8], baseline_manifest: &[u8], plan: &ExportPlan) -> Result<Export> {
@@ -489,6 +492,23 @@ mod tests {
         ] {
             assert!(changed_state(mutate).is_err());
         }
+    }
+
+    #[test]
+    fn standalone_two_predictor_reader_is_not_silently_exported_as_a_journey() {
+        let (bytes, mut plan) = fixture();
+        let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+        value["reading_branch.movable_deal"] = serde_json::to_value(
+            dsrust::module::PredictorState::of(&crate::reading::selector_signature(), &[]),
+        )
+        .unwrap();
+        let bytes = serde_json::to_vec(&value).unwrap();
+        plan.compiled_sha256 = digest(&bytes);
+        let error = export(&bytes, SOURCE_MANIFEST, &plan)
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("Saved family has missing or unexpected fields"));
     }
 
     #[test]
