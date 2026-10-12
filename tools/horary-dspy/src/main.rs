@@ -812,8 +812,8 @@ async fn main() -> Result<()> {
                 "Reader budgets must be positive"
             );
             ensure!(
-                matches!(args.teacher, Teacher::Pool),
-                "Use the available Gemini sequence before Codex fallback"
+                matches!(args.teacher, Teacher::Pool | Teacher::Codex),
+                "Use the available Gemini sequence or an explicit temporary Codex teacher"
             );
             ensure!(
                 !output.exists(),
@@ -844,7 +844,13 @@ async fn main() -> Result<()> {
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let http = google::client(&args.credential_file)?;
+            let http = if matches!(args.teacher, Teacher::Codex) {
+                // The explicit saved-login fallback does not need a Google
+                // credential, model listing or another provider submission.
+                reqwest::Client::new()
+            } else {
+                google::client(&args.credential_file)?
+            };
             let student = selected_student(
                 args.student_local_url.as_deref(),
                 &args.student_model,
@@ -853,27 +859,38 @@ async fn main() -> Result<()> {
                 student_call_cap,
                 14_000,
             )?;
-            let listing = google::models(&http).await?;
-            fs::write(
-                output.join("teacher-model-listing.json"),
-                serde_json::to_vec_pretty(&listing)?,
-            )?;
-            fs::write(
-                output.join("teacher-sequence.json"),
-                serde_json::to_vec_pretty(
-                    &serde_json::json!({"listing_sha256":google::digest(serde_json::to_vec(&listing)?),"models":teachers::available(&listing)?,"fallback":"codex-saved-login-temporary-teacher","shared_physical_call_cap":teacher_call_cap}),
-                )?,
-            )?;
-            let teacher = pooled_teacher(
-                args.teacher,
-                args.codex,
-                http,
-                output.join("teacher"),
-                teacher_call_cap,
-                google::CallBudget::new(teacher_call_cap),
-                &listing,
-                120_000,
-            )?;
+            let teacher = if matches!(args.teacher, Teacher::Pool) {
+                let listing = google::models(&http).await?;
+                fs::write(
+                    output.join("teacher-model-listing.json"),
+                    serde_json::to_vec_pretty(&listing)?,
+                )?;
+                fs::write(
+                    output.join("teacher-sequence.json"),
+                    serde_json::to_vec_pretty(
+                        &serde_json::json!({"listing_sha256":google::digest(serde_json::to_vec(&listing)?),"models":teachers::available(&listing)?,"fallback":"codex-saved-login-temporary-teacher","shared_physical_call_cap":teacher_call_cap}),
+                    )?,
+                )?;
+                pooled_teacher(
+                    args.teacher,
+                    args.codex,
+                    http,
+                    output.join("teacher"),
+                    teacher_call_cap,
+                    google::CallBudget::new(teacher_call_cap),
+                    &listing,
+                    120_000,
+                )?
+            } else {
+                teacher_model(
+                    args.teacher,
+                    args.codex,
+                    http,
+                    output.join("teacher"),
+                    teacher_call_cap,
+                )
+                .await?
+            };
             let models = runner::Models {
                 student,
                 teacher,
