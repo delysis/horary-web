@@ -311,6 +311,159 @@ impl Runtime for FixtureReader<'_> {
     }
 }
 
+/// Find the accepted classifier record, not the later consultation frame. The
+/// focused extractor is permitted to refine that frame after this completion.
+fn accepted_classifier(session: &Session) -> Result<Option<Value>, String> {
+    let mut receipts = Vec::new();
+    for event in &session.audit {
+        if event["event"] != "stage_transition"
+            || event["stage"] != "intake"
+            || event["to"] != "complete"
+        {
+            continue;
+        }
+        let index = event["recordIndex"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or("Intake acceptance has no native record index")?;
+        let record = session
+            .method
+            .records
+            .get(index)
+            .ok_or("Intake acceptance references an absent native record")?;
+        let original = crate::horary_step::original_input(&record.input);
+        if original["recognition_phase"] != "classify_question" {
+            continue;
+        }
+        let jobs = session.method.flow.jobs.iter().filter(|job| {
+            job.key == event["key"].as_str().unwrap_or("")
+                && job.stage == Stage::Intake
+                && job.revision == record.revision
+                && matches!(job.phase(), crate::horary_step::Phase::Complete { record_index } if *record_index == index)
+        }).collect::<Vec<_>>();
+        if record.stage != Stage::Intake
+            || record.validation_error.is_some()
+            || record.input_sha256 != horary_lessons::digest(&record.input.to_string())
+            || jobs.len() != 1
+            || jobs[0].input_sha256 != horary_lessons::digest(&original.to_string())
+            || record.raw != record.generation.content
+            || crate::horary_contract::decode_json(&record.raw)? != record.worksheet
+        {
+            return Err(
+                "Classifier acceptance does not bind its complete native job and record".into(),
+            );
+        }
+        // Recheck the recorded permit with the same native authority. This
+        // does not apply a patch, run a model or reconstruct a completed state.
+        let checked = crate::horary_step::check(
+            Stage::Intake,
+            Matter::Other,
+            &record.worksheet,
+            &record.input,
+            &[],
+        )?;
+        let crate::horary_step::Checked::Data(data) = checked else {
+            return Err("Classifier completion has no native data permit".into());
+        };
+        let turn = data.turn().ok_or("Classifier permit has no checked Turn")?;
+        receipts.push(json!({"record_index":index,"revision":record.revision,
+            "record_sha256":horary_prompt_program::digest(serde_json::to_vec(record).map_err(|e|e.to_string())?),
+            "record_input_sha256":record.input_sha256,"original_input_sha256":jobs[0].input_sha256,
+            "guide_sha256":record.guide_sha256,"schema_sha256":record.schema_sha256,
+            "raw_sha256":horary_prompt_program::digest(&record.raw),"job_key":jobs[0].key,
+            "recognition_phase":"classify_question","actual_route":turn.frame,
+            "accepted_question":turn.question,"accepted_question_sha256":turn.question.as_ref().map(horary_prompt_program::digest),
+            "source_words":original["latest_words"],"spoken_input":original["spoken_input"],
+            "first_user_words":session.messages.iter().find(|message|message.role=="user").map(|message|&message.text)}));
+    }
+    match receipts.len() {
+        0 => Ok(None),
+        1 => Ok(receipts.pop()),
+        _ => Err(
+            "More than one accepted classifier record makes this first-message boundary ambiguous"
+                .into(),
+        ),
+    }
+}
+
+/// This private-gold subgrade observes only accepted method/facet and original
+/// input continuity. It is independent of execution/reading success, and does
+/// not judge principal, branch or semantic preservation of a concise question.
+fn classification_grade(case: &FirstMessageCase, dir: &Path) -> Value {
+    let mut grade = json!({"version":1,"scope":"accepted_first_message_classifier_method_facet",
+        "state":"unobserved","passed":null,"accepted_classifier_phase_observed":false,
+        "expected_route":{"method":case.method,"facet":case.expected.facet},
+        "actual_route":null,"original_input_continuity":null,"acceptance_receipt":null,
+        "source_correct_classification":"unobserved","semantic_question_preservation":"unobserved",
+        "limits":"Mechanical private-gold route comparison only. Principal, branch, semantic question preservation and source-correct reading require independent review. Downstream failure does not change this grade."});
+    let observation = (|| -> Result<Option<Value>, String> {
+        let mut accepted = BTreeMap::new();
+        let mut files = fs::read_dir(dir.join("checkpoints"))
+            .map_err(|error| error.to_string())?
+            .map(|entry| entry.map(|entry| entry.path()).map_err(|e| e.to_string()))
+            .collect::<Result<Vec<_>, _>>()?;
+        files.sort();
+        for path in files {
+            if path.extension().is_none_or(|extension| extension != "json") {
+                continue;
+            }
+            let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+            let checkpoint: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+            let saved: Session = serde_json::from_value(checkpoint["session"].clone())
+                .map_err(|error| error.to_string())?;
+            if let Some(receipt) = accepted_classifier(&saved)? {
+                // Repeated publishes retain the same receipt. Keep its first
+                // checkpoint, including across a later new-question reset.
+                let identity = horary_prompt_program::digest(receipt.to_string());
+                let name = path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .ok_or("Non-UTF8 classifier checkpoint")?;
+                accepted.entry(identity).or_insert(json!({"record":receipt,
+                    "checkpoint":{"file":format!("checkpoints/{name}"),
+                        "sha256":horary_prompt_program::digest(&bytes)}}));
+                if accepted.len() > 1 {
+                    return Err("Distinct accepted classifier receipts make this first-message boundary ambiguous".into());
+                }
+            }
+        }
+        Ok(accepted.into_values().next())
+    })();
+    match observation {
+        Ok(None) => grade["reason"] = json!("No completed native classifier phase was observed"),
+        Err(error) => {
+            grade["state"] = json!("evidence_error");
+            grade["reason"] = json!(error);
+        }
+        Ok(Some(receipt)) => {
+            let record = &receipt["record"];
+            let continuity = record["source_words"] == case.question
+                && record["first_user_words"] == case.question
+                && record["spoken_input"] == false;
+            grade["accepted_classifier_phase_observed"] = json!(true);
+            grade["original_input_continuity"] = json!(continuity);
+            grade["actual_route"] = record["actual_route"].clone();
+            if !continuity {
+                grade["state"] = json!("evidence_error");
+                grade["reason"] = json!(
+                    "Accepted classifier input is not this exact original typed first message"
+                );
+            } else if record["actual_route"].is_null() {
+                grade["reason"] =
+                    json!("Native phase completed without an observed method/facet route");
+            } else {
+                let pass = record["actual_route"] == grade["expected_route"];
+                grade["state"] = json!(if pass { "pass" } else { "mismatch" });
+                grade["passed"] = json!(pass);
+            }
+            grade["original_question_sha256"] =
+                json!(horary_prompt_program::digest(&case.question));
+            grade["acceptance_receipt"] = receipt;
+        }
+    }
+    grade
+}
+
 fn execute(
     state: &NativeLlamaState,
     hosted: Arc<crate::hosted_gemma_eval::Client>,
@@ -376,6 +529,7 @@ fn execute(
         true,
         result.as_ref().err().map(String::as_str),
     );
+    let native_classification = classification_grade(case, &dir);
     let calls = reader
         .reader
         .calls
@@ -384,7 +538,7 @@ fn execute(
         .clone();
     let outcome = json!({"id":case.id,"scope":"fresh_application_first_message_journey",
         "execution_completed":result.is_ok(),"result":result,"elapsed_ms":start.elapsed().as_millis(),
-        "native_structure":native_structure,"semantic_input_review":"unobserved",
+        "native_structure":native_structure,"native_classification":native_classification,"semantic_input_review":"unobserved",
         "source_correct_interpretation":"unobserved",
         "semantic_review_requirement":"Independent input and book/rubric interpretation review required",
         "qualified":false,"original_question":case.question,"receipt_instant_ms":instant,
@@ -409,7 +563,7 @@ fn execute(
     write_new(&dir.join("outcome.json"), &outcome)?;
     println!(
         "{}",
-        json!({"event":"first_message_case_completed","case_id":case.id,"execution_completed":result.is_ok(),"native_structure":native_structure})
+        json!({"event":"first_message_case_completed","case_id":case.id,"execution_completed":result.is_ok(),"native_structure":native_structure,"native_classification":native_classification})
     );
     Ok(outcome)
 }
@@ -463,7 +617,7 @@ fn real_model_first_message_application_journey() -> Result<(), String> {
         "model":hosted.metadata(),"program_sha256":program_bytes.as_ref().map(horary_prompt_program::digest),
         "oracle_inputs":"Original question plus the selected fixture's own device clock, place and timezone only",
         "private_expected_data":"No expected method/facts/roles/chart or completed state is injected",
-        "qualification":"Native structure only; independent input and source-correct interpretation review remains required",
+        "qualification":"Native structure plus separately checkpoint-bound classifier method/facet comparison; independent input and source-correct interpretation review remains required",
         "limits":{"native_call_groups_per_case":task.max_calls,"maximum_branches_per_group":4,
             "completed_http_attempts_per_branch":3,"case_seconds":task.case_seconds,
             "physical_attempt_reservation":task.max_calls * 4 * 3 * cases.len() as u64,
@@ -576,6 +730,18 @@ mod tests {
     struct Capture {
         dir: PathBuf,
         requests: Mutex<Vec<Value>>,
+        responses: Mutex<std::collections::VecDeque<String>>,
+        checkpoints: AtomicU64,
+    }
+    impl Capture {
+        fn new(dir: &Path, responses: Vec<String>) -> Self {
+            Self {
+                dir: dir.to_owned(),
+                requests: Mutex::new(vec![]),
+                responses: Mutex::new(responses.into()),
+                checkpoints: AtomicU64::new(0),
+            }
+        }
     }
     impl Runtime for Capture {
         fn generate(
@@ -587,7 +753,28 @@ mod tests {
             _audio: Option<&[u8]>,
         ) -> Result<NativeGenerationResult, String> {
             self.requests.lock().unwrap().push(json!({"stage":stage,"input":input,"prompt":trial_prompt(stage,matter,input,schema,None)?.0}));
-            Err("Offline witness stop before inference".into())
+            let content = self
+                .responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .ok_or("Offline witness stop before inference")?;
+            Ok(NativeGenerationResult {
+                content,
+                prompt_tokens: 0,
+                generated_tokens: 0,
+                elapsed_ms: 0,
+                total_wall_ms: None,
+                batch_size: None,
+                lesson_bank_hit: None,
+                lesson_prepare_ms: None,
+                tokens_per_second: 0.,
+                prompt_cache_hit: false,
+                cached_prompt_tokens: 0,
+                prefilled_prompt_tokens: 0,
+                first_token_ms: None,
+                cold_cache_bytes: None,
+            })
         }
         fn generate_batch(
             &self,
@@ -595,8 +782,16 @@ mod tests {
         ) -> Result<Vec<NativeGenerationResult>, String> {
             Err("Offline witness does not infer".into())
         }
-        fn publish(&self, _session: &mut Session) -> Result<(), String> {
-            Ok(())
+        fn publish(&self, session: &mut Session) -> Result<(), String> {
+            // Mirror the existing Reader checkpoint boundary; the native
+            // executor, not this mock, supplies records and completion events.
+            let sequence = self.checkpoints.fetch_add(1, Ordering::AcqRel) + 1;
+            let path = self.dir.join("checkpoints");
+            fs::create_dir_all(&path).map_err(|error| error.to_string())?;
+            write_new(
+                &path.join(format!("{sequence:04}.json")),
+                &json!({"session":session,"candidates":session.candidates}),
+            )
         }
         fn check(&self) -> Result<(), String> {
             Ok(())
@@ -636,10 +831,7 @@ mod tests {
     fn actual_native_first_request_keeps_original_words_and_cannot_see_expected_data() {
         let case = fixture();
         let dir = tempfile::tempdir().unwrap();
-        let capture = Capture {
-            dir: dir.path().to_owned(),
-            requests: Mutex::new(vec![]),
-        };
+        let capture = Capture::new(dir.path(), vec![]);
         let (mut session, previous, _, instant) = initial(&case).unwrap();
         let result = crate::horary_pipeline::run(
             &mut session,
@@ -670,6 +862,8 @@ mod tests {
         other_gold.chart.utc = "2024-03-03T08:00:00Z".into();
         other_gold.chart.latitude = 1.;
         other_gold.expected.facts.clear();
+        other_gold.method = "new_job".into();
+        other_gold.expected.facet = "profit".into();
         assert_eq!(
             serde_json::to_value(initial(&case).unwrap().0).unwrap(),
             serde_json::to_value(initial(&other_gold).unwrap().0).unwrap()
@@ -713,5 +907,253 @@ mod tests {
         let mut value = serde_json::to_value(task(&fixture())).unwrap();
         value["checkpoint"] = json!("old-state.json");
         assert!(serde_json::from_value::<Task>(value).is_err());
+    }
+
+    fn classifier_reply(case: &FirstMessageCase, method: Method, facet: Facet) -> String {
+        let mut turn = reading_contracts::control(reading_contracts::Intent::Read);
+        turn.question = Some(case.question.clone());
+        turn.frame = Some(reading_contracts::Frame { method, facet });
+        serde_json::to_string(&turn).unwrap()
+    }
+
+    fn offline_journey(
+        replies: Vec<String>,
+    ) -> (
+        FirstMessageCase,
+        tempfile::TempDir,
+        Session,
+        Result<(), String>,
+    ) {
+        let case = fixture();
+        let dir = tempfile::tempdir().unwrap();
+        let capture = Capture::new(dir.path(), replies);
+        let (mut session, previous, _, instant) = initial(&case).unwrap();
+        let result = crate::horary_pipeline::run(
+            &mut session,
+            &capture,
+            &GeocodeState::default(),
+            instant,
+            None,
+            &previous,
+        );
+        (case, dir, session, result)
+    }
+
+    #[test]
+    fn accepted_classifier_pass_is_separate_from_downstream_failure() {
+        let (case, dir, session, result) = offline_journey(vec![classifier_reply(
+            &fixture(),
+            Method::MovableDeal,
+            Facet::Event,
+        )]);
+        assert!(result.is_err());
+        assert!(session.method.records[0].validation_error.is_none());
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["state"], "pass");
+        assert_eq!(grade["passed"], true);
+        assert_eq!(grade["original_input_continuity"], true);
+        assert_eq!(grade["semantic_question_preservation"], "unobserved");
+        assert_eq!(grade["source_correct_classification"], "unobserved");
+        let checkpoint = &grade["acceptance_receipt"]["checkpoint"];
+        let bytes = fs::read(dir.path().join(checkpoint["file"].as_str().unwrap())).unwrap();
+        assert_eq!(checkpoint["sha256"], horary_prompt_program::digest(bytes));
+        let saved: Value = serde_json::from_slice(
+            &fs::read(dir.path().join(checkpoint["file"].as_str().unwrap())).unwrap(),
+        )
+        .unwrap();
+        // This is before the classifier patch was applied to the consultation,
+        // and before any focused extraction or reading result existed.
+        assert!(saved["session"]["method"]["consultation"]["frame"]["state"] == "missing");
+        assert!(saved["session"]["method"]["result"].is_null());
+    }
+
+    #[test]
+    fn focused_frame_refinement_does_not_regrade_the_accepted_classifier() {
+        let mut refinement = reading_contracts::control(reading_contracts::Intent::Clarify);
+        refinement.frame = Some(reading_contracts::Frame {
+            method: Method::Property,
+            facet: Facet::Event,
+        });
+        let (case, dir, session, result) = offline_journey(vec![
+            classifier_reply(&fixture(), Method::MovableDeal, Facet::Event),
+            serde_json::to_string(&refinement).unwrap(),
+        ]);
+        assert!(result.is_err());
+        assert_eq!(
+            session.method.consultation.as_ref().unwrap().method(),
+            Some(Method::Property)
+        );
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["passed"], true);
+        assert_eq!(grade["actual_route"]["method"], "movable_deal");
+        assert_eq!(grade["acceptance_receipt"]["record"]["record_index"], 0);
+    }
+
+    #[test]
+    fn accepted_method_and_facet_mismatches_are_observed_independently() {
+        for (method, facet) in [
+            (Method::Relationship, Facet::Event),
+            (Method::MovableDeal, Facet::Timing),
+        ] {
+            let (case, dir, _session, result) =
+                offline_journey(vec![classifier_reply(&fixture(), method, facet)]);
+            assert!(result.is_err());
+            let grade = classification_grade(&case, dir.path());
+            assert_eq!(grade["state"], "mismatch");
+            assert_eq!(grade["passed"], false);
+            assert_eq!(grade["accepted_classifier_phase_observed"], true);
+            assert_eq!(
+                grade["actual_route"],
+                json!({"method":method,"facet":facet})
+            );
+        }
+    }
+
+    #[test]
+    fn repair_receipt_uses_original_input_and_does_not_require_a_literal_full_message_question() {
+        let mut rejected: Value = serde_json::from_str(&classifier_reply(
+            &fixture(),
+            Method::MovableDeal,
+            Facet::Event,
+        ))
+        .unwrap();
+        rejected["question"] = Value::Null;
+        let mut accepted = rejected.clone();
+        accepted["question"] = json!("Will I sell my violin?");
+        let (case, dir, session, result) =
+            offline_journey(vec![rejected.to_string(), accepted.to_string()]);
+        assert!(result.is_err());
+        assert!(session.method.records[0].validation_error.is_some());
+        assert!(session.method.records[1].input["original_input"].is_object());
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["passed"], true);
+        assert_eq!(grade["acceptance_receipt"]["record"]["record_index"], 1);
+        assert_eq!(
+            grade["acceptance_receipt"]["record"]["accepted_question"],
+            "Will I sell my violin?"
+        );
+        assert_eq!(grade["semantic_question_preservation"], "unobserved");
+    }
+
+    #[test]
+    fn absent_acceptance_cannot_pass_from_a_later_frame_or_private_expected_route() {
+        let (case, dir, mut session, result) = offline_journey(vec![]);
+        assert!(result.is_err());
+        let turn: reading_contracts::Turn =
+            serde_json::from_str(&classifier_reply(&case, Method::MovableDeal, Facet::Event))
+                .unwrap();
+        session
+            .method
+            .consultation
+            .as_mut()
+            .unwrap()
+            .apply(&turn, 1, &case.question, false)
+            .unwrap();
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["state"], "unobserved");
+        assert!(grade["passed"].is_null());
+        assert_eq!(grade["accepted_classifier_phase_observed"], false);
+        assert!(grade["actual_route"].is_null());
+    }
+
+    #[test]
+    fn a_completed_classifier_phase_without_a_route_remains_unobserved() {
+        let mut reply: Value = serde_json::from_str(&classifier_reply(
+            &fixture(),
+            Method::MovableDeal,
+            Facet::Event,
+        ))
+        .unwrap();
+        reply["frame"] = Value::Null;
+        let (case, dir, _session, result) = offline_journey(vec![reply.to_string()]);
+        assert!(result.is_err());
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["state"], "unobserved");
+        assert_eq!(grade["accepted_classifier_phase_observed"], true);
+        assert!(grade["passed"].is_null());
+        assert!(grade["actual_route"].is_null());
+        assert!(grade["acceptance_receipt"].is_object());
+    }
+
+    #[test]
+    fn incomplete_or_ambiguous_receipts_remain_unknown_not_negative_or_pass() {
+        let (case, dir, session, _) = offline_journey(vec![classifier_reply(
+            &fixture(),
+            Method::MovableDeal,
+            Facet::Event,
+        )]);
+        let mut duplicate = session.clone();
+        let complete = duplicate
+            .audit
+            .iter()
+            .find(|event| event["to"] == "complete")
+            .unwrap()
+            .clone();
+        duplicate.audit.push(complete);
+        let mut wrong_job = session.clone();
+        wrong_job.method.flow.jobs[0].input_sha256 = horary_prompt_program::digest("another input");
+        let extra = dir.path().join("checkpoints/9999.json");
+        for changed in [duplicate, wrong_job] {
+            fs::write(
+                &extra,
+                serde_json::to_vec(&json!({"session":changed})).unwrap(),
+            )
+            .unwrap();
+            let grade = classification_grade(&case, dir.path());
+            assert_eq!(grade["state"], "evidence_error");
+            assert!(grade["passed"].is_null());
+        }
+        let (_, _, other, _) = offline_journey(vec![classifier_reply(
+            &fixture(),
+            Method::Relationship,
+            Facet::Event,
+        )]);
+        fs::write(
+            &extra,
+            serde_json::to_vec(&json!({"session":other})).unwrap(),
+        )
+        .unwrap();
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["state"], "evidence_error");
+        assert!(grade["passed"].is_null());
+        fs::remove_dir_all(dir.path().join("checkpoints")).unwrap();
+        fs::create_dir(dir.path().join("checkpoints")).unwrap();
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["state"], "unobserved");
+        assert!(grade["passed"].is_null());
+    }
+
+    #[test]
+    fn a_different_original_message_is_an_evidence_error_not_a_route_score() {
+        let (mut case, dir, _session, _) = offline_journey(vec![classifier_reply(
+            &fixture(),
+            Method::MovableDeal,
+            Facet::Event,
+        )]);
+        case.question = "Will I sell someone else's piano?".into();
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["original_input_continuity"], false);
+        assert_eq!(grade["state"], "evidence_error");
+        assert!(grade["passed"].is_null());
+    }
+
+    #[test]
+    fn a_new_question_reset_does_not_erase_the_observed_classifier_acceptance() {
+        let mut reply: Value = serde_json::from_str(&classifier_reply(
+            &fixture(),
+            Method::MovableDeal,
+            Facet::Event,
+        ))
+        .unwrap();
+        reply["intent"] = json!("new_question");
+        let (case, dir, session, result) = offline_journey(vec![reply.to_string()]);
+        assert!(result.is_err());
+        assert!(accepted_classifier(&session).unwrap().is_none());
+        assert!(!session.method.records.is_empty());
+        let grade = classification_grade(&case, dir.path());
+        assert_eq!(grade["state"], "pass");
+        assert_eq!(grade["passed"], true);
+        assert_eq!(grade["original_input_continuity"], true);
+        assert!(grade["acceptance_receipt"]["checkpoint"]["sha256"].is_string());
     }
 }

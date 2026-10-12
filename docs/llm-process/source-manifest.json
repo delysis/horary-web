@@ -135,7 +135,7 @@
     },
     {
       "path": "src-tauri/src/first_message_journey_eval.rs",
-      "sha256": "58b966069e11f428445e36d22425db61facd4706c581c344290af26d895b0973"
+      "sha256": "e99e732094d3996edb2c7e31b388b0c5f4fbe5363fa7a1f4d8849c3b09aa3ef9"
     },
     {
       "path": "src-tauri/src/geocode.rs",
@@ -423,7 +423,7 @@
     },
     {
       "path": "tools/horary-dspy/README.md",
-      "sha256": "07f93e723e13dc330f1d20bab8f818684aad123a2a2b90fa8cb8355e37ebc9fb"
+      "sha256": "d3d093bc4463b2db8dcf37634a60722b0ed259a6e6f77b8d9672b7ed2b88b7cc"
     },
     {
       "path": "tools/horary-dspy/coverage.json",
