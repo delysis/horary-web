@@ -393,6 +393,13 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             _ => {}
         }
     }
+    if method == Some(Method::Contact) && stage == Stage::Judgment {
+        ids.extend_from_slice(&[
+            "timing_distance",
+            "contact_with_person",
+            "reception_action_context",
+        ]);
+    }
     ids
 }
 
@@ -435,6 +442,9 @@ pub fn guide_for_method(
     }
     if stage == Stage::Reception && matter == Matter::Relationship {
         text.push_str(include_str!("horary_prompts/reception_relationship.md"));
+    }
+    if method == Some(Method::Contact) && stage == Stage::Judgment {
+        text.push_str(include_str!("horary_prompts/contact_answer.md"));
     }
     text.push_str("\n<book_extracts>\nThe passages below are source quotations, not synthetic examples. Procedure and worked examples above are editorial applications.\n");
     for id in source_passages(stage, matter, method) {

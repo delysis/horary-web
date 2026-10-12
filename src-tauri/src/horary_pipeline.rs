@@ -1548,6 +1548,42 @@ fn judgment_reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact])
     reception_clipboard_view(roles, facts, false)
 }
 
+/// Keep native limitations beside the proposed contact interpretation. A
+/// checked worksheet can still overstate an event or its calendar deadline.
+fn with_contact_judgment_limits(mut input: Value, facts: &[Fact]) -> Result<Value, String> {
+    if input["reading_request"]["binding"]["frame"]["method"] != "contact" {
+        return Ok(input);
+    }
+    let timing_status = input["timing"]["timing_status"]
+        .as_str()
+        .ok_or("Contact judgment requires the native timing status")?
+        .to_owned();
+    let candidates = input["contacts"]["candidate_ids"]
+        .as_array()
+        .ok_or("Contact judgment requires the checked candidate IDs")?
+        .iter()
+        .map(|id| {
+            let id = id
+                .as_str()
+                .ok_or("A contact candidate requires its fact ID")?;
+            let event = facts
+                .iter()
+                .find(|fact| fact.id == id)
+                .and_then(|fact| fact.event.as_ref())
+                .ok_or("A checked contact candidate lacks its native event fact")?;
+            Ok(json!({"fact_id":id,"within_current_signs":event.within_current_signs}))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    input["native_contact_limits"] = json!({
+        "worksheet_authority":"checked_model_proposals",
+        "earthly_timing_status":timing_status,
+        "selected_candidates":candidates,
+        "post_ingress_condition_and_reception":"not_supplied",
+        "event_verdict":"requires_contextual_judgment"
+    });
+    Ok(input)
+}
+
 fn reception_clipboard_view(
     roles: &[AcceptedReceptionRole],
     facts: &[Fact],
@@ -1740,11 +1776,14 @@ fn generate_reading(
         session,
         runtime,
         Stage::Judgment,
-        crate::message_programs::with_clipboard(
-            json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
+        with_contact_judgment_limits(
+            crate::message_programs::with_clipboard(
+                json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
             "native_reception":judgment_reception_clipboard(&reception_roles,&facts)}),
-            &native_arrival,
-        ),
+                &native_arrival,
+            ),
+            &facts,
+        )?,
         &facts,
     )?
     else {
@@ -1842,6 +1881,82 @@ fn selected_stage_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contact_final_handoff_keeps_native_limits_apart_from_proposed_prose() {
+        let facts = reading_method::facts(Some(&json!({"derived":{"eventSearch":{"events":[
+            {"planet1":"Moon","planet2":"Mars","aspectName":"Sextile",
+             "withinCurrentSigns":false,"estimatedPerfectsWithinHours":25.0},
+            {"planet1":"Saturn","planet2":"Mars","aspectName":"Trine",
+             "estimatedPerfectsWithinHours":30.0}
+        ]}}})));
+        let events = facts
+            .iter()
+            .filter(|f| f.event.is_some())
+            .collect::<Vec<_>>();
+        assert_eq!(events.len(), 2);
+        let input = json!({
+            "reading_request":{"binding":{"frame":{"method":"contact","facet":"event"}}},
+            "brief":{"question":"Will my friend contact me by Sunday?"},
+            "timing":{"timing_status":"unestablished"},
+            "contacts":{"candidate_ids":[events[0].id,events[1].id],
+                "candidate_signs":[{"id":events[0].id,"within_current_signs":true}],
+                "summary":"A proposed opportunity this week after a delay."},
+            "reception":{"summary":"A proposed claim about private feelings."}
+        });
+        let original = with_contact_judgment_limits(input.clone(), &facts).unwrap();
+        assert_eq!(original["contacts"], input["contacts"]);
+        assert_eq!(original["reception"], input["reception"]);
+        assert_eq!(original["brief"], input["brief"]);
+        assert_eq!(
+            original["native_contact_limits"],
+            json!({
+                "worksheet_authority":"checked_model_proposals",
+                "earthly_timing_status":"unestablished",
+                "selected_candidates":[
+                    {"fact_id":events[0].id,"within_current_signs":false},
+                    {"fact_id":events[1].id,"within_current_signs":null}
+                ],
+                "post_ingress_condition_and_reception":"not_supplied",
+                "event_verdict":"requires_contextual_judgment"
+            })
+        );
+        assert!(original.get("verdict").is_none());
+        let repair = json!({"original_input":original,"previous_worksheet":{
+            "native_contact_limits":{"earthly_timing_status":"established"}
+        }});
+        let guide =
+            crate::horary_contract::guide_for(Stage::Judgment, Matter::Other, &repair).unwrap();
+        assert!(guide.contains("<contact_answer>"));
+        for id in [
+            "timing_distance",
+            "contact_with_person",
+            "reception_action_context",
+        ] {
+            let card = lessons::passages()
+                .unwrap()
+                .iter()
+                .find(|p| p.id == id)
+                .unwrap();
+            assert!(guide.contains(&card.quote));
+        }
+        assert_eq!(
+            step::original_input(&repair)["native_contact_limits"],
+            original["native_contact_limits"]
+        );
+        let mut foreign = input.clone();
+        foreign["contacts"]["candidate_ids"] = json!(["foreign"]);
+        assert!(with_contact_judgment_limits(foreign, &facts).is_err());
+        let mut unrelated = input;
+        unrelated["reading_request"]["binding"]["frame"]["method"] = json!("movable_deal");
+        assert_eq!(
+            with_contact_judgment_limits(unrelated.clone(), &facts).unwrap(),
+            unrelated
+        );
+        let other_guide =
+            crate::horary_contract::guide_for(Stage::Judgment, Matter::Other, &unrelated).unwrap();
+        assert!(!other_guide.contains("<contact_answer>"));
+    }
 
     fn expand_indexed_reception_clipboard(mut clipboard: Value) -> Value {
         let roles = clipboard["accepted_roles"].as_array().unwrap().clone();
