@@ -167,7 +167,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "7fe743a4aef15145022c1d8fa1bb37469053104cce3c9d5a34c0ed74c91ab300"
+      "sha256": "82b17b3da9925f5572291da13b5bfb4ef5d5f26ac5f7b005c6ca6cd89f756d27"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -263,7 +263,7 @@
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "285b9d91af2cef5bf3c768322ee089bb991f70026531ebd99283c2b5d37de5b9"
+      "sha256": "28200ed21b9daaf3640a192c7fe3c104b052133012ef5bfe69ff0b3955c43306"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
@@ -355,7 +355,7 @@
     },
     {
       "path": "src-tauri/src/reading_method.rs",
-      "sha256": "f8fe32f310bf109857a31fbb6277b78213f4fc84dd421285aabd567ea77e43bf"
+      "sha256": "d90effc99c85e6d8da24b24f20e762e2311def569a0bab23da3a524d32dfe0db"
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
@@ -419,7 +419,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "1451045905785999bcc6fd7bfb1ac9616e1af5c4b1888621b335c16d95675dd3"
+      "sha256": "0bc84bbb2e66693f2ee1c4c5bacd59045aadb5c7136bcabb6877f847d8d69cbf"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
@@ -827,7 +827,7 @@
     },
     {
       "path": "tools/horary-dspy/src/catalogue.rs",
-      "sha256": "5200c217aded51f4eabc7b5b2f49655a2bdad705b2ac9037c9d14369267ab210"
+      "sha256": "d740d1b2eaa0fc62c51c4575ac838c8e77f23ba826ba32371755a0f4f6d30585"
     },
     {
       "path": "tools/horary-dspy/src/classification_export.rs",

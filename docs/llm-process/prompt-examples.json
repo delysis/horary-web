@@ -3698,7 +3698,7 @@
       "chartInputSha256": "45a7f0102e83a22b00908ba4713d4bb62d0c6ebd2069c2b0c3b0d9087c3e9452",
       "nativeChartInputSha256": "45a7f0102e83a22b00908ba4713d4bb62d0c6ebd2069c2b0c3b0d9087c3e9452",
       "provenance": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "provenanceSha256": "1451045905785999bcc6fd7bfb1ac9616e1af5c4b1888621b335c16d95675dd3",
+      "provenanceSha256": "0bc84bbb2e66693f2ee1c4c5bacd59045aadb5c7136bcabb6877f847d8d69cbf",
       "anchor": {
         "timestamp_ms": 1789387200000.0,
         "latitude": 38.657,
@@ -3710,7 +3710,7 @@
         "crates/horary-ai-core/src/book_method.rs": "d272bd599d0c7f16b9abe50fbd5975b579041ac4c480b5765c162fa622fd78bd",
         "crates/horary-ai-core/src/ephemeris_coefficients.rs": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c",
         "crates/horary-ai-core/src/events.rs": "f5246dd82c08c090d191681ce0c00c158d03a266350f5af0fad9d4a1242fa847",
-        "src-tauri/src/horary_pipeline.rs": "7fe743a4aef15145022c1d8fa1bb37469053104cce3c9d5a34c0ed74c91ab300",
+        "src-tauri/src/horary_pipeline.rs": "82b17b3da9925f5572291da13b5bfb4ef5d5f26ac5f7b005c6ca6cd89f756d27",
         "src-tauri/src/process_reference.rs": "3f1933c4bbd11f3d3769fdd2a15e1934687b5c846509cf3d390b7e847f4953e0"
       },
       "generator": "process_reference::tests::capture_documentation_chart_fixture",
