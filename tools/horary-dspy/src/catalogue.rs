@@ -422,6 +422,61 @@ pub fn family_reader_source(book: &Book, method: &str) -> Result<String> {
     Ok(source)
 }
 
+/// Full salient primary pages for authoring and reviewing reference answers.
+/// Students use their separately bound compact topic source; this function does
+/// not enlarge student calls or turn reference answers into input facts.
+/// This allocation uses the declared family/source contracts, never a private
+/// expected branch, verdict or answer. Having a rule available does not make it
+/// applicable: state/quality questions do not acquire an aspect prerequisite.
+pub fn reference_reader_pages(method: &str) -> Result<BTreeSet<usize>> {
+    ensure!(
+        !matches!(method, "wish" | "unclassified"),
+        "Reference authoring requires a substantive reading family"
+    );
+    let mut pages = Book::context_pages(method_source_pages(method)?, true);
+    pages.extend(common_branch_pages(method));
+    pages.extend(14..=38); // Houses/capacities, turning, principal, rulers and Moon collisions.
+    pages.extend(40..=77); // Signs; complete essential/accidental and directed-reception context.
+    pages.extend(84..=101); // Occasion, actual motion/signs, translation/collection and prevention.
+    pages.extend(137..=141); // Principal/relay, actual default and chart qualifications.
+    pages.extend(243..=246); // Delivering a useful answer, not extra adjudication rules.
+    if method_facets(method)?
+        .iter()
+        .any(|facet| matches!(facet.as_str(), "event" | "timing"))
+    {
+        pages.extend(127..=136);
+    }
+    // The natural/person/heart examples are relevant to this family only; do
+    // not universalize romantic identities or psychology into other readings.
+    if method == "relationship" {
+        pages.extend(78..=83);
+    }
+    if matches!(method, "missing_person" | "existing_job") {
+        // Their medical example starts on p186; p187 is its worked explanation.
+        // This is source continuity, not a new universal illness requirement.
+        pages.insert(187);
+    }
+    Ok(pages)
+}
+
+/// The first paragraph of p188 completes that medical example. Treatment after
+/// it is outside these two allocations and is neither imported nor demanded.
+pub fn reference_reader_excerpt_pages(method: &str) -> BTreeSet<usize> {
+    if matches!(method, "missing_person" | "existing_job") {
+        BTreeSet::from([188])
+    } else {
+        BTreeSet::new()
+    }
+}
+
+pub fn reference_reader_source(book: &Book, method: &str) -> Result<String> {
+    let mut source = book.pages(&reference_reader_pages(method)?)?;
+    for page in reference_reader_excerpt_pages(method) {
+        source.push_str(&book.first_paragraph(page)?);
+    }
+    Ok(source)
+}
+
 fn method_source_pages(method: &str) -> Result<BTreeSet<usize>> {
     let card = coverage_card(method)?;
     let mut pages = card["primary_context_printed_pages"]
@@ -449,6 +504,24 @@ fn method_source_pages(method: &str) -> Result<BTreeSet<usize>> {
             pages.insert(page.as_u64().context("Invalid branch page")? as usize);
         }
     }
+    // Explicit primary-text cross-chapter dependencies. These form a new,
+    // corrected topic baseline for BOTH arms of future comparisons. Old banks,
+    // compiled campaigns and their captured input/source bytes are untouched.
+    match method {
+        // Letting reuses the property/price procedure (p170); p169 completes it.
+        "rental" => {
+            pages.insert(169);
+        }
+        // Examinations are explicitly profit from knowledge (p218).
+        "exam" => {
+            pages.extend([216, 217]);
+        }
+        // Pregnancy/conception bodily-aspect restrictions begin on p173.
+        "fertility" => {
+            pages.insert(173);
+        }
+        _ => {}
+    }
     Ok(pages)
 }
 
@@ -466,6 +539,154 @@ pub fn coverage_card(method: &str) -> Result<Value> {
 #[cfg(test)]
 mod source_context_tests {
     use super::*;
+
+    #[test]
+    fn reference_source_contains_full_common_and_all_family_branch_pages() {
+        let book = Book::fixture();
+        let common = (14..=38)
+            .chain(40..=77)
+            .chain(84..=101)
+            .chain(137..=141)
+            .chain(243..=246)
+            .collect::<BTreeSet<_>>();
+        for method in crate::signatures::METHODS
+            .iter()
+            .copied()
+            .filter(|m| !matches!(*m, "wish" | "unclassified"))
+        {
+            let pages = reference_reader_pages(method).unwrap();
+            assert!(
+                common.is_subset(&pages),
+                "{method}: missing common primary procedure"
+            );
+            assert!(
+                method_source_pages(method).unwrap().is_subset(&pages),
+                "{method}: missing family/branch primary pages"
+            );
+            let source = reference_reader_source(&book, method).unwrap();
+            for page in pages {
+                assert!(source.contains(&format!(
+                    "<Frawley printed_page=\"{page}\" ocr_page=\"{}\">",
+                    page + 9
+                )));
+            }
+            assert!(!source.contains("<rule id="));
+        }
+    }
+    #[test]
+    fn reference_timing_and_relationship_context_use_family_not_case_gold() {
+        let contact = reference_reader_pages("contact").unwrap();
+        assert!((127..=136).all(|p| contact.contains(&p)));
+        let trust = reference_reader_pages("trust").unwrap();
+        assert!((132..=136).all(|p| !trust.contains(&p)));
+        assert!(
+            reference_reader_pages("relationship")
+                .unwrap()
+                .contains(&79)
+        );
+        assert!(!reference_reader_pages("new_job").unwrap().contains(&79));
+        assert!(
+            reference_reader_pages("missing_person")
+                .unwrap()
+                .contains(&187)
+        );
+        assert_eq!(
+            reference_reader_excerpt_pages("missing_person"),
+            BTreeSet::from([188])
+        );
+        assert_eq!(
+            reference_reader_excerpt_pages("existing_job"),
+            BTreeSet::from([188])
+        );
+        assert!(reference_reader_excerpt_pages("contact").is_empty());
+        assert!(reference_reader_pages("wish").is_err());
+        assert!(reference_reader_pages("unclassified").is_err());
+    }
+    #[test]
+    fn reference_common_expansion_stays_out_of_compact_student_source() {
+        let book = Book::fixture();
+        for method in ["contact", "new_job", "relationship", "movable_deal"] {
+            let student = family_reader_source(&book, method).unwrap();
+            let reference = reference_reader_source(&book, method).unwrap();
+            assert!(reference.contains("<Frawley printed_page=\"18\""));
+            assert!(!student.contains("<Frawley printed_page=\"18\""));
+        }
+        let legacy = BTreeSet::from([
+            7, 8, 30, 40, 44, 56, 57, 58, 59, 60, 61, 62, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74,
+            75, 76, 77, 126, 127, 128, 129, 130, 131, 166,
+        ]);
+        assert_eq!(
+            book.context([166], true).unwrap(),
+            book.pages(&legacy).unwrap()
+        );
+    }
+    #[test]
+    fn corrected_student_topic_baseline_adds_only_three_verified_dependencies() {
+        let book = Book::fixture();
+        for method in crate::signatures::METHODS {
+            let card = coverage_card(method).unwrap();
+            let mut prior = card["primary_context_printed_pages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p.as_u64().unwrap() as usize)
+                .collect::<BTreeSet<_>>();
+            for branch in card["judgment_subbranches"].as_array().unwrap() {
+                prior.extend(
+                    branch["printed_pages"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|p| p.as_u64().unwrap() as usize),
+                );
+            }
+            let expected = match *method {
+                "rental" => BTreeSet::from([169]),
+                "exam" => BTreeSet::from([216, 217]),
+                "fertility" => BTreeSet::from([173]),
+                _ => BTreeSet::new(),
+            };
+            let current = method_source_pages(method).unwrap();
+            assert!(prior.is_subset(&current));
+            assert_eq!(
+                current.difference(&prior).copied().collect::<BTreeSet<_>>(),
+                expected
+            );
+            let source = family_reader_source(&book, method).unwrap();
+            for page in expected {
+                assert!(source.contains(&format!("<Frawley printed_page=\"{page}\"")));
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires the private hash-pinned book; source bytes only, no cases or models"]
+    fn reference_real_book_source_size_witnesses() {
+        let book = Book::open(Path::new(crate::book::DEFAULT_OCR)).unwrap();
+        for method in crate::signatures::METHODS
+            .iter()
+            .copied()
+            .filter(|m| !matches!(*m, "wish" | "unclassified"))
+        {
+            let pages = reference_reader_pages(method).unwrap();
+            let reference = reference_reader_source(&book, method).unwrap();
+            let mut actual = book.pages(&pages).unwrap();
+            let excerpts = reference_reader_excerpt_pages(method);
+            for page in &excerpts {
+                actual.push_str(&book.first_paragraph(*page).unwrap());
+            }
+            assert_eq!(reference, actual);
+            let student = family_reader_source(&book, method).unwrap();
+            println!(
+                "{}",
+                json!({"method":method,"printed_pages":pages,"page_count":pages.len(),"excerpt_printed_pages":excerpts,
+                "reference_source_bytes":reference.len(),"reference_source_sha256":crate::google::digest(&reference),
+                "student_source_bytes":student.len(),"student_source_sha256":crate::google::digest(student),
+                "rough_reference_tokens_characters_div_four":reference.chars().count().div_ceil(4),
+                "rough_size_is_not_tokenizer_measurement_or_admission":true,"provider_calls":0})
+            );
+        }
+    }
 
     #[test]
     fn contact_component_reference_uses_assembled_declared_inputs_without_private_role_gold() {

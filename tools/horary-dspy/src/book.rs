@@ -79,6 +79,35 @@ impl Book {
         method_pages: impl IntoIterator<Item = usize>,
         reading: bool,
     ) -> Result<String> {
+        self.pages(&Self::context_pages(method_pages, reading))
+    }
+    /// Preserve an exact page-opening continuation without importing a later,
+    /// unrelated section as part of this method's source allocation.
+    pub fn first_paragraph(&self, printed: usize) -> Result<String> {
+        let ocr = printed + 9;
+        let content = self
+            .pages
+            .get(&ocr)
+            .with_context(|| format!("Missing printed page {printed}, OCR page {ocr}"))?;
+        let paragraph = content
+            .lines()
+            .take_while(|line| !line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        ensure!(
+            !paragraph.is_empty(),
+            "Missing first paragraph on printed page {printed}"
+        );
+        Ok(format!(
+            "\n<Frawley printed_page=\"{printed}\" ocr_page=\"{ocr}\" excerpt=\"first_paragraph\">\n{paragraph}\n</Frawley>\n"
+        ))
+    }
+    /// The exact existing full-context allocation, available to source-bound
+    /// authoring receipts without parsing page markers or changing students.
+    pub fn context_pages(
+        method_pages: impl IntoIterator<Item = usize>,
+        reading: bool,
+    ) -> BTreeSet<usize> {
         let mut printed = method_pages.into_iter().collect::<BTreeSet<_>>();
         printed.extend([7, 8]);
         // Full primary pages, including the ordinary adverse case and its
@@ -89,7 +118,7 @@ impl Book {
                 76, 77, 126, 127, 128, 129, 130, 131,
             ]);
         }
-        self.pages(&printed)
+        printed
     }
     /// Compact exact primary witnesses; the complete chapter context is kept
     /// for the teacher/judge and available to callers, never synthesized as fact.
@@ -169,6 +198,20 @@ impl Book {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn first_paragraph_retains_exact_continuation_without_following_section() {
+        let mut book = Book::fixture();
+        book.pages.insert(
+            197,
+            "Exact continuation.\nSecond line.\n  \nUNRELATED TREATMENT SECTION".into(),
+        );
+        let source = book.first_paragraph(188).unwrap();
+        assert!(
+            source.contains("printed_page=\"188\" ocr_page=\"197\" excerpt=\"first_paragraph\"")
+        );
+        assert!(source.contains("Exact continuation.\nSecond line."));
+        assert!(!source.contains("UNRELATED"));
+    }
     #[test]
     fn changed_source_is_not_silently_used() {
         let temp = tempfile::NamedTempFile::new().unwrap();
