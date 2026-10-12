@@ -1548,6 +1548,63 @@ fn judgment_reception_clipboard(roles: &[AcceptedReceptionRole], facts: &[Fact])
     reception_clipboard_view(roles, facts, false)
 }
 
+fn native_contact_role_reference(
+    case: &crate::reading_contracts::Consultation,
+    request: &Value,
+    roles: &[AcceptedReceptionRole],
+    facts: &[Fact],
+) -> Option<Value> {
+    use crate::reading_contracts::{Evidence, Field, Method};
+    if case.method() != Some(Method::Contact) {
+        return None;
+    }
+    let mut accepted = Vec::new();
+    for field in [Field::PrincipalMode, Field::PrincipalId] {
+        if let Some(crate::reading_contracts::Slot::Resolved { observation }) =
+            case.facts.get(&field)
+        {
+            let quote = match &observation.evidence {
+                Evidence::User { quote, .. } | Evidence::RetainedQuestion { quote } => {
+                    quote.as_str()
+                }
+                _ => "",
+            };
+            accepted.push(json!({"field":field.name(),"value":observation.value,
+                "quote":quote,"evidence":observation.evidence}));
+        }
+    }
+    accepted.push(
+        json!({"field":"subject.owner_id","value":request["subject"]["owner_id"],
+        "quote":request["subject"]["source_quote"]}),
+    );
+    for (id, person) in request["people"].as_object().into_iter().flatten() {
+        for (name, key) in [("label", "label"), ("relationship", "relationship")] {
+            accepted.push(
+                json!({"field":format!("people.{id}.{name}"),"value":person[key],
+                "quote":person["source_quote"]}),
+            );
+        }
+    }
+    let selections: Vec<_> = roles
+        .iter()
+        .map(|role| reading_method::ContactAcceptedRole {
+            selected_id: role.selected_id.clone(),
+            label: role.label.clone(),
+            house: role.house,
+            planet: role.planet.clone(),
+        })
+        .collect();
+    let projection = json!({"facts":accepted,"unknown":[],
+        "source_identity":{"reading_input_sha256":request["binding"]["input_sha256"],
+            "role_selections_sha256":crate::horary_lessons::digest(&serde_json::to_string(&selections).expect("Finite native role selections"))},
+        "source_scope":"native_accepted_consultation_and_roles"});
+    Some(reading_method::contact_role_reference(
+        &projection,
+        facts,
+        Some(&selections),
+    ))
+}
+
 /// Keep native limitations beside the proposed contact interpretation. A
 /// checked worksheet can still overstate an event or its calendar deadline.
 fn with_contact_judgment_limits(mut input: Value, facts: &[Fact]) -> Result<Value, String> {
@@ -1683,6 +1740,16 @@ fn generate_reading(
             .map(|()| None);
     }
     let reception_roles = accepted_reception_roles(&assignment)?;
+    let contact_roles = native_contact_role_reference(
+        session
+            .method
+            .consultation
+            .as_ref()
+            .expect("Consultation installed"),
+        &reading_request,
+        &reception_roles,
+        &all,
+    );
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
     let contact_context = contact_evidence(&all, &roles);
@@ -1789,17 +1856,18 @@ fn generate_reading(
             facts.push(fact.clone());
         }
     }
+    let mut judgment_input = json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
+        "native_reception":judgment_reception_clipboard(&reception_roles,&facts)});
+    if let Some(reference) = contact_roles {
+        judgment_input["contact_role_reference"] = reference;
+    }
     let record_start = session.method.records.len();
     let Some(judgment) = task(
         session,
         runtime,
         Stage::Judgment,
         with_contact_judgment_limits(
-            crate::message_programs::with_clipboard(
-                json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
-            "native_reception":judgment_reception_clipboard(&reception_roles,&facts)}),
-                &native_arrival,
-            ),
+            crate::message_programs::with_clipboard(judgment_input, &native_arrival),
             &facts,
         )?,
         &facts,
@@ -1899,6 +1967,108 @@ fn selected_stage_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn contact_final_reference_reuses_actual_native_role_permit_and_input_binding() {
+        use crate::reading_contracts::{self as contracts, Frame, Intent, Method};
+        let words = "Will my mother Alma contact me?";
+        let mut case = contracts::Consultation::default();
+        let mut patch = contracts::control(Intent::Read);
+        patch.question = Some(words.into());
+        patch.frame = Some(Frame {
+            method: Method::Contact,
+            facet: contracts::Facet::Event,
+        });
+        patch.people = vec![crate::horary_role_options::Person {
+            id: "alma".into(),
+            label: "Alma".into(),
+            relationship: "mother".into(),
+            source_quote: "my mother Alma".into(),
+        }];
+        patch.subject = Some(crate::horary_role_options::Subject {
+            name: "Alma".into(),
+            kind: "person".into(),
+            owner_id: "alma".into(),
+            source_quote: "Alma".into(),
+        });
+        case.apply(&patch, 1, words, false).unwrap();
+        let anchor = contracts::Anchor {
+            timestamp_ms: 1791478980000.,
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+        };
+        let ready = contracts::ReadyReading::prepare(&case, anchor.clone()).unwrap();
+        let native = reading_method::facts(Some(
+            &horary_ai_core::astronomy::chart(
+                anchor.timestamp_ms,
+                anchor.latitude,
+                anchor.longitude,
+            )
+            .unwrap(),
+        ));
+        let brief = ready.brief();
+        let options = crate::horary_role_options::build_for(
+            &case,
+            brief.matter,
+            &brief.people,
+            &brief.subject,
+        );
+        let worksheet = json!({"selections":options.required_groups.iter().map(|group| {
+            assert_eq!(group.len(),1);
+            let choice = options.choices.iter().find(|choice| choice.id == group[0]).unwrap();
+            json!({"id":choice.id,"reason":choice.basis})
+        }).collect::<Vec<_>>(),"summary":"Actual bound role calculation only.","unknowns":[]});
+        let step::Checked::Data(data) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &worksheet,
+            &json!({"native_role_options":options}),
+            &native,
+        )
+        .unwrap() else {
+            panic!("Authored selections must cross the real native acceptance boundary");
+        };
+        let selected = accepted_reception_roles(&data).unwrap();
+        let request = ready.input();
+        let reference = native_contact_role_reference(&case, &request, &selected, &native).unwrap();
+        assert_eq!(reference["alias_authority"], "native_accepted_selections");
+        assert_eq!(
+            reference["source_identity"]["reading_input_sha256"],
+            request["binding"]["input_sha256"]
+        );
+        for (alias, role) in reference["aliases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(&selected)
+        {
+            assert_eq!(alias["role_id"], role.selected_id);
+            assert_eq!(alias["label"], role.label);
+            assert_eq!(alias["planet"], role.planet);
+            assert_eq!(alias["significator_house"], json!(role.house));
+        }
+        let input = json!({"reading_request":request,"brief":{"question":words},"roles":data.roles(),
+            "facts":native,"contact_role_reference":reference,"timing":{"timing_status":"unestablished"},
+            "contacts":{"candidate_ids":[],"unknowns":["No model contact assessment executed in this handoff regression."]}});
+        let final_input = with_contact_judgment_limits(input.clone(), &native).unwrap();
+        assert_eq!(
+            final_input["contact_role_reference"],
+            input["contact_role_reference"]
+        );
+        assert_eq!(final_input["facts"], input["facts"]);
+        let mut other = case;
+        if let contracts::Slot::Resolved { observation } = &mut other.frame {
+            observation.value.method = Method::NewJob;
+        }
+        assert!(native_contact_role_reference(
+            &other,
+            &input["reading_request"],
+            &selected,
+            &native
+        )
+        .is_none());
+    }
 
     #[test]
     fn contact_final_handoff_keeps_native_limits_apart_from_proposed_prose() {

@@ -2,6 +2,7 @@
 //! The model selects IDs. Rust binds the person/object, turns houses, and derives
 //! rulers. A person cannot be relabeled as their possessions by a numeric slip.
 #![forbid(unsafe_code)]
+pub use crate::reading_method::{relationship_house, turn};
 use crate::{
     horary_lessons::Matter,
     reading_method::{self, Fact, NaturalRole, Role, RoleChoice},
@@ -69,25 +70,6 @@ pub struct Options {
     pub conditional_roles: Vec<ConditionalRole>,
     pub missing: Vec<String>,
     pub compare: Vec<String>,
-}
-
-pub fn turn(base: u8, relative: u8) -> u8 {
-    (base + relative - 2) % 12 + 1
-}
-
-pub fn relationship_house(relationship: &str) -> Option<u8> {
-    match relationship {
-        "partner" | "other_party" => Some(7),
-        "child" => Some(5),
-        "sibling" => Some(3),
-        "friend" => Some(11),
-        "mother" | "employer" => Some(10),
-        "father" => Some(4),
-        "employee" => Some(6),
-        "querent" => Some(1),
-        "neighbor" => Some(3),
-        _ => None,
-    }
 }
 
 /// This is a conservative English extraction check, not a proof of the full

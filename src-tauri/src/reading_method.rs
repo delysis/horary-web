@@ -407,6 +407,312 @@ pub struct Role {
     pub reason: String,
 }
 
+pub fn turn(base: u8, relative: u8) -> u8 {
+    (base + relative - 2) % 12 + 1
+}
+
+pub fn relationship_house(relationship: &str) -> Option<u8> {
+    match relationship {
+        "partner" | "other_party" => Some(7),
+        "child" => Some(5),
+        "sibling" | "neighbor" => Some(3),
+        "friend" => Some(11),
+        "mother" | "employer" => Some(10),
+        "father" => Some(4),
+        "employee" => Some(6),
+        "querent" => Some(1),
+        _ => None,
+    }
+}
+
+/// Exact accepted selection values, not roles reconstructed from a model label.
+#[derive(Clone, Serialize)]
+pub struct ContactAcceptedRole {
+    pub selected_id: String,
+    pub label: String,
+    pub house: Option<u8>,
+    pub planet: String,
+}
+
+/// A read-only view of an accepted consultation projection and calculated facts.
+/// The same view serves the component reader and the application's judgment.
+/// It neither chooses a contact route nor interprets reception or an event.
+pub fn contact_role_reference(
+    consultation: &Value,
+    native: &[Fact],
+    accepted_roles: Option<&[ContactAcceptedRole]>,
+) -> Value {
+    use serde_json::json;
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut unknowns = Vec::new();
+    let mut projection_valid = true;
+    let mut fields: BTreeMap<&str, Vec<&Value>> = BTreeMap::new();
+    if let Some(facts) = consultation["facts"].as_array() {
+        for fact in facts {
+            if let (Some(field), Some(_), Some(_)) = (
+                fact["field"].as_str(),
+                fact["value"].as_str(),
+                fact["quote"].as_str(),
+            ) {
+                fields.entry(field).or_default().push(fact);
+            } else {
+                projection_valid = false;
+                unknowns.push("An accepted fact projection is malformed.".into());
+            }
+        }
+    } else {
+        unknowns.push("The accepted fact projection is unavailable.".into());
+    }
+    let unavailable: BTreeSet<_> = consultation["unknown"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let value = |field: &str| {
+        (!unavailable.contains(field))
+            .then(|| fields.get(field))
+            .flatten()
+            .filter(|entries| entries.len() == 1)
+            .and_then(|entries| entries[0]["value"].as_str())
+            .filter(|value| !value.is_empty())
+    };
+    for (field, entries) in &fields {
+        if entries.len() != 1 || unavailable.contains(field) {
+            unknowns.push(format!("{field} is conflicting or unresolved."));
+        }
+    }
+    let principal = match value("principal_mode") {
+        Some("relay") => value("principal_id"),
+        Some("self" | "concerning_other") => Some("querent"),
+        None if projection_valid
+            && consultation["facts"].is_array()
+            && !fields.contains_key("principal_mode")
+            && !unavailable.contains("principal_mode") =>
+        {
+            Some("querent")
+        }
+        _ => None,
+    };
+    let target = value("subject.owner_id");
+    if principal.is_none() {
+        unknowns.push(
+            "The effective principal is unresolved; no first-house actor is invented.".into(),
+        );
+    }
+    if target.is_none() {
+        unknowns.push("The contact target's accepted person ID is unresolved.".into());
+    }
+    let label = |id: &str| {
+        value(&format!("people.{id}.label"))
+            .or_else(|| value(&format!("people.{id}.name")))
+            .unwrap_or(id)
+            .to_owned()
+    };
+    let relationship_field = target.map(|id| format!("people.{id}.relationship"));
+    let capacity_field = target.map(|id| format!("people.{id}.capacity"));
+    let target_house = target.and_then(|id| {
+        if Some(id) == principal {
+            Some(1)
+        } else {
+            if [relationship_field.as_deref(), capacity_field.as_deref()]
+                .into_iter()
+                .flatten()
+                .any(|field| {
+                    (fields.contains_key(field) || unavailable.contains(field))
+                        && value(field).is_none()
+                })
+            {
+                return None;
+            }
+            let relationship = relationship_field.as_deref().and_then(value);
+            let capacity = capacity_field.as_deref().and_then(value);
+            // Both are canonical operative inputs, not an occupation inferred
+            // from prose. Conflicting allocations require actual clarification.
+            match (relationship, capacity) {
+                (Some(relationship), Some(capacity)) if relationship != capacity => None,
+                (Some(relationship), _) => relationship_house(relationship),
+                (_, Some(capacity)) => relationship_house(capacity),
+                _ => None,
+            }
+        }
+    });
+    if target.is_some() && target_house.is_none() {
+        unknowns.push("The target's operative relationship is absent or unsupported; no seventh-house default or relationship chain is inferred.".into());
+    }
+    let mut rows = Vec::new();
+    let mut add = |id: &str,
+                   actor: Option<&str>,
+                   house: Option<u8>,
+                   optional: bool,
+                   sources: Vec<String>| {
+        let house_facts: Vec<_> = native
+            .iter()
+            .filter(|fact| {
+                fact.kind == "house"
+                    && house.is_some_and(|house| fact.label == format!("House {house}"))
+            })
+            .collect();
+        let cusp = (house_facts.len() == 1).then(|| house_facts[0]);
+        let ruler =
+            cusp.and_then(|fact| (fact.planets.len() == 1).then(|| fact.planets[0].as_str()));
+        if house.is_some() && ruler.is_none() {
+            unknowns.push(format!(
+                "{id}: the unique native cusp/ruler is unavailable."
+            ));
+        }
+        let positions: Vec<_> = native
+            .iter()
+            .filter(|fact| {
+                fact.kind == "position"
+                    && ruler.is_some_and(|ruler| fact.planets.iter().any(|planet| planet == ruler))
+            })
+            .map(|fact| fact.id.as_str())
+            .collect();
+        rows.push(json!({"role_id":id,"actor_id":actor,"label":actor.map(label),
+            "significator_house":house,"cusp_fact_id":cusp.map(|fact|&fact.id),
+            "ruler_planet":ruler,"position_fact_ids":positions,"optional":optional,"source_fields":sources}));
+    };
+    add(
+        "principal.person",
+        principal,
+        principal.map(|_| 1),
+        false,
+        ["principal_mode", "principal_id"]
+            .into_iter()
+            .filter(|field| fields.contains_key(field))
+            .map(str::to_owned)
+            .collect(),
+    );
+    let mut target_sources = vec!["subject.owner_id".into()];
+    if let Some(field) = relationship_field {
+        target_sources.push(field);
+    }
+    if let Some(field) = capacity_field.filter(|field| fields.contains_key(field.as_str())) {
+        target_sources.push(field);
+    }
+    add(
+        "target.person",
+        target,
+        target_house,
+        false,
+        target_sources.clone(),
+    );
+    // Frawley p. 166: the person's own contact is sufficient. This additional
+    // sender-third reference is optional, never a required message actor.
+    add(
+        "target.message",
+        target,
+        target_house.map(|house| turn(house, 3)),
+        true,
+        target_sources,
+    );
+
+    let mut aliases: Vec<Value> = match accepted_roles {
+        Some(roles) => roles.iter().map(|role| {
+            let actor = if role.selected_id == "querent.self" || role.selected_id == "moon.contextual" {
+                principal
+            } else {
+                target.filter(|id| role.selected_id == format!("{id}.self"))
+            };
+            json!({"role_id":role.selected_id,"actor_id":actor,"label":role.label,
+                "significator_house":role.house,"planet":role.planet})
+        }).collect(),
+        None => rows.iter().filter(|row| row["ruler_planet"].is_string()).map(|row| {
+            json!({"role_id":row["role_id"],"actor_id":row["actor_id"],"label":row["label"],
+                "significator_house":row["significator_house"],"planet":row["ruler_planet"],"optional":row["optional"]})
+        }).collect(),
+    };
+    let moon_claims: Vec<_> = aliases
+        .iter()
+        .filter(|role| {
+            role["planet"] == "Moon"
+                && role["significator_house"].is_number()
+                && role["optional"] != true
+        })
+        .cloned()
+        .collect();
+    let conditional_moon_claims: Vec<_> = rows
+        .iter()
+        .filter(|row| row["ruler_planet"] == "Moon" && row["optional"] == true)
+        .map(|row| row["role_id"].clone())
+        .collect();
+    let moon_available = principal.is_some()
+        && moon_claims.is_empty()
+        && rows
+            .iter()
+            .filter(|row| row["optional"] == false)
+            .all(|row| row["ruler_planet"].is_string());
+    if accepted_roles.is_none() && moon_available {
+        aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
+            "label":"The principal's contextual Moon","significator_house":null,"planet":"Moon","optional":true}));
+    }
+    let matching = |planet: &str| {
+        aliases
+            .iter()
+            .filter(|role| role["planet"] == planet)
+            .collect::<Vec<_>>()
+    };
+    let reception: Vec<_> = native
+        .iter()
+        .filter_map(|fact| {
+            let edge = fact
+                .reception
+                .as_ref()
+                .filter(|_| fact.kind == "reception")?;
+            let guest_roles = matching(&edge.guest_planet);
+            let host_roles = matching(&edge.host_planet);
+            if guest_roles.is_empty() || host_roles.is_empty() {
+                return None;
+            }
+            Some(json!({"fact_id":fact.id,"guest_planet":edge.guest_planet,
+            "guest_roles":guest_roles,"host_planet":edge.host_planet,
+            "host_roles":host_roles,"qualities":edge.qualities}))
+        })
+        .collect();
+    let events: Vec<_> = native
+        .iter()
+        .filter_map(|fact| {
+            let event = fact
+                .event
+                .as_ref()
+                .filter(|_| fact.kind == "event" && fact.planets.len() == 2)?;
+            if fact
+                .planets
+                .iter()
+                .all(|planet| matching(planet).is_empty())
+            {
+                return None;
+            }
+            Some(
+                json!({"fact_id":fact.id,"endpoints":fact.planets.iter().map(|planet| {
+            json!({"planet":planet,"roles":matching(planet)})
+        }).collect::<Vec<_>>(),"candidate":event}),
+            )
+        })
+        .collect();
+    let sources: Vec<_> = fields
+        .iter()
+        .filter(|(field, _)| {
+            matches!(
+                **field,
+                "principal_mode" | "principal_id" | "subject.owner_id"
+            ) || target.is_some_and(|id| field.starts_with(&format!("people.{id}.")))
+                || principal.is_some_and(|id| field.starts_with(&format!("people.{id}.")))
+        })
+        .flat_map(|(_, entries)| entries.iter().copied())
+        .collect();
+    json!({"version":"contact-role-reference-1","source_identity":consultation["source_identity"],
+        "source_scope":consultation["source_scope"],"accepted_fact_references":sources,
+        "principal_basis":if principal.is_none(){"unresolved"}else if fields.contains_key("principal_mode"){"accepted_principal_mode"}else{"default_querent_no_relay_asserted"},
+        "role_rows":rows,"alias_authority":if accepted_roles.is_some(){"native_accepted_selections"}else{"calculated_role_references"},
+        "aliases":aliases,"moon":{"available_as_contextual_reference":moon_available,"house_claims":moon_claims,
+            "conditional_house_claims_if_optional_role_used":conditional_moon_claims},
+        "directed_reception":reception,"event_endpoints":events,"unknowns":unknowns,
+        "limitations":"Significator houses assign roles; they are not the bodies' occupied houses. The sender-third row is optional. Reception arrows retain guest-to-host direction, not an event or emotional verdict. Event endpoints do not assign sender or applying planet.",
+        "printed_pages":"25–27, 30–32, 165–166"})
+}
+
 #[cfg(test)]
 pub fn assign(chart: &Value, choices: Vec<RoleChoice>) -> Result<Vec<Role>, String> {
     assign_with(choices, |number| {
@@ -485,6 +791,248 @@ fn assign_with<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn contact_projection() -> Value {
+        serde_json::json!({"source_scope":"synthetic accepted projection","source_identity":"accepted-input-test",
+            "facts":[{"field":"subject.owner_id","value":"alma","quote":"my mother Alma"},
+                {"field":"people.alma.label","value":"Alma","quote":"Alma"},
+                {"field":"people.alma.relationship","value":"mother","quote":"my mother Alma"}],"unknown":[]})
+    }
+
+    fn contact_native_facts() -> Vec<Fact> {
+        let mut native: Vec<_> = [(1, "Saturn"), (10, "Mars"), (12, "Venus")]
+            .into_iter()
+            .enumerate()
+            .map(|(index, (house, planet))| Fact {
+                id: format!("e{index}"),
+                kind: "house".into(),
+                label: format!("House {house}"),
+                detail: "Synthetic calculated cusp/ruler regression.".into(),
+                planets: vec![planet.into()],
+                condition_facet: None,
+                event: None,
+                reception: None,
+            })
+            .collect();
+        native.push(Fact {
+            id: "e3".into(),
+            kind: "position".into(),
+            label: "Saturn".into(),
+            detail: "Saturn occupies physical house 4, not its first-house role.".into(),
+            planets: vec!["Saturn".into()],
+            condition_facet: None,
+            event: None,
+            reception: None,
+        });
+        native
+    }
+
+    fn reference_row<'a>(view: &'a Value, id: &str) -> &'a Value {
+        view["role_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["role_id"] == id)
+            .unwrap()
+    }
+
+    #[test]
+    fn contact_reference_binds_known_actor_and_optional_turned_message_to_cusps() {
+        let projection = contact_projection();
+        let native = contact_native_facts();
+        let view = contact_role_reference(&projection, &native, None);
+        let principal = reference_row(&view, "principal.person");
+        assert_eq!(principal["actor_id"], "querent");
+        assert_eq!(principal["significator_house"], 1);
+        assert_eq!(principal["position_fact_ids"], serde_json::json!(["e3"]));
+        assert!(principal.get("physical_house").is_none());
+        assert_eq!(
+            reference_row(&view, "target.person")["significator_house"],
+            10
+        );
+        let message = reference_row(&view, "target.message");
+        assert_eq!(message["significator_house"], 12);
+        assert_eq!(message["cusp_fact_id"], "e2");
+        assert_eq!(message["ruler_planet"], "Venus");
+        assert_eq!(message["optional"], true);
+        assert_eq!(view["source_identity"], "accepted-input-test");
+        assert_eq!(
+            view["accepted_fact_references"][2]["quote"],
+            "my mother Alma"
+        );
+        assert_eq!(turn(7, 3), 9);
+        assert_eq!(turn(11, 3), 1);
+    }
+
+    #[test]
+    fn contact_reference_keeps_unknown_conflicting_and_unsupported_inputs_unknown() {
+        let native = contact_native_facts();
+        let mut projection = contact_projection();
+        projection["facts"][2]["value"] = serde_json::json!("mother_of_neighbor");
+        let view = contact_role_reference(&projection, &native, None);
+        assert!(reference_row(&view, "target.person")["significator_house"].is_null());
+        assert!(reference_row(&view, "target.message")["ruler_planet"].is_null());
+        projection["facts"][2]["value"] = serde_json::json!("mother");
+        projection["facts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+            "field":"people.alma.relationship","value":"friend","quote":"Alma is my friend"}));
+        let view = contact_role_reference(&projection, &native, None);
+        assert!(reference_row(&view, "target.person")["significator_house"].is_null());
+        assert_eq!(
+            view["accepted_fact_references"].as_array().unwrap().len(),
+            4
+        );
+        let mut missing = contact_projection();
+        missing["unknown"] = serde_json::json!(["people.alma.relationship"]);
+        assert!(reference_row(
+            &contact_role_reference(&missing, &native, None),
+            "target.person"
+        )["ruler_planet"]
+            .is_null());
+        let mut capacity = contact_projection();
+        capacity["facts"][2]["field"] = serde_json::json!("people.alma.capacity");
+        capacity["facts"][2]["value"] = serde_json::json!("employer");
+        assert_eq!(
+            reference_row(
+                &contact_role_reference(&capacity, &native, None),
+                "target.person"
+            )["significator_house"],
+            10
+        );
+        let empty = contact_role_reference(&serde_json::json!({}), &native, None);
+        assert!(reference_row(&empty, "principal.person")["actor_id"].is_null());
+    }
+
+    #[test]
+    fn contact_reference_requires_actual_relay_binding_and_keeps_other_person_ordinary() {
+        let native = contact_native_facts();
+        let mut projection = contact_projection();
+        projection["facts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+            "field":"principal_mode","value":"relay","quote":"Alma asked her own question"}));
+        let view = contact_role_reference(&projection, &native, None);
+        assert!(reference_row(&view, "principal.person")["actor_id"].is_null());
+        projection["facts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+            "field":"principal_id","value":"alma","quote":"Alma asked her own question"}));
+        let view = contact_role_reference(&projection, &native, None);
+        assert_eq!(reference_row(&view, "principal.person")["actor_id"], "alma");
+        assert_eq!(
+            reference_row(&view, "target.person")["significator_house"],
+            1
+        );
+        projection["facts"][3]["value"] = serde_json::json!("concerning_other");
+        let view = contact_role_reference(&projection, &native, None);
+        assert_eq!(
+            reference_row(&view, "principal.person")["actor_id"],
+            "querent"
+        );
+        assert_eq!(
+            reference_row(&view, "target.person")["significator_house"],
+            10
+        );
+    }
+
+    #[test]
+    fn contact_reference_preserves_house_claims_shared_aliases_and_reception_direction() {
+        use serde_json::json;
+        let projection = contact_projection();
+        let mut native = contact_native_facts();
+        native[0].planets = vec!["Moon".into()];
+        native[1].planets = vec!["Moon".into()];
+        native.push(Fact {
+            id: "e4".into(),
+            kind: "reception".into(),
+            label: "Moon toward Venus".into(),
+            detail: "Synthetic directed qualities.".into(),
+            planets: vec!["Moon".into(), "Venus".into()],
+            condition_facet: None,
+            event: None,
+            reception: Some(DirectedReception {
+                guest_planet: "Moon".into(),
+                host_planet: "Venus".into(),
+                qualities: vec![
+                    ReceptionQuality {
+                        dignity: ReceptionDignity::FaceRuler,
+                        polarity: ReceptionPolarity::Positive,
+                    },
+                    ReceptionQuality {
+                        dignity: ReceptionDignity::Detriment,
+                        polarity: ReceptionPolarity::Negative,
+                    },
+                ],
+            }),
+        });
+        native.push(Fact {
+            id: "e5".into(),
+            kind: "event".into(),
+            label: "Synthetic candidate".into(),
+            detail: "No earthly verdict.".into(),
+            planets: vec!["Moon".into(), "Venus".into()],
+            condition_facet: None,
+            reception: None,
+            event: Some(EventCandidate {
+                within_current_signs: Some(false),
+                astronomical_hours: 25.,
+                perfection_motion: None,
+            }),
+        });
+        let before = serde_json::to_value(&native).unwrap();
+        let view = contact_role_reference(&projection, &native, None);
+        assert_eq!(view["moon"]["house_claims"].as_array().unwrap().len(), 2);
+        assert_eq!(view["moon"]["available_as_contextual_reference"], false);
+        let edge = &view["directed_reception"][0];
+        assert_eq!(
+            edge["guest_roles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|role| role["role_id"].clone())
+                .collect::<Vec<_>>(),
+            vec![json!("principal.person"), json!("target.person")]
+        );
+        assert_eq!(edge["host_roles"][0]["role_id"], "target.message");
+        assert_eq!(edge["guest_roles"][1]["actor_id"], "alma");
+        assert_eq!(
+            edge["qualities"],
+            serde_json::to_value(&native[4].reception.as_ref().unwrap().qualities).unwrap()
+        );
+        assert_eq!(edge["fact_id"], "e4");
+        assert_eq!(
+            view["event_endpoints"][0]["candidate"]["withinCurrentSigns"],
+            false
+        );
+        assert!(view["event_endpoints"][0].get("applying_planet").is_none());
+        assert_eq!(serde_json::to_value(&native).unwrap(), before);
+        let selected = [
+            ContactAcceptedRole {
+                selected_id: "querent.self".into(),
+                label: "Actual first role".into(),
+                house: Some(1),
+                planet: "Moon".into(),
+            },
+            ContactAcceptedRole {
+                selected_id: "alma.self".into(),
+                label: "Actual target role".into(),
+                house: Some(10),
+                planet: "Moon".into(),
+            },
+        ];
+        let view = contact_role_reference(&projection, &native, Some(&selected));
+        assert_eq!(view["alias_authority"], "native_accepted_selections");
+        assert_eq!(view["aliases"][0]["role_id"], "querent.self");
+        assert_eq!(view["aliases"][1]["label"], "Actual target role");
+        assert!(
+            view["directed_reception"].as_array().unwrap().is_empty(),
+            "An unselected optional message role cannot become an accepted reception alias"
+        );
+    }
 
     #[test]
     fn typed_reception_preserves_native_direction_qualities_ids_and_prose() {

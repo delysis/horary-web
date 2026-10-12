@@ -168,6 +168,10 @@ pub fn requirements(method: &str) -> Result<String> {
 }
 
 pub fn chart_evidence(case: &Case) -> Result<Value> {
+    chart_evidence_for_consultation(case, None)
+}
+
+fn chart_evidence_for_consultation(case: &Case, consultation: Option<&Value>) -> Result<Value> {
     let at = chrono::DateTime::parse_from_rfc3339(&case.chart.utc)?;
     let raw = horary_ai_core::astronomy::chart(
         at.timestamp_millis() as f64,
@@ -179,11 +183,32 @@ pub fn chart_evidence(case: &Case) -> Result<Value> {
     // native fact once, in the same notation as an original-message journey;
     // repeating structured and prose versions adds tokens, not testimony.
     let native = crate::native_evidence::facts(Some(&raw));
-    let compact = json!({"anchor":case.chart,"facts":compact_native_facts(&native),
+    let mut compact = json!({"anchor":case.chart,"facts":compact_native_facts(&native),
         "moon":raw["derived"]["voidOfCourseMoon"],
         "search_limitations":raw["calculationNote"],
         "input_scope":"Independently supplied chart for a reading-function test, not an observed extraction journey. All native fact IDs and details are present; no omitted fact is inferred absent."});
+    if case.method == "contact"
+        && let Some(consultation) = consultation
+    {
+        compact["role_reference"] = component_contact_role_reference(consultation, &native)?;
+    }
     Ok(compact)
+}
+
+fn component_contact_role_reference(
+    consultation: &Value,
+    native: &[crate::native_evidence::Fact],
+) -> Result<Value> {
+    // The helper consumes only declared reader inputs after assembly, not the
+    // case's private expected method, branch, roles or answer rubric.
+    let mut projection = consultation.clone();
+    projection["source_identity"] = json!(crate::google::digest(serde_json::to_vec(consultation)?));
+    projection["source_scope"] = json!("declared_component_consultation_not_an_extraction_journey");
+    Ok(crate::native_evidence::contact_role_reference(
+        &projection,
+        native,
+        None,
+    ))
 }
 
 /// Component examples have declared inputs. The reading component receives
@@ -195,20 +220,24 @@ pub fn example(case: &Case, task: &str, book: &Book) -> Result<Example> {
     )?;
     let history = serde_json::to_string(&case.history)?;
     let fields: Vec<(String, Value)> = match task {
-        "reading" => vec![
-            ("question".into(), json!(case.question)),
-            (
-                "consultation".into(),
-                json!(serde_json::to_string(
-                    &json!({"facts":case.expected.facts,"unknown":case.expected.missing,"device":case.device})
-                )?),
-            ),
-            (
-                "chart_evidence".into(),
-                json!(serde_json::to_string(&chart_evidence(case)?)?),
-            ),
-            ("source_text".into(), json!(source)),
-        ],
+        "reading" => {
+            let consultation = json!({"facts":case.expected.facts,"unknown":case.expected.missing,"device":case.device});
+            vec![
+                ("question".into(), json!(case.question)),
+                (
+                    "consultation".into(),
+                    json!(serde_json::to_string(&consultation)?),
+                ),
+                (
+                    "chart_evidence".into(),
+                    json!(serde_json::to_string(&chart_evidence_for_consultation(
+                        case,
+                        Some(&consultation)
+                    )?)?),
+                ),
+                ("source_text".into(), json!(source)),
+            ]
+        }
         "extraction" => vec![
             ("question".into(), json!(case.question)),
             ("conversation".into(), json!(history)),
@@ -437,6 +466,76 @@ pub fn coverage_card(method: &str) -> Result<Value> {
 #[cfg(test)]
 mod source_context_tests {
     use super::*;
+
+    #[test]
+    fn contact_component_reference_uses_assembled_declared_inputs_without_private_role_gold() {
+        let case: Case = serde_json::from_value(json!({
+            "id":"synthetic-contact-view","method":"contact","split":"train","variant":"explicit",
+            "question":"Will my mother Alma contact me?","history":[],
+            "device":{"observed_at":"2031-04-17T11:30:00Z","time_zone":"America/New_York",
+                "place":{"name":"Synthetic reader place","latitude":38.657,"longitude":-77.249}},
+            "chart":{"utc":"2031-04-17T11:30:00Z","latitude":38.657,"longitude":-77.249},
+            "expected":{"facet":"event","facts":[
+                {"field":"subject.owner_id","value":"alma","quote":"Alma"},
+                {"field":"people.alma.relationship","value":"mother","quote":"my mother Alma"}],
+                "missing":[],"reading_status":"answer","must_explain":["PRIVATE ROLE GOLD MUST NOT ENTER VIEW"],
+                "must_not":[],"source_pages":[165,166]}
+        })).unwrap();
+        let input = example(&case, "reading", &Book::fixture()).unwrap();
+        let consultation: Value =
+            serde_json::from_str(input.get("consultation").unwrap().as_str().unwrap()).unwrap();
+        let evidence: Value =
+            serde_json::from_str(input.get("chart_evidence").unwrap().as_str().unwrap()).unwrap();
+        let view = &evidence["role_reference"];
+        assert_eq!(view["alias_authority"], "calculated_role_references");
+        let target = view["role_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["role_id"] == "target.person")
+            .unwrap();
+        assert_eq!(target["significator_house"], 10);
+        assert!(
+            evidence["facts"]
+                .as_str()
+                .unwrap()
+                .lines()
+                .any(|row| row.starts_with(target["cusp_fact_id"].as_str().unwrap()))
+        );
+        assert_eq!(
+            view["accepted_fact_references"][0]["quote"],
+            "my mother Alma"
+        );
+        assert!(!view.to_string().contains("PRIVATE ROLE GOLD"));
+        assert_eq!(
+            consultation["facts"],
+            serde_json::to_value(&case.expected.facts).unwrap()
+        );
+        let mut without = evidence;
+        without.as_object_mut().unwrap().remove("role_reference");
+        assert_eq!(
+            without,
+            chart_evidence(&case).unwrap(),
+            "Removing only the view reproduces the original complete native chart presentation"
+        );
+        let mut declared = consultation;
+        declared["facts"][1]["value"] = json!("friend");
+        let raw = horary_ai_core::astronomy::chart(
+            chrono::DateTime::parse_from_rfc3339(&case.chart.utc)
+                .unwrap()
+                .timestamp_millis() as f64,
+            case.chart.latitude,
+            case.chart.longitude,
+        )
+        .unwrap();
+        let view =
+            component_contact_role_reference(&declared, &crate::native_evidence::facts(Some(&raw)))
+                .unwrap();
+        assert_eq!(
+            view["role_rows"][1]["significator_house"], 11,
+            "The helper follows the supplied declaration, not the case's mother label"
+        );
+    }
 
     #[test]
     fn component_chart_preserves_every_native_fact_without_duplicate_presentations() {
