@@ -151,7 +151,7 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "d9b3cf94f3fe06c6ec4cb2aeb3678781b737c9038fef4b6f788b12dadca10ef1"
+      "sha256": "82c85285d7ed41c99e5cb24f17f621e19b051cb60ee181c94faa31e410d1fcab"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",

@@ -6956,14 +6956,192 @@ mod effective_guide_tests {
     }
 }
 
-fn bounded_strings(value: &Value) -> bool {
+fn validate_resource_bounds(
+    value: &Value,
+    schema: &Value,
+    native_evidence_budget: usize,
+    path: &str,
+) -> Result<(), String> {
     match value {
         Value::String(s) => {
-            s.len() <= 8000 && !s.contains("<|") && !s.contains("|>") && !s.contains("<image")
+            if s.len() > 8000 {
+                return Err(format!(
+                    "{path}: string has {} UTF-8 bytes; maximum is 8000.",
+                    s.len()
+                ));
+            }
+            if ["<|", "|>", "<image"].iter().any(|token| s.contains(token)) {
+                return Err(format!(
+                    "{path}: string contains a reserved model-control token."
+                ));
+            }
         }
-        Value::Array(a) => a.len() <= 40 && a.iter().all(bounded_strings),
-        Value::Object(m) => m.len() <= 30 && m.values().all(bounded_strings),
-        _ => true,
+        Value::Array(a) => {
+            // A synthesis may cite the whole finite native fact allowlist.
+            // Exact per-check/stage limits and IDs still come from its schema.
+            let resource_maximum = if path.ends_with(".evidence") {
+                native_evidence_budget.max(40)
+            } else {
+                40
+            };
+            let maximum = schema["maxItems"]
+                .as_u64()
+                .and_then(|maximum| usize::try_from(maximum).ok())
+                .map_or(resource_maximum, |maximum| maximum.min(resource_maximum));
+            if a.len() > maximum {
+                return Err(format!(
+                    "{path}: array has {} entries; maximum is {maximum}.",
+                    a.len()
+                ));
+            }
+            for (index, entry) in a.iter().enumerate() {
+                validate_resource_bounds(
+                    entry,
+                    &schema["items"],
+                    native_evidence_budget,
+                    &format!("{path}[{index}]"),
+                )?;
+            }
+        }
+        Value::Object(m) => {
+            if m.len() > 30 {
+                return Err(format!(
+                    "{path}: object has {} fields; maximum resource budget is 30.",
+                    m.len()
+                ));
+            }
+            for (key, entry) in m {
+                validate_resource_bounds(
+                    entry,
+                    &schema["properties"][key],
+                    native_evidence_budget,
+                    &format!("{path}.{key}"),
+                )?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod resource_bounds_tests {
+    use super::*;
+
+    fn full_native_judgment() -> (Value, Vec<Fact>) {
+        let facts: Vec<_> = (0..81)
+            .map(|index| Fact {
+                id: format!("e{index}"),
+                kind: if index == 80 { "boundary" } else { "position" }.into(),
+                label: "Offline native citation witness".into(),
+                detail: "This fixture tests contract acceptance, not interpretation.".into(),
+                planets: Vec::new(),
+                condition_facet: None,
+                event: None,
+                reception: None,
+            })
+            .collect();
+        let checks: serde_json::Map<_, _> = Stage::Judgment
+            .checks()
+            .iter()
+            .map(|key| {
+                (
+                    (*key).into(),
+                    json!({"state":"unestablished","evidence":[],"finding":"This offline fixture does not assess a horoscope."}),
+                )
+            })
+            .collect();
+        let mut value = json!({
+            "checks":checks,
+            "summary":"Only the native evidence contract is under test.",
+            "unknowns":[],
+            "verdict":"mixed",
+            "answer":"This offline fixture tests native citation membership and declared bounds, not an astrological answer.",
+            "evidence":facts.iter().map(|fact| &fact.id).collect::<Vec<_>>()
+        });
+        value["checks"]["scope_of_answer"] = json!({
+            "state":"supported","evidence":["e80"],"finding":"The supplied native boundary remains cited."
+        });
+        (value, facts)
+    }
+
+    #[test]
+    fn judgment_accepts_the_declared_full_native_evidence_union() {
+        let (value, facts) = full_native_judgment();
+        assert_eq!(
+            schema_for(Stage::Judgment, Matter::Other, &facts)["properties"]["evidence"]
+                ["maxItems"],
+            81
+        );
+        validate_for(Stage::Judgment, Matter::Other, &value, &facts).unwrap();
+    }
+
+    #[test]
+    fn judgment_evidence_reports_over_budget_and_foreign_ids() {
+        let (value, facts) = full_native_judgment();
+        let mut overflow = value.clone();
+        overflow["evidence"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("e0"));
+        assert_eq!(
+            validate_for(Stage::Judgment, Matter::Other, &overflow, &facts).unwrap_err(),
+            "$.evidence: array has 82 entries; maximum is 81."
+        );
+        let mut foreign = value;
+        foreign["evidence"][42] = json!("not-native");
+        let error = validate_for(Stage::Judgment, Matter::Other, &foreign, &facts).unwrap_err();
+        assert!(error.contains("$.evidence[42]: unexpected value"));
+        assert!(error.contains("allowed values"));
+    }
+
+    #[test]
+    fn larger_native_union_keeps_per_check_and_unknowns_limits() {
+        let (value, facts) = full_native_judgment();
+        let mut excessive_check = value.clone();
+        excessive_check["checks"]["supporting_testimony"]["evidence"] =
+            json!(["e0", "e1", "e2", "e3", "e4", "e5", "e6"]);
+        assert_eq!(
+            validate_for(Stage::Judgment, Matter::Other, &excessive_check, &facts).unwrap_err(),
+            "$.checks.supporting_testimony.evidence: array has 7 entries; maximum is 6."
+        );
+        let mut excessive_unknowns = value;
+        excessive_unknowns["unknowns"] = json!(["One", "Two", "Three", "Four", "Five"]);
+        assert_eq!(
+            validate_for(Stage::Judgment, Matter::Other, &excessive_unknowns, &facts).unwrap_err(),
+            "$.unknowns: array has 5 entries; maximum is 4."
+        );
+    }
+
+    #[test]
+    fn native_evidence_budget_does_not_expand_unrelated_resource_limits() {
+        let unrelated = json!({"notes":vec!["";41]});
+        let contract = object(json!({"notes":list(text(1),100)}));
+        assert_eq!(
+            validate_resource_bounds(&unrelated, &contract, 81, "$").unwrap_err(),
+            "$.notes: array has 41 entries; maximum is 40."
+        );
+    }
+
+    #[test]
+    fn full_evidence_union_cannot_replace_required_check_witnesses() {
+        let (value, facts) = full_native_judgment();
+        let mut missing_boundary = value.clone();
+        missing_boundary["checks"]["scope_of_answer"]["evidence"] = json!(["e0"]);
+        assert_eq!(
+            validate_for(Stage::Judgment, Matter::Other, &missing_boundary, &facts).unwrap_err(),
+            "The scope check must cite the supplied calculation boundary."
+        );
+        let mut unsupported_negative = value;
+        unsupported_negative["verdict"] = json!("likely_no");
+        assert!(validate_for(
+            Stage::Judgment,
+            Matter::Other,
+            &unsupported_negative,
+            &facts
+        )
+        .unwrap_err()
+        .contains("needs relevant contrary condition or reception"));
     }
 }
 
@@ -7053,10 +7231,8 @@ pub(crate) fn validate_for(
     value: &Value,
     facts: &[Fact],
 ) -> Result<(), String> {
-    if !bounded_strings(value) {
-        return Err("Worksheet exceeds its bounds.".into());
-    }
     let contract = schema_for(stage, matter, facts);
+    validate_resource_bounds(value, &contract, facts.len(), "$")?;
     validate_shape(value, &contract)?;
     if stage == Stage::Intake {
         serde_json::from_value::<crate::reading_contracts::Turn>(value.clone())
@@ -7675,12 +7851,33 @@ mod shape_feedback_tests {
             rejected["checks"]["strength_and_quality"]["finding"] = invalid;
             assert!(validate_for(Stage::Reception, Matter::Other, &rejected, &facts).is_err());
         }
-        for overflow in ["a".repeat(8001), "é".repeat(4001), "<image>".into()] {
+        for (overflow, expected) in [
+            (
+                "a".repeat(8001),
+                "string has 8001 UTF-8 bytes; maximum is 8000.",
+            ),
+            (
+                "é".repeat(4001),
+                "string has 8002 UTF-8 bytes; maximum is 8000.",
+            ),
+            (
+                "<image>".into(),
+                "string contains a reserved model-control token.",
+            ),
+            (
+                "<|model-tag".into(),
+                "string contains a reserved model-control token.",
+            ),
+            (
+                "model-tag|>".into(),
+                "string contains a reserved model-control token.",
+            ),
+        ] {
             let mut rejected = value.clone();
             rejected["checks"]["strength_and_quality"]["finding"] = json!(overflow);
             assert_eq!(
                 validate_for(Stage::Reception, Matter::Other, &rejected, &facts).unwrap_err(),
-                "Worksheet exceeds its bounds."
+                format!("$.checks.strength_and_quality.finding: {expected}")
             );
         }
     }
