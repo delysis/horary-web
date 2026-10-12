@@ -3123,7 +3123,7 @@ Being direct in motion is usually listed as a dignity. It isn't. This is the usu
 
 ### Who regards whom · reception
 
-Guide SHA256: `03387b6eae8a43ab27375bd83ff89cfb63f99559a5ce6be62f6161a542736a67`
+Guide SHA256: `03b2a90113e9e54105cbf2247417d4a7481e05c76aac1f343b07ed1be8a31557`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -3161,7 +3161,7 @@ Domicile reception: strong positive regard, seeing/loving the other for what it 
 <procedure>
 1. Identify the actual parties/objects and the selected facets from the roles. Do not assign a new role just to make a reception story fit. A shared planet does not let every role be read simultaneously. For a missing object's location, the disputed planet belongs to the object (Frawley printed p.147); do not turn its receptions into the querent's private feelings. A person's role retained to establish ownership is not automatically relevant to this question's motives. If the actual facet needs no motive finding, mark contextual_motive=not_relevant rather than inventing one.
 2. Complete direction: read each supplied guest → host fact literally and attach it to the guest's role. Repeat the direction as a short public check result.
-3. Complete strength_and_quality: distinguish domicile/exaltation, triplicity, minor term/face, negative detriment/fall and mixed testimony. No fact supplied means unestablished, not indifference or dislike proven.
+3. Complete strength_and_quality: inspect EVERY quality in each cited directed row. A row containing positive triplicity AND negative fall retains both: some affinity alongside the stronger negative indication (printed p.76), not pure liking or pure dislike. Weigh their meanings; do not cancel or count them. No fact supplied means an edge is unestablished, not that the supplied person/planet is absent.
 4. Complete contextual_motive: what would this regard make the actor want in this specific question? Positive regard can explain inclination but does not establish ability, opportunity or consent. Negative regard can be important without proving a future event impossible.
 5. Check reciprocity separately. Call it mutual ONLY if two directed native facts actually support it. Specify which actual pair and roles; one pair does not establish that all significators regard each other positively. Mutual reception is not automatically beneficial or enough to cause an event.
 6. A role's own dignity concerns its condition, not its feelings towards someone else. Exalting the job tells us the querent's expectations, not the job's objective quality. Evaluate the job's own condition in the condition record instead.
@@ -3175,6 +3175,7 @@ B — reversed regard is forbidden. Buyer=Venus; seller=Mars; native fact Venus 
 C — own debility is different. Mercury's OWN fall is supplied, but no Mercury → Venus reception. It concerns Mercury's condition. Do not infer that Mercury hates Venus.
 D — minor versus major. Only Moon → Jupiter by term is supplied. This is a small inclination; do not promote it to domicile reception or a certain event.
 E — infatuation and job quality. Querent's planet exalts the job's planet. The querent can idealize the job. This does not make the job strong, reputable or desirable on its own merits.
+F — ambivalent regard, from the book's p.76 example. Guest Venus → host Mars contains triplicity positive and fall negative. Correct: Venus has some affinity with Mars but an overall strong aversion. Wrong: "only fall", "pure positive", or dropping either supplied quality. This is not proof of Mars's attitude to Venus or of an objective defect in what Mars represents.
 G — objects are not literal lovers. Money positively regards its owner. In this question that can fit money returning to possession, but the event still needs relevant testimony.
 H — disputed planet in a location question. Lord 1 and a sister's missing watch share Jupiter; Jupiter negatively regards the sister's Saturn. Give Jupiter to the watch. Do not say the querent dislikes their sister or that the watch's location proves family tension. The question asks where the watch is; its relationship to the querent is secondary.
 </worked_examples>
@@ -3207,6 +3208,10 @@ Don't overstate this exaggeration: it does not mean that the person who is being
 
 <extract id="reception_triplicity" source="Frawley, The Horary Textbook, 2005" printed_pages="73–73" ocr_pages="82–82">
 If sign-rulership is like love and exaltation like infatuation, triplicity is like friendship: warm and comfortable, but with no grand passion. In most relationship questions, our querents would be hoping for more than this, but in many contexts it will do fine. 'Will I like this job?' and Lord 1 (querent) is in the triplicity ruled by Lord 10 (the job): 'Yes. It won't be the best job in the world, but you'll like it well enough'.
+</extract>
+
+<extract id="ambivalent_reception" source="Frawley, The Horary Textbook, 2005" printed_pages="76–76" ocr_pages="85–85">
+We can also have ambivalent reciprocity: Mars in the sign of Venus, Venus in both triplicity and fall of Mars. He loves her; there are some qualities she likes in him, but overall she loathes him. As these examples show, considering the particular receptions the planets have for each other will tell us exactly what feelings are between these two people.
 </extract>
 </book_extracts>
 </stage>
@@ -3397,7 +3402,7 @@ If sign-rulership is like love and exaltation like infatuation, triplicity is li
 
 ### What could bring it about · contacts
 
-Guide SHA256: `00aff158f2f8fd03729a7beea87b2aeb6b3c5fc4ca598e11b91a5568b2425e59`
+Guide SHA256: `cb4dcd79365bdc3965dc14d4a1425921fd394834795df4188820a3a44e0983b5`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -3437,7 +3442,7 @@ The native search supplies approximate HOURLY brackets over SEVEN DAYS. A candid
 2. Read the accepted baseline BEFORE deciding what contact is required. A hoped-for new event needs an occasion; an already agreed wedding has a different default: it proceeds unless genuinely disrupted (Frawley p.140). A separating contact may have set an agreed matter in motion (p.99); do not demand a NEW applying contact to re-create an agreement already made. Look for actual relevant disruption, never treat missing short-window candidates as disruption. An available offer similarly is not a new acquisition. A situation can be answered chiefly by receptions; a lost object's location can be answered by occupied house. Do not demand a future aspect just to allow a location explanation. If the necessary past or future tests are not supplied, state their actual coverage limit rather than claiming a contact is absent.
 3. Complete applying_or_separating: inspect supplied native contacts only. A past separating contact can fit a reported past event, not an event still to happen. A current drawing aspect with no future candidate does not establish future perfection.
 4. For each selected direct candidate, copy its typed event.withinCurrentSigns field into candidate_signs as within_current_signs: true, false or null. Native Rust checks this copy. true means before either changes sign; false means after a change; null means unestablished. Do not use the old sign's condition/reception to certify a contact after an ingress. Motive and ability are assessed separately; describe the contact as a candidate, never guaranteed completion.
-5. Complete event_order: select only the next relevant contact, or a specifically supported next-two-contact connection. Never push a planet through a long chain until it delivers the desired outcome.
+5. Complete event_order from the next actual aspect, not merely the first one involving the desired partner. Inspect earlier contacts even when they involve unassigned planets: their meanings can be unknown, but they are not erased from the sequence. Printed p.97 ordinarily permits the next aspect, or a supported next-two-aspect translation, not marching through a chain to reach the desired outcome. A later candidate with unchecked intervening contacts is complex_unverified; retaining its ID does not establish an occasion. Do not turn those contacts into steps, delays, agents or eventual success.
 6. A third planet may help or obstruct. Translation needs the appropriate faster actor and sequence; collection the slower actor and both applications. Their ultimate assistance/interference also depends on contextual reception, which is not supplied to this task. If actor/order/motion tests are unavailable, mark complex mechanism unestablished instead of declaring it.
 7. Complete changing_conditions: check supplied sign changes, stations/intervening events if available. Do not invent an ephemeris result. An aspect after a sign change can alter the interpretation and often the requested time scope.
 8. For lost property, permit either Moon-as-querent applying to the object's lord OR Moon-as-object applying to Lord 1. These are distinct contextual roles. Do not discard recovery testimony simply because the Moon was earlier the querent's cosignificator.
@@ -3456,6 +3461,8 @@ G — location without future action. Object occupies the child's fifth-house pl
 H — previous theft allegation. A separating suspect/object contact could relate to a past theft if asked. An applying future contact cannot prove a theft already happened. Do not introduce theft when it was not raised.
 I — two different sign intervals. e10 is Moon–Mars with event.withinCurrentSigns=true; e11 is Moon–Venus with event.withinCurrentSigns=false. If both are selected, candidate_signs is [{"id":"e10","within_current_signs":true},{"id":"e11","within_current_signs":false}]. The second contact occurs after a sign change. Wrong: "both occur before sign changes." The same-condition interpretation of e11 remains unchecked.
 J — wedding already agreed. The accepted baseline is arranged_wedding and the venue is booked. There is no new candidate in the seven-day search. Do not label that absence an obstacle or conclude that the wedding lacks an occasion. An actual separating agreement can fit events already in motion; an actual forthcoming disruption must be assessed on its merits. If no such test was supplied, distinguish the arranged baseline from incomplete obstruction coverage. The limited window cannot establish either a cancellation or the absence of every later disruption.
+K — later conjunction is not a promise. Moon meets Mars, Saturn and Sun before a partner conjunction after ingress. The final conjunction is a supplied later candidate, not "the next relevant aspect" and not a present occasion for commitment. Use complex_unverified with the actual intervening/sign-change tests unestablished; do not promise an opportunity, say it only changes the kind of commitment, or invent intermediaries. Current reception cannot certify that later contact.
+L — dating versus commitment. The source says they are already dating but have not committed. Printed p.196 permits an applying aspect to show formalisation of an existing relationship; existing dating alone does not mean the requested commitment is already arranged. Distinguish current relationship testimony from the unestablished occasion for that requested change.
 </worked_examples>
 
 <output_fields>basis, candidate_ids, candidate_signs, checks relevant_actors/applying_or_separating/event_order/changing_conditions/coverage_limits, summary, unknowns. Every selected event ID has exactly one candidate_signs entry copied from its native event data. A check result cites current IDs or honestly has no established evidence.</output_fields>
@@ -4554,7 +4561,7 @@ Examples: 'When will I get a better job?' Years must be our longest unit, so mon
 
 ### A working answer · judgment
 
-Guide SHA256: `e86b728000d2562d804233653cae45c9a2afd9f0bd992c9b973af7e041f2c525`
+Guide SHA256: `9f0df59c353b4de9c34a85d12eedfa5890472dfb28917aca28b6129796ba9c6c`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -4583,7 +4590,7 @@ request_input suspends the unfinished step; it does not complete it or authorize
 
 <procedure>
 1. Complete question_answered: restate the person's scope in the public check. Match event/situation/location/choice and stated horizon. Do not answer "Will I ever marry?" when asked "within the next year?" If no particular partner is named, Lord 7 is a role in this question, not evidence that a real person currently dislikes the querent. Do not address an invented present partner as "this person" or state that someone currently rejects them.
-2. Complete supporting_testimony: identify the most relevant role-correct evidence from condition, directed reception and occasion/location. Explain what makes it support THIS answer. No votes or point-summing; the number of testimonies is not a correctness test.
+2. Complete supporting_testimony: identify the most relevant role-correct evidence from condition, directed reception and occasion/location. Recheck the actual facts when a worksheet says there is an opportunity: a contact after ingress and an unchecked long Moon chain is not a certified occasion or a promised event (printed p.97). Retain mixed positive/negative reception qualities rather than repeating an earlier selective summary. No votes or point-summing.
 3. Complete contrary_testimony: address the strongest genuine contrary evidence. Do not hide negative reception, practical inability, or an intervening change to preserve an upbeat narrative. Do not invent a contrary fact just to appear balanced.
 4. For an event, first identify what happens if nothing changes: the accepted baseline and method determine this (Frawley p.140). For a NEW hoped-for event, combine inclination, ability and relevant occasion. For an already agreed wedding, events are already set in motion: judge actual disruption instead of requiring a new applying contact to establish the agreement again (p.99). A separating agreement can support that baseline. Missing seven-day contacts are not contrary testimony and are not a cancellation. An available offer is similarly not a new acquisition. Do not invent past agreement contacts or future obstruction checks; qualify the actual coverage. A nice reception alone is not a guaranteed event; an aspect alone may give an unwanted occasion. A working likely answer may be cautious rather than absolute.
 5. For a situation: explain motives/quality from the relevant roles and receipts, including head/heart disagreement. No future aspect is required merely to describe the present.
@@ -4592,7 +4599,7 @@ request_input suspends the unfinished step; it does not complete it or authorize
 8. Complete scope_of_answer: a seven-day no-candidate result cannot settle a one-year absence. Say "no relevant contact was established within the covered interval," never "there is no aspect" or "there is no occasion." A named complex event chain with unchecked stations/order cannot be certified. Timing suggestions must come from the timing worksheet, never candidate astronomical hours. If timing_status=unestablished, do not say "soon," "imminent," or another implied earthly date from an astronomical candidate. A contact after a sign change cannot reuse the old sign's condition/reception as though unchanged. The answer's wording must respect this check; a cautious verdict label does not excuse an unsupported categorical sentence.
 9. Choose verdict: likely_yes, likely_no, mixed, situation, location, or unresolved. A likely_no needs actual contrary testimony, not only a missing candidate. You may give a substantial present interpretation even when the full requested future horizon is unresolved.
 10. Write answer in 3–5 SHORT sentences. Sentence one addresses the actual question. The next one or two connect the strongest relevant testimony to the people/object, not unexplained planet abbreviations. Then state the material limit and any useful next clarification. Do not repeat all earlier chart analysis.
-11. Keep facts, source doctrine and proposed inference distinct. This is a working judgment for correction and Eileen's assessment, not an independently verified prophecy. Do not invent private characteristics of a prospective person or a named suspect.
+11. Keep facts, source doctrine and proposed inference distinct. In relationships, supplied Lord 1/Lord 7 are the person's head/person roles, while Moon is the querent's emotional facet (p.193). Do not call supplied heads absent, rename the partner's head as their feelings, or guess gender from a name. This is a working judgment, not a psychological diagnosis or an independently verified prophecy.
 </procedure>
 
 <worked_examples>
@@ -4603,6 +4610,7 @@ D — year horizon. The person asks about marriage within a year; reception reco
 E — modest evidence can still help. A supported occupied-house location gives a clear search lead and context agrees. Give the lead; do not demand three testimonies or impossible certainty before it is useful.
 F — contrary testimony versus missing evidence. An explicit blocked/negative condition may be a reason for a cautious negative proposal if relevant. "No candidate returned" alone is not. State which sort you have. If the chart is about an unspecified future partner, describe the question's testimony and limits without inventing the current attitude of an existing person.
 G — booked wedding versus first meeting. Both charts have no new candidate within the computed week. In an arranged_wedding case, that is not a reason to withhold the occasion or call the wedding unverified: the baseline is that the plan proceeds unless disrupted. Explain actual role-correct support/tension, then qualify any obstruction tests that remain unchecked beyond the window. In a hoped_for case, the event has not already been arranged and still needs relevant occasion testimony. The same candidate list does not give the same answer for these different accepted circumstances. Do not turn the arranged baseline into a categorical promise that all disruptions were checked.
+H — useful caution without an invented opportunity. They are dating and ask about commitment; the querent's emotional investment is strong, the partner shows modest positive personal regard but stronger negative reception toward that emotional facet. The only later contact follows ingress and an unchecked Moon chain. A working answer can say: "The reading is cautious about this becoming a committed partnership. Your investment appears stronger than the response shown from the other side, despite some interest. I would not treat the later contact as a promise of commitment; its intervening conditions remain unresolved." Do not claim a coming opportunity or replace the reading with "a seven-day window is too short for a major life change". Judge the requested change, not the duration of its eventual effects.
 </worked_examples>
 
 <output_fields>verdict, checks question_answered/supporting_testimony/contrary_testimony/missing_information/scope_of_answer, answer, evidence, summary, unknowns. answer is the visible interpretation. Reference current evidence and the boundary. Do not produce a fixed open-outcome closing in place of the answer.</output_fields>

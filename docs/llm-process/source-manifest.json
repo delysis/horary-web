@@ -147,7 +147,7 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "818d25fc9190819badb267dee4eeea8ddbf2a0367d7f55fee0414ca2458a1704"
+      "sha256": "c526121ac7e4b204c80d467b6565d9e2e104d27478d5942d8166d831b742a304"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
@@ -159,11 +159,11 @@
     },
     {
       "path": "src-tauri/src/horary_lessons.rs",
-      "sha256": "4d70299bffcbe99e3e155185ef2d0c13e4b0aeac9effc9c066b3fd0c42329536"
+      "sha256": "951e5c7fad3263efad8ef15fdbd31b9705a9e98faf5abd8d4a2c1c55ec336ceb"
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "b00ebf8dee8bd9fd8524b7c0a52e20f1a04b74de8bf980b80fc9cd3ffb580b03"
+      "sha256": "01a2011fd34f8063207e2245c168d5400c7bb293a675c4740423c7d1e1d25ff0"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -171,7 +171,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/contacts.md",
-      "sha256": "02bbfe30e839699b3ba8c0442dbb24b181cd1c2b52bbb3dd20cdcfc0944ad5e7"
+      "sha256": "003bc46464cec1524ff1d0c28546511a4d0dda8b8bd2848fd7c248d6503975ce"
     },
     {
       "path": "src-tauri/src/horary_prompts/conversation.md",
@@ -187,7 +187,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/judgment.md",
-      "sha256": "e804fd74c7276eae7b2ee5cb09b5b9821b6f2696977573e85416130c1b4aa7b3"
+      "sha256": "7f85d7c884457ba6c0ff67855b3e94b87f35e2e6010377352e8411b6154def64"
     },
     {
       "path": "src-tauri/src/horary_prompts/location.md",
@@ -199,7 +199,7 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/new_job_contacts.md",
-      "sha256": "e554e96a3fd42e5d9ea7747d55fe6f0e37250eb0bc633c591efa672d99f172d9"
+      "sha256": "83a26e6f4dea0361b56ce92236a225aa58c7b1a28ca6ae33ab7f5d8797e0bbe2"
     },
     {
       "path": "src-tauri/src/horary_prompts/new_job_context.md",
@@ -207,15 +207,15 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/new_job_judgment.md",
-      "sha256": "18d4f78d8e16435e57b86c8dc073ccf1b58574d0d5dbc786e0af58f024b407a4"
+      "sha256": "f07d0a4e893900d38160e05bdde3d3f2967d71a16c6c5267657c5b216d5f6d96"
     },
     {
       "path": "src-tauri/src/horary_prompts/new_job_reception.md",
-      "sha256": "e805ee33842bdac6e91a0f78d7ef4ac3f4b22b8bd5a41c94cb9e8b83e76f95c7"
+      "sha256": "6032d0a0a2a0d0e2a7f73ed6421e78f572f4158a07870542dc7020b0235c6c58"
     },
     {
       "path": "src-tauri/src/horary_prompts/passages.json",
-      "sha256": "192a6088255065cecc4e58848688c75812c64b7035e913e1ba2e7d34a087cb08"
+      "sha256": "34c57646aadb3a9f087549af2e792424d29331a28fe8bb6284aec101fc601917"
     },
     {
       "path": "src-tauri/src/horary_prompts/place.md",
@@ -223,11 +223,11 @@
     },
     {
       "path": "src-tauri/src/horary_prompts/reception.md",
-      "sha256": "5baf153cfdedceab45dbfffcba8f3432a0788d2fadbf7bf073b1fe7b6dc5f035"
+      "sha256": "fb84729a47a09c2b5d55fb3816d6cb03031859c260291df0d64279b59c840e47"
     },
     {
       "path": "src-tauri/src/horary_prompts/reception_relationship.md",
-      "sha256": "78071b9c812133b92c9e98bc89a0544e76f9e139e14d5c291c2b752250b9719f"
+      "sha256": "d83ad92366e198bac9ba3145fd6a89ab032f98d332ff4e7d561556dfbf9acb3f"
     },
     {
       "path": "src-tauri/src/horary_prompts/significators_common.md",
@@ -331,11 +331,11 @@
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "acf277f187c3bff48b648ec20ca87c28d5e7753cd2ee6e79835bd4427c2a49a3"
+      "sha256": "6f6a432d34343c533d7663f53f1bd4443b86d139a14b70e3aad8e5e52f03393d"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
-      "sha256": "03d0338eb47e0fcae7d87b27ef14de217b47ead773a2ba0cb0edb95aba5eed8f"
+      "sha256": "6ec15fad311b887063c4c83fcee85d96c6da208ef1ee2ac1082084261195eacd"
     },
     {
       "path": "src-tauri/src/reading_eval.rs",
@@ -407,7 +407,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "1e78335679ee6b5358c14f8d15fa25f90208118c764f42781f9f385ffaff246d"
+      "sha256": "60c6392f705fc445be1957ad8b80a43da4f2746ffbf725ecaf24fb7bbf7186cb"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
@@ -443,15 +443,15 @@
     },
     {
       "path": "tools/horary-dspy/Cargo.lock",
-      "sha256": "1dc7ec12352aba8b1460e96a1573b6594bd7b5616dd3c297e5bbf18ea382fcd3"
+      "sha256": "61ab7ceabf9d4f19bb251c7a85b4c9a7a1f363da3025199c87249c77d607ec15"
     },
     {
       "path": "tools/horary-dspy/Cargo.toml",
-      "sha256": "971dc183472b8073c819700697805dd1bd158e6f43a288ce341bc5815b799527"
+      "sha256": "486d5a9cc53405a2e64ff9b46f2d8c02fc36407c01a78c3d7df22b2eba1e69a3"
     },
     {
       "path": "tools/horary-dspy/README.md",
-      "sha256": "a7b5461cb81a2a72b5ca887cc4167b30b842a1f7e9eb4e5f60951537a955efbb"
+      "sha256": "b8cf17e38ba51f06d4532e6372b62a531b3187b8a757b3399d11be28aba56208"
     },
     {
       "path": "tools/horary-dspy/coverage.json",
@@ -851,11 +851,15 @@
     },
     {
       "path": "tools/horary-dspy/src/lib.rs",
-      "sha256": "56f6723baf47b51f7e14e6d8ce220e28424893890deaf431aeecad0686536b03"
+      "sha256": "eea847cf2e66806b5c63a971d58f1e99d8218b860a39dc2f74447871981ce6ab"
+    },
+    {
+      "path": "tools/horary-dspy/src/local.rs",
+      "sha256": "176d25258d7ad28c9b3e05680379fa655b29a06976be11f9edb544d4ed3aa620"
     },
     {
       "path": "tools/horary-dspy/src/main.rs",
-      "sha256": "84fb6bbbb86c404c0d118e3bcae6617c5e3bf9eefd1c68e45fd9cee52cce75b1"
+      "sha256": "d6cdddb89b15850764f3c94cd19cbc0078f19e65f885a3607444b4166196910b"
     },
     {
       "path": "tools/horary-dspy/src/native_export.rs",
@@ -863,7 +867,7 @@
     },
     {
       "path": "tools/horary-dspy/src/optimize.rs",
-      "sha256": "a3c25bf5f7755667dec8d5c46e6c32015d88dcfa815a3111deceea8f23168140"
+      "sha256": "1039c1d5f2089967a0cb1be8e97b68c3c7f9e5fc99b993c4f0b4105e8b5f006a"
     },
     {
       "path": "tools/horary-dspy/src/preflight.rs",
@@ -871,7 +875,7 @@
     },
     {
       "path": "tools/horary-dspy/src/queue.rs",
-      "sha256": "ddea7ef4b2d6a304bdad369d9555aee83aeea60e08f7e7126fe00ce685db0df2"
+      "sha256": "262155c00e7fb7debe03ee43724ac6df84a9e3f93b495522bdaf734bbf4f7314"
     },
     {
       "path": "tools/horary-dspy/src/reading.rs",
@@ -879,11 +883,11 @@
     },
     {
       "path": "tools/horary-dspy/src/runner.rs",
-      "sha256": "60b2d2bd87d46d13ff3ba215b8f8f2d61dd7ab4901ac9c4ff83f5f1f373d52af"
+      "sha256": "281696f4dd64b6f870030dd4534b73ee31e0527edf9c6d5c74a2593b7183484a"
     },
     {
       "path": "tools/horary-dspy/src/signatures.rs",
-      "sha256": "50ebf20ebf82305b4b42021687909b6b6f7237242644d864c80e10e669f83dfa"
+      "sha256": "f0333bd775037c30dc6ca19e3bde357568204639e058a86bddfee4afdef4488a"
     },
     {
       "path": "tools/horary-dspy/src/teachers.rs",

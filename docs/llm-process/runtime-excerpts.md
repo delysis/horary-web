@@ -3450,6 +3450,92 @@ mod selected_stage_execution_tests {
         }
         assert!(mechanics.len() < context.len());
     }
+
+    #[test]
+    fn reading_handoff_reaches_roles_and_every_subsequent_job_stage_with_source_context() {
+        use crate::reading_contracts::{
+            self as contracts, Field, Frame, Intent, Method, Update, UpdateMode,
+        };
+        let words = "I applied for a laboratory job through a recruiter. There is no offer yet. Will I get this job?";
+        let mut case = contracts::Consultation::default();
+        let mut patch = contracts::control(Intent::Read);
+        patch.question = Some("Will I get this job?".into());
+        patch.frame = Some(Frame {
+            method: Method::NewJob,
+            facet: contracts::Facet::Event,
+        });
+        patch.subject = Some(crate::horary_role_options::Subject {
+            name: "laboratory job".into(),
+            kind: "job".into(),
+            owner_id: "querent".into(),
+            source_quote: "laboratory job".into(),
+        });
+        patch.updates = vec![Update {
+            field: Field::JobContext,
+            value: "laboratory job".into(),
+            quote: "laboratory job".into(),
+            mode: UpdateMode::Supply,
+        }];
+        case.apply(&patch, 1, words, false).unwrap();
+        let anchor = contracts::Anchor {
+            timestamp_ms: 1791478980000.,
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+        };
+        let ready = contracts::ReadyReading::prepare(&case, anchor.clone()).unwrap();
+        let mut session = Session {
+            question: ready.binding().question.clone(),
+            chart: Some(
+                horary_ai_core::astronomy::chart(
+                    anchor.timestamp_ms,
+                    anchor.latitude,
+                    anchor.longitude,
+                )
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        session.method.brief = ready.brief();
+        session.method.consultation = Some(case);
+        let reader = Reader {
+            dir: tempfile::tempdir().unwrap(),
+            target: Some(Stage::Judgment),
+            calls: Mutex::new(vec![]),
+            reject_first: AtomicBool::new(false),
+            judgment: JudgmentReply::Answer,
+        };
+        generate_reading(&mut session, &reader, ready).unwrap();
+        let calls = reader.calls.lock().unwrap();
+        for stage in [
+            Stage::Significators,
+            Stage::Condition,
+            Stage::Reception,
+            Stage::Contacts,
+            Stage::Judgment,
+        ] {
+            let input = &calls
+                .iter()
+                .find(|(actual, _, _)| *actual == stage)
+                .unwrap()
+                .1;
+            assert_eq!(
+                input["reading_request"]["contextual_words"]["original_question"]["quote"],
+                words
+            );
+            assert_eq!(
+                input["reading_request"]["binding"]["question"],
+                "Will I get this job?"
+            );
+            assert_eq!(
+                input["reading_request"]["inputs"]["job_context"],
+                "laboratory job"
+            );
+        }
+        assert!(!calls
+            .iter()
+            .any(|(stage, _, _)| *stage == Stage::Intake || *stage == Stage::Conversation));
+    }
 }
 
 #[cfg(test)]
@@ -5942,6 +6028,10 @@ fn native_output_protocol(schema: &Value) -> Option<String> {
         return None;
     }
     let mut protocol = format!("Required:{}. Each named check directly has state,evidence,finding: evidence is an ID array; finding is one string covering role differences, never planet/role maps. Use actual input/contract values.", required.join(","));
+    protocol.push_str(&format!(
+        " checks contains ONLY:{}. Close checks before writing the other required fields: they are top-level siblings, never inside checks. Write each field once.",
+        checks.keys().map(String::as_str).collect::<Vec<_>>().join(",")
+    ));
     if alternatives.is_some_and(|branches| {
         branches
             .iter()
@@ -6456,6 +6546,15 @@ mod protected_output_protocol_tests {
             assert!(protocol.starts_with(&format!("Required:{}.", required.join(","))));
             assert!(protocol.contains("state,evidence,finding"));
             assert!(protocol.contains("finding is one string covering role differences"));
+            for check in worksheet["properties"]["checks"]["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+            {
+                assert!(protocol.contains(check), "Missing check boundary: {check}");
+            }
+            assert!(protocol.contains("top-level siblings, never inside checks"));
+            assert!(protocol.contains("Write each field once"));
             let control_allowed = schema["oneOf"].as_array().is_some_and(|branches| {
                 branches
                     .iter()
@@ -6481,7 +6580,7 @@ mod protected_output_protocol_tests {
                 json!({"input":input,"worksheet_contract":model_contract(stage,&schema)});
             let added_bytes = payload.to_string().len() - old_payload.to_string().len();
             assert!(
-                added_bytes <= 350,
+                added_bytes <= 650,
                 "{}: {added_bytes} additional UTF-8 bytes",
                 stage.name()
             );
@@ -12955,6 +13054,7 @@ impl Stage {
                 "reception_by_sign",
                 "reception_exaltation",
                 "reception_triplicity",
+                "ambivalent_reception",
                 "same_object_candidates",
                 "moon_object_role",
             ],
@@ -12964,6 +13064,7 @@ impl Stage {
                 "reception_by_sign",
                 "reception_exaltation",
                 "reception_triplicity",
+                "ambivalent_reception",
                 "relationship_facets",
             ],
             Self::Reception => &[
@@ -12972,6 +13073,7 @@ impl Stage {
                 "reception_by_sign",
                 "reception_exaltation",
                 "reception_triplicity",
+                "ambivalent_reception",
             ],
             Self::Contacts => &[
                 "occasion_motive_ability",
@@ -13083,7 +13185,12 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             ]
         }
         (Stage::Judgment, Some(Method::NewJob)) => {
-            vec!["no_forced_certainty", "occasion_motive_ability"]
+            vec![
+                "no_forced_certainty",
+                "occasion_motive_ability",
+                "next_contacts",
+                "ambivalent_reception",
+            ]
         }
         _ => stage.passages(matter).to_vec(),
     };
@@ -13102,6 +13209,18 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             ],
             _ => &[],
         });
+    }
+    if method == Some(Method::Relationship) {
+        match stage {
+            Stage::Contacts => ids.push("relationship_formalisation"),
+            Stage::Judgment => ids.extend_from_slice(&[
+                "relationship_facets",
+                "relationship_formalisation",
+                "next_contacts",
+                "ambivalent_reception",
+            ]),
+            _ => {}
+        }
     }
     ids
 }

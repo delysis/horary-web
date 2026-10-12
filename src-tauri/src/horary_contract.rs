@@ -363,6 +363,10 @@ fn native_output_protocol(schema: &Value) -> Option<String> {
         return None;
     }
     let mut protocol = format!("Required:{}. Each named check directly has state,evidence,finding: evidence is an ID array; finding is one string covering role differences, never planet/role maps. Use actual input/contract values.", required.join(","));
+    protocol.push_str(&format!(
+        " checks contains ONLY:{}. Close checks before writing the other required fields: they are top-level siblings, never inside checks. Write each field once.",
+        checks.keys().map(String::as_str).collect::<Vec<_>>().join(",")
+    ));
     if alternatives.is_some_and(|branches| {
         branches
             .iter()
@@ -877,6 +881,15 @@ mod protected_output_protocol_tests {
             assert!(protocol.starts_with(&format!("Required:{}.", required.join(","))));
             assert!(protocol.contains("state,evidence,finding"));
             assert!(protocol.contains("finding is one string covering role differences"));
+            for check in worksheet["properties"]["checks"]["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+            {
+                assert!(protocol.contains(check), "Missing check boundary: {check}");
+            }
+            assert!(protocol.contains("top-level siblings, never inside checks"));
+            assert!(protocol.contains("Write each field once"));
             let control_allowed = schema["oneOf"].as_array().is_some_and(|branches| {
                 branches
                     .iter()
@@ -902,7 +915,7 @@ mod protected_output_protocol_tests {
                 json!({"input":input,"worksheet_contract":model_contract(stage,&schema)});
             let added_bytes = payload.to_string().len() - old_payload.to_string().len();
             assert!(
-                added_bytes <= 350,
+                added_bytes <= 650,
                 "{}: {added_bytes} additional UTF-8 bytes",
                 stage.name()
             );
