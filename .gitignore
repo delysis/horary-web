@@ -41,3 +41,6 @@ tools/horary-gepa/target/
 
 artifacts/horary-reading-eval.json
 artifacts/horary-reading-eval-live.json
+
+# Prepared local runtime artifacts are supplied at packaging time.
+src-tauri/binaries/
