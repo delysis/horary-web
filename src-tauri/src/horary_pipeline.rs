@@ -1581,6 +1581,24 @@ fn with_contact_judgment_limits(mut input: Value, facts: &[Fact]) -> Result<Valu
         "post_ingress_condition_and_reception":"not_supplied",
         "event_verdict":"requires_contextual_judgment"
     });
+    // Records and sections keep the original worksheets. The final reader
+    // receives their proposed statuses/IDs and uncertainties, not a story to
+    // paraphrase in preference to the native facts already supplied once.
+    for name in ["condition", "reception", "contacts", "timing"] {
+        let Some(worksheet) = input.get_mut(name).and_then(Value::as_object_mut) else {
+            continue;
+        };
+        for key in ["summary", "finding", "because", "reason"] {
+            worksheet.remove(key);
+        }
+        if let Some(checks) = worksheet.get_mut("checks").and_then(Value::as_object_mut) {
+            for check in checks.values_mut().filter_map(Value::as_object_mut) {
+                for key in ["finding", "because"] {
+                    check.remove(key);
+                }
+            }
+        }
+    }
     Ok(input)
 }
 
@@ -1898,15 +1916,43 @@ mod tests {
         let input = json!({
             "reading_request":{"binding":{"frame":{"method":"contact","facet":"event"}}},
             "brief":{"question":"Will my friend contact me by Sunday?"},
-            "timing":{"timing_status":"unestablished"},
+            "roles":[{"label":"You","house":1,"planet":"Saturn"},
+                {"label":"The friend","house":11,"planet":"Mars"}],
+            "facts":facts,
+            "condition":{"checks":{"ability_to_act":{"state":"supported",
+                "evidence":[],"finding":"MISLEADING_CAPACITY_PROSE"}},
+                "summary":"MISLEADING_CONDITION_SUMMARY","unknowns":["A declared capacity uncertainty."]},
+            "timing":{"timing_status":"unestablished","reason":"MISLEADING_TIMING_REASON"},
             "contacts":{"candidate_ids":[events[0].id,events[1].id],
                 "candidate_signs":[{"id":events[0].id,"within_current_signs":true}],
-                "summary":"A proposed opportunity this week after a delay."},
-            "reception":{"summary":"A proposed claim about private feelings."}
+                "basis":"direct_candidate","checks":{"event_order":{"state":"unestablished",
+                    "evidence":[events[0].id],"finding":"MISLEADING_CONTACT_FINDING",
+                    "because":"MISLEADING_CONTACT_BECAUSE"}},
+                "summary":"MISLEADING_CONTACT_SUMMARY","unknowns":["A declared event-order uncertainty."]},
+            "reception":{"checks":{"contextual_motive":{"state":"unestablished",
+                "evidence":[],"finding":"MISLEADING_FEELINGS_FINDING"}},
+                "summary":"MISLEADING_RECEPTION_SUMMARY","unknowns":[]}
         });
         let original = with_contact_judgment_limits(input.clone(), &facts).unwrap();
-        assert_eq!(original["contacts"], input["contacts"]);
-        assert_eq!(original["reception"], input["reception"]);
+        assert!(!original.to_string().contains("MISLEADING_"));
+        assert!(
+            input.to_string().contains("MISLEADING_"),
+            "The original worksheets are unchanged"
+        );
+        for key in ["reading_request", "brief", "roles", "facts"] {
+            assert_eq!(original[key], input[key]);
+        }
+        for name in ["condition", "reception", "contacts"] {
+            assert_eq!(original[name]["unknowns"], input[name]["unknowns"]);
+            for (key, check) in input[name]["checks"].as_object().unwrap() {
+                assert_eq!(original[name]["checks"][key]["state"], check["state"]);
+                assert_eq!(original[name]["checks"][key]["evidence"], check["evidence"]);
+            }
+        }
+        for key in ["basis", "candidate_ids", "candidate_signs"] {
+            assert_eq!(original["contacts"][key], input["contacts"][key]);
+        }
+        assert_eq!(original["timing"], json!({"timing_status":"unestablished"}));
         assert_eq!(original["brief"], input["brief"]);
         assert_eq!(
             original["native_contact_limits"],
