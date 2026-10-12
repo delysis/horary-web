@@ -339,7 +339,7 @@
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "548d6534a0e321ba379104b751152920fe3e13eb82ce6d2416da7d098807eee1"
+      "sha256": "a30bdbfb0e58f28c2a8902444d0f0969e4d7dd43a6d8fb1dfbe4982d3c546cea"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
