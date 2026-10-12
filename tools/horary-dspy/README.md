@@ -295,3 +295,26 @@ horary-dspy --teacher codex --student-local-url http://127.0.0.1:63924/v1 \
 ```
 
 Preparation saves the exact stock-adapter requests with a 1,024-token generation allowance. The resident tokenizer must establish fit before the separately authorized one-shot launch. Execution verifies the exact executable, native fixtures, primary source, signature and preparation; no earlier score, optimizer state or paid response is imported across the source-coverage change. Adding printed pp. 74–75 is a source repair measured with a fresh baseline, not a learned improvement. Fully received output failures reach normal native feedback and GEPA traces; uncertain provider/review errors remain unknown and stop the run.
+
+`compare-reception-transfer` compares authored and selected instructions on four original training consultations using hosted Gemma. Three Contact probes use declared production role IDs and actual target-to-querent or reverse native edges. The sell-profit probe has distinct stock and recipient-money roles sharing their native second-house ruler. These are source-known component declarations, not an observed acquisition or selection journey. No private expected facts, labels, prior scores, demonstrations or optimizer state enter either arm.
+
+```sh
+horary-dspy --teacher codex compare-reception-transfer --prepare-only \
+  --examples /absolute/path/to/original/examples \
+  --candidate-program /absolute/path/to/settled/run/compiled.json \
+  --candidate-closure /absolute/path/to/settled/closure.json \
+  --output /absolute/path/to/fresh-preparation
+
+horary-dspy compare-reception-transfer --count-tokens-only \
+  --examples /absolute/path/to/original/examples \
+  --prepared /absolute/path/to/fresh-preparation \
+  --output /absolute/path/to/fresh-counts
+
+horary-dspy --teacher codex compare-reception-transfer \
+  --examples /absolute/path/to/original/examples \
+  --prepared /absolute/path/to/fresh-preparation \
+  --token-preflight /absolute/path/to/fresh-counts/token-preflight.json \
+  --output /absolute/path/to/fresh-comparison
+```
+
+Preparation makes no provider calls. The count phase uses Google's exact token-count endpoint and submits no generations or reviews. Execution is a separately authorized, sequential stock `Evaluate` comparison with eight logical student calls, shared hard caps of sixteen hosted attempts and twelve saved-login Codex attempts, a 2,048-token output limit and an initial 14,000-input-token/minute pacing hint. Ordinary text output has no response schema. Native edge identity, all endpoint aliases and supplied qualities are noncompensating; the book-equipped reviewer grades contextual meaning only. Complete readings and application promotion remain unobserved.

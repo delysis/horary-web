@@ -259,6 +259,26 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Fixed hosted transfer comparison; native-derived training probes only.
+    CompareReceptionTransfer {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        prepare_only: bool,
+        /// Google token counting only: no generation or teacher call.
+        #[arg(long)]
+        count_tokens_only: bool,
+        #[arg(long)]
+        candidate_program: Option<PathBuf>,
+        #[arg(long)]
+        candidate_closure: Option<PathBuf>,
+        #[arg(long)]
+        prepared: Option<PathBuf>,
+        #[arg(long)]
+        token_preflight: Option<PathBuf>,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Compare an already proposed instruction on one complete development pool.
     CompareClassification {
         #[arg(long)]
@@ -1076,6 +1096,117 @@ async fn main() -> Result<()> {
             };
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
+        Command::CompareReceptionTransfer {
+            examples,
+            prepare_only,
+            count_tokens_only,
+            candidate_program,
+            candidate_closure,
+            prepared,
+            token_preflight,
+            output,
+        } => {
+            ensure!(!output.exists(), "Preserve the earlier transfer attempt");
+            ensure!(
+                args.student_local_url.is_none(),
+                "This fresh comparison measures the hosted student only"
+            );
+            ensure!(
+                !(prepare_only && count_tokens_only),
+                "Choose one preparation operation"
+            );
+            let contact = catalogue::cases(&examples, "contact")?;
+            let movable = catalogue::cases(&examples, "movable_deal")?;
+            let book = Arc::new(book::Book::open(&args.book)?);
+            let result = if prepare_only {
+                ensure!(
+                    prepared.is_none() && token_preflight.is_none(),
+                    "Preparation does not execute another plan"
+                );
+                reception::prepare_transfer(
+                    &contact,
+                    &movable,
+                    &book,
+                    &candidate_program.context("No settled candidate program")?,
+                    &candidate_closure.context("No preserved candidate closure")?,
+                    &output,
+                )?
+            } else {
+                ensure!(
+                    candidate_program.is_none() && candidate_closure.is_none(),
+                    "Execute only the prepared instruction presentation"
+                );
+                let prepared = prepared.context("No source-bound transfer preparation")?;
+                if count_tokens_only {
+                    ensure!(
+                        token_preflight.is_none(),
+                        "Count only this exact prepared wire"
+                    );
+                    reception::count_transfer(
+                        &contact,
+                        &movable,
+                        &book,
+                        &prepared,
+                        &google::client(&args.credential_file)?,
+                        &output,
+                    )
+                    .await?
+                } else {
+                    ensure!(
+                        matches!(args.teacher, Teacher::Codex),
+                        "The bounded transfer uses the authorized saved-login contextual reviewer"
+                    );
+                    let counts = token_preflight.context("No exact Google token preflight")?;
+                    let selected = contact
+                        .iter()
+                        .chain(&movable)
+                        .filter(|case| reception::TRANSFER_CASES.contains(&case.id.as_str()))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    runner::manifest(
+                        &output,
+                        &selected,
+                        &args.book,
+                        serde_json::json!({
+                        "command":"compare-reception-transfer","student":google::STUDENT,"teacher":teacher_identity(args.teacher),
+                        "logical_student_calls":8,"student_physical_cap":reception::TRANSFER_STUDENT_CALLS,
+                        "teacher_physical_cap":reception::TRANSFER_TEACHER_CALLS,"initial_student_tokens_per_minute":14000,
+                        "prepared":prepared,"preparation_sha256":google::digest(fs::read(prepared.join("preparation.json"))?),
+                        "token_preflight":counts,"token_preflight_sha256":google::digest(fs::read(&counts)?),
+                        "old_scores_or_optimizer_state_imported":false,"evaluation_concurrency":1,
+                        "component_inputs":"Declared source-known roles resolved by actual native house/ruler assignment, no observed acquisition/selection",
+                        "application_promoted":false}),
+                    )?;
+                    let student = selected_student(
+                        None,
+                        google::STUDENT,
+                        google::client(&args.credential_file)?,
+                        output.join("student"),
+                        reception::TRANSFER_STUDENT_CALLS,
+                        14000,
+                    )?;
+                    let teacher = teacher_model(
+                        args.teacher,
+                        args.codex,
+                        reqwest::Client::new(),
+                        output.join("teacher"),
+                        reception::TRANSFER_TEACHER_CALLS,
+                    )
+                    .await?;
+                    let models = runner::Models {
+                        student,
+                        teacher,
+                        student_id: google::STUDENT.into(),
+                        teacher_id: teacher_identity(args.teacher).into(),
+                    };
+                    reception::compare_transfer(
+                        &contact, &movable, book, &prepared, &counts, &models, &output,
+                    )
+                    .await?
+                }
+            };
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Command::CompareContactReference {
             examples,
             prepare_only,
@@ -1312,6 +1443,57 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn hosted_transfer_cli_admits_only_its_recorded_hosted_phases() {
+        for phase in ["prepare", "count", "execute"] {
+            let mut args = vec![
+                "horary-dspy",
+                "--teacher",
+                "codex",
+                "compare-reception-transfer",
+            ];
+            match phase {
+                "prepare" => args.extend([
+                    "--prepare-only",
+                    "--candidate-program",
+                    "candidate.json",
+                    "--candidate-closure",
+                    "closure.json",
+                ]),
+                "count" => {
+                    args.extend(["--count-tokens-only", "--prepared", "synthetic-preparation"])
+                }
+                _ => args.extend([
+                    "--prepared",
+                    "synthetic-preparation",
+                    "--token-preflight",
+                    "synthetic-counts.json",
+                ]),
+            }
+            args.extend(["--output", "synthetic-output"]);
+            let parsed = Args::try_parse_from(args).unwrap();
+            assert!(!allows_local_student(&parsed.command));
+            let Command::CompareReceptionTransfer {
+                prepare_only,
+                count_tokens_only,
+                ..
+            } = parsed.command
+            else {
+                panic!("Wrong CLI operation")
+            };
+            assert_eq!(prepare_only, phase == "prepare");
+            assert_eq!(count_tokens_only, phase == "count");
+        }
+        assert!(
+            Args::try_parse_from([
+                "horary-dspy",
+                "compare-reception-transfer",
+                "--prepare-only"
+            ])
+            .is_err()
+        );
+    }
 
     #[test]
     fn narrow_reception_preparation_and_run_are_admitted_by_real_cli() {

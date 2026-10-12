@@ -17,6 +17,15 @@ pub const SOURCE_PAGES: [usize; 6] = [44, 71, 72, 73, 74, 75];
 pub const GEPA_METRICS: usize = 24;
 pub const GEPA_LOCAL_CALLS: usize = 32;
 pub const GEPA_TEACHER_CALLS: usize = 48;
+pub const TRANSFER_CASES: [&str; 4] = [
+    "dspy-contact-first-004",
+    "dspy-contact-first-006",
+    "dspy-contact-first-008",
+    "dspy-movable_deal-first-003",
+];
+pub const TRANSFER_STUDENT_CALLS: usize = 16;
+pub const TRANSFER_TEACHER_CALLS: usize = 12;
+const TRANSFER_OUTPUT_TOKENS: u32 = 2048;
 
 #[derive(dsrust::Signature)]
 /// Interpret ONLY the supplied directed reception, under the supplied primary text. The guest planet regards the host planet; never reverse that direction or assume reciprocity. Preserve all matching accepted role IDs when a planet has several roles. Report the exact native positive and negative dignity names separately, without summing or cancelling them. Give a concise qualified contextual implication about the regarding actor's inclination toward the regarded actor. Reception alone establishes neither ability nor an occasion, an action, delivery, an outcome or timing. Do not infer a psychological diagnosis, qualifications or an identity conflict. Return ONLY the seven requested output fields, beginning with edge_id; never reproduce source_text, question, accepted_roles or native_edge.
@@ -496,6 +505,488 @@ pub async fn evaluate(
     Ok(result)
 }
 
+/// Declared, source-known component roles, resolved by the application's actual
+/// native house/ruler assignment. This never reads Case.expected or claims an
+/// observed classification, extraction, or native selection journey.
+pub fn transfer_fixtures(
+    contact: &[catalogue::Case],
+    movable: &[catalogue::Case],
+    book: &Book,
+) -> Result<Vec<Fixture>> {
+    use crate::native_evidence::{RoleChoice, assign_from_facts, facts, relationship_house};
+    let mut result = Vec::new();
+    for (index, id) in TRANSFER_CASES.iter().enumerate() {
+        let bank = if index < 3 { contact } else { movable };
+        let case = bank
+            .iter()
+            .find(|c| c.id == *id)
+            .context("Missing original transfer probe")?;
+        ensure!(
+            case.split == "train"
+                && case.method == if index < 3 { "contact" } else { "movable_deal" },
+            "Transfer probe original membership differs"
+        );
+        let (quotes, declarations, guest_id, host_id) = if index < 3 {
+            let (actor, label, relationship, quote) = match index {
+                0 => (
+                    "dena",
+                    "Dena",
+                    "neighbor",
+                    "Dena is the next-door neighbour",
+                ),
+                1 => (
+                    "finn",
+                    "Finn",
+                    "employer",
+                    "Finn supervises my work and is my direct boss",
+                ),
+                _ => ("hana", "Hana", "partner", "Hana, my wife"),
+            };
+            let target = format!("{actor}.self");
+            let house = relationship_house(relationship)
+                .context("Unresolved native operative relationship")?;
+            (
+                vec![quote],
+                vec![
+                    ("querent.self".to_owned(), "You".to_owned(), 1),
+                    (target.clone(), label.into(), house),
+                ],
+                if index == 0 {
+                    target.clone()
+                } else {
+                    "querent.self".into()
+                },
+                if index == 0 {
+                    "querent.self".into()
+                } else {
+                    target
+                },
+            )
+        } else {
+            // Native sell-profit policy: stock and the actual recipient's money
+            // are distinct roles in the same second house. No extra actor is
+            // invented. Both source clauses explicitly identify this speaker.
+            (
+                vec![
+                    "I own and will sell my handmade lamps",
+                    "I keep the proceeds",
+                    "worthwhile profit for me",
+                ],
+                vec![
+                    ("querent.self".into(), "You".into(), 1),
+                    ("subject.primary".into(), "The handmade lamps".into(), 2),
+                    ("deal.pocket".into(), "Your recipient money".into(), 2),
+                ],
+                "querent.self".into(),
+                "subject.primary".into(),
+            )
+        };
+        ensure!(
+            quotes.iter().all(|quote| case.question.contains(quote)),
+            "Declared operative role lacks its exact original source quote"
+        );
+        let at = chrono::DateTime::parse_from_rfc3339(&case.chart.utc)?;
+        let chart = horary_ai_core::astronomy::chart(
+            at.timestamp_millis() as f64,
+            case.chart.latitude,
+            case.chart.longitude,
+        )
+        .map_err(anyhow::Error::msg)?;
+        let native = facts(Some(&chart));
+        let choices = declarations.iter().map(|(_, label, house)| RoleChoice {
+            label:label.clone(), house:Some(*house), natural:None,
+            reason:"Declared source-known operative role; native house/ruler assignment, not an expected answer.".into(),
+        }).collect();
+        let bound = assign_from_facts(&native, choices).map_err(anyhow::Error::msg)?;
+        ensure!(
+            bound.len() == declarations.len(),
+            "Native role assignment changed cardinality"
+        );
+        let roles = bound
+            .into_iter()
+            .zip(&declarations)
+            .enumerate()
+            .map(|(role_index, (role, (id, _, _)))| AcceptedRole {
+                role_index,
+                selected_id: id.clone(),
+                label: role.label,
+                house: role.house,
+                planet: role.planet,
+            })
+            .collect::<Vec<_>>();
+        let planet = |id: &str| {
+            roles
+                .iter()
+                .find(|r| r.selected_id == id)
+                .map(|r| r.planet.as_str())
+                .context("Missing declared edge endpoint")
+        };
+        let guest = planet(&guest_id)?;
+        let host = planet(&host_id)?;
+        if index == 3 {
+            ensure!(
+                planet("subject.primary")? == planet("deal.pocket")?,
+                "The genuine second-house shared ruler is unavailable"
+            );
+        }
+        let edges = native
+            .iter()
+            .filter(|fact| {
+                fact.kind == "reception"
+                    && fact
+                        .reception
+                        .as_ref()
+                        .is_some_and(|edge| edge.guest_planet == guest && edge.host_planet == host)
+            })
+            .collect::<Vec<_>>();
+        ensure!(
+            edges.len() == 1,
+            "{}: declared native edge {guest} → {host} has {} rows; do not fabricate it",
+            case.id,
+            edges.len()
+        );
+        let fact = edges[0];
+        let edge = NativeEdge {
+            fact_id: fact.id.clone(),
+            reception: fact
+                .reception
+                .clone()
+                .context("No typed native reception")?,
+        };
+        let source = source(book)?;
+        let mut example = dsrust::input! {source_text:source,question:case.question,
+        accepted_roles:serde_json::to_string(&roles)?,native_edge:serde_json::to_string(&edge)?};
+        example.set("case_id", json!(case.id));
+        example.set("expected", json!({"source_pages":SOURCE_PAGES,"task":"Qualified contextual meaning of only this supplied directed reception",
+            "must_explain":["Preserve exact regarding/regarded roles and distinguish all native qualities", "Use qualified context; preserve object/money roles without literal human emotions", "Regard toward a person is not evidence of interest in a separate request or task"],
+            "must_not":["Infer reciprocity, ability, action, an event verdict or timing", "Invent actor identity or merge shared-ruler roles", "Cancel contrary qualities or invent a net strength"]}));
+        example.set("__review_source", json!(source));
+        example.set("__input_authority", json!("Explicitly declared source-known component roles resolved through native assign_from_facts; not observed acquisition/selection"));
+        example.set("__derivation", json!({"original_case_id":case.id,"original_split":case.split,"original_question_sha256":crate::google::digest(&case.question),
+            "exact_source_quotes":quotes,"native_anchor":case.chart,"guest_role_id":guest_id,"host_role_id":host_id,
+            "native_house_facts":native.iter().filter(|fact|fact.kind=="house"&&roles.iter().any(|role|role.house.is_some_and(|h|fact.label==format!("House {h}")))).collect::<Vec<_>>(),
+            "role_policy":"Contact persons use actual operative relationship houses; sell-profit stock and recipient pocket both use their actual owner's/recipient's second house. IDs are declared production role IDs, never copied from Case.expected.",
+            "role_policy_source_sha256":crate::google::digest(include_bytes!("../../../src-tauri/src/horary_role_options.rs")),
+            "house_assignment_source_sha256":crate::google::digest(include_bytes!("../../../src-tauri/src/reading_method.rs")),
+            "role_assignment_authority":"Declared operative roles from the exact original question and pinned native role/house policy; not an observed full selection clipboard or a new house-classification grade"}));
+        result.push(Fixture {
+            split: case.split.clone(),
+            example,
+        });
+    }
+    Ok(result)
+}
+
+fn transfer_instruction(program: &Path, closure: &Path) -> Result<String> {
+    let bytes = fs::read(program)?;
+    let closed: Value = serde_json::from_slice(&fs::read(closure)?)?;
+    ensure!(
+        closed["exit_code"] == 0
+            && closed["unsettled_calls"] == 0
+            && closed["application_promoted"] == false
+            && closed["compiled_sha256"] == crate::google::digest(&bytes),
+        "Candidate is not bound to its settled, preserved closure"
+    );
+    let state: dsrust::module::ProgramState = serde_json::from_slice(&bytes)?;
+    ensure!(
+        state.predictors.len() == 1,
+        "Transfer only this single reception instruction"
+    );
+    let predictor = state
+        .predictors
+        .get("reception.interpretation")
+        .context("Candidate is not the reception function")?;
+    ensure!(
+        predictor.demos.is_empty()
+            && predictor.signature.fields
+                == dsrust::module::SignatureState::of(&signature()).fields,
+        "No demonstrations, incompatible fields, or foreign optimizer state may be imported"
+    );
+    let text = &predictor.signature.instructions;
+    ensure!(
+        !text.trim().is_empty()
+            && closed["selected_instruction_sha256"] == crate::google::digest(text),
+        "Selected instruction identity differs"
+    );
+    Ok(text.clone())
+}
+
+fn transfer_predictor(instruction: &str) -> dsrust::Predict {
+    let mut sig = signature();
+    sig.instructions = instruction.to_owned();
+    optimize::plain(sig, Arc::new(dsrust::DummyLM::new(vec![]))).with_config(LmConfig {
+        max_tokens: Some(TRANSFER_OUTPUT_TOKENS),
+        temperature: Some(0.),
+        ..Default::default()
+    })
+}
+
+/// Render both ordinary ChatAdapter arms. Only the learned instruction differs;
+/// all questions, declared native roles, exact edges and sources are identical.
+pub fn prepare_transfer(
+    contact: &[catalogue::Case],
+    movable: &[catalogue::Case],
+    book: &Book,
+    candidate: &Path,
+    closure: &Path,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(
+        !directory.exists(),
+        "Preserve the earlier transfer preparation"
+    );
+    let fixtures = transfer_fixtures(contact, movable, book)?;
+    let candidate_text = transfer_instruction(candidate, closure)?;
+    let mut requests = Vec::new();
+    for (arm, instruction) in [
+        ("baseline", signature().instructions),
+        ("candidate", candidate_text.clone()),
+    ] {
+        for mut request in
+            crate::preflight::reader_requests(&fixtures, &transfer_predictor(&instruction))?
+        {
+            request["arm"] = json!(arm);
+            requests.push(request);
+        }
+    }
+    fs::create_dir(directory)?;
+    crate::queue::write_json_atomic(&directory.join("wire-preflight.json"), &json!(requests))?;
+    crate::queue::write_json_atomic(&directory.join("declared-inputs.json"), &json!(fixtures.iter().map(|f| Ok(json!({"case_id":f.example.get("case_id"),"split":f.split,"inputs":f.example.inputs()?.rendered(),"derivation":f.example.get("__derivation")}))).collect::<Result<Vec<_>>>()?))?;
+    fs::write(
+        directory.join("candidate-instructions.txt"),
+        &candidate_text,
+    )?;
+    fs::write(
+        directory.join("baseline-instructions.txt"),
+        &signature().instructions,
+    )?;
+    let plan = json!({"phase":"hosted_reception_transfer_preparation","function":"reception.interpretation","case_ids":TRANSFER_CASES,
+        "original_contact_bank_count":contact.len(),"original_movable_deal_bank_count":movable.len(),
+        "contact_bank_sha256":crate::google::digest(serde_json::to_vec(contact)?),"movable_deal_bank_sha256":crate::google::digest(serde_json::to_vec(movable)?),
+        "fixtures_sha256":optimize::fixtures_digest(&fixtures)?,"book_sha256":crate::book::OCR_SHA256,"source_pages":SOURCE_PAGES,
+        "executable_sha256":crate::google::digest(fs::read(std::env::current_exe()?)?),"teaching_sources_sha256":optimize::teaching_sources(),
+        "candidate_program_sha256":crate::google::digest(fs::read(candidate)?),"candidate_closure_sha256":crate::google::digest(fs::read(closure)?),
+        "candidate_instruction_sha256":crate::google::digest(&candidate_text),"baseline_instruction_sha256":crate::google::digest(signature().instructions),
+        "wire_preflight_sha256":crate::google::digest(fs::read(directory.join("wire-preflight.json"))?),"declared_inputs_sha256":crate::google::digest(fs::read(directory.join("declared-inputs.json"))?),
+        "student":crate::google::STUDENT,"teacher":"codex-saved-login-contextual-review","logical_student_calls":8,
+        "physical_bounds":{"student":TRANSFER_STUDENT_CALLS,"teacher":TRANSFER_TEACHER_CALLS},"initial_input_tokens_per_minute":14000,
+        "student_output_tokens":TRANSFER_OUTPUT_TOKENS,"teacher_metric":"contextual_meaning only; exact native direction/IDs/qualities are noncompensating",
+        "provider_schema":false,"bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,"generation_calls":0,"teacher_calls":0,
+        "original_training_only":true,"original_bank_and_split_unchanged":true,"old_scores_or_optimizer_state_imported":false,
+        "component_inputs":"Explicit declared source-known native roles/edges, not an observed classification/extraction or full native selection journey",
+        "only_treatment":"Authored versus selected instruction; same four actual native inputs",
+        "whole_reading_unobserved":true,"application_promoted":false});
+    crate::queue::write_json_atomic(&directory.join("preparation.json"), &plan)?;
+    Ok(plan)
+}
+
+fn verify_transfer(
+    contact: &[catalogue::Case],
+    movable: &[catalogue::Case],
+    book: &Book,
+    prepared: &Path,
+) -> Result<Vec<Fixture>> {
+    let fixtures = transfer_fixtures(contact, movable, book)?;
+    let plan: Value = serde_json::from_slice(&fs::read(prepared.join("preparation.json"))?)?;
+    ensure!(
+        plan["phase"] == "hosted_reception_transfer_preparation"
+            && plan["case_ids"] == json!(TRANSFER_CASES)
+            && plan["contact_bank_sha256"] == crate::google::digest(serde_json::to_vec(contact)?)
+            && plan["movable_deal_bank_sha256"]
+                == crate::google::digest(serde_json::to_vec(movable)?)
+            && plan["fixtures_sha256"] == optimize::fixtures_digest(&fixtures)?
+            && plan["book_sha256"] == crate::book::OCR_SHA256
+            && plan["executable_sha256"]
+                == crate::google::digest(fs::read(std::env::current_exe()?)?)
+            && plan["teaching_sources_sha256"] == json!(optimize::teaching_sources())
+            && plan["source_pages"] == json!(SOURCE_PAGES),
+        "Transfer source/input identity differs"
+    );
+    ensure!(
+        plan["student"] == crate::google::STUDENT
+            && plan["physical_bounds"]
+                == json!({"student":TRANSFER_STUDENT_CALLS,"teacher":TRANSFER_TEACHER_CALLS})
+            && plan["logical_student_calls"] == 8
+            && plan["student_output_tokens"] == TRANSFER_OUTPUT_TOKENS
+            && plan["initial_input_tokens_per_minute"] == 14000
+            && plan["provider_schema"] == false,
+        "Transfer fixed provider configuration differs"
+    );
+    for (file, key) in [
+        ("wire-preflight.json", "wire_preflight_sha256"),
+        ("declared-inputs.json", "declared_inputs_sha256"),
+        ("candidate-instructions.txt", "candidate_instruction_sha256"),
+        ("baseline-instructions.txt", "baseline_instruction_sha256"),
+    ] {
+        ensure!(
+            plan[key] == crate::google::digest(fs::read(prepared.join(file))?),
+            "Prepared transfer artifact differs"
+        );
+    }
+    Ok(fixtures)
+}
+
+fn verify_transfer_counts(prepared: &Path, counted: &Value) -> Result<()> {
+    ensure!(
+        counted["all_fit"] == true
+            && counted["counted_requests"] == 8
+            && counted["student"] == crate::google::STUDENT
+            && counted["generation_calls"] == 0
+            && counted["teacher_calls"] == 0
+            && counted["preparation_sha256"]
+                == crate::google::digest(fs::read(prepared.join("preparation.json"))?)
+            && counted["wire_preflight_sha256"]
+                == crate::google::digest(fs::read(prepared.join("wire-preflight.json"))?),
+        "No matching exact Google token preflight"
+    );
+    let wires: Vec<Value> =
+        serde_json::from_slice(&fs::read(prepared.join("wire-preflight.json"))?)?;
+    let rows = counted["requests"]
+        .as_array()
+        .context("Missing counted requests")?;
+    ensure!(
+        wires.len() == 8 && rows.len() == 8,
+        "Transfer count membership differs"
+    );
+    for (wire, row) in wires.iter().zip(rows) {
+        let mut request: dsrust::lm::api::LmRequest =
+            serde_json::from_value(wire["request"].clone())?;
+        request.model = crate::google::STUDENT.into();
+        ensure!(
+            row["case_id"] == wire["case_id"]
+                && row["arm"] == wire["arm"]
+                && row["normalized_request_sha256"] == wire["request_sha256"]
+                && row["provider_request_key"] == request.cache_key(crate::google::STUDENT)
+                && row["generation_tokens"] == TRANSFER_OUTPUT_TOKENS
+                && row["within_listed_limits"] == true
+                && row["generation_submitted"] == false
+                && row["teacher_called"] == false
+                && row["input_tokens"].as_u64().is_some_and(|n| n > 0),
+            "Google token count is not bound to this exact transfer request"
+        );
+    }
+    Ok(())
+}
+
+pub async fn count_transfer(
+    contact: &[catalogue::Case],
+    movable: &[catalogue::Case],
+    book: &Book,
+    prepared: &Path,
+    http: &reqwest::Client,
+    directory: &Path,
+) -> Result<Value> {
+    verify_transfer(contact, movable, book, prepared)?;
+    ensure!(
+        !directory.exists(),
+        "Preserve the earlier token count attempt"
+    );
+    fs::create_dir(directory)?;
+    let listing = crate::google::models(http).await?;
+    crate::queue::write_json_atomic(&directory.join("model-listing.json"), &listing)?;
+    let info: crate::google::ModelInfo = serde_json::from_value(listing["student"].clone())?;
+    let wires: Vec<Value> =
+        serde_json::from_slice(&fs::read(prepared.join("wire-preflight.json"))?)?;
+    let mut rows = Vec::new();
+    for wire in wires {
+        let mut request: dsrust::lm::api::LmRequest =
+            serde_json::from_value(wire["request"].clone())?;
+        request.model = crate::google::STUDENT.into();
+        let count =
+            crate::google::count_tokens(http, &request, &directory.join("requests")).await?;
+        let tokens = count["input_tokens"]
+            .as_u64()
+            .context("No provider count")?;
+        rows.push(json!({"case_id":wire["case_id"],"arm":wire["arm"],"normalized_request_sha256":wire["request_sha256"],
+            "provider_request_key":request.cache_key(crate::google::STUDENT),"input_tokens":tokens,"generation_tokens":TRANSFER_OUTPUT_TOKENS,
+            "within_listed_limits":tokens <= info.input_token_limit as u64 && TRANSFER_OUTPUT_TOKENS as usize <= info.output_token_limit,
+            "generation_submitted":false,"teacher_called":false}));
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+    let result = json!({"preparation_sha256":crate::google::digest(fs::read(prepared.join("preparation.json"))?),
+        "wire_preflight_sha256":crate::google::digest(fs::read(prepared.join("wire-preflight.json"))?),
+        "student":crate::google::STUDENT,"model_input_limit":info.input_token_limit,"model_output_limit":info.output_token_limit,
+        "counted_requests":rows.len(),"requests":rows,"all_fit":rows.iter().all(|r|r["within_listed_limits"]==true),
+        "generation_calls":0,"teacher_calls":0,"provider_schema":false});
+    crate::queue::write_json_atomic(&directory.join("token-preflight.json"), &result)?;
+    ensure!(
+        result["all_fit"] == true && result["counted_requests"] == 8,
+        "Counted transfer request does not fit; no generation submitted"
+    );
+    Ok(result)
+}
+
+pub async fn compare_transfer(
+    contact: &[catalogue::Case],
+    movable: &[catalogue::Case],
+    book: Arc<Book>,
+    prepared: &Path,
+    token_preflight: &Path,
+    models: &crate::runner::Models,
+    directory: &Path,
+) -> Result<Value> {
+    let fixtures = verify_transfer(contact, movable, &book, prepared)?;
+    let counted: Value = serde_json::from_slice(&fs::read(token_preflight)?)?;
+    verify_transfer_counts(prepared, &counted)?;
+    ensure!(
+        !directory.join("result.json").exists()
+            && !directory.join("baseline.json").exists()
+            && !directory.join("baseline-observations.jsonl").exists(),
+        "Preserve the earlier transfer evaluation"
+    );
+    fs::create_dir_all(directory)?;
+    let examples = fixtures
+        .iter()
+        .map(|f| f.example.clone())
+        .collect::<Vec<_>>();
+    let mut grades = Vec::new();
+    for arm in ["baseline", "candidate"] {
+        let instruction = fs::read_to_string(prepared.join(format!("{arm}-instructions.txt")))?;
+        let mut program = optimize::Graded::new(
+            "common",
+            "reception",
+            &examples,
+            models.student.clone(),
+            models.teacher.clone(),
+            Some(book.clone()),
+        )?
+        .with_stream(directory.join(format!("{arm}-observations.jsonl")))?;
+        let predictors = program.named_predictors();
+        ensure!(
+            predictors.len() == 1 && predictors[0].name == "reception.interpretation",
+            "Unexpected reception program"
+        );
+        for p in predictors {
+            p.signature.instructions = instruction.clone();
+            p.config.max_tokens = Some(TRANSFER_OUTPUT_TOKENS);
+        }
+        program.save(&directory.join(format!("{arm}-program.json")))?;
+        let evaluation = Evaluate::new(
+            examples.clone(),
+            |input| program.forward(input),
+            optimize::Graded::metric,
+        )
+        .run()
+        .await;
+        let receipt = optimize::evaluation_receipt(&evaluation);
+        crate::queue::write_json_atomic(&directory.join(format!("{arm}.json")), &receipt)?;
+        program.save_observations(&directory.join(format!("{arm}-observations.json")))?;
+        ensure!(
+            evaluation.failure_count() == 0,
+            "Received execution/review failure is preserved and unqualified; later arm withheld, not fabricated as zero"
+        );
+        grades.push(json!({"arm":arm,"grades":receipt,"full_function_passes":evaluation.results.iter().filter(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true))&&p.get("__review_summary_consistent")==Some(&json!(true)))).count()}));
+    }
+    let result = json!({"function":"reception.interpretation","optimizer":"stock Evaluate, no search","student":models.student_id,"teacher":models.teacher_id,
+        "case_ids":TRANSFER_CASES,"arms":grades,"preparation_sha256":crate::google::digest(fs::read(prepared.join("preparation.json"))?),
+        "token_preflight_sha256":crate::google::digest(fs::read(token_preflight)?),"logical_student_calls":8,
+        "physical_bounds":{"student":TRANSFER_STUDENT_CALLS,"teacher":TRANSFER_TEACHER_CALLS},"evaluation_concurrency":1,
+        "old_scores_or_optimizer_state_imported":false,"reflection_calls":0,"selection_calls":0,"bootstrap_calls":0,"original_training_only":true,
+        "whole_reading_unobserved":true,"application_promoted":false});
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,5 +1219,215 @@ mod tests {
             .set("native_edge", json!("changed native input"));
         assert!(verify_preparation(&cases, &fixtures, &directory, true).is_err());
         assert!(prepare_optimization(&cases, &book, &directory).is_err());
+    }
+
+    fn transfer_banks() -> (Vec<catalogue::Case>, Vec<catalogue::Case>) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        (
+            catalogue::cases(&path, "contact").unwrap(),
+            catalogue::cases(&path, "movable_deal").unwrap(),
+        )
+    }
+
+    #[test]
+    fn transfer_uses_source_native_production_ids_reverse_edges_and_genuine_shared_roles() {
+        let (contact, movable) = transfer_banks();
+        let fixtures = transfer_fixtures(&contact, &movable, &Book::fixture()).unwrap();
+        assert_eq!(fixtures.len(), 4);
+        for fixture in &fixtures {
+            assert_eq!(fixture.split, "train");
+            assert_eq!(
+                fixture
+                    .example
+                    .inputs()
+                    .unwrap()
+                    .fields()
+                    .map(|(k, _)| k)
+                    .collect::<Vec<_>>(),
+                ["source_text", "question", "accepted_roles", "native_edge"]
+            );
+            let (roles, edge) = supplied(&fixture.example).unwrap();
+            assert!(!role_ids(&roles, &edge.reception.guest_planet).is_empty());
+            assert!(!role_ids(&roles, &edge.reception.host_planet).is_empty());
+            assert!(
+                !roles.iter().any(
+                    |r| r.selected_id == "target.person" || r.selected_id == "principal.person"
+                )
+            );
+        }
+        let (roles, edge) = supplied(&fixtures[0].example).unwrap();
+        assert_eq!(
+            role_ids(&roles, &edge.reception.guest_planet),
+            BTreeSet::from(["dena.self".into()])
+        );
+        let (roles, edge) = supplied(&fixtures[1].example).unwrap();
+        assert_eq!(
+            role_ids(&roles, &edge.reception.guest_planet),
+            BTreeSet::from(["querent.self".into()])
+        );
+        assert_eq!(
+            role_ids(&roles, &edge.reception.host_planet),
+            BTreeSet::from(["finn.self".into()])
+        );
+        let (roles, edge) = supplied(&fixtures[2].example).unwrap();
+        assert_eq!(
+            role_ids(&roles, &edge.reception.host_planet),
+            BTreeSet::from(["hana.self".into()])
+        );
+        let (roles, edge) = supplied(&fixtures[3].example).unwrap();
+        assert_eq!(
+            role_ids(&roles, &edge.reception.host_planet),
+            BTreeSet::from(["subject.primary".into(), "deal.pocket".into()])
+        );
+        let mut prediction = dsrust::example! {edge_id:edge.fact_id,
+        regarding_actor_ids:serde_json::to_string(&role_ids(&roles,&edge.reception.guest_planet)).unwrap(),
+        regarded_actor_ids:serde_json::to_string(&role_ids(&roles,&edge.reception.host_planet)).unwrap(),
+        positive_qualities:serde_json::to_string(&qualities(&edge,"positive").unwrap()).unwrap(),
+        negative_qualities:serde_json::to_string(&qualities(&edge,"negative").unwrap()).unwrap(),
+        interpretation:"Synthetic mechanics text, not a qualified judgment",limitations:"Synthetic mechanics text"};
+        assert!(
+            native_failures(
+                &fixtures[3].example,
+                &Prediction::new(prediction.clone(), "Synthetic mechanics response")
+            )
+            .unwrap()
+            .is_empty()
+        );
+        prediction.set("regarded_actor_ids", json!(r#"["subject.primary"]"#));
+        assert!(
+            !native_failures(
+                &fixtures[3].example,
+                &Prediction::new(prediction, "Synthetic mechanics response")
+            )
+            .unwrap()
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn transfer_inputs_ignore_all_private_gold_but_require_original_source_quotes() {
+        let (mut contact, mut movable) = transfer_banks();
+        let book = Book::fixture();
+        let original = transfer_fixtures(&contact, &movable, &book).unwrap();
+        for case in contact.iter_mut().chain(&mut movable) {
+            case.expected.facts.clear();
+            case.expected.missing = vec!["Private fake missing fact".into()];
+            case.expected.facet = "Private fake facet".into();
+            case.expected.source_pages = vec![99];
+            case.expected.must_explain = vec!["Private fake role or verdict".into()];
+        }
+        let changed = transfer_fixtures(&contact, &movable, &book).unwrap();
+        for (a, b) in original.iter().zip(changed) {
+            assert_eq!(
+                a.example.inputs().unwrap().rendered(),
+                b.example.inputs().unwrap().rendered()
+            );
+        }
+        contact
+            .iter_mut()
+            .find(|c| c.id == TRANSFER_CASES[1])
+            .unwrap()
+            .question = "Finn has an unspecified relationship.".into();
+        assert!(
+            transfer_fixtures(&contact, &movable, &book)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("source quote")
+        );
+    }
+
+    #[tokio::test]
+    async fn transfer_preflight_is_the_actual_fixed_2048_predict_request() {
+        let (contact, movable) = transfer_banks();
+        let fixtures = transfer_fixtures(&contact, &movable, &Book::fixture()).unwrap();
+        struct Capture(std::sync::Mutex<Option<dsrust::lm::api::LmRequest>>);
+        impl dsrust::lm::ChatModel for Capture {
+            async fn forward(
+                &self,
+                _: &reqwest::Client,
+                request: &dsrust::lm::api::LmRequest,
+            ) -> Result<dsrust::lm::api::LmResponse> {
+                *self.0.lock().unwrap() = Some(request.clone());
+                Ok(dsrust::lm::api::LmResponse {
+                    outputs: vec![dsrust::lm::api::LmOutput::text(
+                        "[[ ## edge_id ## ]]\nsynthetic\n[[ ## regarding_actor_ids ## ]]\n[]\n[[ ## regarded_actor_ids ## ]]\n[]\n[[ ## positive_qualities ## ]]\n[]\n[[ ## negative_qualities ## ]]\n[]\n[[ ## interpretation ## ]]\nSynthetic format check only\n[[ ## limitations ## ]]\nSynthetic format check only\n[[ ## completed ## ]]",
+                    )],
+                    ..Default::default()
+                })
+            }
+            async fn capabilities(&self, _: &reqwest::Client) -> dsrust::lm::Capabilities {
+                dsrust::lm::Capabilities::default()
+            }
+        }
+        let lm = Arc::new(Capture(std::sync::Mutex::new(None)));
+        let predictor = transfer_predictor("Synthetic candidate instruction").with_lm(lm.clone());
+        let expected = crate::preflight::reader_requests(&fixtures, &predictor).unwrap();
+        predictor
+            .forward(fixtures[0].example.clone())
+            .await
+            .unwrap();
+        let actual = lm.0.lock().unwrap().clone().unwrap();
+        assert_eq!(actual.config.max_tokens, Some(2048));
+        assert_eq!(expected[0]["generation_tokens"], 2048);
+        assert_eq!(
+            serde_json::to_value(&actual).unwrap(),
+            expected[0]["request"]
+        );
+        assert!(
+            actual.model.is_empty() && actual.tools.is_empty() && actual.output_schema().is_none()
+        );
+    }
+
+    #[test]
+    fn transfer_counts_reject_changed_order_request_identity_and_generation_allowance() {
+        let (contact, movable) = transfer_banks();
+        let fixtures = transfer_fixtures(&contact, &movable, &Book::fixture()).unwrap();
+        let mut wires = Vec::new();
+        for arm in ["baseline", "candidate"] {
+            for mut wire in
+                crate::preflight::reader_requests(&fixtures, &transfer_predictor(arm)).unwrap()
+            {
+                wire["arm"] = json!(arm);
+                wires.push(wire);
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        fs::write(
+            root.path().join("preparation.json"),
+            b"Synthetic metadata check",
+        )
+        .unwrap();
+        let wire_bytes = serde_json::to_vec(&wires).unwrap();
+        fs::write(root.path().join("wire-preflight.json"), &wire_bytes).unwrap();
+        let rows = wires.iter().map(|wire| {
+            let mut request: dsrust::lm::api::LmRequest = serde_json::from_value(wire["request"].clone()).unwrap();
+            request.model = crate::google::STUDENT.into();
+            json!({"case_id":wire["case_id"],"arm":wire["arm"],"normalized_request_sha256":wire["request_sha256"],
+                "provider_request_key":request.cache_key(crate::google::STUDENT),"generation_tokens":2048,
+                "within_listed_limits":true,"generation_submitted":false,"teacher_called":false,"input_tokens":100})
+        }).collect::<Vec<_>>();
+        let receipt = json!({"all_fit":true,"counted_requests":8,"student":crate::google::STUDENT,
+            "generation_calls":0,"teacher_calls":0,"requests":rows,
+            "preparation_sha256":crate::google::digest(b"Synthetic metadata check"),
+            "wire_preflight_sha256":crate::google::digest(&wire_bytes)});
+        verify_transfer_counts(root.path(), &receipt).unwrap();
+        for field in [
+            "arm",
+            "case_id",
+            "provider_request_key",
+            "normalized_request_sha256",
+            "generation_tokens",
+        ] {
+            let mut changed = receipt.clone();
+            changed["requests"][0][field] = json!("Changed synthetic metadata");
+            assert!(
+                verify_transfer_counts(root.path(), &changed).is_err(),
+                "{field}"
+            );
+        }
+        let mut changed = receipt.clone();
+        changed["requests"].as_array_mut().unwrap().swap(0, 1);
+        assert!(verify_transfer_counts(root.path(), &changed).is_err());
     }
 }
