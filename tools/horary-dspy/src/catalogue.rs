@@ -1139,7 +1139,7 @@ fn concise_native_table(
                 fact.planets[1],
                 aspect,
                 event.within_current_signs,
-                event.astronomical_hours,
+                concise_decimal(&json!(event.astronomical_hours)),
                 gap_or_detail,
                 motion
             ]));
@@ -1208,14 +1208,18 @@ fn concise_native_table(
             "principal_basis":reference["principal_basis"],"alias_authority":reference["alias_authority"],
             "role_columns":role_fields,"roles":roles,"aliases_by_planet":aliases,
             "moon":reference["moon"],"unknowns":reference["unknowns"]},
-        "legend":"Reception direction is regarding→regarded, with every supplied quality retained; no weighting or verdict. Event endpoints are storage order, not applicant/caller order. Native gap is not travel. Motion positions/travel are approximate sample-bracket interpolation; speeds are interval means, not certified exact speeds. Reversal flags cover samples only; intra-interval motion remains unresolved. Null motion was not supplied in this input. All native eIDs remain; unknown or omitted computation is not proof of absence."}),
+        "legend":"Reception direction is regarding→regarded, with every supplied quality retained; no weighting or verdict. Event endpoints are storage order, not applicant/caller order. Native gap is not travel. Degrees, astronomical hours and speeds in this display are rounded to three decimals, with error ≤0.0005 of their stated unit; full precision remains in the canonical review input. Rounded zero is not stationarity. Motion positions/travel are approximate sample-bracket interpolation; speeds are interval means, not certified exact speeds. Reversal flags cover samples only; intra-interval motion remains unresolved. Null motion was not supplied in this input. All native eIDs remain; unknown or omitted computation is not proof of absence."}),
     )
 }
 
 fn concise_event_motion(motion: &Value) -> Value {
+    let bracket = motion["bracketHours"].as_array().map_or_else(
+        || motion["bracketHours"].clone(),
+        |hours| Value::Array(hours.iter().map(concise_decimal).collect()),
+    );
     json!([
         motion["estimateMethod"],
-        motion["bracketHours"],
+        bracket,
         motion["intraIntervalMotionResolved"],
         motion["bodyMotion"]
             .as_array()
@@ -1223,17 +1227,35 @@ fn concise_event_motion(motion: &Value) -> Value {
             .flatten()
             .map(|body| json!([
                 body["planet"],
-                body["chartLongitudeDegrees"],
-                body["estimatedPerfectionLongitudeDegrees"],
-                body["estimatedSignedTravelDegrees"],
-                body["estimatedPathDistanceDegrees"],
-                body["initialIntervalMeanSpeedDegreesPerDay"],
-                body["perfectionBracketMeanSpeedDegreesPerDay"],
+                concise_decimal(&body["chartLongitudeDegrees"]),
+                concise_decimal(&body["estimatedPerfectionLongitudeDegrees"]),
+                concise_decimal(&body["estimatedSignedTravelDegrees"]),
+                concise_decimal(&body["estimatedPathDistanceDegrees"]),
+                concise_decimal(&body["initialIntervalMeanSpeedDegreesPerDay"]),
+                concise_decimal(&body["perfectionBracketMeanSpeedDegreesPerDay"]),
                 body["sampledMotionReversalObserved"],
                 body["zeroMeanMotionIntervalObserved"]
             ]))
             .collect::<Vec<_>>()
     ])
+}
+
+/// Display-only precision. Native request validation and private review inputs
+/// keep the original values; no rounded value is fed back to the calculator.
+fn concise_decimal(value: &Value) -> Value {
+    let Some(number) = value.as_f64().filter(|n| n.is_finite()) else {
+        return value.clone();
+    };
+    let scaled = number * 1000.;
+    if !scaled.is_finite() {
+        return value.clone();
+    }
+    let rounded = scaled.round() / 1000.;
+    if rounded.fract() == 0. && rounded.abs() < i64::MAX as f64 {
+        json!(rounded as i64)
+    } else {
+        json!(rounded)
+    }
 }
 
 pub fn method_source(book: &Book, method: &str, reading: bool) -> Result<String> {
@@ -1612,7 +1634,7 @@ mod concise_projection_tests {
     }
 
     #[test]
-    fn concise_projection_keeps_every_native_id_direction_quality_and_motion_number() {
+    fn concise_projection_keeps_every_native_id_direction_quality_and_bounded_motion_display() {
         let (input, original, native) = declared(Some("mother"));
         let compact = concise_reader_inputs(&input, "contact").unwrap();
         assert_eq!(compact.get("question"), input.get("question"));
@@ -1675,7 +1697,10 @@ mod concise_projection_tests {
                 .find(|e| e["fact_id"] == row[0])
                 .unwrap();
             assert_eq!(row[4], supplied["candidate"]["withinCurrentSigns"]);
-            assert_eq!(row[5], supplied["candidate"]["astronomicalHours"]);
+            assert_eq!(
+                row[5],
+                concise_decimal(&supplied["candidate"]["astronomicalHours"])
+            );
             assert_eq!(
                 row[7],
                 concise_event_motion(&supplied["candidate"]["perfectionMotion"])
@@ -1798,13 +1823,75 @@ mod concise_projection_tests {
             concise_event_motion(&motion),
             json!([
                 "sample_interval_linear_interpolation",
-                [5., 6.],
+                [5, 6],
                 false,
                 [
-                    ["Venus", 350., 5., 15., 17., -0.2, 0.4, true, false],
-                    ["Mars", 5., 4., -1., 1., -0.1, -0.2, false, true]
+                    ["Venus", 350, 5, 15, 17, -0.2, 0.4, true, false],
+                    ["Mars", 5, 4, -1, 1, -0.1, -0.2, false, true]
                 ]
             ])
+        );
+    }
+
+    #[test]
+    fn concise_numeric_display_is_bounded_without_changing_full_precision_or_flags() {
+        let motion = json!({"estimateMethod":"sample_interval_linear_interpolation",
+            "bracketHours":[10.123456789,11.987654321],"intraIntervalMotionResolved":false,
+            "bodyMotion":[{"planet":"Venus","chartLongitudeDegrees":359.987654321,
+                "estimatedPerfectionLongitudeDegrees":0.123456789,
+                "estimatedSignedTravelDegrees":-0.000123456,"estimatedPathDistanceDegrees":0.0004321,
+                "initialIntervalMeanSpeedDegreesPerDay":-0.0001,
+                "perfectionBracketMeanSpeedDegreesPerDay":0.987654321,
+                "sampledMotionReversalObserved":true,"zeroMeanMotionIntervalObserved":false}]});
+        let original = motion.clone();
+        let display = concise_event_motion(&motion);
+        assert_eq!(motion, original);
+        assert_eq!(display[0], original["estimateMethod"]);
+        assert_eq!(display[2], false);
+        assert_eq!(display[3][0][0], "Venus");
+        assert_eq!(display[3][0][7], true);
+        assert_eq!(display[3][0][8], false);
+        for (column, field) in [
+            "chartLongitudeDegrees",
+            "estimatedPerfectionLongitudeDegrees",
+            "estimatedSignedTravelDegrees",
+            "estimatedPathDistanceDegrees",
+            "initialIntervalMeanSpeedDegreesPerDay",
+            "perfectionBracketMeanSpeedDegreesPerDay",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let value = original["bodyMotion"][0][field].as_f64().unwrap();
+            let shown = display[3][0][column + 1].as_f64().unwrap();
+            assert!((shown - value).abs() <= 0.0005);
+            assert!((shown * 1000. - (shown * 1000.).round()).abs() < 1e-8);
+        }
+        for i in 0..2 {
+            assert!(
+                (display[1][i].as_f64().unwrap() - original["bracketHours"][i].as_f64().unwrap())
+                    .abs()
+                    <= 0.0005
+            );
+        }
+        assert_eq!(display[3][0][5], 0);
+        assert_eq!(display[3][0][8], false); // Rounded zero did not mint a station flag.
+        assert_eq!(concise_decimal(&Value::Null), Value::Null);
+        assert_eq!(concise_decimal(&json!("unknown")), json!("unknown"));
+        assert!(
+            serde_json::to_string(&display).unwrap().len()
+                < serde_json::to_string(&original).unwrap().len()
+        );
+        let (input, _, _) = declared(Some("mother"));
+        let compact = concise_reader_inputs(&input, "contact").unwrap();
+        let chart: Value =
+            serde_json::from_str(compact.get("chart_evidence").unwrap().as_str().unwrap()).unwrap();
+        assert!(chart["legend"].as_str().unwrap().contains("error ≤0.0005"));
+        assert!(
+            chart["legend"]
+                .as_str()
+                .unwrap()
+                .contains("Rounded zero is not stationarity")
         );
     }
 
