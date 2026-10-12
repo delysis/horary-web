@@ -344,17 +344,19 @@ pub fn branch_source(book: &Book, method: &str, branch: &str, reading: bool) -> 
         .map(|p| p.as_u64().map(|n| n as usize).context("Invalid page"))
         .collect::<Result<BTreeSet<_>>>()?;
     // Common chapter allocations precede specialized branch examples.
-    match method {
-        "lost_object" | "lost_animal" | "missing_person" => pages.extend([137, 138]),
-        "relationship" | "person_description" => pages.extend([192, 193]),
-        "money" | "bet" => pages.extend([156, 158]),
-        "property" | "rental" | "business_property" => pages.extend([167, 168]),
-        "new_job" | "existing_job" | "return_to_job" | "job_offer" | "work_person" => {
-            pages.extend([224, 225])
-        }
-        _ => {}
-    }
+    pages.extend(common_branch_pages(method));
     book.student_context(pages, reading)
+}
+
+fn common_branch_pages(method: &str) -> &'static [usize] {
+    match method {
+        "lost_object" | "lost_animal" | "missing_person" => &[137, 138],
+        "relationship" | "person_description" => &[192, 193],
+        "money" | "bet" => &[156, 158],
+        "property" | "rental" | "business_property" => &[167, 168],
+        "new_job" | "existing_job" | "return_to_job" | "job_offer" | "work_person" => &[224, 225],
+        _ => &[],
+    }
 }
 
 pub fn compact_native_facts(facts: &[crate::native_evidence::Fact]) -> String {
@@ -369,6 +371,24 @@ pub fn compact_native_facts(facts: &[crate::native_evidence::Fact]) -> String {
 }
 
 pub fn method_source(book: &Book, method: &str, reading: bool) -> Result<String> {
+    book.student_context(method_source_pages(method)?, reading)
+}
+
+/// The union of the existing family and every actual branch allocation. It is
+/// chosen by the declared component family, never a fixture's expected branch.
+pub fn family_reader_source(book: &Book, method: &str) -> Result<String> {
+    let pages = method_source_pages(method)?;
+    let extra = common_branch_pages(method)
+        .iter()
+        .copied()
+        .filter(|page| !pages.contains(page))
+        .collect();
+    let mut source = method_source(book, method, true)?;
+    source.push_str(&book.pages(&extra)?);
+    Ok(source)
+}
+
+fn method_source_pages(method: &str) -> Result<BTreeSet<usize>> {
     let card = coverage_card(method)?;
     let mut pages = card["primary_context_printed_pages"]
         .as_array()
@@ -395,7 +415,7 @@ pub fn method_source(book: &Book, method: &str, reading: bool) -> Result<String>
             pages.insert(page.as_u64().context("Invalid branch page")? as usize);
         }
     }
-    book.student_context(pages, reading)
+    Ok(pages)
 }
 
 pub fn coverage_card(method: &str) -> Result<Value> {

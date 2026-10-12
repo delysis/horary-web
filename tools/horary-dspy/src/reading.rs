@@ -32,9 +32,23 @@ pub fn new_job_reader_baseline() -> Result<String> {
 /// The declared family union plus the common page supplied by every existing
 /// NewJob branch allocation. No case label chooses these primary passages.
 pub fn new_job_family_source(book: &Book) -> Result<String> {
-    let mut source = catalogue::method_source(book, "new_job", true)?;
-    source.push_str(&book.pages(&[225].into_iter().collect())?);
-    Ok(source)
+    catalogue::family_reader_source(book, "new_job")
+}
+
+/// Other families start with their existing typed reading instruction and
+/// ordinary output contract. GEPA supplies the learned family teaching from
+/// source-reviewed training feedback, not an imported native worksheet.
+pub fn direct_reader_baseline(method: &str) -> Result<String> {
+    ensure!(
+        !matches!(method, "wish" | "unclassified"),
+        "Select a substantive reading family"
+    );
+    if method == "new_job" {
+        return new_job_reader_baseline();
+    }
+    let mut instruction = signatures::reading(method)?.instructions;
+    instruction.push_str("\n\nReturn ONLY the requested status, answer, analysis, evidence and unresolved fields in their requested field markers, beginning with status. Use answer, need_information or method_limit for status according to the actual evidence. Never copy question, consultation, chart_evidence or source_text. Do not output a native worksheet or a hidden reasoning transcript. Answer the person's actual question directly, then give concise reviewable reasons with the supplied native evidence IDs and honest limitations. The supplied family source covers all its branches; choose the appropriate procedure from actual circumstances, not an expected label.");
+    Ok(instruction)
 }
 
 #[derive(dsrust::Signature)]
@@ -242,6 +256,29 @@ pub(crate) mod tests {
         assert!(text.contains("hypothetical examples are teaching, never this chart's facts"));
         assert!(!text.contains("<output_fields>verdict"));
         assert!(!text.contains("dspy-new_job-first-"));
+    }
+    #[test]
+    fn direct_contact_baseline_preserves_its_typed_contract_and_excludes_job_teaching() {
+        let text = direct_reader_baseline("contact").unwrap();
+        assert!(text.contains("Judge a contact question"));
+        assert!(text.contains("status, answer, analysis, evidence and unresolved"));
+        assert!(!text.contains("Moon-as-worker"));
+        assert!(!text.contains("dspy-contact-first-"));
+        assert!(direct_reader_baseline("wish").is_err());
+    }
+    #[test]
+    fn generic_family_allocation_keeps_new_job_input_byte_identical() {
+        let book = Book::fixture();
+        let old = format!(
+            "{}{}",
+            catalogue::method_source(&book, "new_job", true).unwrap(),
+            book.pages(&[225].into_iter().collect()).unwrap()
+        );
+        assert_eq!(new_job_family_source(&book).unwrap(), old);
+        assert_eq!(
+            direct_reader_baseline("new_job").unwrap(),
+            new_job_reader_baseline().unwrap()
+        );
     }
     #[tokio::test]
     async fn actual_selector_and_reader_trace_match_both_optimizable_predictors() {

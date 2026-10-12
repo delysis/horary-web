@@ -196,8 +196,10 @@ enum Command {
         #[arg(long, default_value_t = 2)]
         bootstrap_demos: usize,
     },
-    /// Optimize one NewJob Predict with the complete salient family source.
+    /// Optimize one declared reading Predict with the complete salient family source.
     OptimizeReading {
+        #[arg(long, default_value = "new_job")]
+        method: String,
         #[arg(long, default_value = "examples")]
         examples: PathBuf,
         #[arg(long)]
@@ -797,6 +799,7 @@ async fn main() -> Result<()> {
             }
         }
         Command::OptimizeReading {
+            method,
             examples,
             output,
             max_metric_calls,
@@ -819,13 +822,17 @@ async fn main() -> Result<()> {
                 !output.exists(),
                 "Preserve an existing attempt; use a fresh reader output directory"
             );
-            let cases = catalogue::cases(&examples, "new_job")?;
-            let baseline = horary_dspy::reading::new_job_reader_baseline()?;
+            ensure!(
+                runner::methods(&method)?.len() == 1,
+                "Select one declared reading family"
+            );
+            let cases = catalogue::cases(&examples, &method)?;
+            let baseline = horary_dspy::reading::direct_reader_baseline(&method)?;
             runner::manifest(
                 &output,
                 &cases,
                 &args.book,
-                serde_json::json!({"command":"optimize-reading","method":"new_job","program_kind":"direct_family_reading","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":max_metric_calls,"reflection_minibatch":3,"seed":23,"bootstrap_demos":0,"optimizable_predictors":["reading.new_job"],"branch_selector":"none; declared family uses complete salient branch union, never a gold branch","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
+                serde_json::json!({"command":"optimize-reading","method":method,"program_kind":"direct_family_reading","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":max_metric_calls,"reflection_minibatch":3,"seed":23,"bootstrap_demos":0,"optimizable_predictors":[optimize::predictor_name(&method,"reading")?],"branch_selector":"none; declared family uses complete salient branch union, never a gold branch","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
             )?;
             fs::write(output.join("baseline-instructions.txt"), &baseline)?;
             let book = Arc::new(book::Book::open(&args.book)?);
@@ -836,7 +843,7 @@ async fn main() -> Result<()> {
                         split: case.split.clone(),
                         example: {
                             let mut example = catalogue::example(case, "reading", &book)?;
-                            let source = horary_dspy::reading::new_job_family_source(&book)?;
+                            let source = catalogue::family_reader_source(&book, &method)?;
                             example.set("source_text", serde_json::json!(&source));
                             example.set("__review_source", serde_json::json!(source));
                             example
@@ -900,9 +907,9 @@ async fn main() -> Result<()> {
                     &args.student_model,
                 ),
             };
-            let result = optimize::compile_reader_fixtures(
+            let result = optimize::compile_direct_reader_fixtures(
                 &fixtures,
-                "new_job",
+                &method,
                 book,
                 &models,
                 &output,

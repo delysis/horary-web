@@ -1090,15 +1090,13 @@ pub async fn compile_fixtures(
     options: CompileOptions,
 ) -> Result<Value> {
     compile_fixtures_inner(
-        fixtures, method, function, book, models, directory, options, None,
+        fixtures, method, function, book, models, directory, options, None, false,
     )
     .await
 }
 
-/// Instruction-only compilation of a reader. NewJob uses its declared family
-/// and complete book-defined branch union in a single Predict; other families
-/// retain their actual selector. The caller supplies a source-reviewed baseline
-/// in this reader's declared output contract.
+/// Diagnostic reader-only view of the original composed program. Its actual
+/// selector still executes; only the reader's instruction is optimizable.
 #[allow(clippy::too_many_arguments)]
 pub async fn compile_reader_fixtures(
     fixtures: &[Fixture],
@@ -1123,6 +1121,38 @@ pub async fn compile_reader_fixtures(
         directory,
         options,
         Some(baseline),
+        false,
+    )
+    .await
+}
+
+/// Stock GEPA on one declared reading function with the complete primary
+/// family/branch union. No redundant neural selector or gold branch is supplied.
+#[allow(clippy::too_many_arguments)]
+pub async fn compile_direct_reader_fixtures(
+    fixtures: &[Fixture],
+    method: &str,
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    directory: &Path,
+    options: CompileOptions,
+    baseline: &str,
+) -> Result<Value> {
+    ensure!(
+        options.bootstrap_demos == 0,
+        "Direct reader GEPA is instruction-only"
+    );
+    ensure!(!baseline.trim().is_empty(), "Reader baseline is empty");
+    compile_fixtures_inner(
+        fixtures,
+        method,
+        "reading",
+        book,
+        models,
+        directory,
+        options,
+        Some(baseline),
+        true,
     )
     .await
 }
@@ -1137,15 +1167,19 @@ async fn compile_fixtures_inner(
     directory: &Path,
     options: CompileOptions,
     reader_baseline: Option<&str>,
+    direct_family_reader: bool,
 ) -> Result<Value> {
     ensure!(
         options.max_metrics > 0,
         "GEPA needs a positive metric budget"
     );
     fs::create_dir_all(directory)?;
-    let direct_family_reader = reader_baseline.is_some() && method == "new_job";
     if direct_family_reader {
-        let source = crate::reading::new_job_family_source(&book)?;
+        ensure!(
+            function == "reading" && reader_baseline.is_some(),
+            "Direct reader requires its declared reading baseline"
+        );
+        let source = catalogue::family_reader_source(&book, method)?;
         ensure!(
             fixtures.iter().all(|fixture| {
                 fixture.example.get("source_text").and_then(Value::as_str) == Some(&source)
@@ -1188,9 +1222,8 @@ async fn compile_fixtures_inner(
         Some(book.clone()),
     )?
     .with_stream(directory.join("observations.jsonl"))?;
-    // This family is already declared by its function signature. Its three
-    // branches share the same primary chapter; choosing another neural route
-    // adds a failure prerequisite without narrowing the necessary source.
+    // This family is already declared by its function signature. The direct
+    // experiment supplies its full source union rather than another neural route.
     if direct_family_reader {
         program.oracle =
             Oracle::Single(plain(signatures::reading(method)?, models.student.clone()));
@@ -1301,8 +1334,9 @@ async fn compile_fixtures_inner(
         receipt["version"] = json!(3);
         receipt["program_kind"] = json!("direct_family_reading");
         receipt["predictor_names"] = json!([predictor_name(method, function)?]);
-        receipt["source_selection"] =
-            json!("Book-defined complete NewJob branch union; no expected branch");
+        receipt["source_selection"] = json!(format!(
+            "Book-defined complete {method} branch union; no expected branch"
+        ));
         receipt
             .as_object_mut()
             .unwrap()
@@ -1688,7 +1722,7 @@ mod component_tests {
             teacher_id: "Synthetic offline".into(),
         };
         let directory = tempfile::tempdir().unwrap();
-        let result = compile_reader_fixtures(
+        let result = compile_direct_reader_fixtures(
             &fixtures,
             "new_job",
             book.clone(),
@@ -1767,7 +1801,7 @@ mod component_tests {
         };
         let directory = tempfile::tempdir().unwrap();
         assert!(
-            compile_reader_fixtures(
+            compile_direct_reader_fixtures(
                 &fixtures,
                 "new_job",
                 Arc::new(Book::fixture()),
@@ -1784,6 +1818,81 @@ mod component_tests {
         );
         assert!(oracle.asked().is_empty());
         assert!(teacher.asked().is_empty());
+    }
+
+    #[tokio::test]
+    async fn contact_direct_reader_reaches_the_target_without_a_selector_or_gold_branch() {
+        let book = Arc::new(Book::fixture());
+        let source = catalogue::family_reader_source(&book, "contact").unwrap();
+        assert_eq!(
+            source,
+            catalogue::method_source(&book, "contact", true).unwrap()
+        );
+        assert!(source.contains("printed_page=\"165\""));
+        assert!(source.contains("printed_page=\"166\""));
+        let fixtures = ["train", "development", "test"].map(|split| {
+            let mut example = crate::reading::tests::input(json!({"facts":[]}));
+            example.set(
+                "question",
+                json!(format!("Synthetic {split} contact question")),
+            );
+            example.set("source_text", json!(&source));
+            example.set("__review_source", json!(&source));
+            Fixture {
+                split: split.into(),
+                example,
+            }
+        });
+        let oracle = Arc::new(DummyLM::new((0..50).map(|_| {
+            dsrust::example! {status:"method_limit",answer:"Synthetic answer only.",analysis:"e1 boundary",evidence:"e1",unresolved:"Synthetic calculation limit"}
+        })));
+        let teacher =
+            Arc::new(DummyLM::new((0..50).map(|_| {
+                review("unobserved", "unobserved", "pass", "pass", true)
+            })));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher,
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let result = compile_direct_reader_fixtures(
+            &fixtures,
+            "contact",
+            book,
+            &models,
+            directory.path(),
+            CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+            &crate::reading::direct_reader_baseline("contact").unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["program_kind"], "direct_family_reading");
+        assert_eq!(result["optimizable_predictors"], json!(["reading.contact"]));
+        let state: Value =
+            serde_json::from_slice(&fs::read(directory.path().join("compiled.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            state
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>(),
+            ["metadata", "reading.contact"].into_iter().collect()
+        );
+        assert!(!format!("{:?}", oracle.asked()).contains("PRIVATE GOLD"));
+        let observations: Vec<Value> =
+            serde_json::from_slice(&fs::read(directory.path().join("observations.json")).unwrap())
+                .unwrap();
+        assert!(observations.iter().all(|row| {
+            let stages = row["oracle_stages"].as_array().unwrap();
+            stages.len() == 1 && stages[0]["predictor"] == "reading.contact"
+        }));
     }
     #[tokio::test]
     async fn fixed_comparison_changes_instruction_only_and_never_reflects_on_development() {
