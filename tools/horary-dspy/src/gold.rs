@@ -871,18 +871,16 @@ async fn count_labeled_inputs(
             .as_u64()
             .context("No exact provider count")? as usize;
         let output = if student.concise { 2048 } else { 8192 };
-        ensure!(
-            tokens.saturating_add(output) <= limit,
-            "Worked examples and generation do not fit the listed context"
-        );
-        ensure!(
-            !student.concise || tokens <= STUDENT_INPUT_LIMIT,
-            "Student request {index} has {tokens} input tokens, above fixed {STUDENT_INPUT_LIMIT}; no generation submitted"
-        );
-        counts.push(json!({"case_id":row["case_id"],"request_sha256":row["request_sha256"],"input_tokens":tokens,"generation_tokens":output,"fits":true}));
+        let fits = tokens.saturating_add(output) <= limit
+            && (!student.concise || tokens <= STUDENT_INPUT_LIMIT);
+        counts.push(json!({"case_id":row["case_id"],"request_sha256":row["request_sha256"],"input_tokens":tokens,"generation_tokens":output,"fits":fits}));
     }
     let result = json!({"method":method,"optimizer":"upstream LabeledFewShot","labeled_training_cases":labels.len(),"demos":if student.concise{usize::from(!labels.is_empty())}else{2},"input_context_limit":limit,"strict_prompt_limit":if student.concise{Some(STUDENT_INPUT_LIMIT)}else{None},"generation_tokens":if student.concise{2048}else{8192},"counts":counts,"generation_submitted":false,"reference_and_rubric_private":true,"resident_tokenizer":student.local_url.is_some()});
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    ensure!(
+        counts.iter().all(|row| row["fits"] == true),
+        "One or more student wires exceed the fixed prompt/context limits; all exact counts retained and no generation submitted"
+    );
     Ok(result)
 }
 
