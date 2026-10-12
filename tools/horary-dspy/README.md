@@ -31,6 +31,17 @@ remain recorded, uncertain keys are not retried, and other independent families
 continue. Reading-component results do not establish a first-message extraction
 journey or install a prompt into the application.
 
+The same gold consumer accepts the existing `--student-local-url` and
+`--student-model` flags. It uses the port's resident provider with a finite
+600-second reading timeout and exact resident chat-template/tokenizer counts
+before generation, without loading a Google credential or applying Google
+rate pacing. The resident slot's reported context must fit the two unchanged
+worked examples plus 8192 output tokens. `--prior-consumer-closure` binds a
+deliberately stopped, fully received no-answer hosted comparison and deducts
+its two physical quota rejections from the first family's original cap. The
+local model starts a distinct authored/labeled/selected baseline; no hosted
+answer, semantic score or optimizer state is imported.
+
 `evaluate-reception --prepare-only` renders the actual short Predict requests for
 four original Contact training probes without calling a model. The reusable
 function accepts an `AcceptedReceptionRole`-shaped actor clipboard and one exact

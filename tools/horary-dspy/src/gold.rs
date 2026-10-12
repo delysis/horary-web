@@ -1,7 +1,7 @@
 //! Source-reviewed worked answers. Rubrics and provenance are not demonstrations.
 use crate::{
-    book::Book, catalogue, codex, functions::Fixture, google, optimize, preflight, reading, runner,
-    signatures,
+    book::Book, catalogue, codex, functions::Fixture, google, local, optimize, preflight, reading,
+    runner, signatures,
 };
 use anyhow::{Context, Result, ensure};
 use dsrust::{
@@ -555,20 +555,35 @@ async fn count_labeled_inputs(
     http: &reqwest::Client,
     listing: &Value,
     directory: &Path,
+    student: &StudentSelection<'_>,
 ) -> Result<Value> {
     fs::create_dir(directory)?;
     let predictor = labeled_predictor(method, labels, 2)?;
     let requests = preflight::reader_requests(fixtures, &predictor)?;
     crate::queue::write_json_atomic(&directory.join("requests.json"), &json!(requests))?;
-    let limit = google::model_context_limit(listing, google::STUDENT)?;
+    let limit = if student.local_url.is_some() {
+        listing["local_context_limit"]
+            .as_u64()
+            .context("No resident slot context")? as usize
+    } else {
+        google::model_context_limit(listing, google::STUDENT)?
+    };
     let mut counts = Vec::new();
     for (index, row) in requests.iter().enumerate() {
         let mut request: dsrust::lm::api::LmRequest =
             serde_json::from_value(row["request"].clone())?;
-        request.model = google::STUDENT.into();
-        let count =
-            google::count_tokens(http, &request, &directory.join(format!("count-{index:02}")))
-                .await?;
+        request.model = if student.local_url.is_some() {
+            student.model
+        } else {
+            google::STUDENT
+        }
+        .into();
+        let target = directory.join(format!("count-{index:02}"));
+        let count = if let Some(url) = student.local_url {
+            local::count_tokens(http, url, &request, &target).await?
+        } else {
+            google::count_tokens(http, &request, &target).await?
+        };
         let tokens = count["input_tokens"]
             .as_u64()
             .context("No exact provider count")? as usize;
@@ -578,9 +593,77 @@ async fn count_labeled_inputs(
         );
         counts.push(json!({"case_id":row["case_id"],"request_sha256":row["request_sha256"],"input_tokens":tokens,"generation_tokens":8192,"fits":true}));
     }
-    let result = json!({"method":method,"optimizer":"upstream LabeledFewShot","labeled_training_cases":labels.len(),"demos":2,"input_context_limit":limit,"generation_tokens":8192,"counts":counts,"generation_submitted":false,"reference_and_rubric_private":true});
+    let result = json!({"method":method,"optimizer":"upstream LabeledFewShot","labeled_training_cases":labels.len(),"demos":2,"input_context_limit":limit,"generation_tokens":8192,"counts":counts,"generation_submitted":false,"reference_and_rubric_private":true,"resident_tokenizer":student.local_url.is_some()});
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     Ok(result)
+}
+
+pub struct StudentSelection<'a> {
+    pub local_url: Option<&'a str>,
+    pub model: &'a str,
+    pub prior_closure: Option<&'a Path>,
+}
+
+fn inherited_consumer_calls(path: Option<&Path>) -> Result<(usize, usize, Value)> {
+    let Some(path) = path else {
+        return Ok((0, 0, Value::Null));
+    };
+    let bytes = fs::read(path)?;
+    let closure: Value = serde_json::from_slice(&bytes)?;
+    ensure!(
+        closure["exact_pids_absent"] == true
+            && closure["uncertain_requests"] == 0
+            && closure["student_normalized_outputs"] == 0
+            && closure["semantic_reviews"] == 0
+            && closure["third_attempt_wait_generation_submitted"] == false,
+        "Only a settled, explicitly stopped no-output consumer can supply deductions"
+    );
+    ensure!(
+        closure["student_physical_calls"] == 2
+            && closure["teacher_physical_calls"] == 0
+            && closure["original_caps"]["student_per_family"] == 64
+            && closure["original_caps"]["teacher_per_family"] == 80,
+        "Prior consumer bounds or deductions differ"
+    );
+    let root = Path::new(
+        closure["campaign"]
+            .as_str()
+            .context("No stopped campaign")?,
+    );
+    for (name, digest) in closure["sealed_files"]
+        .as_object()
+        .context("No stopped carrier seals")?
+    {
+        let relative = Path::new(name);
+        ensure!(
+            relative
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_))),
+            "Unsafe stopped carrier path"
+        );
+        ensure!(
+            digest == &json!(google::digest(fs::read(root.join(relative))?)),
+            "Stopped carrier drift: {name}"
+        );
+    }
+    let results = closure["results"]
+        .as_array()
+        .context("No stopped physical outcomes")?;
+    ensure!(
+        results.len() == 2
+            && results
+                .iter()
+                .enumerate()
+                .all(|(i, r)| r["response_complete"] == true
+                    && r["http_status"] == 429
+                    && r["physical_call"] == i + 1),
+        "Stopped provider work was not fully received quota rejection"
+    );
+    Ok((
+        2,
+        0,
+        json!({"path":path,"sha256":google::digest(bytes),"student_physical_calls":2,"teacher_physical_calls":0,"outputs_and_scores_imported":false}),
+    ))
 }
 
 fn first_family_gate(campaign: &Path, gate: &Path) -> Result<()> {
@@ -640,6 +723,7 @@ pub async fn optimize_families(
     codex_path: &Path,
     directory: &Path,
     watch: bool,
+    student: StudentSelection<'_>,
 ) -> Result<Value> {
     ensure!(
         !directory.exists(),
@@ -654,18 +738,61 @@ pub async fn optimize_families(
         );
         vec![selected]
     };
+    ensure!(
+        student.prior_closure.is_none() || (student.local_url.is_some() && methods[0] == "contact"),
+        "Stopped hosted Contact work is deducted only from a fresh local Contact-first baseline"
+    );
+    let (mut student_spent, mut teacher_spent, ancestry) =
+        inherited_consumer_calls(student.prior_closure)?;
     fs::create_dir(directory)?;
     let author_plan = fs::read(campaign.join("prepared/plan.json"))?;
-    let listing = google::models(&http).await?;
+    let listing = if let Some(url) = student.local_url {
+        local::validate_url(url)?;
+        ensure!(
+            student.model == local::MODEL,
+            "Gold local baseline must name the resident QAT/MTP model"
+        );
+        let base = url.trim_end_matches('/').trim_end_matches("/v1");
+        let slots: Value = http
+            .get(format!("{base}/slots"))
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let rows = slots.as_array().context("No resident slots")?;
+        ensure!(
+            rows.len() == 1 && rows[0]["is_processing"] == false,
+            "Resident gold comparison needs its one idle slot"
+        );
+        let context = rows[0]["n_ctx"]
+            .as_u64()
+            .context("No resident context limit")?;
+        ensure!(context > 8192, "Resident context cannot fit a reading");
+        let models: Value = http
+            .get(url.trim_end_matches('/').to_owned() + "/models")
+            .timeout(Duration::from_secs(30))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        json!({"student":student.model,"local_url":url,"local_context_limit":context,"slots":slots,"models":models,"provider":"resident-port-OpenAiCompatible"})
+    } else {
+        google::models(&http).await?
+    };
     crate::queue::write_json_atomic(&directory.join("models.json"), &listing)?;
-    let info: google::ModelInfo = serde_json::from_value(listing["student"].clone())?;
-    let plan = json!({"method_order":methods,"author_plan_sha256":google::digest(&author_plan),"book_sha256":crate::book::OCR_SHA256,"executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),"teaching_sources_sha256":optimize::teaching_sources(),"per_family_physical_student_cap":64,"per_family_physical_teacher_cap":80,"cumulative_student_cap":64*methods.len(),"cumulative_teacher_cap":80*methods.len(),"soft_metric_calls":24,"stock_optimizers":["LabeledFewShot","GEPA"],"demos":2,"original_split":"12/4/4","student":google::STUDENT,"student_output_tokens":8192,"teacher":"codex-saved-login-tool-free-no-override","teacher_output_tokens":8192,"google_rate_hint":14000,"student_concurrency":1,"approval_gate":approval_gate,"automatic_uncertain_replay":false,"application_promoted":false});
+    let student_id = if student.local_url.is_some() {
+        student.model
+    } else {
+        google::STUDENT
+    };
+    let plan = json!({"method_order":methods,"author_plan_sha256":google::digest(&author_plan),"book_sha256":crate::book::OCR_SHA256,"executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),"teaching_sources_sha256":optimize::teaching_sources(),"per_family_physical_student_cap":64,"per_family_physical_teacher_cap":80,"cumulative_student_cap":64*methods.len(),"cumulative_teacher_cap":80*methods.len(),"soft_metric_calls":24,"stock_optimizers":["LabeledFewShot","GEPA"],"demos":2,"original_split":"12/4/4","student":student_id,"student_local_url":student.local_url,"local_request_timeout_seconds":if student.local_url.is_some(){Some(600)}else{None},"prior_consumer":ancestry,"student_output_tokens":8192,"teacher":"codex-saved-login-tool-free-no-override","teacher_output_tokens":8192,"google_rate_hint":if student.local_url.is_none(){Some(14000)}else{None},"student_concurrency":1,"approval_gate":approval_gate,"automatic_uncertain_replay":false,"application_promoted":false});
     crate::queue::write_json_atomic(&directory.join("plan.json"), &plan)?;
     let limiter = google::RateLimiter::new(14000)?;
-    let mut student_spent = 0;
-    let mut teacher_spent = 0;
     let mut results = Vec::new();
-    for method in &methods {
+    for (family_index, method) in methods.iter().enumerate() {
         let family_gold = campaign.join("run").join(method).join("result.json");
         while !family_gold.exists() {
             if !watch {
@@ -703,12 +830,20 @@ pub async fn optimize_families(
         first_family_gate(campaign, approval_gate)?;
         let family = directory.join(method);
         fs::create_dir(&family)?;
-        let student_budget = google::CallBudget::seeded(student_spent + 64, student_spent)?;
+        let student_budget = google::CallBudget::seeded(
+            if family_index == 0 {
+                64
+            } else {
+                student_spent + 64
+            },
+            student_spent,
+        )?;
         let teacher_budget = google::CallBudget::seeded(teacher_spent + 80, teacher_spent)?;
         let outcome=async {
             let (fixtures,labels)=reviewed_family(examples,&book,campaign,method)?;
-            let preflight=count_labeled_inputs(&fixtures,method,&labels,&http,&listing,&family.join("preflight")).await?;
-            let models=runner::Models{student:Arc::new(google::Google::from_listing(info.clone(),http.clone(),directory.join("student"),student_budget.clone(),limiter.clone())?),teacher:Arc::new(codex::Codex::new(codex_path.to_path_buf(),directory.join("teacher").join(method),80)?.with_budget(teacher_budget.clone())),student_id:google::STUDENT.into(),teacher_id:"codex-saved-login-tool-free-no-override".into()};
+            let preflight=count_labeled_inputs(&fixtures,method,&labels,&http,&listing,&family.join("preflight"),&student).await?;
+            let selected:Arc<dyn DynChatModel>=if let Some(url)=student.local_url { Arc::new(local::LocalStudent::new(url,student.model,&directory.join("student"))?.with_budget(student_budget.clone()).with_timeout(600)?) } else {Arc::new(google::Google::from_listing(serde_json::from_value(listing["student"].clone())?,http.clone(),directory.join("student"),student_budget.clone(),limiter.clone())?)};
+            let models=runner::Models{student:selected,teacher:Arc::new(codex::Codex::new(codex_path.to_path_buf(),directory.join("teacher").join(method),80)?.with_budget(teacher_budget.clone())),student_id:student_id.into(),teacher_id:"codex-saved-login-tool-free-no-override".into()};
             crate::queue::write_json_atomic(&family.join("started.json"),&json!({"gold_bank_sha256":google::digest(fs::read(campaign.join("run").join(method).join("answers.jsonl"))?),"fixture_digest":optimize::fixtures_digest(&fixtures)?,"preflight":preflight,"inherited_student_physical_calls":student_spent,"inherited_teacher_physical_calls":teacher_spent,"caps_carried_without_reset":true}))?;
             optimize::compile_direct_reader_from_gold(&fixtures,method,book.clone(),&models,&family.join("compile"),optimize::CompileOptions{max_metrics:24,bootstrap_demos:0},&reading::direct_reader_baseline(method)?,&labels,2).await
         }.await;
@@ -816,6 +951,28 @@ mod tests {
                 .len(),
             42
         );
+    }
+    #[test]
+    fn stopped_hosted_consumer_deducts_settled_calls_but_never_unknown_work() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(
+            directory.path().join("received.json"),
+            b"Synthetic fully received carrier",
+        )
+        .unwrap();
+        let mut value = json!({"campaign":directory.path(),"exact_pids_absent":true,"uncertain_requests":0,"student_normalized_outputs":0,"semantic_reviews":0,"third_attempt_wait_generation_submitted":false,"student_physical_calls":2,"teacher_physical_calls":0,"original_caps":{"student_per_family":64,"teacher_per_family":80},"sealed_files":{"received.json":google::digest(b"Synthetic fully received carrier")},"results":[{"physical_call":1,"response_complete":true,"http_status":429},{"physical_call":2,"response_complete":true,"http_status":429}]});
+        let path = directory.path().join("closure.json");
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let (student, teacher, receipt) = inherited_consumer_calls(Some(&path)).unwrap();
+        assert_eq!((student, teacher), (2, 0));
+        assert_eq!(receipt["outputs_and_scores_imported"], false);
+        value["results"][1]["response_complete"] = json!(false);
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(inherited_consumer_calls(Some(&path)).is_err());
+        value["results"][1]["response_complete"] = json!(true);
+        value["uncertain_requests"] = json!(1);
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(inherited_consumer_calls(Some(&path)).is_err());
     }
     #[test]
     fn source_gate_binds_complete_gold_records_and_their_received_answers() {

@@ -48,6 +48,9 @@ enum Command {
         method: String,
         #[arg(long)]
         watch: bool,
+        /// Deduct settled calls from a deliberately stopped prior consumer.
+        #[arg(long)]
+        prior_consumer_closure: Option<PathBuf>,
         #[arg(long)]
         output: PathBuf,
     },
@@ -333,6 +336,7 @@ fn allows_local_student(command: &Command) -> bool {
     matches!(
         command,
         Command::Run { .. }
+            | Command::OptimizeGoldReadings { .. }
             | Command::Optimize { .. }
             | Command::OptimizeClassification { .. }
             | Command::OptimizeReading { .. }
@@ -360,6 +364,7 @@ async fn main() -> Result<()> {
             approval_gate,
             method,
             watch,
+            prior_consumer_closure,
             output,
         } => {
             ensure!(
@@ -372,10 +377,23 @@ async fn main() -> Result<()> {
                 &gold_campaign,
                 &approval_gate,
                 &method,
-                google::client(&args.credential_file)?,
+                if args.student_local_url.is_some() {
+                    reqwest::Client::builder()
+                        .no_proxy()
+                        .retry(reqwest::retry::never())
+                        .redirect(reqwest::redirect::Policy::none())
+                        .build()?
+                } else {
+                    google::client(&args.credential_file)?
+                },
                 &args.codex,
                 &output,
                 watch,
+                gold::StudentSelection {
+                    local_url: args.student_local_url.as_deref(),
+                    model: &args.student_model,
+                    prior_closure: prior_consumer_closure.as_deref(),
+                },
             )
             .await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
@@ -1526,7 +1544,7 @@ mod cli_tests {
     use super::*;
 
     #[test]
-    fn actual_answer_consumer_cli_is_hosted_and_carries_explicit_source_gate() {
+    fn actual_answer_consumer_cli_carries_source_gate_and_supports_existing_local_selection() {
         let parsed = Args::try_parse_from([
             "horary-dspy",
             "--teacher",
@@ -1541,8 +1559,32 @@ mod cli_tests {
             "synthetic-output",
         ])
         .unwrap();
-        assert!(!allows_local_student(&parsed.command));
+        assert!(allows_local_student(&parsed.command));
         assert!(matches!(parsed.command,Command::OptimizeGoldReadings{method,..} if method=="all"));
+        let local = Args::try_parse_from([
+            "horary-dspy",
+            "--teacher",
+            "codex",
+            "--student-local-url",
+            "http://127.0.0.1:63924/v1",
+            "optimize-gold-readings",
+            "--gold-campaign",
+            "synthetic-campaign",
+            "--approval-gate",
+            "synthetic-gate",
+            "--prior-consumer-closure",
+            "synthetic-closure",
+            "--output",
+            "synthetic-output",
+        ])
+        .unwrap();
+        assert_eq!(
+            local.student_local_url.as_deref(),
+            Some("http://127.0.0.1:63924/v1")
+        );
+        assert!(
+            matches!(local.command,Command::OptimizeGoldReadings{prior_consumer_closure:Some(path),..} if path.as_os_str()=="synthetic-closure")
+        );
     }
 
     #[test]
