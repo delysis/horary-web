@@ -586,12 +586,19 @@ fn canonical_review_inputs(example: &Example) -> Result<Example> {
 
 pub(crate) fn verify_concise_fixture(example: &Example, method: &str) -> Result<()> {
     let canonical = canonical_review_inputs(example)?;
+    let projected = catalogue::concise_reader_inputs(&canonical, method)?;
     ensure!(
-        catalogue::concise_reader_inputs(&canonical, method)?.rendered()
-            == example.inputs()?.rendered(),
+        same_named_inputs(&projected, &example.inputs()?),
         "Concise reader input does not match its canonical native/source witness"
     );
     Ok(())
+}
+
+fn same_named_inputs(first: &Example, second: &Example) -> bool {
+    first.len() == 4
+        && second.len() == 4
+        && first.rendered().into_iter().collect::<BTreeMap<_, _>>()
+            == second.rendered().into_iter().collect::<BTreeMap<_, _>>()
 }
 
 fn concise_fixtures(fixtures: &mut [Fixture], method: &str) -> Result<()> {
@@ -1514,6 +1521,58 @@ mod tests {
             ]),
         );
         assert!(canonical_review_inputs(&fixture).is_err());
+    }
+
+    #[test]
+    fn named_four_input_guard_allows_field_order_but_not_extra_or_changed_values() {
+        let first =
+            dsrust::input! {question:"q",consultation:"c",chart_evidence:"n",source_text:"s"};
+        let mut second =
+            dsrust::input! {source_text:"s",question:"q",consultation:"c",chart_evidence:"n"};
+        assert_ne!(first.rendered(), second.rendered());
+        assert!(same_named_inputs(&first, &second));
+        second.set("chart_evidence", json!("Changed native fact"));
+        assert!(!same_named_inputs(&first, &second));
+        second.set("chart_evidence", json!("n"));
+        second.set("expected", json!("Private rubric"));
+        assert!(!same_named_inputs(&first, &second));
+    }
+
+    #[test]
+    #[ignore = "Requires the exact private book and approved twenty-case reference bank; no providers"]
+    fn actual_contact_gold_projects_and_verifies_all_twenty_offline() {
+        let book = Book::open(&std::path::PathBuf::from(
+            std::env::var("HORARY_BOOK").unwrap(),
+        ))
+        .unwrap();
+        let examples = std::path::PathBuf::from(std::env::var("HORARY_EXAMPLES").unwrap());
+        let campaign = std::path::PathBuf::from(std::env::var("HORARY_GOLD_CAMPAIGN").unwrap());
+        let (mut fixtures, _) = reviewed_family(&examples, &book, &campaign, "contact").unwrap();
+        assert_eq!(fixtures.len(), 20);
+        concise_fixtures(&mut fixtures, "contact").unwrap();
+        for fixture in &fixtures {
+            verify_concise_fixture(&fixture.example, "contact").unwrap();
+            let chart: Value = serde_json::from_str(
+                fixture
+                    .example
+                    .get("chart_evidence")
+                    .unwrap()
+                    .as_str()
+                    .unwrap(),
+            )
+            .unwrap();
+            assert!(!optimize::native_evidence_ids(&chart).unwrap().is_empty());
+        }
+        let requests =
+            preflight::reader_requests(&fixtures, &concise_predictor("contact", &[], 0).unwrap())
+                .unwrap();
+        assert_eq!(requests.len(), 20);
+        if let Ok(output) = std::env::var("HORARY_CONCISE_WIRES") {
+            crate::queue::write_json_atomic(Path::new(&output),&json!({"cases":20,"fixture_digest":optimize::fixtures_digest(&fixtures).unwrap(),"requests":requests,"provider_calls":0,"generation_submitted":false})).unwrap();
+        }
+        println!(
+            "All twenty original Contact inputs projected, native-validated and rendered without provider calls"
+        );
     }
 
     #[test]
