@@ -3636,8 +3636,10 @@ mod selected_stage_execution_tests {
                 judgment: JudgmentReply::Answer,
             };
             let question = "Will my application launch successfully?";
-            let mut session = Session::default();
-            session.question = question.into();
+            let mut session = Session {
+                question: question.into(),
+                ..Default::default()
+            };
             session.method.brief.question = question.into();
             session.method.consultation = Some(Consultation {
                 question: resolved(question.into()),
