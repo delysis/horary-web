@@ -38,6 +38,7 @@ pub struct LocalStudent {
     http: reqwest::Client,
     directory: PathBuf,
     calls: AtomicUsize,
+    max_calls: usize,
     failed: AtomicBool,
 }
 impl LocalStudent {
@@ -66,8 +67,15 @@ impl LocalStudent {
                 .build()?,
             directory: directory.into(),
             calls: AtomicUsize::new(0),
+            max_calls: usize::MAX,
             failed: AtomicBool::new(false),
         })
+    }
+    /// Admission cap shared by every predictor using this resident student.
+    /// A blocked request consumes no slot and creates no provider submission.
+    pub fn with_max_calls(mut self, max_calls: usize) -> Self {
+        self.max_calls = max_calls;
+        self
     }
     fn save(&self, ordinal: usize, suffix: &str, value: &serde_json::Value) -> Result<()> {
         let path = self
@@ -92,7 +100,15 @@ impl ChatModel for LocalStudent {
             !self.failed.load(Ordering::SeqCst),
             "Prior local provider failure is retained; no automatic replay"
         );
-        let ordinal = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        let ordinal = self
+            .calls
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |calls| {
+                (calls < self.max_calls).then_some(calls.saturating_add(1))
+            })
+            .map_err(|_| {
+                anyhow::anyhow!("Local physical-call cap reached; no request submitted")
+            })?
+            + 1;
         self.save(ordinal, "request", &json!({"ordinal":ordinal,"provider_model":self.model.model.id,"base_url":self.model.openai.base_url,"request":request,"request_sha256":google::digest(serde_json::to_vec(request)?),"at_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis(),"provider_schema":false,"port_timeout_patch_revision":PORT_REVISION,"port_base_revision":"f24adde08c1d8850e4d7079d019643bb40f905cb","port_timeout_seconds":self.model.openai.request_timeout.as_secs(),"hosted_student":false,"transport":"Pinned port OpenAiCompatible with configurable timeout; no custom parser, retry or hidden cache"}))?;
         let begun = Instant::now();
         let result = self.model.forward(&self.http, request).await;
@@ -175,6 +191,35 @@ mod tests {
         )
         .unwrap();
         assert_eq!(saved["response"], serde_json::to_value(reply).unwrap());
+    }
+
+    #[tokio::test]
+    async fn shared_local_cap_stops_before_another_wire_request() {
+        let mock = Mock::new(vec![Reply::Complete(
+            200,
+            r#"{"choices":[{"message":{"role":"assistant","content":"Synthetic observed answer"},"finish_reason":"stop"}]}"#,
+        )]);
+        let dir = tempfile::tempdir().unwrap();
+        let model = LocalStudent::new(&format!("{}/v1", mock.api), MODEL, dir.path())
+            .unwrap()
+            .with_max_calls(1);
+        let request = LmRequest::new(
+            "Synthetic capped request",
+            vec![LmMessage::user(vec![LmPart::text("Question")])],
+        );
+        model
+            .forward(&reqwest::Client::new(), &request)
+            .await
+            .unwrap();
+        let error = model
+            .forward(&reqwest::Client::new(), &request)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("physical-call cap"));
+        assert_eq!(mock.requests.lock().unwrap().len(), 1);
+        assert_eq!(model.calls.load(Ordering::SeqCst), 1);
+        assert!(dir.path().join("call-000001.response.json").exists());
+        assert!(!dir.path().join("call-000002.request.json").exists());
     }
 
     #[tokio::test]

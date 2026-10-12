@@ -19,6 +19,16 @@ use std::sync::Arc;
 
 pub const VERSION: u32 = 2;
 
+/// Authored adaptation of the current native NewJob teaching to this reader's
+/// own declared inputs and five-field output contract. No native worksheet or
+/// fixture-specific conclusion is imported as authority.
+pub fn new_job_reader_baseline() -> Result<String> {
+    let mut instruction = signatures::reading("new_job")?.instructions;
+    instruction.push_str("\n\n");
+    instruction.push_str(include_str!("../prompts/new_job_reader.md"));
+    Ok(instruction)
+}
+
 #[derive(dsrust::Signature)]
 /// Select the book's judgment branch within the supplied reading family using only the person's original question and accepted consultation. Return one exact branch ID from the taxonomy. Select the requested outcome, not an incidental deadline or an unrequested reframing. Do not invent absent situational inputs. If no branch is supportable, return unknown. This selects source context; it does not answer the question.
 pub struct SelectReadingBranch {
@@ -212,6 +222,18 @@ pub(crate) mod tests {
     }
     fn reply() -> Example {
         dsrust::example! {status:"method_limit",answer:"Synthetic answer only.",analysis:"Synthetic e1 observation.",evidence:"e1",unresolved:"UNKNOWN NATIVE COMPUTATION"}
+    }
+    #[test]
+    fn adapted_new_job_baseline_preserves_its_real_function_contract() {
+        let text = new_job_reader_baseline().unwrap();
+        assert!(text.contains("triplicity is moderate"));
+        assert!(text.contains("job → applicant ruler and job → Moon-as-worker distinct"));
+        assert!(text.contains("retrogradation must be interpreted for the planet"));
+        assert!(text.contains("identity-versus-worker conflict"));
+        assert!(text.contains("status, answer, analysis, evidence, unresolved"));
+        assert!(text.contains("hypothetical examples are teaching, never this chart's facts"));
+        assert!(!text.contains("<output_fields>verdict"));
+        assert!(!text.contains("dspy-new_job-first-"));
     }
     #[tokio::test]
     async fn actual_selector_and_reader_trace_match_both_optimizable_predictors() {

@@ -515,6 +515,36 @@ impl Module for Graded {
     }
 }
 
+/// A standard Module view: only the chosen predictor's instruction is mutable.
+/// Forward still executes the complete program, including its unchanged actual
+/// branch selector. Saving uses the full program rather than this narrow view.
+struct FunctionView<'a> {
+    program: &'a mut Graded,
+    name: String,
+}
+impl Module for FunctionView<'_> {
+    fn forward<'a>(
+        &'a self,
+        input: Example,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Prediction>> + Send + 'a>> {
+        self.program.forward(input)
+    }
+    fn forward_traced<'a>(
+        &'a self,
+        input: Example,
+        trace: &'a mut Vec<TraceStep>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<Prediction>> + Send + 'a>> {
+        self.program.forward_traced(input, trace)
+    }
+    fn named_predictors(&mut self) -> Vec<NamedPredictor<'_>> {
+        self.program
+            .named_predictors()
+            .into_iter()
+            .filter(|predictor| predictor.name == self.name)
+            .collect()
+    }
+}
+
 pub async fn compile(
     cases: &[Case],
     method: &str,
@@ -592,6 +622,26 @@ pub fn teaching_sources() -> BTreeMap<String, String> {
     [
         ("book.rs", include_bytes!("book.rs").as_slice()),
         ("reading.rs", include_bytes!("reading.rs").as_slice()),
+        (
+            "new_job_reader.md",
+            include_bytes!("../prompts/new_job_reader.md").as_slice(),
+        ),
+        (
+            "native-new-job-context.md",
+            include_bytes!("../../../src-tauri/src/horary_prompts/new_job_context.md").as_slice(),
+        ),
+        (
+            "native-new-job-contacts.md",
+            include_bytes!("../../../src-tauri/src/horary_prompts/new_job_contacts.md").as_slice(),
+        ),
+        (
+            "native-new-job-reception.md",
+            include_bytes!("../../../src-tauri/src/horary_prompts/new_job_reception.md").as_slice(),
+        ),
+        (
+            "native-new-job-judgment.md",
+            include_bytes!("../../../src-tauri/src/horary_prompts/new_job_judgment.md").as_slice(),
+        ),
         ("anchors.rs", include_bytes!("anchors.rs").as_slice()),
         (
             "coverage.json",
@@ -1024,6 +1074,54 @@ pub async fn compile_fixtures(
     directory: &Path,
     options: CompileOptions,
 ) -> Result<Value> {
+    compile_fixtures_inner(
+        fixtures, method, function, book, models, directory, options, None,
+    )
+    .await
+}
+
+/// Instruction-only compilation of a reader, with the actual unchanged branch
+/// selector retained in execution and full saved state. The caller supplies a
+/// source-reviewed baseline in this reader's declared output contract.
+#[allow(clippy::too_many_arguments)]
+pub async fn compile_reader_fixtures(
+    fixtures: &[Fixture],
+    method: &str,
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    directory: &Path,
+    options: CompileOptions,
+    baseline: &str,
+) -> Result<Value> {
+    ensure!(
+        options.bootstrap_demos == 0,
+        "Reader-only GEPA is instruction-only"
+    );
+    ensure!(!baseline.trim().is_empty(), "Reader baseline is empty");
+    compile_fixtures_inner(
+        fixtures,
+        method,
+        "reading",
+        book,
+        models,
+        directory,
+        options,
+        Some(baseline),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn compile_fixtures_inner(
+    fixtures: &[Fixture],
+    method: &str,
+    function: &str,
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    directory: &Path,
+    options: CompileOptions,
+    reader_baseline: Option<&str>,
+) -> Result<Value> {
     ensure!(
         options.max_metrics > 0,
         "GEPA needs a positive metric budget"
@@ -1059,6 +1157,25 @@ pub async fn compile_fixtures(
         Some(book.clone()),
     )?
     .with_stream(directory.join("observations.jsonl"))?;
+    let optimizable_predictors = if let Some(baseline) = reader_baseline {
+        program.judge.signature.instructions.push_str(" Return ONLY the requested output fields score, passed, classification, extraction, reading, answer_quality and feedback, in their requested field markers, beginning with score. Never copy the input, prediction, rubric or source_text fields. Keep feedback specific and concise, with observed quotations and printed source references.");
+        let name = predictor_name(method, function)?;
+        let mut found = false;
+        for predictor in program.named_predictors() {
+            if predictor.name == name {
+                predictor.signature.instructions = baseline.to_owned();
+                found = true;
+            }
+        }
+        ensure!(found, "Declared reader predictor is absent");
+        vec![name]
+    } else {
+        program
+            .named_predictors()
+            .into_iter()
+            .map(|p| p.name)
+            .collect()
+    };
     program.save(&directory.join("baseline-program.json"))?;
     let dataset_digest = fixtures_digest(fixtures)?;
     let before = Evaluate::new(
@@ -1110,11 +1227,26 @@ pub async fn compile_fixtures(
         inner: models.teacher.clone(),
         failed: program.failed.clone(),
     });
-    let outcome = GEPA::new(Graded::feedback, reflection)
+    let optimizer = GEPA::new(Graded::feedback, reflection)
         .with_max_metric_calls(options.max_metrics)
-        .with_seed(23)
-        .compile(&mut program, &train, &development)
-        .await?;
+        .with_reflection_minibatch_size(3)
+        .with_seed(23);
+    let outcome = if reader_baseline.is_some() {
+        optimizer
+            .compile(
+                &mut FunctionView {
+                    program: &mut program,
+                    name: optimizable_predictors[0].clone(),
+                },
+                &train,
+                &development,
+            )
+            .await?
+    } else {
+        optimizer
+            .compile(&mut program, &train, &development)
+            .await?
+    };
     program.save_observations(&directory.join("search-observations.json"))?;
     ensure!(
         !program.failed.load(Ordering::SeqCst),
@@ -1150,7 +1282,7 @@ pub async fn compile_fixtures(
         .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
         .iter()
         .all(|observation| observation["review_summary_consistent"] == true);
-    let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":models.student_id,"bootstrap_demos":demos,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
+    let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":models.student_id,"bootstrap_demos":demos,"optimizable_predictors":optimizable_predictors,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     ensure!(
         observed,
@@ -1291,6 +1423,188 @@ mod component_tests {
     }
     fn classification_reply() -> Example {
         dsrust::example! {method:"movable_deal",facet:"event",branch:"pure_completion",principal:"querent",clarification:""}
+    }
+    #[tokio::test]
+    async fn reader_view_changes_only_reader_and_still_observes_actual_selector() {
+        let input = crate::reading::tests::input(json!({"facts":[]}));
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {branch:"pure_completion"},
+            dsrust::example! {status:"method_limit",answer:"Synthetic interpretation.",analysis:"e1 is the supplied boundary.",evidence:"e1",unresolved:"Actual synthetic calculation limit."},
+        ]));
+        let judge = Arc::new(DummyLM::new([review(
+            "unobserved",
+            "unobserved",
+            "pass",
+            "pass",
+            true,
+        )]));
+        let mut program = Graded::new(
+            "movable_deal",
+            "reading",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge.clone(),
+            Some(Arc::new(Book::fixture())),
+        )
+        .unwrap();
+        let before = serde_json::to_value(program.dump_state()).unwrap();
+        let mut view = FunctionView {
+            program: &mut program,
+            name: "reading.movable_deal".into(),
+        };
+        let predictors = view.named_predictors();
+        assert_eq!(predictors.len(), 1);
+        assert_eq!(predictors[0].name, "reading.movable_deal");
+        predictors
+            .into_iter()
+            .next()
+            .unwrap()
+            .signature
+            .instructions = "Synthetic reader instruction only".into();
+        let mut trace = Vec::new();
+        let prediction = view
+            .forward_traced(input.inputs().unwrap(), &mut trace)
+            .await
+            .unwrap();
+        assert_eq!(
+            prediction.get("__reading_branch"),
+            Some(&json!("pure_completion"))
+        );
+        assert_eq!(
+            trace
+                .iter()
+                .map(|t| t.predictor.as_str())
+                .collect::<Vec<_>>(),
+            ["reading_branch.movable_deal", "reading.movable_deal"]
+        );
+        let after = serde_json::to_value(program.dump_state()).unwrap();
+        assert_eq!(
+            before["reading_branch.movable_deal"],
+            after["reading_branch.movable_deal"]
+        );
+        assert_ne!(
+            before["reading.movable_deal"],
+            after["reading.movable_deal"]
+        );
+        assert_eq!(program.dump_state().predictors.len(), 2);
+        assert_eq!(oracle.asked().len(), 2);
+        assert!(
+            oracle.asked()[1]
+                .system
+                .contains("Synthetic reader instruction only")
+        );
+        assert!(!format!("{:?}", oracle.asked()).contains("PRIVATE GOLD"));
+        assert!(
+            judge.asked()[0]
+                .system
+                .contains("Applicable dimensions: reading, answer_quality")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reading_needs_both_interpretation_and_a_coherent_answer() {
+        for (reading, quality) in [("pass", "fail"), ("fail", "pass")] {
+            let input = crate::reading::tests::input(
+                json!({"facts":[],"branch":"pure_completion","method":"movable_deal"}),
+            );
+            let oracle = Arc::new(DummyLM::new([
+                dsrust::example! {status:"method_limit",answer:"Synthetic only.",analysis:"e1",evidence:"e1",unresolved:"Synthetic limit"},
+            ]));
+            let judge = Arc::new(DummyLM::new([review(
+                "unobserved",
+                "unobserved",
+                reading,
+                quality,
+                false,
+            )]));
+            let program = Graded::new(
+                "movable_deal",
+                "reading",
+                std::slice::from_ref(&input),
+                oracle,
+                judge,
+                Some(Arc::new(Book::fixture())),
+            )
+            .unwrap();
+            let output = program.forward(input).await.unwrap();
+            assert_eq!(output.get("__passed"), Some(&json!(false)));
+            assert!(output.get("__score").unwrap().as_f64().unwrap() < 1.);
+            assert!(!program.failed.load(Ordering::SeqCst));
+        }
+    }
+    #[tokio::test]
+    async fn stock_gepa_reader_only_saves_full_program_without_changing_selector() {
+        let fixtures = ["train", "development", "test"].map(|split| {
+            let mut example = crate::reading::tests::input(json!({"facts":[]}));
+            example.set(
+                "question",
+                json!(format!("Synthetic {split} sale question")),
+            );
+            Fixture {
+                split: split.into(),
+                example,
+            }
+        });
+        let oracle = Arc::new(DummyLM::new((0..50).flat_map(|_| [
+            dsrust::example! {branch:"pure_completion"},
+            dsrust::example! {status:"method_limit",answer:"Synthetic answer only.",analysis:"e1 boundary",evidence:"e1",unresolved:"Synthetic calculation limit"},
+        ])));
+        let judge =
+            Arc::new(DummyLM::new((0..50).map(|_| {
+                review("unobserved", "unobserved", "pass", "pass", true)
+            })));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: judge,
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let book = Arc::new(Book::fixture());
+        let result = compile_reader_fixtures(
+            &fixtures,
+            "movable_deal",
+            book.clone(),
+            &models,
+            directory.path(),
+            CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+            "Source-adapted synthetic reader only",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            result["optimizable_predictors"],
+            json!(["reading.movable_deal"])
+        );
+        assert_eq!(result["bootstrap_demos"], 0);
+        let baseline: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("baseline-program.json")).unwrap(),
+        )
+        .unwrap();
+        let compiled: Value =
+            serde_json::from_slice(&fs::read(directory.path().join("compiled.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            baseline["reading_branch.movable_deal"],
+            compiled["reading_branch.movable_deal"]
+        );
+        assert!(compiled["reading_branch.movable_deal"].is_object());
+        let mut reloaded = ReadingProgram::new("movable_deal", book, oracle).unwrap();
+        load_reading_component(
+            &mut reloaded,
+            &directory.path().join("compiled.json"),
+            "movable_deal",
+            &fixtures_digest(&fixtures).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(reloaded.dump_state().predictors.len(), 2);
+        assert_eq!(
+            reloaded.reader.signature.instructions,
+            "Source-adapted synthetic reader only"
+        );
     }
     #[tokio::test]
     async fn fixed_comparison_changes_instruction_only_and_never_reflects_on_development() {

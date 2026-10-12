@@ -196,6 +196,19 @@ enum Command {
         #[arg(long, default_value_t = 2)]
         bootstrap_demos: usize,
     },
+    /// Optimize only the NewJob reader; actual branch selection stays unchanged.
+    OptimizeReading {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long, default_value_t = 16)]
+        max_metric_calls: usize,
+        #[arg(long, default_value_t = 72)]
+        student_call_cap: usize,
+        #[arg(long, default_value_t = 96)]
+        teacher_call_cap: usize,
+    },
     /// Compare an already proposed instruction on one complete development pool.
     CompareClassification {
         #[arg(long)]
@@ -231,6 +244,7 @@ async fn main() -> Result<()> {
                 Command::Run { .. }
                     | Command::Optimize { .. }
                     | Command::OptimizeClassification { .. }
+                    | Command::OptimizeReading { .. }
                     | Command::CompareClassification { .. }
             ),
             "Local selection applies to run/optimize; sealed hosted queues remain unchanged"
@@ -782,6 +796,102 @@ async fn main() -> Result<()> {
                 println!("{}", serde_json::to_string(&result)?);
             }
         }
+        Command::OptimizeReading {
+            examples,
+            output,
+            max_metric_calls,
+            student_call_cap,
+            teacher_call_cap,
+        } => {
+            ensure!(
+                args.student_local_url.is_some(),
+                "This bounded reader round requires the resident local student"
+            );
+            ensure!(
+                max_metric_calls > 0 && student_call_cap > 0 && teacher_call_cap > 0,
+                "Reader budgets must be positive"
+            );
+            ensure!(
+                matches!(args.teacher, Teacher::Pool),
+                "Use the available Gemini sequence before Codex fallback"
+            );
+            ensure!(
+                !output.exists(),
+                "Preserve an existing attempt; use a fresh reader output directory"
+            );
+            let cases = catalogue::cases(&examples, "new_job")?;
+            let baseline = horary_dspy::reading::new_job_reader_baseline()?;
+            runner::manifest(
+                &output,
+                &cases,
+                &args.book,
+                serde_json::json!({"command":"optimize-reading","method":"new_job","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":max_metric_calls,"reflection_minibatch":3,"seed":23,"bootstrap_demos":0,"optimizable_predictors":["reading.new_job"],"branch_selector":"unchanged, executed and traced from actual accepted consultation","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
+            )?;
+            fs::write(output.join("baseline-instructions.txt"), &baseline)?;
+            let book = Arc::new(book::Book::open(&args.book)?);
+            let fixtures = cases
+                .iter()
+                .map(|case| {
+                    Ok(horary_dspy::functions::Fixture {
+                        split: case.split.clone(),
+                        example: catalogue::example(case, "reading", &book)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let http = google::client(&args.credential_file)?;
+            let student = selected_student(
+                args.student_local_url.as_deref(),
+                &args.student_model,
+                http.clone(),
+                output.join("student"),
+                student_call_cap,
+                14_000,
+            )?;
+            let listing = google::models(&http).await?;
+            fs::write(
+                output.join("teacher-model-listing.json"),
+                serde_json::to_vec_pretty(&listing)?,
+            )?;
+            fs::write(
+                output.join("teacher-sequence.json"),
+                serde_json::to_vec_pretty(
+                    &serde_json::json!({"listing_sha256":google::digest(serde_json::to_vec(&listing)?),"models":teachers::available(&listing)?,"fallback":"codex-saved-login-temporary-teacher","shared_physical_call_cap":teacher_call_cap}),
+                )?,
+            )?;
+            let teacher = pooled_teacher(
+                args.teacher,
+                args.codex,
+                http,
+                output.join("teacher"),
+                teacher_call_cap,
+                google::CallBudget::new(teacher_call_cap),
+                &listing,
+                120_000,
+            )?;
+            let models = runner::Models {
+                student,
+                teacher,
+                teacher_id: teacher_identity(args.teacher).into(),
+                student_id: student_identity(
+                    args.student_local_url.as_deref(),
+                    &args.student_model,
+                ),
+            };
+            let result = optimize::compile_reader_fixtures(
+                &fixtures,
+                "new_job",
+                book,
+                &models,
+                &output,
+                optimize::CompileOptions {
+                    max_metrics: max_metric_calls,
+                    bootstrap_demos: 0,
+                },
+                &baseline,
+            )
+            .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Command::OptimizeClassification {
             examples,
             output,
@@ -938,7 +1048,9 @@ fn selected_student(
     hosted_tokens_per_minute: usize,
 ) -> Result<Arc<dyn DynChatModel>> {
     if let Some(url) = local_url {
-        Ok(Arc::new(local::LocalStudent::new(url, model, &directory)?))
+        Ok(Arc::new(
+            local::LocalStudent::new(url, model, &directory)?.with_max_calls(hosted_max_calls),
+        ))
     } else {
         Ok(Arc::new(google::Google::new(
             google::STUDENT,
