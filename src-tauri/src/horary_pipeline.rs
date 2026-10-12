@@ -3443,6 +3443,92 @@ mod selected_stage_execution_tests {
         }
         assert!(mechanics.len() < context.len());
     }
+
+    #[test]
+    fn reading_handoff_reaches_roles_and_every_subsequent_job_stage_with_source_context() {
+        use crate::reading_contracts::{
+            self as contracts, Field, Frame, Intent, Method, Update, UpdateMode,
+        };
+        let words = "I applied for a laboratory job through a recruiter. There is no offer yet. Will I get this job?";
+        let mut case = contracts::Consultation::default();
+        let mut patch = contracts::control(Intent::Read);
+        patch.question = Some("Will I get this job?".into());
+        patch.frame = Some(Frame {
+            method: Method::NewJob,
+            facet: contracts::Facet::Event,
+        });
+        patch.subject = Some(crate::horary_role_options::Subject {
+            name: "laboratory job".into(),
+            kind: "job".into(),
+            owner_id: "querent".into(),
+            source_quote: "laboratory job".into(),
+        });
+        patch.updates = vec![Update {
+            field: Field::JobContext,
+            value: "laboratory job".into(),
+            quote: "laboratory job".into(),
+            mode: UpdateMode::Supply,
+        }];
+        case.apply(&patch, 1, words, false).unwrap();
+        let anchor = contracts::Anchor {
+            timestamp_ms: 1791478980000.,
+            latitude: 38.657,
+            longitude: -77.249,
+            timezone: "America/New_York".into(),
+        };
+        let ready = contracts::ReadyReading::prepare(&case, anchor.clone()).unwrap();
+        let mut session = Session {
+            question: ready.binding().question.clone(),
+            chart: Some(
+                horary_ai_core::astronomy::chart(
+                    anchor.timestamp_ms,
+                    anchor.latitude,
+                    anchor.longitude,
+                )
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        session.method.brief = ready.brief();
+        session.method.consultation = Some(case);
+        let reader = Reader {
+            dir: tempfile::tempdir().unwrap(),
+            target: Some(Stage::Judgment),
+            calls: Mutex::new(vec![]),
+            reject_first: AtomicBool::new(false),
+            judgment: JudgmentReply::Answer,
+        };
+        generate_reading(&mut session, &reader, ready).unwrap();
+        let calls = reader.calls.lock().unwrap();
+        for stage in [
+            Stage::Significators,
+            Stage::Condition,
+            Stage::Reception,
+            Stage::Contacts,
+            Stage::Judgment,
+        ] {
+            let input = &calls
+                .iter()
+                .find(|(actual, _, _)| *actual == stage)
+                .unwrap()
+                .1;
+            assert_eq!(
+                input["reading_request"]["contextual_words"]["original_question"]["quote"],
+                words
+            );
+            assert_eq!(
+                input["reading_request"]["binding"]["question"],
+                "Will I get this job?"
+            );
+            assert_eq!(
+                input["reading_request"]["inputs"]["job_context"],
+                "laboratory job"
+            );
+        }
+        assert!(!calls
+            .iter()
+            .any(|(stage, _, _)| *stage == Stage::Intake || *stage == Stage::Conversation));
+    }
 }
 
 #[cfg(test)]

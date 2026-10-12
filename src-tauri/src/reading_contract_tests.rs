@@ -2,6 +2,114 @@
 use super::*;
 
 #[test]
+fn reading_handoff_preserves_sourced_words_and_current_correction_authority() {
+    let words = "I applied for a laboratory job through a recruiter. There is no offer yet. Will I get this job?";
+    let mut consultation = Consultation::default();
+    let mut patch = control(Intent::Read);
+    patch.question = Some("Will I get this job?".into());
+    patch.frame = Some(Frame {
+        method: Method::NewJob,
+        facet: Facet::Event,
+    });
+    patch.subject = Some(Subject {
+        name: "laboratory job".into(),
+        kind: "job".into(),
+        owner_id: "querent".into(),
+        source_quote: "laboratory job".into(),
+    });
+    patch.updates = vec![Update {
+        field: Field::JobContext,
+        value: "laboratory job".into(),
+        quote: "laboratory job".into(),
+        mode: UpdateMode::Supply,
+    }];
+    consultation.apply(&patch, 1, words, false).unwrap();
+    let ready = ReadyReading::prepare(&consultation, regression_anchor()).unwrap();
+    assert_eq!(
+        ready.input()["contextual_words"]["original_question"]["quote"],
+        words
+    );
+    assert_eq!(ready.input()["binding"]["question"], "Will I get this job?");
+    assert!(ready.input()["contextual_words"]["clarifications"]
+        .as_object()
+        .unwrap()
+        .is_empty());
+
+    let correction = "The recruiter is no longer involved.";
+    let mut patch = control(Intent::Correct);
+    patch.updates = vec![Update {
+        field: Field::Context,
+        value: correction.into(),
+        quote: correction.into(),
+        mode: UpdateMode::Correct,
+    }];
+    consultation.apply(&patch, 2, correction, false).unwrap();
+    assert!(ready.validate_current(&consultation).is_err());
+    let current = ReadyReading::prepare(&consultation, regression_anchor())
+        .unwrap()
+        .input();
+    assert_eq!(current["inputs"]["context"], correction);
+    assert_eq!(
+        current["contextual_words"]["original_question"]["quote"],
+        words
+    );
+    assert_eq!(
+        current["contextual_words"]["clarifications"]["context"]["quote"],
+        correction
+    );
+    assert!(!current.to_string().contains("previous_worksheet"));
+    assert!(method_guide(Method::NewJob).contains("an older quotation must not undo them"));
+}
+
+#[test]
+fn reading_handoff_does_not_mint_migrated_words_or_import_unresolved_foreign_context() {
+    let mut consultation = case(Method::NewJob, "querent");
+    consultation.question = Slot::Resolved {
+        observation: Observation {
+            value: "Will I get the job?".into(),
+            evidence: Evidence::Migration {
+                detail: "An old canonical summary is not a transcript".into(),
+            },
+        },
+    };
+    consultation.facts.insert(
+        Field::Context,
+        Slot::Proposed {
+            observation: Observation {
+                value: "Rejected or tentative context".into(),
+                evidence: Evidence::User {
+                    turn: 2,
+                    quote: "unresolved quotation".into(),
+                },
+            },
+        },
+    );
+    consultation.facts.insert(
+        Field::WeatherScope,
+        Slot::Resolved {
+            observation: Observation {
+                value: "Unrelated weather detail".into(),
+                evidence: Evidence::User {
+                    turn: 3,
+                    quote: "a different question's weather".into(),
+                },
+            },
+        },
+    );
+    let handoff = ReadyReading::prepare(&consultation, regression_anchor())
+        .unwrap()
+        .input();
+    assert!(handoff["contextual_words"]
+        .get("original_question")
+        .is_none());
+    assert!(!handoff.to_string().contains("unresolved quotation"));
+    assert!(!handoff
+        .to_string()
+        .contains("a different question's weather"));
+    assert_eq!(handoff["binding"]["question"], "Will I get the job?");
+}
+
+#[test]
 fn rental_comparison_retains_alternatives_without_a_preselected_future_action() {
     let mut consultation = case(Method::Rental, "querent");
     consultation.frame = resolved(Frame {
