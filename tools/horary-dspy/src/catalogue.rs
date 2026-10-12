@@ -302,6 +302,31 @@ pub fn method_index() -> Result<String> {
     Ok(serde_json::to_string(&entries)?)
 }
 
+/// The classifier and its validator use the same authored native facet enum.
+/// A judgment branch names a procedure; it is not a question facet.
+pub fn method_facets(method: &str) -> Result<Vec<String>> {
+    let value: Value = serde_json::from_str(include_str!(
+        "../../../docs/llm-process/reading-catalogue.json"
+    ))?;
+    let card = value["contracts"]
+        .as_array()
+        .context("Missing generated native contracts")?
+        .iter()
+        .find(|card| card["method"] == method)
+        .context("Method absent from native contracts")?;
+    card["facets"]
+        .as_array()
+        .context("Missing native method facets")?
+        .iter()
+        .map(|facet| {
+            facet
+                .as_str()
+                .map(str::to_owned)
+                .context("Invalid native method facet")
+        })
+        .collect()
+}
+
 /// Select primary context from the model's actual branch, never case gold.
 /// The independent judge still receives the family's complete source context.
 pub fn branch_source(book: &Book, method: &str, branch: &str, reading: bool) -> Result<String> {

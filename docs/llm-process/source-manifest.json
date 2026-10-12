@@ -423,7 +423,7 @@
     },
     {
       "path": "tools/horary-dspy/README.md",
-      "sha256": "253ffa18a10e86ad7b7c99816f62442c47588641d1aea4c2391060c5c8131208"
+      "sha256": "a7b5461cb81a2a72b5ca887cc4167b30b842a1f7e9eb4e5f60951537a955efbb"
     },
     {
       "path": "tools/horary-dspy/coverage.json",
@@ -787,7 +787,7 @@
     },
     {
       "path": "tools/horary-dspy/src/catalogue.rs",
-      "sha256": "0e0072267077282fb2bf7b05f53c244cdb16becd5fe50b44f65ea6e4a1d7434d"
+      "sha256": "1306861d87c09923f0294f4e74069314fb9a2f12a3eaf9b3fec8b6d9ada3fc3b"
     },
     {
       "path": "tools/horary-dspy/src/classification_export.rs",
@@ -835,7 +835,7 @@
     },
     {
       "path": "tools/horary-dspy/src/optimize.rs",
-      "sha256": "72ece5202ee903966942f6f2f2d55c326d9f9575410be0fae06f9c4a5a2a803b"
+      "sha256": "a3c25bf5f7755667dec8d5c46e6c32015d88dcfa815a3111deceea8f23168140"
     },
     {
       "path": "tools/horary-dspy/src/preflight.rs",

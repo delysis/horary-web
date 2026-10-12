@@ -249,16 +249,25 @@ impl Graded {
             )?);
         } else if self.function == "classification" {
             let method = text(&prediction, "method")?;
+            let facet = text(&prediction, "facet")?;
             let branch = text(&prediction, "branch")?;
             if !signatures::METHODS.contains(&method) {
                 errors.push(format!("Unknown method {method}"));
-            } else if !catalogue::coverage_card(method)?["judgment_subbranches"]
-                .as_array()
-                .context("No branches")?
-                .iter()
-                .any(|b| b["id"] == branch)
-            {
-                errors.push(format!("Unknown {method} branch {branch}"));
+            } else {
+                if !catalogue::method_facets(method)?
+                    .iter()
+                    .any(|allowed| allowed == facet)
+                {
+                    errors.push(format!("Unknown {method} facet {facet}"));
+                }
+                if !catalogue::coverage_card(method)?["judgment_subbranches"]
+                    .as_array()
+                    .context("No branches")?
+                    .iter()
+                    .any(|b| b["id"] == branch)
+                {
+                    errors.push(format!("Unknown {method} branch {branch}"));
+                }
             }
         } else if self.function == "reading" {
             let chart: Value = serde_json::from_str(
@@ -1108,6 +1117,101 @@ mod component_tests {
                 .system
                 .contains("Applicable dimensions: classification")
         );
+    }
+    #[tokio::test]
+    async fn classification_rejects_branch_as_facet_despite_positive_reviewer() {
+        let input = classification_input();
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {method:"trust",facet:"person_in_capacity",branch:"person_in_capacity",principal:"querent",clarification:""},
+        ]));
+        let judge = Arc::new(DummyLM::new([review(
+            "pass",
+            "unobserved",
+            "unobserved",
+            "unobserved",
+            true,
+        )]));
+        let program = Graded::new(
+            "all",
+            "classification",
+            std::slice::from_ref(&input),
+            oracle.clone(),
+            judge,
+            None,
+        )
+        .unwrap();
+        let output = program.forward(input).await.unwrap();
+        assert_eq!(output.get("__score"), Some(&json!(0.0)));
+        assert_eq!(output.get("__passed"), Some(&json!(false)));
+        assert!(!program.failed.load(Ordering::SeqCst));
+        assert_eq!(oracle.asked().len(), 1);
+        let observations = program.observations.lock().unwrap();
+        assert_eq!(observations[0]["prediction"]["facet"], "person_in_capacity");
+        assert_eq!(observations[0]["review"]["classification"], "pass");
+        assert_eq!(observations[0]["review"]["passed"], true);
+        assert_eq!(
+            observations[0]["native_failures"],
+            json!(["Unknown trust facet person_in_capacity"])
+        );
+    }
+    #[tokio::test]
+    async fn classification_rejects_empty_or_foreign_method_facets() {
+        for facet in ["", "event", "arbitrary"] {
+            let input = classification_input();
+            let oracle = Arc::new(DummyLM::new([
+                dsrust::example! {method:"trust",facet:facet,branch:"person_in_capacity",principal:"querent",clarification:""},
+            ]));
+            let judge = Arc::new(DummyLM::new([review(
+                "pass",
+                "unobserved",
+                "unobserved",
+                "unobserved",
+                true,
+            )]));
+            let program = Graded::new(
+                "all",
+                "classification",
+                std::slice::from_ref(&input),
+                oracle,
+                judge,
+                None,
+            )
+            .unwrap();
+            let output = program.forward(input).await.unwrap();
+            assert_eq!(output.get("__score"), Some(&json!(0.0)));
+            assert!(!program.failed.load(Ordering::SeqCst));
+        }
+    }
+    #[tokio::test]
+    async fn classification_keeps_valid_facets_subject_to_semantic_review() {
+        for facet in catalogue::method_facets("trust").unwrap() {
+            let input = classification_input();
+            let oracle = Arc::new(DummyLM::new([
+                dsrust::example! {method:"trust",facet:facet,branch:"person_in_capacity",principal:"querent",clarification:""},
+            ]));
+            let judge = Arc::new(DummyLM::new([review(
+                "fail",
+                "unobserved",
+                "unobserved",
+                "unobserved",
+                false,
+            )]));
+            let program = Graded::new(
+                "all",
+                "classification",
+                std::slice::from_ref(&input),
+                oracle,
+                judge,
+                None,
+            )
+            .unwrap();
+            let output = program.forward(input).await.unwrap();
+            assert_eq!(output.get("__passed"), Some(&json!(false)));
+            assert_eq!(
+                program.observations.lock().unwrap()[0]["native_failures"],
+                json!([])
+            );
+        }
     }
     #[tokio::test]
     async fn contradictory_summary_is_retained_without_vetoing_scoped_learning() {
