@@ -2583,6 +2583,69 @@ fn source_backed_neighbor_and_sibling_inference_keeps_negation_and_target_scope(
 }
 
 #[test]
+fn direct_dating_evidence_binds_the_named_partner_without_inventing_commitment() {
+    for (label, quote, source) in [
+        (
+            "Iris",
+            "I have been dating Iris for six months",
+            "I have been dating Iris for six months, without a commitment. Will Iris and I become a committed couple?",
+        ),
+        ("Iris", "dating Iris", "I am currently dating Iris."),
+        ("Iris", "dating Iris", "I'm dating Iris."),
+        ("Iris", "dating Iris", "I’ve been dating Iris."),
+        ("Iris", "dating me", "Iris is dating me."),
+        ("Iris", "dating me", "Iris has been dating me."),
+        ("Iris Smith", "dating Iris Smith", "I am dating Iris Smith."),
+    ] {
+        let mut consultation = Consultation::default();
+        let mut patch = control(Intent::Clarify);
+        let id = label.to_ascii_lowercase().replace(' ', "_");
+        patch.people.push(Person {
+            id: id.clone(),
+            label: label.into(),
+            relationship: "partner".into(),
+            source_quote: quote.into(),
+        });
+        consultation.apply(&patch, 1, source, false).unwrap();
+        assert_eq!(consultation.people[&id].relationship, "partner");
+        assert!(consultation.text(Field::Baseline).is_none());
+    }
+}
+
+#[test]
+fn dating_evidence_preserves_negation_uncertainty_and_the_actual_two_people() {
+    for (quote, source) in [
+        ("dating Iris", "I have not been dating Iris."),
+        ("dating Iris", "I am not currently dating Iris."),
+        ("dating Iris", "I've never been dating Iris."),
+        ("dating Iris", "I haven't been dating Iris."),
+        ("dating me", "Iris has not been dating me."),
+        ("dating Iris", "I heard my brother is dating Iris."),
+        ("dating Iris", "I said Mary has been dating Iris."),
+        ("dating Iris", "I think I am dating Iris."),
+        ("dating Iris", "If I am dating Iris, will we get married?"),
+        ("dating Iris", "I will be dating Iris next month."),
+        ("dating Iris's brother", "I am dating Iris's brother."),
+        ("dating me", "Mary is dating me."),
+        ("dating Dana", "I am dating Dana."),
+    ] {
+        let mut consultation = Consultation::default();
+        let mut patch = control(Intent::Clarify);
+        patch.people.push(Person {
+            id: "iris".into(),
+            label: "Iris".into(),
+            relationship: "partner".into(),
+            source_quote: quote.into(),
+        });
+        assert!(
+            consultation.apply(&patch, 1, source, false).is_err(),
+            "Unsupported partner capacity: {source}"
+        );
+        assert!(!consultation.people.contains_key("iris"));
+    }
+}
+
+#[test]
 fn literal_relationships_keep_the_speaker_target_and_negation_beyond_four_modifiers() {
     for (relationship, label, quote, source) in [
         ("friend", "Jo", "friend", "Can I trust my friend Jo?"),

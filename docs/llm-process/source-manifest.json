@@ -235,7 +235,7 @@
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "1d60954707df45ca4f3448a5d3e905f60182ec66b5d4e04f23dc5d40271440a8"
+      "sha256": "285b9d91af2cef5bf3c768322ee089bb991f70026531ebd99283c2b5d37de5b9"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
@@ -259,7 +259,7 @@
     },
     {
       "path": "src-tauri/src/llama.rs",
-      "sha256": "7a217e9ae749aa49f813fce7d8f8989372f093e40bb819fa439763add5d6ed7e"
+      "sha256": "d57130c2b131284671d3218093646b6b8772cd7f71fef73cdf1a4870bf8b8dd7"
     },
     {
       "path": "src-tauri/src/local_dictation.rs",
@@ -311,7 +311,7 @@
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "efe6dca3952de6fa443276aa69827096e46adf9000499a3ee07609a555a8b7b1"
+      "sha256": "acf277f187c3bff48b648ec20ca87c28d5e7753cd2ee6e79835bd4427c2a49a3"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",

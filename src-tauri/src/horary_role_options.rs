@@ -422,6 +422,59 @@ fn literal_capacity_binding(
         || pending && pending_reference(source, cue, cue + cue_word.len())
 }
 
+/// Direct present dating statements supply a romantic capacity without saying
+/// anything about commitment. Bind both endpoints: mentioning the speaker in a
+/// report about someone else's dating must not transfer that person's capacity.
+fn dating_capacity_binding(source: &str, cue: usize, label: &str) -> bool {
+    let clause_before = source[..cue]
+        .rsplit(['.', '!', '?', ';', ',', '\n'])
+        .next()
+        .unwrap_or("");
+    let prefix: Vec<_> = words(clause_before)
+        .into_iter()
+        .map(|(_, word)| word)
+        .filter(|word| !matches!(*word, "currently" | "still" | "recently"))
+        .collect();
+    let after = &source[cue + "dating".len()..];
+    let suffix = words(after);
+    let label = label.to_ascii_lowercase();
+    let label_words = words(&label);
+    if label_words.is_empty() {
+        return false;
+    }
+    let label_matches = |tokens: &[(usize, &str)]| {
+        tokens.len() == label_words.len()
+            && tokens
+                .iter()
+                .zip(&label_words)
+                .all(|(actual, named)| actual.1 == named.1)
+    };
+    let speaker_subject = matches!(
+        prefix.as_slice(),
+        ["i", "am"]
+            | ["i", "have", "been"]
+            | ["i'm"]
+            | ["i’m"]
+            | ["i've", "been"]
+            | ["i’ve", "been"]
+    );
+    if speaker_subject {
+        // Do not turn "dating Iris's brother" into a relationship with Iris.
+        return suffix.get(..label_words.len()).is_some_and(label_matches);
+    }
+    let named_subject = prefix
+        .strip_suffix(&["is"])
+        .or_else(|| prefix.strip_suffix(&["has", "been"]));
+    named_subject.is_some_and(|subject| {
+        subject.len() == label_words.len()
+            && subject
+                .iter()
+                .zip(&label_words)
+                .all(|(actual, named)| *actual == named.1)
+            && suffix.first().is_some_and(|(_, word)| *word == "me")
+    })
+}
+
 /// Narrow English evidence checks, not a general semantic proof. Both the exact
 /// quote and its source context matter: trimming "not" must not create evidence.
 pub(crate) fn relationship_evidence(
@@ -439,6 +492,9 @@ pub(crate) fn relationship_evidence(
         return true;
     }
     match relationship {
+        "partner" => positive_phrase(quote, source, "dating", |source, at| {
+            dating_capacity_binding(source, at, label)
+        }),
         "neighbor" => ["lives next door to me", "lives next door to us"]
             .iter()
             .any(|cue| {

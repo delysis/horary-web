@@ -608,8 +608,8 @@ pub fn build_llama_server_args(
         args.push("draft-mtp".to_string());
         args.push("--spec-draft-n-max".to_string());
         args.push(launch_args.spec_draft_n_max.to_string());
-        args.push("--spec-draft-device".to_string());
-        args.push("none".to_string());
+        // Inherit the target device. Gemma's paired MTP assistant shares the
+        // target KV; forcing the draft onto CPU breaks that device binding.
     }
 
     Ok(args)
@@ -1268,9 +1268,8 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair == ["--spec-draft-n-max", "3"]));
-        assert!(args
-            .windows(2)
-            .any(|pair| pair == ["--spec-draft-device", "none"]));
+        assert!(!args.contains(&"--spec-draft-device".to_string()));
+        assert!(has_arg_pair(&args, "--n-gpu-layers", "auto"));
     }
 
     #[test]
