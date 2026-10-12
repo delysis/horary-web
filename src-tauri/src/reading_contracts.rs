@@ -2115,6 +2115,7 @@ impl ReadingWords {
 pub struct ReadyReading {
     binding: Binding,
     anchor: Anchor,
+    chart_local_clock: String,
     subject: Subject,
     people: BTreeMap<String, Person>,
     inputs: BTreeMap<Field, String>,
@@ -2173,7 +2174,11 @@ impl ReadyReading {
             .collect();
         let canonical_deal_party = case.deal_party_binding();
         let contextual_words = ReadingWords::from_case(case, &inputs);
-        let mut bound = json!({"version":VERSION,"question":question,"frame":frame,"subject":subject,"people":people,"inputs":inputs,"anchor":anchor,"contextual_words":contextual_words});
+        // The plan validates the native chart clock. Event time stays separate.
+        let chart_local_clock =
+            horary_ai_core::chart_input::local_clock(anchor.timestamp_ms, &anchor.timezone)
+                .expect("Plan checked the native chart clock");
+        let mut bound = json!({"version":VERSION,"question":question,"frame":frame,"subject":subject,"people":people,"inputs":inputs,"anchor":anchor,"contextual_words":contextual_words,"chart_local_clock":chart_local_clock});
         if let Some(party) = &canonical_deal_party {
             bound["canonical_deal_party"] = json!(party);
         }
@@ -2187,6 +2192,7 @@ impl ReadyReading {
                 input_sha256: hash,
             },
             anchor,
+            chart_local_clock,
             subject,
             people,
             inputs,

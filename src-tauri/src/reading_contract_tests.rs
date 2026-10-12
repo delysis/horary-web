@@ -976,6 +976,76 @@ fn an_unnamed_future_partner_does_not_erase_the_genuine_relay_principal() {
 }
 
 #[test]
+fn native_reading_clock_keeps_tomorrows_event_separate_from_the_chart() {
+    let mut sale = case(Method::MovableDeal, "querent");
+    let question = "Will I sell my prints at the fair on October 9, 2026?";
+    sale.question = resolved(question.into());
+    sale.facts
+        .insert(Field::DealActor, resolved("querent".into()));
+    sale.facts
+        .insert(Field::DealCapacity, resolved("sell".into()));
+    sale.facts
+        .insert(Field::EventTime, resolved("October 9, 2026".into()));
+    let anchor = Anchor {
+        timestamp_ms: chrono::DateTime::parse_from_rfc3339("2026-10-08T16:00:00Z")
+            .unwrap()
+            .timestamp_millis() as f64,
+        timezone: "America/New_York".into(),
+        ..regression_anchor()
+    };
+    let original = serde_json::to_value(&sale).unwrap();
+    let ready = ReadyReading::prepare(&sale, anchor.clone()).unwrap();
+    let input = ready.input();
+    assert_eq!(input["chart_local_clock"], "2026-10-08T12:00");
+    assert_eq!(input["anchor"], serde_json::to_value(anchor).unwrap());
+    assert_eq!(input["binding"]["question"], question);
+    assert_eq!(input["inputs"]["event_time"], "October 9, 2026");
+    assert!(input["inputs"].get("event_place").is_none());
+    assert_eq!(serde_json::to_value(&sale).unwrap(), original);
+    ready.validate_current(&sale).unwrap();
+}
+
+#[test]
+fn native_reading_clock_is_bound_to_the_handoff_and_uses_its_anchor_zone() {
+    let mut money = case(Method::Money, "querent");
+    money
+        .facts
+        .insert(Field::MoneySource, resolved("job".into()));
+    let anchor = Anchor {
+        timestamp_ms: chrono::DateTime::parse_from_rfc3339("2026-10-09T00:30:00Z")
+            .unwrap()
+            .timestamp_millis() as f64,
+        timezone: "America/New_York".into(),
+        ..regression_anchor()
+    };
+    let ready = ReadyReading::prepare(&money, anchor.clone()).unwrap();
+    assert_eq!(ready.input()["chart_local_clock"], "2026-10-08T20:30");
+    let mut bound = json!({"version":VERSION,"question":ready.binding.question,
+        "frame":ready.binding.frame,"subject":ready.subject,"people":ready.people,
+        "inputs":ready.inputs,"anchor":anchor});
+    assert_ne!(
+        ready.binding.input_sha256,
+        crate::horary_lessons::digest(&bound.to_string()),
+        "A handoff without the source-owned civil clock cannot reuse this binding"
+    );
+    bound["chart_local_clock"] = json!("2026-10-08T20:30");
+    assert_eq!(
+        ready.binding.input_sha256,
+        crate::horary_lessons::digest(&bound.to_string())
+    );
+    let utc = ReadyReading::prepare(
+        &money,
+        Anchor {
+            timezone: "UTC".into(),
+            ..anchor
+        },
+    )
+    .unwrap();
+    assert_eq!(utc.input()["chart_local_clock"], "2026-10-09T00:30");
+    assert_ne!(ready.binding.input_sha256, utc.binding.input_sha256);
+}
+
+#[test]
 fn a_reading_handoff_excludes_inapplicable_facts_and_background_people() {
     let mut money = case(Method::Money, "querent");
     money
