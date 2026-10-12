@@ -7,6 +7,7 @@ pub mod codex;
 pub mod continuation;
 pub mod demo;
 pub mod functions;
+pub mod gold;
 pub mod google;
 pub mod journey;
 #[cfg(test)]

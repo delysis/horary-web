@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand, ValueEnum};
 use dsrust::{Module, lm::DynChatModel};
 use horary_dspy::{
-    book, catalogue, classification_export, codex, continuation, google, local, native_export,
-    optimize, preflight, queue, reception, runner, signatures, teachers,
+    book, catalogue, classification_export, codex, continuation, gold, google, local,
+    native_export, optimize, preflight, queue, reception, runner, signatures, teachers,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Arc};
@@ -36,6 +36,17 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Author and independently review all 42 original twenty-case reading banks.
+    GenerateGoldReadings {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        prepare_only: bool,
+        #[arg(long)]
+        prepared: Option<PathBuf>,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Bind all conventional DSPy jobs to executable, book, corpus and provider policy.
     QueuePlan {
         #[arg(long, default_value = "examples")]
@@ -328,6 +339,35 @@ async fn main() -> Result<()> {
     }
     let optimize_reception = matches!(&args.command, Command::OptimizeReception { .. });
     match args.command {
+        Command::GenerateGoldReadings {
+            examples,
+            prepare_only,
+            prepared,
+            output,
+        } => {
+            ensure!(
+                matches!(args.teacher, Teacher::Codex),
+                "Gold authoring uses the authorized saved-login, tool-free Codex teacher"
+            );
+            let book = Arc::new(book::Book::open(&args.book)?);
+            let result = if prepare_only {
+                ensure!(
+                    prepared.is_none(),
+                    "Prepare a fresh gold plan, without executing another plan"
+                );
+                gold::prepare(&examples, &book, &args.codex, &output)?
+            } else {
+                gold::generate(
+                    &examples,
+                    book,
+                    &prepared.context("No source-bound gold authoring plan")?,
+                    &args.codex,
+                    &output,
+                )
+                .await?
+            };
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Command::QueuePlan {
             examples,
             models,
@@ -1443,6 +1483,32 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn gold_authoring_cli_keeps_teacher_only_preparation_and_execution_separate() {
+        for phase in ["prepare", "execute"] {
+            let mut args = vec![
+                "horary-dspy",
+                "--teacher",
+                "codex",
+                "generate-gold-readings",
+                "--output",
+                "synthetic-output",
+            ];
+            if phase == "prepare" {
+                args.push("--prepare-only");
+            } else {
+                args.extend(["--prepared", "synthetic-plan"]);
+            }
+            let parsed = Args::try_parse_from(args).unwrap();
+            assert!(!allows_local_student(&parsed.command));
+            assert!(matches!(parsed.teacher, Teacher::Codex));
+            assert!(matches!(
+                parsed.command,
+                Command::GenerateGoldReadings { .. }
+            ));
+        }
+    }
 
     #[test]
     fn hosted_transfer_cli_admits_only_its_recorded_hosted_phases() {

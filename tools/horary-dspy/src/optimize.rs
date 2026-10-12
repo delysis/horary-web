@@ -26,7 +26,7 @@ use std::{
     },
 };
 
-fn input_key(input: &Example) -> Result<String> {
+pub(crate) fn input_key(input: &Example) -> Result<String> {
     Ok(crate::google::digest(serde_json::to_vec(
         &input.rendered(),
     )?))
@@ -95,6 +95,57 @@ pub fn classification_label_failures(
             "Classification facet differs from authored label {facet}"
         ));
     }
+    Ok(errors)
+}
+
+/// Validate reading output against the exact supplied native chart only.
+pub fn reading_native_failures(input: &Example, prediction: &Prediction) -> Result<Vec<String>> {
+    let mut errors = Vec::new();
+    let chart: Value = serde_json::from_str(
+        input
+            .get("chart_evidence")
+            .and_then(Value::as_str)
+            .context("No actual chart")?,
+    )?;
+    let mut ids = std::collections::BTreeSet::new();
+    if let Some(table) = chart["facts"].as_str() {
+        ids.extend(
+            table
+                .lines()
+                .skip(1)
+                .filter_map(|row| row.split('\t').next())
+                .map(str::to_owned),
+        );
+    } else if let Some(facts) = chart["native_facts"].as_array() {
+        ids.extend(
+            facts
+                .iter()
+                .filter_map(|fact| fact["id"].as_str())
+                .map(str::to_owned),
+        );
+    }
+    ensure!(
+        !ids.is_empty(),
+        "Reading component lacks native evidence IDs"
+    );
+    let pattern = regex::Regex::new(r"\be[0-9]+\b")?;
+    for field in ["answer", "analysis", "evidence", "unresolved"] {
+        for found in pattern.find_iter(text(prediction, field)?) {
+            if !ids.contains(found.as_str()) {
+                errors.push(format!(
+                    "{field}: cites absent native evidence {}",
+                    found.as_str()
+                ));
+            }
+        }
+    }
+    if !matches!(
+        text(prediction, "status")?,
+        "answer" | "need_information" | "method_limit"
+    ) {
+        errors.push("Unknown reading status".into());
+    }
+
     Ok(errors)
 }
 
@@ -380,60 +431,19 @@ impl Graded {
                 }
             }
         } else if self.function == "reading" {
-            let chart: Value = serde_json::from_str(
-                input
-                    .get("chart_evidence")
-                    .and_then(Value::as_str)
-                    .context("No actual chart")?,
-            )?;
-            let mut ids = std::collections::BTreeSet::new();
-            if let Some(table) = chart["facts"].as_str() {
-                ids.extend(
-                    table
-                        .lines()
-                        .skip(1)
-                        .filter_map(|row| row.split('\t').next())
-                        .map(str::to_owned),
-                );
-            } else if let Some(facts) = chart["native_facts"].as_array() {
-                ids.extend(
-                    facts
-                        .iter()
-                        .filter_map(|fact| fact["id"].as_str())
-                        .map(str::to_owned),
-                );
-            }
-            ensure!(
-                !ids.is_empty(),
-                "Reading component lacks native evidence IDs"
-            );
-            let pattern = regex::Regex::new(r"\be[0-9]+\b")?;
-            for field in ["answer", "analysis", "evidence", "unresolved"] {
-                for found in pattern.find_iter(text(&prediction, field)?) {
-                    if !ids.contains(found.as_str()) {
-                        errors.push(format!(
-                            "{field}: cites absent native evidence {}",
-                            found.as_str()
-                        ));
-                    }
-                }
-            }
-            if !matches!(
-                text(&prediction, "status")?,
-                "answer" | "need_information" | "method_limit"
-            ) {
-                errors.push("Unknown reading status".into());
-            }
+            errors.extend(reading_native_failures(&input, &prediction)?);
         }
         let mut review_input = dsrust::input! {
             inputs:serde_json::to_string(&input.rendered())?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
         };
         if self.function != "reception" {
             review_input.set("function", json!(self.function));
+            review_input.set("reference_answer", example.get("__reference_answer").cloned().unwrap_or_else(||json!("No approved worked reference; assess against the authored criteria and primary source.")));
             review_input = review_input.with_inputs([
                 "function",
                 "inputs",
                 "prediction",
+                "reference_answer",
                 "rubric",
                 "source_text",
             ]);
@@ -679,6 +689,11 @@ fn declaration_digest(method: &str, function: &str) -> Result<String> {
 
 pub fn teaching_sources() -> BTreeMap<String, String> {
     [
+        ("gold.rs", include_bytes!("gold.rs").as_slice()),
+        ("signatures.rs", include_bytes!("signatures.rs").as_slice()),
+        ("catalogue.rs", include_bytes!("catalogue.rs").as_slice()),
+        ("optimize.rs", include_bytes!("optimize.rs").as_slice()),
+        ("codex.rs", include_bytes!("codex.rs").as_slice()),
         ("book.rs", include_bytes!("book.rs").as_slice()),
         ("reading.rs", include_bytes!("reading.rs").as_slice()),
         ("reception.rs", include_bytes!("reception.rs").as_slice()),

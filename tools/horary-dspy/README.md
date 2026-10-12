@@ -1,5 +1,20 @@
 # Horary DSPy experiment
 
+`--teacher codex generate-gold-readings --prepare-only --output /fresh/plan`
+binds all 42 original twenty-case banks, their unchanged splits, actual native
+inputs, complete salient primary teacher source, executable and shared 3360-call
+author/reviewer cap. Execute once with `--prepared /fresh/plan --output /fresh/answers`.
+Contact, NewJob, MovableDeal and Relationship come first, then the remaining
+families. Every case saves an actual five-field worked answer separately from
+its rubric and source/review metadata. A useful qualified answer with genuine
+calculation limits can pass; only source-correct reading and answer dimensions
+apply. One received failure may receive one new corrective answer and independent
+review. Uncertain work is never replayed; failed cases remain preserved while
+distinct cases continue. Student demonstrations contain only declared inputs and
+status/answer/analysis/evidence/unresolved, never rubric prose or provenance.
+Author/reviewer primary context and compact student inputs have separate hashes.
+This phase performs no student inference or application promotion.
+
 `evaluate-reception --prepare-only` renders the actual short Predict requests for
 four original Contact training probes without calling a model. The reusable
 function accepts an `AcceptedReceptionRole`-shaped actor clipboard and one exact

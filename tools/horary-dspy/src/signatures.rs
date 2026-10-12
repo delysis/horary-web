@@ -195,18 +195,22 @@ pub struct UpdateConsultation {
 }
 
 #[derive(dsrust::Signature)]
-/// Grade only this neural function against the independently authored rubric and primary text. Cite concrete observed output and source passages. Extraction is judged for semantic completeness, source fidelity and genuine missing information; readings for source-correct roles, ability, reception direction, relevant occasions, Moon, timing and a coherent actual answer. Formatting alone cannot earn correctness. Unobserved dimensions stay unobserved.
+/// Grade only this neural function against the independently authored rubric and primary text. Reference_answer is a separate source-reviewed worked answer, never the rubric. Accept substantively equivalent readings and legitimate source-supported alternatives rather than verbatim matching. Cite concrete observed output and source passages. Extraction is judged for semantic completeness, source fidelity and genuine missing information; readings for source-correct roles, ability, reception direction, relevant occasions, Moon, defensible timing and a coherent useful answer with material limits. Do not require unavailable calculations or fail a correct reading merely for style or Frawley's contextual love metaphor. Formatting alone cannot earn correctness. Unobserved dimensions stay unobserved.
 pub struct JudgeFunction {
+    /// Full salient primary context; keep the stable book prefix before changing case data.
+    #[input]
+    pub source_text: String,
     #[input]
     pub function: String,
     #[input]
     pub inputs: String,
     #[input]
     pub prediction: String,
+    /// Actual source-reviewed five-field worked answer, or an explicit unavailable-reference marker; never criteria or private metadata.
+    #[input]
+    pub reference_answer: String,
     #[input]
     pub rubric: String,
-    #[input]
-    pub source_text: String,
     /// A finite score between zero and one for this function only.
     #[output]
     pub score: f64,
