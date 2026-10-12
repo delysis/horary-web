@@ -22,7 +22,7 @@ const OMIT: &[&str] = &[
 ];
 const HEADER: &str = "ID\tKIND\tLABEL\tCALCULATED TESTIMONY";
 const SUBSET: &str = "Demonstration only: native facts retain all cited IDs, planet positions, house cusps, Moon rows and calculation boundaries. Omitted rows are not evidence of absence in the original chart.";
-const CONCISE_SUBSET: &str = "Demonstration evidence subset: all output citations, positions, cusps, supplied conditions, first Moon occasion and calculation boundaries retained. Every actor alias and unknown remains. Omitted rows are not evidence of absence in the full original chart.";
+const CONCISE_SUBSET: &str = "Demonstration evidence subset: all output citations, actual role-bound positions/cusps/conditions, first Moon occasion and calculation boundaries retained. Every actor alias and unknown remains. Omitted rows are not evidence of absence in the full original chart.";
 
 /// Return a separate, compact demonstration while preserving its declared
 /// input/label split. Unknown citations and malformed chart rows fail instead
@@ -202,6 +202,48 @@ fn project_concise(mut chart: Value, cited: &BTreeSet<String>, encoded: bool) ->
             "Demonstration cites absent native fact {id}"
         );
     }
+    let columns = chart["role_reference"]["role_columns"]
+        .as_array()
+        .context("No declared demo role columns")?;
+    let column = |name: &str| {
+        columns
+            .iter()
+            .position(|value| value == name)
+            .with_context(|| format!("No declared demo role column {name}"))
+    };
+    let ruler = column("ruler_planet")?;
+    let cusp = column("cusp_fact_id")?;
+    let position = column("position_fact_ids")?;
+    let mut planets = BTreeSet::from(["Moon".to_owned()]);
+    let mut foundations = BTreeSet::new();
+    for role in chart["role_reference"]["roles"]
+        .as_array()
+        .context("No declared demo role rows")?
+    {
+        let role = role.as_array().context("Malformed demo role row")?;
+        ensure!(role.len() == columns.len(), "Demo role row width differs");
+        if let Some(planet) = role[ruler].as_str() {
+            planets.insert(planet.to_owned());
+        }
+        if let Some(id) = role[cusp].as_str() {
+            foundations.insert(id.to_owned());
+        }
+        if let Some(ids) = role[position].as_array() {
+            for id in ids {
+                foundations.insert(
+                    id.as_str()
+                        .context("Malformed role position ID")?
+                        .to_owned(),
+                );
+            }
+        }
+    }
+    for id in &foundations {
+        ensure!(
+            actual.contains(id),
+            "Demo role refers to absent native fact {id}"
+        );
+    }
     // This is only a saved example. The live oracle retains every native row.
     // Select an actual earliest supplied lunar occasion without choosing an
     // applicant, verdict, intermediary or civil timing unit.
@@ -222,10 +264,16 @@ fn project_concise(mut chart: Value, cited: &BTreeSet<String>, encoded: bool) ->
         .context("No native facts")?;
     facts.retain(|row| {
         cited.contains(row[0].as_str().unwrap())
-            || matches!(
-                row[1].as_str(),
-                Some("position" | "house" | "condition" | "moon" | "boundary")
-            )
+            || foundations.contains(row[0].as_str().unwrap())
+            || matches!(row[1].as_str(), Some("moon" | "boundary"))
+            || (row[1] == "position"
+                && row[2].as_str().is_some_and(|label| planets.contains(label)))
+            || (row[1] == "condition"
+                && (row[2].as_str().is_some_and(|label| planets.contains(label))
+                    || row[3]
+                        .as_str()
+                        .and_then(|text| text.split_whitespace().next())
+                        .is_some_and(|planet| planets.contains(planet))))
     });
     chart["receptions"]["rows"]
         .as_array_mut()
@@ -306,10 +354,10 @@ mod tests {
     #[test]
     fn concise_demo_retains_citations_roles_and_first_moon_without_pruning_live_input() {
         let source = json!({"presentation":"concise-native-reader-1",
-            "facts":{"columns":["id","kind","label","native_detail"],"rows":[["e0","position","Mars","Exact position"],["e1","condition","Moon","Exact motion"],["e2","boundary","Limits","Exact limitations"]]},
+            "facts":{"columns":["id","kind","label","native_detail"],"rows":[["e0","position","Mars","Exact position"],["e1","condition","Moon","Exact motion"],["e2","boundary","Limits","Exact limitations"],["e8","position","Venus","Exact uncited position"],["e9","house","House 11","Exact unused cusp"],["e10","condition","Calculated testimony","Venus exact unused condition"]]},
             "receptions":{"columns":["id","regarding_planet","regarded_planet","positive_qualities","negative_qualities"],"rows":[["e3","Mars","Saturn",["face"],["fall"]],["e4","Saturn","Mars",["domicile"],[]]]},
             "events":{"columns":["id","endpoint1","endpoint2","aspect","within_current_signs","astronomical_hours","native_current_angular_gap_or_detail","motion"],"rows":[["e5","Moon","Mars","square",true,2.5,4.0,null],["e6","Moon","Saturn","trine",false,9.0,8.0,null],["e7","Mars","Saturn","sextile",true,12.0,3.0,["Exact native motion"]]]},
-            "role_reference":{"roles":[["a","Mars"],["b","Saturn"],["c","Saturn"]],"unknowns":["Actual unresolved input"]},"search_limitations":"Exact finite search limits"});
+            "role_reference":{"role_columns":["role_id","ruler_planet","cusp_fact_id","position_fact_ids"],"roles":[["a","Mars",null,["e0"]],["b","Saturn",null,null],["c","Saturn",null,null]],"unknowns":["Actual unresolved input"]},"search_limitations":"Exact finite search limits"});
         let mut raw = reading(source.clone());
         raw.set("evidence", json!("e3 e7"));
         raw.set("analysis", json!("Decisive actual testimony."));
@@ -319,7 +367,14 @@ mod tests {
         let compacted = compact(&raw).unwrap();
         let chart = projected(&compacted);
         assert_eq!(raw, before);
-        assert_eq!(chart["facts"], source["facts"]);
+        assert_eq!(
+            chart["facts"]["rows"],
+            json!([
+                source["facts"]["rows"][0],
+                source["facts"]["rows"][1],
+                source["facts"]["rows"][2]
+            ])
+        );
         assert_eq!(chart["receptions"], source["receptions"]);
         assert_eq!(
             chart["events"]["rows"],
