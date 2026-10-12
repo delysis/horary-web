@@ -359,6 +359,13 @@ fn duration_seconds(text: &str) -> Option<Duration> {
     let value = text.trim().trim_end_matches('s').parse::<f64>().ok()?;
     (value.is_finite() && value >= 0.).then(|| Duration::from_secs_f64(value.min(7. * 24. * 3600.)))
 }
+fn quota_model_matches(model: &str, dimension: &str) -> bool {
+    let dimension = dimension.strip_prefix("models/").unwrap_or(dimension);
+    dimension == model
+        // The fixed hosted student's settled 429 identifies this exact quota
+        // group. This is not a general Gemma-prefix or model-family match.
+        || (model == STUDENT && dimension == "gemma-4-26b")
+}
 fn quota_advice(bytes: &[u8], header: Option<&str>, model: &str) -> QuotaAdvice {
     let mut result = QuotaAdvice {
         retry_after_header: header.map(str::to_owned),
@@ -386,7 +393,7 @@ fn quota_advice(bytes: &[u8], header: Option<&str>, model: &str) -> QuotaAdvice 
                 result.violations.push(violation.clone());
                 let relevant = violation["quotaDimensions"]["model"]
                     .as_str()
-                    .is_none_or(|id| id == model || id == format!("models/{model}"));
+                    .is_none_or(|id| quota_model_matches(model, id));
                 if !relevant {
                     continue;
                 }
@@ -1870,6 +1877,125 @@ pub(crate) mod tests {
     const MINUTE_QUOTA: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentInputTokensPerMinutePerModel","quotaMetric":"generativelanguage.googleapis.com/generate_content_input_tokens","quotaDimensions":{"model":"gemma-4-26b-a4b-it"},"quotaValue":"20000"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"0.01s"}]}}"#;
     const DAILY_QUOTA: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentRequestsPerDayPerModel","quotaDimensions":{"model":"gemma-4-26b-a4b-it"},"quotaValue":"100"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"0.01s"}]}}"#;
     const ZERO_QUOTA: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentRequestsPerDayPerModel","quotaValue":"0"}]}]}}"#;
+
+    #[test]
+    fn quota_group_match_is_limited_to_the_observed_fixed_student_pair() {
+        for dimension in [
+            STUDENT,
+            "models/gemma-4-26b-a4b-it",
+            "gemma-4-26b",
+            "models/gemma-4-26b",
+        ] {
+            assert!(quota_model_matches(STUDENT, dimension));
+        }
+        for dimension in [
+            "gemma-4-12b",
+            "gemma-4-26b-a4b",
+            "gemma-4-26b-other",
+            "gemma-4-26",
+            "gemma-4",
+            "models/models/gemma-4-26b",
+            "prefix/gemma-4-26b",
+            "gemini-3.8-flash",
+        ] {
+            assert!(!quota_model_matches(STUDENT, dimension), "{dimension}");
+        }
+        assert!(!quota_model_matches(TEACHER, "gemma-4-26b"));
+        assert!(!quota_model_matches("gemma-4-12b-it", "gemma-4-26b"));
+        assert!(!quota_model_matches("gemma-4-26b-other", "gemma-4-26b"));
+        assert!(quota_model_matches(TEACHER, "models/gemini-3.8-flash"));
+    }
+
+    #[tokio::test]
+    async fn observed_quota_group_adopts_16000_without_halving_the_probe_or_rewriting_evidence() {
+        let violation = json!({
+            "quotaMetric":"generativelanguage.googleapis.com/generate_content_free_tier_input_token_count",
+            "quotaId":"GenerateContentInputTokensPerModelPerMinute-FreeTier",
+            "quotaDimensions":{"location":"global","model":"gemma-4-26b"},
+            "quotaValue":"16000"
+        });
+        let body = json!({"error":{"code":429,"details":[
+            {"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[violation.clone()]},
+            {"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"37s"}
+        ]}});
+        let advice = quota_advice(&serde_json::to_vec(&body).unwrap(), None, STUDENT);
+        assert_eq!(advice.tokens_per_minute, Some(16_000));
+        assert_eq!(advice.retry_after, Some(Duration::from_secs(37)));
+        assert_eq!(advice.violations, vec![violation]);
+        let limiter = RateLimiter::with_probe_ceiling(14_000, 224_000).unwrap();
+        for _ in 0..4 {
+            limiter.success(100).await;
+        }
+        let probed = limiter.snapshot().await["probed_hint_tpm"].clone();
+        limiter.observe(&advice).await;
+        limiter.success(100).await;
+        let snapshot = limiter.snapshot().await;
+        assert_eq!(snapshot["provider_reported_tpm"], 16_000);
+        assert_eq!(snapshot["probed_hint_tpm"], probed);
+        assert!(snapshot["cooldown_remaining_ms"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn foreign_quota_groups_keep_raw_violations_without_applying_rate_zero_or_daily_flags() {
+        for dimension in [
+            "gemma-4-12b",
+            "gemma-4-26b-other",
+            "models/models/gemma-4-26b",
+        ] {
+            let violations = vec![
+                json!({"quotaId":"GenerateContentInputTokensPerModelPerMinute-FreeTier","quotaDimensions":{"model":dimension},"quotaValue":"16000"}),
+                json!({"quotaId":"GenerateContentRequestsPerDayPerModel","quotaDimensions":{"model":dimension},"quotaValue":"0"}),
+            ];
+            let body = json!({"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":violations}]}});
+            let advice = quota_advice(&serde_json::to_vec(&body).unwrap(), None, STUDENT);
+            assert_eq!(advice.violations, violations);
+            assert_eq!(advice.tokens_per_minute, None);
+            assert_eq!(advice.requests_per_minute, None);
+            assert!(!advice.zero_quota);
+            assert!(!advice.daily_quota);
+        }
+    }
+
+    #[tokio::test]
+    async fn aliased_zero_and_daily_quotas_keep_existing_deferral_and_bounded_retry_guards() {
+        const ALIASED_ZERO: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentRequestsPerDayPerModel","quotaDimensions":{"model":"gemma-4-26b"},"quotaValue":"0"}]}]}}"#;
+        const ALIASED_DAILY: &str = r#"{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentRequestsPerDayPerModel","quotaDimensions":{"model":"models/gemma-4-26b"},"quotaValue":"100"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"0.01s"}]}}"#;
+        for (body, submits) in [(ALIASED_ZERO, 1), (ALIASED_DAILY, 2)] {
+            let mut replies = vec![Reply::Complete(429, body)];
+            if submits == 2 {
+                replies.push(Reply::Complete(200, SUCCESS));
+            }
+            let mock = Mock::new(replies);
+            let dir = tempfile::tempdir().unwrap();
+            let request = prompt("Synthetic aliased quota guard");
+            let key = counted(dir.path(), &request, 100);
+            let model = mock.model(dir.path(), 2, 14_000);
+            let response = model.forward(&model.http, &request).await;
+            if submits == 1 {
+                let error = response.unwrap_err();
+                assert_eq!(
+                    disposition(&error).unwrap().disposition,
+                    Disposition::QuotaDeferred
+                );
+                assert_eq!(disposition(&error).unwrap().retry_after, None);
+                assert_eq!(
+                    artifact(dir.path(), &key, "failure.json")["eligible_retry_unix_ms"],
+                    Value::Null
+                );
+            } else {
+                response.unwrap();
+                assert_eq!(
+                    artifact(dir.path(), &key, "attempt-1.result.json")["automatic_retry"],
+                    true
+                );
+            }
+            let result = artifact(dir.path(), &key, "attempt-1.result.json");
+            assert_eq!(result["provider_quota_advice"]["daily_quota"], true);
+            assert_eq!(result["provider_quota_advice"]["zero_quota"], submits == 1);
+            assert_eq!(model.budget.spent(), submits);
+            assert_eq!(mock.requests.lock().unwrap().len(), submits);
+        }
+    }
 
     #[tokio::test]
     async fn prompt_larger_than_rate_hint_is_admitted_and_charged_not_called_context_failure() {

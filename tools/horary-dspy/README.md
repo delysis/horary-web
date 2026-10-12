@@ -27,6 +27,8 @@ Function-local dimensions and native checks drive optimization. Inapplicable sta
 
 Google's listed input context limit is checked separately from input-token pacing. The configured rate is an initial hint, not a per-request length limit. The limiter probes higher throughput after successes up to a recorded ceiling, adopts actual provider quota hints on 429, and retains RetryInfo/Retry-After waits. One student client and limiter span the entire queue. Physical retries count against the same caps. Never restart a queue to bypass its durable guard or reset counters.
 
+Quota dimensions normally match the exact requested model. The fixed `gemma-4-26b-a4b-it` student also accepts Google's observed `gemma-4-26b` quota group, with an optional `models/` prefix; a settled response reported 16,000 input tokens per minute under that identity. Other Gemma sizes and arbitrary prefixes do not match. Raw violations remain unchanged in the receipts. This transport correction does not retroactively change an immutable running worker or its recorded decisions.
+
 From a built, copied executable, using absolute paths:
 
 ```sh

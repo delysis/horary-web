@@ -423,7 +423,7 @@
     },
     {
       "path": "tools/horary-dspy/README.md",
-      "sha256": "abb9896023699dfebf27dfe85101a02a7ade056ff4e6a3aa37cb5a2cf41fcdb4"
+      "sha256": "5b6059942e13f427c8699098fbe0dc69106d6d65504762fcfc740a9133b77dfa"
     },
     {
       "path": "tools/horary-dspy/coverage.json",
@@ -803,7 +803,7 @@
     },
     {
       "path": "tools/horary-dspy/src/google.rs",
-      "sha256": "bbb626f14819aac188192501c337461241c2b52a30dc732c232c32de68ed300e"
+      "sha256": "755572c8d25069ed121e9e07f6c1e908be02676a78052724dd5f786399cdda71"
     },
     {
       "path": "tools/horary-dspy/src/journey.rs",
