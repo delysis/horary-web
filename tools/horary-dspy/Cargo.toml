@@ -24,3 +24,8 @@ tempfile = "3"
 
 [workspace]
 exclude = ["vendor/dsrust"]
+
+# Teacher cache lookups verify the public executable's complete SHA256.
+# Keep that verification fast without weakening it or caching file identity.
+[profile.dev.package.sha2]
+opt-level = 3

@@ -459,7 +459,7 @@
     },
     {
       "path": "tools/horary-dspy/Cargo.toml",
-      "sha256": "486d5a9cc53405a2e64ff9b46f2d8c02fc36407c01a78c3d7df22b2eba1e69a3"
+      "sha256": "c2b2800f1123672b4443055016865c094461e63aa68726fdfa209645ee98c034"
     },
     {
       "path": "tools/horary-dspy/README.md",
