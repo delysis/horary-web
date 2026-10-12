@@ -42,6 +42,10 @@ fn evaluate(
         .and_then(|v| step::check(stage, matter, v, &input, facts));
     let validation_error = checked.as_ref().err().cloned();
     let value = parsed.unwrap_or(Value::Null);
+    let source_passages = crate::horary_contract::source_passages_for(stage, matter, &input)
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
     let record = Record {
         stage,
         revision: 0,
@@ -52,7 +56,7 @@ fn evaluate(
         raw: result.content.clone(),
         worksheet: value.clone(),
         generation: result,
-        source_passages: stage.passages(matter).iter().map(|s| (*s).into()).collect(),
+        source_passages,
         validation_error,
     };
     Ok((checked, record))

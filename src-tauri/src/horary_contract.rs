@@ -440,18 +440,110 @@ fn base_guide_for(stage: Stage, matter: Matter, input: &Value) -> Result<String,
                 .unwrap_or("update_selected_program"),
         ));
     }
-    let mut guide = lessons::guide(stage, matter)?;
-    if let Ok(method) = serde_json::from_value::<crate::reading_contracts::Method>(
-        original["reading_request"]["binding"]["frame"]["method"].clone(),
-    ) {
+    let method = method_for_input(original);
+    let mut guide = lessons::guide_for_method(stage, matter, method)?;
+    if let Some(method) = method {
         guide.push_str(&crate::reading_contracts::method_guide(method));
     }
     Ok(guide)
 }
 
+fn method_for_input(input: &Value) -> Option<crate::reading_contracts::Method> {
+    let original = crate::horary_step::original_input(input);
+    serde_json::from_value(original["reading_request"]["binding"]["frame"]["method"].clone())
+        .ok()
+        .or_else(|| {
+            serde_json::from_value::<crate::reading_contracts::Consultation>(
+                original["consultation"].clone(),
+            )
+            .ok()
+            .and_then(|case| case.method())
+        })
+}
+
+pub(crate) fn source_passages_for(
+    stage: Stage,
+    matter: Matter,
+    input: &Value,
+) -> Vec<&'static str> {
+    lessons::source_passages(stage, matter, method_for_input(input))
+}
+
 #[cfg(test)]
 mod repair_message_tests {
     use super::*;
+
+    fn consultation_for(method: crate::reading_contracts::Method) -> Value {
+        use crate::reading_contracts::{Consultation, Evidence, Facet, Frame, Observation, Slot};
+        serde_json::to_value(Consultation {
+            frame: Slot::Resolved {
+                observation: Observation {
+                    value: Frame {
+                        method,
+                        facet: Facet::Event,
+                    },
+                    evidence: Evidence::User {
+                        turn: 1,
+                        quote: "Authored source-selection witness".into(),
+                    },
+                },
+            },
+            ..Consultation::default()
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn new_job_teaching_uses_original_handoff_in_every_reading_step_and_repair() {
+        let original = json!({"reading_request":{"binding":{"frame":{"method":"new_job"}}}});
+        let repair = json!({
+            "original_input":{"original_input":original},
+            "previous_worksheet":{"frame":{"method":"relationship"}},
+            "native_validation_error":"Authored repair witness"
+        });
+        for stage in [
+            Stage::Significators,
+            Stage::Condition,
+            Stage::Reception,
+            Stage::Contacts,
+            Stage::Judgment,
+        ] {
+            let direct = base_guide_for(stage, Matter::Work, &original).unwrap();
+            assert_eq!(
+                base_guide_for(stage, Matter::Relationship, &repair).unwrap(),
+                direct
+            );
+            assert_eq!(
+                source_passages_for(stage, Matter::Relationship, &repair),
+                source_passages_for(stage, Matter::Work, &original)
+            );
+            assert!(direct.contains("id=\"new_job_"));
+            assert!(!direct.contains("id=\"relationship_facets\""));
+        }
+    }
+
+    #[test]
+    fn new_job_teaching_resolves_consultation_without_trusting_rejected_worksheet() {
+        use crate::reading_contracts::Method;
+        let case_input = json!({"consultation":consultation_for(Method::NewJob)});
+        assert_eq!(method_for_input(&case_input), Some(Method::NewJob));
+        assert!(base_guide_for(Stage::Reception, Matter::Work, &case_input)
+            .unwrap()
+            .contains("id=\"new_job_employer_interest\""));
+        let explicit = json!({
+            "reading_request":{"binding":{"frame":{"method":"relationship"}}},
+            "consultation":consultation_for(Method::NewJob)
+        });
+        assert_eq!(method_for_input(&explicit), Some(Method::Relationship));
+        let text = base_guide_for(Stage::Reception, Matter::Work, &explicit).unwrap();
+        assert!(text.contains("id=\"relationship_facets\""));
+        assert!(!text.contains("id=\"new_job_"));
+        let no_method = json!({"previous_worksheet":{"frame":{"method":"new_job"}}});
+        assert_eq!(method_for_input(&no_method), None);
+        assert!(!base_guide_for(Stage::Reception, Matter::Work, &no_method)
+            .unwrap()
+            .contains("id=\"new_job_"));
+    }
 
     fn expanded_contract(presented: &Value) -> Value {
         fn expand(value: &Value, root: &Value) -> Value {

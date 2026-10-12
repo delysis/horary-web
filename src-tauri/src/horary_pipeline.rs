@@ -661,15 +661,20 @@ fn section(session: &mut Session, stage: Stage, value: &Value, facts: &[Fact], r
         Stage::Contacts => "What could bring it about",
         _ => stage.title(),
     };
+    let source_passages = lessons::source_passages(
+        stage,
+        session.method.brief.matter,
+        session
+            .method
+            .consultation
+            .as_ref()
+            .and_then(crate::reading_contracts::Consultation::method),
+    );
     let rules = lessons::passages()
         .ok()
         .into_iter()
         .flatten()
-        .filter(|p| {
-            stage
-                .passages(session.method.brief.matter)
-                .contains(&p.id.as_str())
-        })
+        .filter(|p| source_passages.contains(&p.id.as_str()))
         .map(|p| reading_method::BookRule {
             id: p.id.clone(),
             title: "From the textbook".into(),
