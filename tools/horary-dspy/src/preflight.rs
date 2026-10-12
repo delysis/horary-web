@@ -33,17 +33,17 @@ fn request_with_demos(
             vec![LmPart::text(
                 turn.content
                     .text()
-                    .context("First-pass budget preflight is text only")?,
+                    .context("Budget preflight is text only")?,
             )],
         ));
     }
-    Ok(
-        LmRequest::new(google::STUDENT, messages).configured(LmConfig {
-            temperature: Some(0.),
-            max_tokens: Some(4096),
-            ..Default::default()
-        }),
-    )
+    // Predict leaves the normalized model blank; the selected provider binds it.
+    // The regression below captures Predict's actual request byte-for-byte.
+    Ok(LmRequest::new("", messages).configured(LmConfig {
+        temperature: Some(0.),
+        max_tokens: Some(4096),
+        ..Default::default()
+    }))
 }
 
 /// Render the port's real direct-reader exchanges, including its accepted
@@ -223,6 +223,80 @@ pub async fn run(
 }
 
 #[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use dsrust::{
+        Module,
+        lm::{
+            Capabilities, ChatModel,
+            api::{LmOutput, LmResponse},
+        },
+    };
+    use std::sync::{Arc, Mutex};
+
+    struct Captured(Arc<Mutex<Option<LmRequest>>>);
+    impl ChatModel for Captured {
+        async fn forward(
+            &self,
+            _http: &reqwest::Client,
+            request: &LmRequest,
+        ) -> Result<LmResponse> {
+            *self.0.lock().unwrap() = Some(request.clone());
+            Ok(LmResponse {
+                outputs: vec![LmOutput::text(
+                    "[[ ## status ## ]]\nmethod_limit\n[[ ## answer ## ]]\nSynthetic received answer.\n[[ ## analysis ## ]]\nSynthetic mechanics only.\n[[ ## evidence ## ]]\ne0\n[[ ## unresolved ## ]]\nUnknown computation.\n[[ ## completed ## ]]",
+                )],
+                ..Default::default()
+            })
+        }
+        async fn capabilities(&self, _http: &reqwest::Client) -> Capabilities {
+            Capabilities::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn reader_preflight_matches_actual_predict_request_with_saved_demo() {
+        let captured = Arc::new(Mutex::new(None));
+        let mut predictor = crate::optimize::plain(
+            signatures::reading("contact").unwrap(),
+            Arc::new(Captured(captured.clone())),
+        );
+        predictor.demos.push(dsrust::example! {
+            question:"A worked example question.", consultation:"Accepted demonstration context.",
+            chart_evidence:"Demonstration native evidence.", status:"answer", answer:"Worked answer.",
+            analysis:"Worked source reasoning.", evidence:"e0", unresolved:""
+        }.with_inputs(["question","consultation","chart_evidence"]));
+        let input = dsrust::example! {
+            source_text:"Constant salient primary source.", question:"Actual live question.",
+            consultation:"Actual accepted context.", chart_evidence:"Actual complete native facts."
+        }
+        .with_inputs(["source_text", "question", "consultation", "chart_evidence"]);
+        let expected = request_with_demos(&predictor.signature, &predictor.demos, &input).unwrap();
+        predictor.forward(input).await.unwrap();
+        let actual = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            serde_json::to_value(&actual).unwrap(),
+            serde_json::to_value(&expected).unwrap()
+        );
+        assert!(
+            actual.model.is_empty() && actual.output_schema().is_none() && actual.tools.is_empty()
+        );
+        let live = actual
+            .messages
+            .last()
+            .unwrap()
+            .parts
+            .iter()
+            .find_map(|part| match part {
+                dsrust::lm::api::LmPart::Text { text, .. } => Some(text),
+                _ => None,
+            })
+            .unwrap();
+        assert!(live.find("source_text").unwrap() < live.find("question").unwrap());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]
@@ -270,6 +344,9 @@ mod tests {
         for forbidden in ["private-id", "PRIVATE GOLD", "PRIVATE JUDGE"] {
             assert!(!rendered.contains(forbidden));
         }
-        assert_eq!(request.model, google::STUDENT);
+        assert!(
+            request.model.is_empty(),
+            "Predict binds the model in the provider, not the normalized request"
+        );
     }
 }

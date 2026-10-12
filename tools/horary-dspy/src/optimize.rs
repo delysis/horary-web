@@ -1602,6 +1602,467 @@ async fn compile_fixtures_inner(
     Ok(result)
 }
 
+pub const CONTACT_REFERENCE_CASES: [&str; 4] = [
+    "dspy-contact-first-004",
+    "dspy-contact-first-006",
+    "dspy-contact-first-008",
+    "dspy-contact-first-011",
+];
+
+struct ContactReferenceInputs {
+    legacy: Vec<Fixture>,
+    off: Vec<Fixture>,
+    on: Vec<Fixture>,
+}
+
+/// The reference view is the only treatment. Typed event/motion values are
+/// supplied identically to both arms, because the original TSV omits them.
+fn contact_reference_inputs(cases: &[Case], book: &Book) -> Result<ContactReferenceInputs> {
+    ensure!(cases.len() == 20, "Keep the complete original Contact bank");
+    let source = catalogue::family_reader_source(book, "contact")?;
+    let mut legacy = Vec::new();
+    let mut off = Vec::new();
+    let mut on = Vec::new();
+    for case in cases {
+        ensure!(case.method == "contact", "Wrong comparison family");
+        let mut example = catalogue::example(case, "reading", book)?;
+        example.set("source_text", json!(&source));
+        example.set("__review_source", json!(&source));
+        let mut chart: Value = serde_json::from_str(
+            example
+                .get("chart_evidence")
+                .and_then(Value::as_str)
+                .context("No native chart")?,
+        )?;
+        let mut aliases = chart
+            .as_object_mut()
+            .context("Chart must be an object")?
+            .remove("role_reference")
+            .context("No Contact role reference")?;
+        let mut old = example.clone();
+        old.set("chart_evidence", json!(serde_json::to_string(&chart)?));
+        legacy.push(Fixture {
+            split: case.split.clone(),
+            example: old,
+        });
+        if !CONTACT_REFERENCE_CASES.contains(&case.id.as_str()) {
+            continue;
+        }
+        ensure!(
+            case.split == "train",
+            "Only the four original training cases may run"
+        );
+        let at = chrono::DateTime::parse_from_rfc3339(&case.chart.utc)?;
+        let raw = horary_ai_core::astronomy::chart(
+            at.timestamp_millis() as f64,
+            case.chart.latitude,
+            case.chart.longitude,
+        )
+        .map_err(anyhow::Error::msg)?;
+        let events: BTreeMap<_, _> = crate::native_evidence::facts(Some(&raw))
+            .into_iter()
+            .filter_map(|fact| fact.event.map(|event| (fact.id, json!(event))))
+            .collect();
+        for endpoint in aliases["event_endpoints"]
+            .as_array_mut()
+            .context("No event alias array")?
+        {
+            let id = endpoint["fact_id"]
+                .as_str()
+                .context("Event alias lacks its native ID")?;
+            ensure!(
+                events.get(id) == endpoint.get("candidate"),
+                "Alias candidate differs from native testimony"
+            );
+            endpoint
+                .as_object_mut()
+                .context("Event alias must be an object")?
+                .remove("candidate");
+        }
+        chart["event_candidates"] = json!(events);
+        example.set("chart_evidence", json!(serde_json::to_string(&chart)?));
+        off.push(Fixture {
+            split: case.split.clone(),
+            example: example.clone(),
+        });
+        chart["role_reference"] = aliases;
+        example.set("chart_evidence", json!(serde_json::to_string(&chart)?));
+        on.push(Fixture {
+            split: case.split.clone(),
+            example,
+        });
+    }
+    ensure!(
+        off.len() == 4 && on.len() == 4,
+        "A comparison case is absent or duplicated"
+    );
+    for (before, after) in off.iter().zip(&on) {
+        let mut removed = after.example.clone();
+        let mut chart: Value = serde_json::from_str(
+            removed
+                .get("chart_evidence")
+                .and_then(Value::as_str)
+                .unwrap(),
+        )?;
+        ensure!(
+            chart
+                .as_object_mut()
+                .unwrap()
+                .remove("role_reference")
+                .is_some(),
+            "On view is absent"
+        );
+        removed.set("chart_evidence", json!(serde_json::to_string(&chart)?));
+        ensure!(
+            removed.rendered() == before.example.rendered(),
+            "Comparison changes more than the reference view"
+        );
+    }
+    Ok(ContactReferenceInputs { legacy, off, on })
+}
+
+// This experiment reuses one specifically approved, completed teacher
+// example. These are artifact identities, not semantic answer labels.
+const CONTACT_APPROVED_PROGRAM: &str =
+    "65ee9776ffeaf9121949d27338232a679101eabb990e4348281a72425a01022a";
+const CONTACT_APPROVED_FULL: &str =
+    "6dc0b15ec1554f174a3d4c4805af95e82de6defc8a4ce7a8f6feb7c37ad4cef8";
+const CONTACT_APPROVED_REVIEW: &str =
+    "f2f64e8eb5910ee2cc6493487f28c5c1f5685a1c9456d903fca6b0f25c1e8438";
+const CONTACT_APPROVED_SOURCE: &str =
+    "a0a5c7f791e870dec16f112512d29baf55cfed66f81864213e852ac2c1464003";
+const CONTACT_APPROVED_DATASET: &str =
+    "4eb20da28b79fdbbae2711705ce09d3ea4de22c57e28938bf4ee708b324e6a69";
+
+fn contact_demo_presentation(
+    bootstrap: &Path,
+    review: &Path,
+    inputs: &ContactReferenceInputs,
+    book: &Book,
+) -> Result<(dsrust::module::ProgramState, Value)> {
+    let bytes = fs::read(bootstrap)?;
+    // Do not accept a merely plausible replacement or repurchase this teacher.
+    ensure!(
+        crate::google::digest(&bytes) == CONTACT_APPROVED_PROGRAM,
+        "The approved Contact demonstration differs"
+    );
+    ensure!(
+        crate::google::digest(fs::read(review)?) == CONTACT_APPROVED_REVIEW,
+        "The accepted source review differs"
+    );
+    let parent = bootstrap.parent().context("No bootstrap directory")?;
+    ensure!(
+        crate::google::digest(fs::read(parent.join("component-source.json"))?)
+            == CONTACT_APPROVED_SOURCE,
+        "The original demonstration's source receipt differs"
+    );
+    let full_bytes = fs::read(parent.join("bootstrapped-full.json"))?;
+    ensure!(
+        crate::google::digest(&full_bytes) == CONTACT_APPROVED_FULL,
+        "The full teacher demonstration differs"
+    );
+    let result: Value = serde_json::from_slice(&fs::read(parent.join("bootstrap-result.json"))?)?;
+    ensure!(
+        result["phase"] == "bootstrap_only"
+            && result["accepted_demos"] == 1
+            && result["student_calls"] == 0
+            && result["compiled_sha256"] == CONTACT_APPROVED_PROGRAM
+            && result["dataset_sha256"] == CONTACT_APPROVED_DATASET
+            && fixtures_digest(&inputs.legacy)? == CONTACT_APPROVED_DATASET,
+        "The original bootstrap inputs/source no longer match"
+    );
+    let review_value: Value = serde_json::from_slice(&fs::read(review)?)?;
+    ensure!(
+        review_value["source_book_sha256"] == crate::book::OCR_SHA256,
+        "The source-approved book differs"
+    );
+    let mut state: dsrust::module::ProgramState = serde_json::from_slice(&bytes)?;
+    let full: dsrust::module::ProgramState = serde_json::from_slice(&full_bytes)?;
+    ensure!(
+        state.metadata == dsrust::module::Metadata::default()
+            && state.predictors.len() == 1
+            && full.predictors.len() == 1,
+        "The accepted example carries other program state"
+    );
+    let name = predictor_name("contact", "reading")?;
+    let saved = state
+        .predictors
+        .get_mut(&name)
+        .context("No Contact predictor")?;
+    let complete = full.get(&name).context("No complete teacher predictor")?;
+    let baseline = crate::reading::direct_reader_baseline("contact")?;
+    let mut signature = signatures::reading("contact")?;
+    signature.instructions = baseline;
+    let current = dsrust::module::SignatureState::of(&signature);
+    let mut previous = current.fields.clone();
+    let primary = previous.remove(0);
+    previous.insert(3, primary);
+    ensure!(
+        saved.signature.instructions == current.instructions
+            && saved.signature.fields == previous
+            && saved.traces.is_empty()
+            && saved.train.is_empty()
+            && saved.lm.is_none()
+            && saved.demos.len() == 1
+            && complete.demos.len() == 1,
+        "Only the recorded source-first field ordering may change"
+    );
+    let teacher = Example::new(
+        complete.demos[0]
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone())),
+    )
+    .with_inputs(["question", "consultation", "chart_evidence", "source_text"]);
+    let compact = crate::demo::compact(&teacher)?;
+    ensure!(
+        fields(&Prediction::new(compact, "")) == Value::Object(saved.demos[0].clone()),
+        "The compact demonstration changed its three inputs or five outputs"
+    );
+    let original = inputs
+        .legacy
+        .iter()
+        .find(|f| f.example.get("case_id") == Some(&json!("dspy-contact-first-006")))
+        .context("No original demo consultation")?;
+    for field in ["question", "consultation", "chart_evidence", "source_text"] {
+        ensure!(
+            teacher.get(field) == original.example.get(field),
+            "Current native/source input {field} differs from the original full demonstration"
+        );
+    }
+    let primary = catalogue::family_reader_source(book, "contact")?;
+    ensure!(
+        teacher.get("source_text").and_then(Value::as_str) == Some(primary.as_str()),
+        "Primary Contact source meaning differs"
+    );
+    // No new motion/view values are inserted into the old worked example.
+    saved.signature = current;
+    let receipt = json!({"origin_program":bootstrap,"origin_program_sha256":CONTACT_APPROVED_PROGRAM,
+        "origin_full_program_sha256":CONTACT_APPROVED_FULL,"source_review":review,"source_review_sha256":CONTACT_APPROVED_REVIEW,
+        "original_dataset_sha256":fixtures_digest(&inputs.legacy)?,"book_sha256":crate::book::OCR_SHA256,
+        "presentation_change":"Move source_text first; names, types, descriptions, authored instruction, three compact inputs and five outputs unchanged",
+        "new_values_inserted_into_demo":false,"teacher_repurchase":false,"scores_or_optimizer_state_imported":false});
+    Ok((state, receipt))
+}
+
+/// Prepare the real stock-adapter exchanges without creating provider clients.
+pub fn prepare_contact_reference(
+    cases: &[Case],
+    book: &Book,
+    bootstrap: &Path,
+    review: &Path,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(!directory.exists(), "Preserve an existing preparation");
+    let inputs = contact_reference_inputs(cases, book)?;
+    let (state, origin) = contact_demo_presentation(bootstrap, review, &inputs, book)?;
+    let signature = signatures::reading("contact")?;
+    let mut predictor = Predict::from_signature(signature.clone());
+    restore(
+        &mut predictor,
+        state.get("reading.contact").unwrap(),
+        &signature,
+    );
+    let mut requests = Vec::new();
+    for (arm, fixtures) in [("off", &inputs.off), ("on", &inputs.on)] {
+        for mut request in crate::preflight::reader_requests(fixtures, &predictor)? {
+            request["arm"] = json!(arm);
+            requests.push(request);
+        }
+    }
+    fs::create_dir_all(directory)?;
+    let program_bytes = serde_json::to_vec_pretty(&state)?;
+    fs::write(directory.join("program.json"), &program_bytes)?;
+    let dataset = fixtures_digest(&inputs.off)?;
+    crate::queue::write_json_atomic(
+        &directory.join("component-source.json"),
+        &direct_source_receipt("contact", &program_bytes, &dataset)?,
+    )?;
+    crate::queue::write_json_atomic(&directory.join("demo-origin.json"), &origin)?;
+    crate::queue::write_json_atomic(&directory.join("wire-preflight.json"), &json!(requests))?;
+    let result = json!({"phase":"contact_reference_preparation","executable_sha256":crate::google::digest(fs::read(std::env::current_exe()?)?),
+        "case_ids":CONTACT_REFERENCE_CASES,"bank_sha256":crate::google::digest(serde_json::to_vec(cases)?),
+        "off_dataset_sha256":dataset,"on_dataset_sha256":fixtures_digest(&inputs.on)?,
+        "program_sha256":crate::google::digest(&program_bytes),
+        "demo_origin_sha256":crate::google::digest(fs::read(directory.join("demo-origin.json"))?),
+        "wire_preflight_sha256":crate::google::digest(fs::read(directory.join("wire-preflight.json"))?),
+        "common_live_presentation":"eID-keyed original typed EventCandidate including PerfectionMotion in both arms; no old prose duplicated",
+        "only_treatment":"Contact role-reference/edge aliases; duplicate event candidate payload removed from aliases",
+        "source_first":true,"bootstrap_calls":0,"reflection_calls":0,"provider_calls":0,
+        "student_call_cap":8,"teacher_call_cap":12,"whole_reading_concurrency":1,
+        "token_preflight_qualified":false,"application_promoted":false});
+    crate::queue::write_json_atomic(&directory.join("preparation.json"), &result)?;
+    Ok(result)
+}
+
+fn validate_contact_token_preflight(prepared: &Path, counts: &Path) -> Result<()> {
+    let receipt: Value = serde_json::from_slice(&fs::read(counts)?)?;
+    ensure!(
+        receipt["preparation_sha256"]
+            == crate::google::digest(fs::read(prepared.join("preparation.json"))?)
+            && receipt["context_per_slot"] == 32768
+            && receipt["student_generation"] == false,
+        "Tokenizer receipt does not bind this exact preparation"
+    );
+    ensure!(
+        receipt["model"] == crate::local::MODEL
+            && receipt["format"]["add_generation_prompt"] == true
+            && receipt["format"]["add_special"] == true
+            && receipt["format"]["parse_special"] == true,
+        "Tokenizer model/template flags differ from the resident reading wire"
+    );
+    let requests: Vec<Value> =
+        serde_json::from_slice(&fs::read(prepared.join("wire-preflight.json"))?)?;
+    let rows = receipt["rows"]
+        .as_array()
+        .context("No observed token counts")?;
+    ensure!(
+        rows.len() == requests.len() && rows.len() == 8,
+        "Eight actual wire counts are required"
+    );
+    for (request, row) in requests.iter().zip(rows) {
+        let tokens = row["token_count"]
+            .as_u64()
+            .context("Missing actual token count")?;
+        ensure!(
+            tokens > 0
+                && tokens + 4096 <= 32768
+                && row["generation_allowance"] == 4096
+                && row["request_sha256"] == request["request_sha256"]
+                && row["case_id"] == request["case_id"]
+                && row["arm"] == request["arm"],
+            "Wire token count differs or exceeds the resident slot"
+        );
+    }
+    Ok(())
+}
+
+/// Fixed training comparison through stock Evaluate. No reflection or selection.
+pub async fn compare_contact_reference(
+    cases: &[Case],
+    book: Arc<Book>,
+    prepared: &Path,
+    counts: &Path,
+    models: &crate::runner::Models,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(
+        !directory.join("result.json").exists()
+            && !directory.join("off-observations.jsonl").exists()
+            && !directory.join("on-observations.jsonl").exists(),
+        "Preserve the preceding comparison attempt"
+    );
+    let inputs = contact_reference_inputs(cases, &book)?;
+    let plan: Value = serde_json::from_slice(&fs::read(prepared.join("preparation.json"))?)?;
+    ensure!(
+        plan["phase"] == "contact_reference_preparation"
+            && plan["executable_sha256"]
+                == crate::google::digest(fs::read(std::env::current_exe()?)?)
+            && plan["case_ids"] == json!(CONTACT_REFERENCE_CASES)
+            && plan["bank_sha256"] == crate::google::digest(serde_json::to_vec(cases)?)
+            && plan["off_dataset_sha256"] == fixtures_digest(&inputs.off)?
+            && plan["on_dataset_sha256"] == fixtures_digest(&inputs.on)?,
+        "Prepared comparison sources or native inputs differ"
+    );
+    for (file, key) in [
+        ("program.json", "program_sha256"),
+        ("demo-origin.json", "demo_origin_sha256"),
+        ("wire-preflight.json", "wire_preflight_sha256"),
+    ] {
+        ensure!(
+            plan[key] == crate::google::digest(fs::read(prepared.join(file))?),
+            "Prepared artifact {file} differs"
+        );
+    }
+    let origin: Value = serde_json::from_slice(&fs::read(prepared.join("demo-origin.json"))?)?;
+    let (expected_state, expected_origin) = contact_demo_presentation(
+        Path::new(
+            origin["origin_program"]
+                .as_str()
+                .context("No original demonstration path")?,
+        ),
+        Path::new(
+            origin["source_review"]
+                .as_str()
+                .context("No source-review path")?,
+        ),
+        &inputs,
+        &book,
+    )?;
+    ensure!(
+        origin == expected_origin,
+        "The derived demonstration provenance differs"
+    );
+    validate_contact_token_preflight(prepared, counts)?;
+    require_dataset(
+        &prepared.join("program.json"),
+        &fixtures_digest(&inputs.off)?,
+    )?;
+    let state = validated_state_kind(&prepared.join("program.json"), "contact", "reading", true)?;
+    ensure!(
+        state == expected_state,
+        "Only the known approved demonstration presentation may execute"
+    );
+    let baseline = crate::reading::direct_reader_baseline("contact")?;
+    ensure!(
+        state.get("reading.contact").unwrap().signature.instructions == baseline
+            && state.get("reading.contact").unwrap().demos.len() == 1,
+        "Prepared instruction/demo differs"
+    );
+    fs::create_dir_all(directory)?;
+    let mut results = BTreeMap::new();
+    let mut all_observed = true;
+    let mut all_consistent = true;
+    for (arm, fixtures) in [("off", &inputs.off), ("on", &inputs.on)] {
+        let mut program = direct_program(
+            fixtures,
+            "contact",
+            book.clone(),
+            models.student.clone(),
+            models.teacher.clone(),
+            &baseline,
+            &directory.join(format!("{arm}-observations.jsonl")),
+        )?;
+        program.load_state(&state);
+        program.save(&directory.join(format!("{arm}-program.json")))?;
+        let evaluation = Evaluate::new(
+            fixtures.iter().map(|f| f.example.clone()).collect(),
+            |input| program.forward(input),
+            Graded::metric,
+        )
+        .run()
+        .await;
+        let receipt = evaluation_receipt(&evaluation);
+        crate::queue::write_json_atomic(&directory.join(format!("{arm}.json")), &receipt)?;
+        program.save_observations(&directory.join(format!("{arm}-observations.json")))?;
+        all_observed &= evaluation.failure_count() == 0;
+        all_consistent &= program
+            .observations
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?
+            .iter()
+            .all(|o| o["review_summary_consistent"] == true);
+        results.insert(arm, receipt);
+        // An unknown provider/reviewer outcome never becomes a semantic zero
+        // or permission to buy another arm. Received model failures are retained.
+        if !all_observed {
+            break;
+        }
+    }
+    let result = json!({"function":"reading.contact","comparison":"fixed four original training cases; role-reference view off/on",
+        "teacher":models.teacher_id,"student":models.student_id,"arms":results,
+        "execution_observed":all_observed && results.len() == 2,"independent_review_consistent":all_consistent,
+        "preparation_sha256":crate::google::digest(fs::read(prepared.join("preparation.json"))?),
+        "token_preflight_sha256":crate::google::digest(fs::read(counts)?),
+        "bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,"application_promoted":false,
+        "source_correct_reading_qualified":false});
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    ensure!(
+        all_observed && results.len() == 2,
+        "A provider/reviewer error leaves this comparison unqualified"
+    );
+    Ok(result)
+}
+
 /// A fixed, paired development comparison. This executes the port's Evaluate
 /// only: no bootstrap, reflection, selection, held-out reuse or deployment.
 pub async fn compare_classification(
@@ -1718,6 +2179,114 @@ pub async fn compare_classification(
 mod component_tests {
     use super::*;
     use dsrust::DummyLM;
+
+    #[test]
+    fn contact_reference_is_the_only_treatment_and_motion_is_common() {
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let cases = catalogue::cases(&directory, "contact").unwrap();
+        let prepared = contact_reference_inputs(&cases, &Book::fixture()).unwrap();
+        assert_eq!(prepared.legacy.len(), 20);
+        assert_eq!(prepared.off.len(), 4);
+        for (off, on) in prepared.off.iter().zip(&prepared.on) {
+            assert_eq!(off.split, "train");
+            assert_eq!(
+                off.example
+                    .inputs()
+                    .unwrap()
+                    .fields()
+                    .map(|(name, _)| name)
+                    .collect::<Vec<_>>(),
+                vec!["question", "consultation", "chart_evidence", "source_text"]
+            );
+            let off_chart: Value =
+                serde_json::from_str(off.example.get("chart_evidence").unwrap().as_str().unwrap())
+                    .unwrap();
+            let mut on_chart: Value =
+                serde_json::from_str(on.example.get("chart_evidence").unwrap().as_str().unwrap())
+                    .unwrap();
+            assert_eq!(off_chart["event_candidates"], on_chart["event_candidates"]);
+            assert!(
+                off_chart["event_candidates"]
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .any(|event| event.get("perfectionMotion").is_some())
+            );
+            let view = on_chart
+                .as_object_mut()
+                .unwrap()
+                .remove("role_reference")
+                .unwrap();
+            assert_eq!(off_chart, on_chart);
+            assert!(
+                view["event_endpoints"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|endpoint| endpoint.get("candidate").is_none())
+            );
+            let roles = view["aliases"].as_array().unwrap();
+            assert!(!roles.is_empty());
+        }
+        for (case, legacy) in cases.iter().zip(prepared.legacy) {
+            assert_eq!(
+                legacy.example.get("chart_evidence"),
+                Some(&json!(
+                    serde_json::to_string(&catalogue::chart_evidence(case).unwrap()).unwrap()
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn contact_reference_rejects_a_moved_training_case_before_any_model() {
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let mut cases = catalogue::cases(&directory, "contact").unwrap();
+        cases
+            .iter_mut()
+            .find(|case| case.id == CONTACT_REFERENCE_CASES[0])
+            .unwrap()
+            .split = "development".into();
+        assert!(
+            contact_reference_inputs(&cases, &Book::fixture())
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("original training")
+        );
+    }
+
+    #[test]
+    fn contact_reference_requires_exact_bound_token_counts_for_both_arms() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("preparation.json"),
+            "Synthetic pinned preparation",
+        )
+        .unwrap();
+        let requests=(0..8).map(|i|json!({"arm":if i<4{"off"}else{"on"},"case_id":CONTACT_REFERENCE_CASES[i%4],"request_sha256":format!("request{i}")})).collect::<Vec<_>>();
+        crate::queue::write_json_atomic(&dir.path().join("wire-preflight.json"), &json!(requests))
+            .unwrap();
+        let rows=requests.iter().map(|r|json!({"arm":r["arm"],"case_id":r["case_id"],"request_sha256":r["request_sha256"],"token_count":17000,"generation_allowance":4096})).collect::<Vec<_>>();
+        let original = json!({"preparation_sha256":crate::google::digest(fs::read(dir.path().join("preparation.json")).unwrap()),"context_per_slot":32768,"model":crate::local::MODEL,
+            "format":{"add_generation_prompt":true,"add_special":true,"parse_special":true},"student_generation":false,"rows":rows});
+        let path = dir.path().join("counts.json");
+        crate::queue::write_json_atomic(&path, &original).unwrap();
+        validate_contact_token_preflight(dir.path(), &path).unwrap();
+        for mutation in 0..6 {
+            let mut invalid = original.clone();
+            match mutation {
+                0 => invalid["rows"][4]["token_count"] = json!(28673),
+                1 => invalid["rows"][4]["request_sha256"] = json!("different request"),
+                2 => invalid["rows"][4]["arm"] = json!("off"),
+                3 => invalid["preparation_sha256"] = json!("different preparation"),
+                4 => invalid["format"]["add_generation_prompt"] = json!(false),
+                _ => invalid["rows"].as_array_mut().unwrap().truncate(7),
+            }
+            crate::queue::write_json_atomic(&path, &invalid).unwrap();
+            assert!(validate_contact_token_preflight(dir.path(), &path).is_err());
+        }
+    }
 
     fn review(
         classification: &str,

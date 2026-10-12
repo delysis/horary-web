@@ -217,6 +217,26 @@ enum Command {
         #[arg(long, default_value_t = 96)]
         teacher_call_cap: usize,
     },
+    /// Fixed four-training-case Contact comparison; no search or new bootstrap.
+    CompareContactReference {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        /// Render source-bound programs/requests without any provider calls.
+        #[arg(long)]
+        prepare_only: bool,
+        #[arg(long)]
+        bootstrap_program: Option<PathBuf>,
+        #[arg(long)]
+        demo_source_review: Option<PathBuf>,
+        /// Completed preparation produced by this exact executable/source.
+        #[arg(long)]
+        prepared: Option<PathBuf>,
+        /// Resident tokenizer counts bound to the eight prepared requests.
+        #[arg(long)]
+        token_preflight: Option<PathBuf>,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Compare an already proposed instruction on one complete development pool.
     CompareClassification {
         #[arg(long)]
@@ -948,6 +968,98 @@ async fn main() -> Result<()> {
                 .await?
             };
             println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::CompareContactReference {
+            examples,
+            prepare_only,
+            bootstrap_program,
+            demo_source_review,
+            prepared,
+            token_preflight,
+            output,
+        } => {
+            ensure!(
+                !output.exists(),
+                "Preserve an existing attempt; use a fresh output directory"
+            );
+            let cases = catalogue::cases(&examples, "contact")?;
+            let book = Arc::new(book::Book::open(&args.book)?);
+            if prepare_only {
+                ensure!(
+                    prepared.is_none() && token_preflight.is_none(),
+                    "Preparation does not execute another plan"
+                );
+                let bootstrap = bootstrap_program
+                    .context("Preparation requires the approved bootstrap program")?;
+                let review = demo_source_review
+                    .context("Preparation requires its accepted source review")?;
+                let result = optimize::prepare_contact_reference(
+                    &cases, &book, &bootstrap, &review, &output,
+                )?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                ensure!(
+                    bootstrap_program.is_none() && demo_source_review.is_none(),
+                    "Execute only the prepared demonstration presentation"
+                );
+                ensure!(
+                    matches!(args.teacher, Teacher::Codex),
+                    "This bounded comparison uses the explicitly authorized Codex reviewer"
+                );
+                ensure!(
+                    args.student_local_url.is_some() && args.student_model == local::MODEL,
+                    "Use the released resident Gemma student"
+                );
+                let prepared = prepared.context("No source-bound preparation supplied")?;
+                let counts =
+                    token_preflight.context("No exact resident tokenizer preflight supplied")?;
+                let selected = cases
+                    .iter()
+                    .filter(|case| optimize::CONTACT_REFERENCE_CASES.contains(&case.id.as_str()))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                runner::manifest(
+                    &output,
+                    &selected,
+                    &args.book,
+                    serde_json::json!({
+                        "command":"compare-contact-reference", "student":student_identity(args.student_local_url.as_deref(),&args.student_model),
+                        "student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),
+                        "prepared":prepared,"preparation_sha256":google::digest(fs::read(prepared.join("preparation.json"))?),
+                        "token_preflight":counts,"token_preflight_sha256":google::digest(fs::read(&counts)?),
+                        "original_bank_cases":20,"executed_training_cases":4,"student_call_cap":8,"teacher_call_cap":12,
+                        "whole_reading_concurrency":1,"bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,
+                        "component_inputs":"Independently accepted consultation and native calculated chart; no acquisition journey claimed",
+                        "only_treatment":"Contact role-reference/edge aliases; identical typed event motion in both arms"
+                    }),
+                )?;
+                let http = reqwest::Client::new();
+                let student = selected_student(
+                    args.student_local_url.as_deref(),
+                    &args.student_model,
+                    http.clone(),
+                    output.join("student"),
+                    8,
+                    14_000,
+                )?;
+                let teacher =
+                    teacher_model(args.teacher, args.codex, http, output.join("teacher"), 12)
+                        .await?;
+                let models = runner::Models {
+                    student,
+                    teacher,
+                    teacher_id: teacher_identity(args.teacher).into(),
+                    student_id: student_identity(
+                        args.student_local_url.as_deref(),
+                        &args.student_model,
+                    ),
+                };
+                let result = optimize::compare_contact_reference(
+                    &cases, book, &prepared, &counts, &models, &output,
+                )
+                .await?;
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            }
         }
         Command::OptimizeClassification {
             examples,

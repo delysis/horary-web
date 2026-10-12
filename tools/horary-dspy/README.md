@@ -245,3 +245,25 @@ Each run preserves a source/configuration manifest and `dataset.json`. Shared Go
 Family optimization also saves `baseline-program.json`, `baseline.json`, baseline/teacher/search observations, full and projected bootstrapped programs, `compiled.json` and the final result when execution reaches those steps. The global-classifier command saves a separate component result. Inspect these files directly while a run is active; rerunning a command is not a status query. A missing final artifact is not an empty successful result. There are no Python or frontend steps in this tool's execution path.
 
 Source/bank review, successful execution, an independent semantic grade, a development improvement, held-out performance and production acceptance are separate claims. A compiled program is still experimental: promotion requires fresh actual application journeys, unchanged source and native guards, source-correct full readings and the application's own acceptance checks. This crate does not install a learned prompt into the app or qualify local Gemma, packaged behavior, voice delivery or unsupported native methods.
+
+`compare-contact-reference` is a fixed diagnostic using stock `Evaluate`, with no prompt search, reflection, selection or new bootstrap. It executes only the original training cases 004, 006, 008 and 011, one complete reader at a time, first without and then with the calculated Contact role/edge references. Both arms receive identical accepted consultation, complete native rows, typed event candidates and perfection motion, primary source, authored instruction, rubric and the approved worked example. The added alias view omits its duplicate event-candidate payload. Classification and extraction are unobserved; training scores do not qualify an application journey.
+
+Preparation requires the exact completed, source-approved Contact demo006 artifacts. It checks the original full twenty-case dataset, full teacher inputs and compact three inputs/five outputs. Only the recorded `source_text`-first signature reordering is permitted. The old demonstration is preserved; newly exposed live motion and alias values are never inserted into it. An input, primary-source or native-testimony mismatch stops preparation rather than grandfathering drift or buying another example.
+
+```sh
+horary-dspy --book /absolute/path/to/pinned-frawley-ocr.md \
+  compare-contact-reference --prepare-only --examples tools/horary-dspy/examples \
+  --bootstrap-program /absolute/path/to/approved/run/bootstrapped.json \
+  --demo-source-review /absolute/path/to/approved/root-demo-source-review.json \
+  --output /absolute/path/to/fresh-preparation
+
+horary-dspy --teacher codex --book /absolute/path/to/pinned-frawley-ocr.md \
+  --student-local-url http://127.0.0.1:63924/v1 \
+  --student-model gemma-4-12b-it-qat-mtp \
+  compare-contact-reference --examples tools/horary-dspy/examples \
+  --prepared /absolute/path/to/fresh-preparation \
+  --token-preflight /absolute/path/to/resident-token-counts.json \
+  --output /absolute/path/to/fresh-comparison
+```
+
+Preparation makes no provider calls and saves the exact stock-adapter requests. The separate resident-tokenizer receipt must bind `preparation_sha256`, the local model, a 32,768-token slot, and `add_generation_prompt`, `add_special` and `parse_special` flags. Its eight ordered rows bind arm, case ID and request SHA256 with an actual `token_count` and 4,096-token `generation_allowance`. Every rendered request must fit before execution. Execution rechecks the source-bound preparation and approved demonstration, then shares hard bounds of eight local calls and twelve Codex attempts across both arms. Raw responses, independent reviews and individual native/source failures remain available. A provider or reviewer error leaves the comparison unqualified; it never becomes a fabricated semantic zero or an automatic replay.
