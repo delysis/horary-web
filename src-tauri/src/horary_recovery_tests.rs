@@ -154,6 +154,16 @@ impl Runtime for Script {
                 content = value.to_string();
             }
         }
+        if stage == Stage::Reception {
+            let mut value: Value = serde_json::from_str(&content).unwrap();
+            if value["summary"] == "Authored fixture summary, not a model answer." {
+                // Only the generic successful offline stub is completed from
+                // the actual immutable task. Explicit fault proposals remain
+                // unchanged and must still be rejected by production guards.
+                value["edge_interpretations"] = reception_receipt_fixture(input);
+                content = value.to_string();
+            }
+        }
         Ok(NativeGenerationResult {
             content,
             prompt_tokens: 0,
@@ -774,10 +784,22 @@ fn all_batch_receipts_survive_cancellation_while_one_case_is_being_repaired() {
     let mut session = session();
     know_bob(&mut session);
     let facts = reading_method::facts(session.chart.as_ref());
-    let assignments =
-        crate::horary_role_options::resolve(&role_options(&session), &roles(), &facts).unwrap();
-    let task_input =
-        json!({"brief":reading_brief(&session.method.brief),"roles":assignments,"facts":facts});
+    let role_input = json!({"brief":reading_brief(&session.method.brief),
+        "house_rulers_and_positions":facts,"native_role_options":role_options(&session)});
+    let step::Checked::Data(accepted) = step::check(
+        Stage::Significators,
+        session.method.brief.matter,
+        &roles(),
+        &role_input,
+        &facts,
+    )
+    .unwrap() else {
+        panic!("Authored native role selection must be accepted")
+    };
+    let assignments = accepted.roles();
+    let native_reception =
+        reception_clipboard(&accepted_reception_roles(&accepted).unwrap(), &facts);
+    let task_input = json!({"brief":reading_brief(&session.method.brief),"roles":assignments,"facts":facts,"native_reception":native_reception});
     let tasks: Vec<_> = [Stage::Condition, Stage::Reception, Stage::Contacts]
         .into_iter()
         .map(|stage| (stage, task_input.clone(), facts.clone()))

@@ -1764,7 +1764,7 @@ fn reception_clipboard_view(
 }
 
 #[cfg(test)]
-fn reception_receipt_fixture(input: &Value) -> Value {
+pub(crate) fn reception_receipt_fixture(input: &Value) -> Value {
     let input = step::original_input(input);
     let roles = input["native_reception"]["accepted_roles"].as_array();
     let rows = input["facts"].as_array().into_iter().flatten().filter_map(|fact| {

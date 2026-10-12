@@ -96,6 +96,10 @@ impl Runtime for Journey {
                 if stage == Stage::Contacts {
                     value["basis"] = json!("complex_unverified");
                 }
+                if stage == Stage::Reception {
+                    value["edge_interpretations"] =
+                        crate::horary_pipeline::reception_receipt_fixture(input);
+                }
                 if stage == Stage::Judgment {
                     value["verdict"] = json!("unresolved");
                     let boundary = input["facts"]
