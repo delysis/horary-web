@@ -9,14 +9,14 @@ macro_rules! reading_types {
             #[derive(dsrust::Signature)]
             #[doc = $method]
             pub struct $reading {
+                /// The relevant primary text with printed and OCR page references.
+                #[input] pub source_text: String,
                 /// The person's actual question, including corrections.
                 #[input] pub question: String,
                 /// Accepted situational inputs; unknown entries remain unknown.
                 #[input] pub consultation: String,
                 /// Native chart, dignity, directed receptions and ordered event evidence.
                 #[input] pub chart_evidence: String,
-                /// The relevant primary text with printed and OCR page references.
-                #[input] pub source_text: String,
                 /// answer, need_information, or method_limit.
                 #[output] pub status: String,
                 /// A direct, contextual answer addressed to the person.

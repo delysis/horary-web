@@ -226,6 +226,39 @@ pub async fn run(
 mod tests {
     use super::*;
     #[test]
+    fn reading_source_is_a_stable_prefix_before_changing_live_facts() {
+        let signature = signatures::reading("contact").unwrap();
+        let exchange = |question: &str, consultation: &str, evidence: &str| {
+            let example =
+                dsrust::example! {source_text:"EXACT CONSTANT BOOK TEXT",question:question,
+                consultation:consultation,chart_evidence:evidence}
+                .with_inputs(["source_text", "question", "consultation", "chart_evidence"]);
+            request(&signature, &example).unwrap().wire_messages()
+        };
+        let first = exchange("FIRST QUESTION", "FIRST CONTEXT", "FIRST NATIVE FACTS");
+        let second = exchange("SECOND QUESTION", "SECOND CONTEXT", "SECOND NATIVE FACTS");
+        assert_eq!(first[0], second[0]);
+        let first = first.last().unwrap()["content"].as_str().unwrap();
+        let second = second.last().unwrap()["content"].as_str().unwrap();
+        let boundary = first.find("[[ ## question ## ]]").unwrap();
+        assert_eq!(&first[..boundary], &second[..boundary]);
+        assert!(first[..boundary].contains("EXACT CONSTANT BOOK TEXT"));
+        for (text, fields) in [
+            (
+                first,
+                ["FIRST QUESTION", "FIRST CONTEXT", "FIRST NATIVE FACTS"],
+            ),
+            (
+                second,
+                ["SECOND QUESTION", "SECOND CONTEXT", "SECOND NATIVE FACTS"],
+            ),
+        ] {
+            for field in fields {
+                assert!(text[boundary..].contains(field));
+            }
+        }
+    }
+    #[test]
     fn exchange_uses_only_declared_fields_and_no_provider_schema() {
         let example = dsrust::example! {question:"A synthetic question",conversation:"[]",catalogue:"Synthetic routes",
             case_id:"private-id",expected:"PRIVATE GOLD",__review_source:"PRIVATE JUDGE"}.with_inputs(["question","conversation","catalogue"]);
