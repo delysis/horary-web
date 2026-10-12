@@ -1740,16 +1740,6 @@ fn generate_reading(
             .map(|()| None);
     }
     let reception_roles = accepted_reception_roles(&assignment)?;
-    let contact_roles = native_contact_role_reference(
-        session
-            .method
-            .consultation
-            .as_ref()
-            .expect("Consultation installed"),
-        &reading_request,
-        &reception_roles,
-        &all,
-    );
     let condition = relevant(&all, &roles, &["condition", "position", "boundary"]);
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
     let contact_context = contact_evidence(&all, &roles);
@@ -1856,6 +1846,18 @@ fn generate_reading(
             facts.push(fact.clone());
         }
     }
+    // Reference IDs belong to this judgment's actual evidence contract, not
+    // to calculations omitted from its final input.
+    let contact_roles = native_contact_role_reference(
+        session
+            .method
+            .consultation
+            .as_ref()
+            .expect("Consultation installed"),
+        &reading_request,
+        &reception_roles,
+        &facts,
+    );
     let mut judgment_input = json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
         "native_reception":judgment_reception_clipboard(&reception_roles,&facts)});
     if let Some(reference) = contact_roles {
@@ -2057,6 +2059,30 @@ mod tests {
             input["contact_role_reference"]
         );
         assert_eq!(final_input["facts"], input["facts"]);
+        let without_positions: Vec<_> = native
+            .iter()
+            .filter(|fact| fact.kind != "position")
+            .cloned()
+            .collect();
+        let limited = native_contact_role_reference(
+            &case,
+            &input["reading_request"],
+            &selected,
+            &without_positions,
+        )
+        .unwrap();
+        assert!(limited["role_rows"].as_array().unwrap().iter().all(|row|row["position_fact_ids"].as_array().unwrap().is_empty()),
+            "A reference must not reintroduce position IDs omitted from the actual judgment contract");
+        for edge in limited["directed_reception"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .chain(limited["event_endpoints"].as_array().unwrap())
+        {
+            assert!(without_positions
+                .iter()
+                .any(|fact| edge["fact_id"] == fact.id));
+        }
         let mut other = case;
         if let contracts::Slot::Resolved { observation } = &mut other.frame {
             observation.value.method = Method::NewJob;
