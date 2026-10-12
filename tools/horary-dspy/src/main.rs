@@ -3,8 +3,8 @@ use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand, ValueEnum};
 use dsrust::{Module, lm::DynChatModel};
 use horary_dspy::{
-    book, catalogue, codex, continuation, google, native_export, optimize, preflight, queue,
-    runner, signatures, teachers,
+    book, catalogue, classification_export, codex, continuation, google, native_export, optimize,
+    preflight, queue, runner, signatures, teachers,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Arc};
@@ -97,6 +97,24 @@ enum Command {
     ExportNative {
         #[arg(long)]
         compiled: PathBuf,
+        #[arg(long)]
+        baseline_manifest: PathBuf,
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Inspect the explicit classifier producer and native target contract.
+    ExportClassificationRequirements {
+        #[arg(long)]
+        output: PathBuf,
+    },
+    /// Export authored classifier teaching without installing or qualifying it.
+    ExportNativeClassification {
+        #[arg(long)]
+        compiled: PathBuf,
+        #[arg(long)]
+        producer_source: PathBuf,
         #[arg(long)]
         baseline_manifest: PathBuf,
         #[arg(long)]
@@ -444,6 +462,47 @@ async fn main() -> Result<()> {
                 serde_json::to_vec_pretty(&export.receipt)?,
             )?;
             println!("Native teaching seed exported; application validation is still required");
+        }
+        Command::ExportClassificationRequirements { output } => fs::write(
+            output,
+            serde_json::to_vec_pretty(&classification_export::requirements()?)?,
+        )?,
+        Command::ExportNativeClassification {
+            compiled,
+            producer_source,
+            baseline_manifest,
+            plan,
+            output,
+        } => {
+            let compiled_bytes = fs::read(compiled)?;
+            let producer_bytes = fs::read(producer_source)?;
+            let manifest_bytes = fs::read(baseline_manifest)?;
+            let plan_bytes = fs::read(plan)?;
+            let plan: classification_export::Plan = serde_json::from_slice(&plan_bytes)?;
+            let export = classification_export::export(
+                &compiled_bytes,
+                &producer_bytes,
+                &manifest_bytes,
+                &plan,
+            )?;
+            // Source and adapter validation precedes creating an uninstalled
+            // proposal. The exact producer artifacts remain separately bound.
+            fs::create_dir(&output)?;
+            fs::write(output.join("compiled-source.json"), compiled_bytes)?;
+            fs::write(output.join("producer-source-receipt.json"), producer_bytes)?;
+            fs::write(output.join("baseline-manifest-source.json"), manifest_bytes)?;
+            fs::write(output.join("export-plan.json"), plan_bytes)?;
+            fs::write(
+                output.join("program.json"),
+                serde_json::to_vec_pretty(&export.program)?,
+            )?;
+            fs::write(
+                output.join("export-receipt.json"),
+                serde_json::to_vec_pretty(&export.receipt)?,
+            )?;
+            println!(
+                "Native classification seed exported; application validation is still required"
+            );
         }
         Command::ImportCodex {
             source,

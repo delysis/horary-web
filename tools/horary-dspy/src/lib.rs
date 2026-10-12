@@ -2,6 +2,7 @@
 pub mod anchors;
 pub mod book;
 pub mod catalogue;
+pub mod classification_export;
 pub mod codex;
 pub mod continuation;
 pub mod demo;

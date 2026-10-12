@@ -73,7 +73,7 @@ fn substantive(method: &str) -> Result<()> {
     Ok(())
 }
 
-fn signature_digest(signature: &Signature) -> Result<String> {
+pub(crate) fn signature_digest(signature: &Signature) -> Result<String> {
     // Saved fields alone omit their names, directions and types. Bind those
     // to the declaration as well as its baseline instruction and ordered fields.
     Ok(digest(serde_json::to_vec(&json!({
@@ -83,7 +83,7 @@ fn signature_digest(signature: &Signature) -> Result<String> {
     }))?))
 }
 
-fn exact_keys(value: &Value, keys: &[&str], label: &str) -> Result<()> {
+pub(crate) fn exact_keys(value: &Value, keys: &[&str], label: &str) -> Result<()> {
     let actual = value
         .as_object()
         .with_context(|| format!("{label} must be an object"))?;

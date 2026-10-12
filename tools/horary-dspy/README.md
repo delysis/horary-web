@@ -82,6 +82,20 @@ Inherited student and teacher physical attempts are charged against the original
 
 The pure `export-native` command can create an explicit native-format teaching seed with a source-bound authored mapping. It withholds foreign demonstrations rather than inventing native typed records. The application's separate `real_model_first_message_application_journey` gate starts a default native session with only the original words and fixture device context, optionally using a pinned native candidate. Its full traces still need an independent source review. Neither exporting a seed nor passing the DSPy journey installs or qualifies the production application.
 
+The separate `export-native-classification` command handles the mixed-family queue's exact single `classification` predictor. Its strict [plan](src/classification_export.rs) binds the original compiled bytes and version-1 `component-source.json` separately from the target native manifest, classification contract and captured guide. Producer optimizer/teaching hashes remain provenance; they need not equal the new exporter's implementation. Classification declaration, taxonomy and book mismatches fail. The explicit target is `intake` / `classify_question` / `method: null`; omitted or foreign selectors fail. An author must bind the learned instruction hash and write teaching for the actual native Turn contract. The tool preserves the baseline guide and every quoted book block, withholds all foreign demonstrations, and converts no branch, principal or clarification output into native records. The resulting seed needs fresh native and independent semantic qualification; it is neither installed nor admitted as a component of a different DSPy queue.
+
+```sh
+horary-dspy export-classification-requirements --output /absolute/path/to/requirements.json
+horary-dspy export-native-classification \
+  --compiled /absolute/path/to/original-classifier/compiled.json \
+  --producer-source /absolute/path/to/original-classifier/component-source.json \
+  --baseline-manifest /absolute/path/to/current-native/source-manifest.json \
+  --plan /absolute/path/to/authored-classification-plan.json \
+  --output /absolute/path/to/new-uninstalled-seed
+```
+
+Validation precedes creating the output directory. The export retains exact copies of the compiled source, producer receipt, target manifest and authored plan alongside `program.json` and its provenance receipt. Existing proposals are never overwritten.
+
 The first actual student reading received a completed Codex review with score 0.75: classification and extraction passed, while reading and answer quality failed. The feedback identified unsupported absence claims, translation/collection omissions and overclaiming from `None` or unknown evidence. Its raw answer remains intact. A validator initially mistook an exact disabled-Code-Mode startup notice for tool execution; the narrow notice check was repaired so that successful paid answer can be reused without resubmission. The repair changes neither the judgment nor the failed reading's qualification.
 
 The complete first-message module in [journey.rs](src/journey.rs) starts with only the original question and device context. Expected method, facts, rubric and chart seeds are evaluation labels; they are not student inputs. The shared classifier selects the actual method, facet, principal and book subbranch. A wrong route remains the observed route: the runner does not substitute the expected family to reach a reader.
