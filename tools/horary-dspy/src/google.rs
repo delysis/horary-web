@@ -64,6 +64,19 @@ impl std::error::Error for ProviderFailure {}
 pub fn disposition(error: &anyhow::Error) -> Option<&ProviderFailure> {
     error.downcast_ref::<ProviderFailure>()
 }
+/// A read-only witness for one fully received teacher output truncation. This
+/// does not authorize resending the original key or repairing semantic errors.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletedTruncation {
+    pub model: String,
+    pub original_key: String,
+    pub original_request_sha256: String,
+    pub original_raw_sha256: String,
+    pub parsed_raw_sha256: String,
+    pub original_max_output_tokens: usize,
+    pub model_output_token_limit: usize,
+}
 fn provider_error(
     model: &str,
     disposition: Disposition,
@@ -771,6 +784,9 @@ impl Google {
         self.limiter = limiter;
         self
     }
+    pub fn model_id(&self) -> &str {
+        &self.model
+    }
     fn routed_key(&self, request: &LmRequest) -> (LmRequest, String) {
         let mut routed = request.clone();
         routed.model = self.model.clone();
@@ -811,6 +827,105 @@ impl Google {
         );
         result.cache_hit = true;
         Ok(Some(result))
+    }
+    /// Verify saved transport evidence without a network operation. Only listed
+    /// ordinary text teachers with a complete HTTP200/MAX_TOKENS response qualify.
+    pub async fn completed_truncation(
+        &self,
+        request: &LmRequest,
+    ) -> Result<Option<CompletedTruncation>> {
+        if self.interactions || self.model == STUDENT {
+            return Ok(None);
+        }
+        ensure!(
+            request.output_schema().is_none() && request.tools.is_empty(),
+            "Teacher repair permits ordinary text only"
+        );
+        let (routed, key) = self.routed_key(request);
+        let raw_path = self.directory.join(format!("{key}.raw.json"));
+        if !raw_path.exists() || self.cached_response(request)?.is_some() {
+            return Ok(None);
+        }
+        let raw_bytes = fs::read(raw_path)?;
+        let raw: Value = serde_json::from_slice(&raw_bytes)?;
+        let candidates = raw["candidates"]
+            .as_array()
+            .context("No saved teacher candidates")?;
+        if candidates.len() != 1 || candidates[0]["finishReason"] != "MAX_TOKENS" {
+            return Ok(None);
+        }
+        ensure!(
+            candidates[0]["content"]["parts"]
+                .as_array()
+                .is_some_and(|parts| parts
+                    .iter()
+                    .any(|p| p["thought"] != true
+                        && p["text"].as_str().is_some_and(|s| !s.is_empty()))),
+            "Truncated teacher response has no observed text output"
+        );
+        let saved_bytes = fs::read(self.directory.join(format!("{key}.request.json")))?;
+        let saved: Value = serde_json::from_slice(&saved_bytes)?;
+        ensure!(
+            saved["model"] == self.model && saved["request"] == serde_json::to_value(&routed)?,
+            "Truncation witness request identity differs"
+        );
+        let original_max = routed.config.max_tokens.unwrap_or(4096) as usize;
+        ensure!(
+            saved["body"]["generationConfig"]["maxOutputTokens"] == original_max,
+            "Truncation witness output bound differs"
+        );
+        let attempt: Value = serde_json::from_slice(&fs::read(
+            self.directory.join(format!("{key}.attempt-1.request.json")),
+        )?)?;
+        let result: Value = serde_json::from_slice(&fs::read(
+            self.directory.join(format!("{key}.attempt-1.result.json")),
+        )?)?;
+        let body_bytes = fs::read(self.directory.join(format!("{key}.attempt-1.body")))?;
+        let body_sha = digest(&body_bytes);
+        let saved_sha = digest(&saved_bytes);
+        ensure!(
+            result["logical_key"] == key
+                && result["attempt"] == 1
+                && result["http_status"] == 200
+                && result["response_complete"] == true
+                && result["automatic_retry"] == false
+                && result["body_sha256"] == body_sha,
+            "Truncation witness is not a complete hash-bound HTTP200 response"
+        );
+        ensure!(
+            serde_json::from_slice::<Value>(&body_bytes)? == raw,
+            "Saved parsed teacher output differs from complete response body"
+        );
+        ensure!(
+            attempt["logical_key"] == key
+                && attempt["attempt"] == 1
+                && attempt["model"] == self.model
+                && attempt["physical_call"].as_u64().is_some_and(|n| n > 0)
+                && result["physical_call"] == attempt["physical_call"]
+                && attempt["request_sha256"] == saved_sha
+                && attempt["body"] == saved["body"]
+                && attempt["body_sha256"] == digest(serde_json::to_vec(&saved["body"])?),
+            "Truncation witness attempt identity differs"
+        );
+        let info = self
+            .info
+            .lock()
+            .await
+            .clone()
+            .context("Teacher repair needs captured listed model metadata")?;
+        ensure!(
+            info.id()? == self.model && crate::teachers::is_text_teacher(&info),
+            "Truncation witness is not a listed text teacher"
+        );
+        Ok(Some(CompletedTruncation {
+            model: self.model.clone(),
+            original_key: key,
+            original_request_sha256: saved_sha,
+            original_raw_sha256: body_sha,
+            parsed_raw_sha256: digest(raw_bytes),
+            original_max_output_tokens: original_max,
+            model_output_token_limit: info.output_token_limit,
+        }))
     }
     #[cfg(test)]
     pub(crate) fn test_api(&mut self, api: &str) {
