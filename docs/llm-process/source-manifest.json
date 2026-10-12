@@ -463,7 +463,7 @@
     },
     {
       "path": "tools/horary-dspy/README.md",
-      "sha256": "e31deaa034e93de161e6cc0024eb339d6a1038933451a0e3f150633097c9782b"
+      "sha256": "f0adc5c65339c5cdb2b771b4d5ee3b9e418b29331d6b2103db7e3292ed56c7af"
     },
     {
       "path": "tools/horary-dspy/coverage.json",
@@ -871,7 +871,7 @@
     },
     {
       "path": "tools/horary-dspy/src/main.rs",
-      "sha256": "fc3895697dd26d8c8e2ae7107fdfdad5887597a1261c91d916516c11e30cc72a"
+      "sha256": "29af20919ee19d1d614128bce1fa67732cfec722d5e5b8a886a5b6ab95e104ee"
     },
     {
       "path": "tools/horary-dspy/src/native_export.rs",
@@ -879,11 +879,11 @@
     },
     {
       "path": "tools/horary-dspy/src/optimize.rs",
-      "sha256": "20f08d5f3ad380a270544dea658d962fe1c291488892d7790db4c5325e149594"
+      "sha256": "80456bae97f97a0ba423c412e46f7fa0f9c9c767bf8cb0ca501767254ddbdc64"
     },
     {
       "path": "tools/horary-dspy/src/preflight.rs",
-      "sha256": "3215147d93547d627fd40604e3ba0577e14e4bd54567cecaaff627ac5f2d6f7d"
+      "sha256": "f63deecfee83ea2a261d7f78b5c2dff0650d2c236cd298b2ba30effd713b81e8"
     },
     {
       "path": "tools/horary-dspy/src/queue.rs",
