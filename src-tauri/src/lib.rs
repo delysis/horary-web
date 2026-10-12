@@ -7,8 +7,6 @@ use geocode::{
     geocode_with_cache, reverse_geocode_local_city, GeocodeError, GeocodeRequest, GeocodeState,
     LocationCandidate, LocationLabel, ReverseGeocodeRequest,
 };
-#[cfg(not(feature = "native-llama"))]
-use llama::start_llama_with_sidecar_dir;
 use llama::{
     get_llama_sidecar_status, get_model_by_id, get_model_status as llama_status_from_state,
     import_model_to_dir, install_llama_sidecar_to_dir, list_models_in_dir, stop_llama_process,
@@ -20,8 +18,6 @@ use model_manifest::{
 };
 use native_llama::{native_llama_runtime_info, NativeLlamaRuntimeInfo};
 mod review_export;
-#[cfg(feature = "native-llama")]
-use native_llama_worker::start_native_llama_in_dir;
 use native_llama_worker::{
     native_llama_health, native_llama_status, stop_native_llama, NativeLlamaHealth,
     NativeLlamaState,
@@ -69,6 +65,7 @@ mod native_location;
 mod permissions;
 #[cfg(test)]
 mod process_reference;
+mod reader_runtime;
 mod reading_contracts;
 #[cfg(test)]
 mod reading_eval;
@@ -351,19 +348,7 @@ async fn start_llama(
         message: error.to_string(),
     })?;
     let result = tauri::async_runtime::spawn_blocking(move || {
-        #[cfg(feature = "native-llama")]
-        {
-            let state = app.state::<LlamaState>();
-            let native_state = app.state::<NativeLlamaState>();
-            let _ = stop_llama_process(&state);
-            start_native_llama_in_dir(&app_data_dir, &native_state, req)
-        }
-        #[cfg(not(feature = "native-llama"))]
-        {
-            let state = app.state::<LlamaState>();
-            let resource_dir = app.path().resource_dir().ok();
-            start_llama_with_sidecar_dir(&app_data_dir, resource_dir.as_deref(), &state, req)
-        }
+        reader_runtime::start(&app, &app_data_dir, req)
     })
     .await
     .map_err(llama_worker_error)?;

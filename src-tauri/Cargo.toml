@@ -24,6 +24,7 @@ cc = "1.2"
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
+base64 = "0.22"
 cpal = "=0.16.0"
 crossbeam-channel = "0.5"
 thiserror = "2"

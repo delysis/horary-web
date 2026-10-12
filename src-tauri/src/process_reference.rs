@@ -229,6 +229,8 @@ const SOURCES: &[&str] = &[
     "scripts/check-release-assets.mjs",
     "src-tauri/src/worksheet_xml.rs",
     "src-tauri/src/conversation.rs",
+    "src-tauri/src/reader_runtime.rs",
+    "docs/LOCAL_READER.md",
     "src-tauri/src/horary_pipeline.rs",
     "src-tauri/src/horary_conversation.rs",
     "src-tauri/src/horary_contract.rs",
@@ -527,7 +529,9 @@ flowchart TB
 
 The clipboard presents chart_context and event_context separately. Device location can supply the reader anchor without establishing an event venue. Ask about the venue when it matters to the selected question, rather than requiring it universally. Mentioning London or yesterday as the location/time of a lost object does not change the chart place or moment. A city-only clarification preserves the original question. A relative historical time needs the native clock in the **chosen place's** zone, not the model's guessed date. Nonexistent civil times fail; repeated civil times require an occurrence choice.
 
-## The cache and native batch boundary
+## The cache and selected local owner boundary
+
+The application selects its reader through `reader_runtime.rs`: an explicit loopback owner, the installed sidecar with the cached Gemma helper, or the existing native-kit fallback. The [local reader guide](LOCAL_READER.md) documents ownership, context and audio checks. A selected endpoint failure does not launch a second model. The following saved-prefix diagram describes native-kit; the server route instead uses its observed prompt cache and up to four independent HTTP requests through the same native stage controller. Neither route treats a cache metric or an accepted worksheet as proof of a correct interpretation.
 
 ```mermaid
 flowchart LR

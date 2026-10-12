@@ -5,9 +5,7 @@ use crate::review_progress::{self, Progress};
 use crate::{
     geocode::{GeocodeState, LocationCandidate},
     hf_cache::AcquisitionState,
-    native_llama_worker::{
-        generate_native, start_native_llama_in_dir, NativeGenerateOptions, NativeLlamaState,
-    },
+    native_llama_worker::NativeGenerateOptions,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -287,15 +285,7 @@ pub fn prepare_reader(app: &tauri::AppHandle) -> Result<(), String> {
     }
     let state = app.state::<ConversationState>();
     state.check()?;
-    start_native_llama_in_dir(
-        &dir,
-        &app.state::<NativeLlamaState>(),
-        serde_json::from_value(
-            json!({"modelId":"gemma-4-12b-qat","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}),
-        )
-        .map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.message)?;
+    crate::reader_runtime::start_reading(app, &dir).map_err(|e| e.message)?;
     Ok(())
 }
 
@@ -312,8 +302,8 @@ pub fn transcribe(app: &tauri::AppHandle, audio: Vec<u8>) -> Result<String, Stri
     state.cancelled.store(false, Ordering::Release);
     prepare_reader(app)?;
     let prompt = json!([{"role":"user","content":TRANSCRIPTION_PROMPT}]).to_string();
-    let answer = generate_native(
-        &app.state::<NativeLlamaState>(),
+    let answer = crate::reader_runtime::generate(
+        app,
         prompt,
         NativeGenerateOptions {
             audio: Some(audio),
@@ -406,8 +396,8 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let wall = std::time::Instant::now();
-        let result = crate::native_llama_worker::generate_native_batch(
-            &self.app.state::<NativeLlamaState>(),
+        let result = crate::reader_runtime::generate_batch(
+            self.app,
             prompts,
             NativeGenerateOptions {
                 max_tokens: 1000,
@@ -445,8 +435,8 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
         audio: Option<&[u8]>,
     ) -> Result<crate::native_llama_worker::NativeGenerationResult, String> {
         let prompt = crate::horary_pipeline::prompt(stage, matter, input, schema)?;
-        let result = generate_native(
-            &self.app.state::<NativeLlamaState>(),
+        let result = crate::reader_runtime::generate(
+            self.app,
             prompt,
             NativeGenerateOptions {
                 max_tokens: if stage == crate::horary_lessons::Stage::Judgment {
@@ -637,16 +627,7 @@ fn run(
             acquisition.0.run(&dir).map_err(|e| e.message)?;
         }
         state.check()?;
-        let native = app.state::<NativeLlamaState>();
-        start_native_llama_in_dir(
-            &dir,
-            &native,
-            serde_json::from_value(
-                json!({"modelId":"gemma-4-12b-qat","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}),
-            )
-            .map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.message)?;
+        crate::reader_runtime::start_reading(app, &dir).map_err(|e| e.message)?;
         note(
             &mut session,
             &dir,

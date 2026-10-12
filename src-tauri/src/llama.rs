@@ -145,7 +145,9 @@ struct RunningLlama {
     model_id: String,
     port: u16,
     log_path: PathBuf,
-    child: Child,
+    // An explicit local endpoint is borrowed; stopping the app must not kill
+    // its independently owned process.
+    child: Option<Child>,
 }
 
 pub(crate) struct LlamaLaunchArgs {
@@ -161,8 +163,10 @@ pub(crate) struct LlamaLaunchArgs {
 
 impl Drop for RunningLlama {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Some(child) = &mut self.child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -443,7 +447,8 @@ pub fn get_model_status(state: &LlamaState) -> LlamaResult<LlamaStatus> {
             model_id: Some(process.model_id.clone()),
             port: Some(process.port),
             backend: Some(LLAMA_SIDECAR_BACKEND.to_string()),
-            log_path: Some(process.log_path.to_string_lossy().to_string()),
+            log_path: (!process.log_path.as_os_str().is_empty())
+                .then(|| process.log_path.to_string_lossy().into_owned()),
         },
         None => LlamaStatus {
             running: false,
@@ -466,6 +471,35 @@ pub fn active_llama_connection(state: &LlamaState) -> LlamaResult<Option<LlamaCo
     }))
 }
 
+/// Called only after the reader has checked the local server's model identity.
+pub(crate) fn attach_llama_connection(
+    state: &LlamaState,
+    model_id: String,
+    port: u16,
+) -> LlamaResult<LlamaStatus> {
+    let mut running = state.running.lock().map_err(|_| LlamaError {
+        message: "llama state lock poisoned".into(),
+    })?;
+    clear_exited_llama(&mut running)?;
+    if let Some(old) = running.as_ref() {
+        if old.model_id == model_id && old.port == port {
+            drop(running);
+            return get_model_status(state);
+        }
+        return Err(LlamaError {
+            message: "Stop the current local reader before attaching a different endpoint.".into(),
+        });
+    }
+    *running = Some(RunningLlama {
+        model_id,
+        port,
+        log_path: PathBuf::new(),
+        child: None,
+    });
+    drop(running);
+    get_model_status(state)
+}
+
 #[cfg(test)]
 pub fn start_llama_in_dir(
     app_data_dir: &Path,
@@ -482,10 +516,17 @@ pub fn start_llama_with_sidecar_dir(
     req: StartLlamaRequest,
 ) -> LlamaResult<LlamaStatus> {
     {
-        let running = state.running.lock().map_err(|_| LlamaError {
+        let mut running = state.running.lock().map_err(|_| LlamaError {
             message: "llama state lock poisoned".to_string(),
         })?;
-        if running.is_some() {
+        clear_exited_llama(&mut running)?;
+        if let Some(old) = running.as_ref() {
+            if old.model_id != req.model_id {
+                return Err(LlamaError {
+                    message: "Stop the current local reader before choosing a different model."
+                        .into(),
+                });
+            }
             drop(running);
             return get_model_status(state);
         }
@@ -494,6 +535,11 @@ pub fn start_llama_with_sidecar_dir(
     let model = get_model_by_id(app_data_dir, &req.model_id)?;
     let model_path = resolve_model_path(app_data_dir, &model.filename)?;
     let draft_model_path = resolve_optional_draft_model_path(app_data_dir, &req)?;
+    let projector_model_path =
+        match get_model_by_id(app_data_dir, &format!("{}-projector", req.model_id)) {
+            Ok(projector) => Some(resolve_model_path(app_data_dir, &projector.filename)?),
+            Err(_) => None,
+        };
     let binary = resolve_llama_server_path(app_data_dir, resource_dir)?;
 
     let port = find_free_loopback_port()?;
@@ -505,13 +551,20 @@ pub fn start_llama_with_sidecar_dir(
     let log_file = File::create(&log_path)?;
     let log_file_for_stderr = log_file.try_clone()?;
 
-    let args = build_llama_server_args(
+    let mut args = build_llama_server_args(
         &model_path,
         port,
         &req,
         Some(&kv_cache_dir),
         draft_model_path.as_deref(),
     )?;
+    if let Some(projector) = projector_model_path {
+        args.push("--mmproj".into());
+        args.push(projector.to_string_lossy().into_owned());
+    }
+    if req.model_id == crate::hf_cache::RECOMMENDED_ID {
+        args.extend(["--reasoning".into(), "off".into()]);
+    }
     let mut child = Command::new(binary)
         .args(args)
         .stdout(Stdio::from(log_file))
@@ -533,7 +586,7 @@ pub fn start_llama_with_sidecar_dir(
         model_id: model.id,
         port,
         log_path,
-        child,
+        child: Some(child),
     });
     drop(running);
     get_model_status(state)
@@ -548,7 +601,10 @@ pub fn stop_llama_process(state: &LlamaState) -> LlamaResult<bool> {
 
 fn clear_exited_llama(running: &mut Option<RunningLlama>) -> LlamaResult<()> {
     let exited = match running.as_mut() {
-        Some(process) => process.child.try_wait()?.is_some(),
+        Some(process) => match process.child.as_mut() {
+            Some(child) => child.try_wait()?.is_some(),
+            None => false,
+        },
         None => false,
     };
     if exited {
@@ -1446,6 +1502,52 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn owned_reader_pairs_cached_target_helper_and_projector_in_one_launch() {
+        let app_dir = temp_dir("paired-reader-startup");
+        let model_id = "synthetic-gemma";
+        let mut paths = Vec::new();
+        for suffix in ["", "-assistant", "-projector"] {
+            let id = format!("{model_id}{suffix}");
+            let source = app_dir.join(format!("{id}.gguf"));
+            write_model(&source);
+            let model = import_model_to_dir(
+                &app_dir,
+                ImportModelRequest {
+                    path: source.to_string_lossy().into_owned(),
+                    id: Some(id),
+                    display_name: None,
+                },
+            )
+            .unwrap();
+            paths.push(resolve_model_path(&app_dir, &model.filename).unwrap());
+        }
+        let binary_dir = app_dir.join(BINARIES_DIR);
+        fs::create_dir_all(&binary_dir).unwrap();
+        let binary = binary_dir.join(llama_server_target_binary_name());
+        fs::write(&binary, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 7\n").unwrap();
+        make_executable(&binary).unwrap();
+
+        let state = LlamaState::default();
+        let error = start_llama_in_dir(&app_dir, &state, start_request(model_id)).unwrap_err();
+        assert!(error.message.contains("exited before becoming ready"));
+        let args: Vec<String> = fs::read_to_string(app_dir.join(LOGS_DIR).join("llama-server.log"))
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        for (flag, path) in ["--model", "--model-draft", "--mmproj"]
+            .into_iter()
+            .zip(paths)
+        {
+            assert!(has_arg_pair(&args, flag, path.to_str().unwrap()));
+        }
+        assert!(has_arg_pair(&args, "--spec-type", "draft-mtp"));
+        assert!(!args.iter().any(|arg| arg == "--spec-draft-device"));
+        assert!(!get_model_status(&state).unwrap().running);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn start_creates_log_and_kv_cache_directories_before_sidecar_readiness() {
         let app_dir = temp_dir("fake-sidecar-startup");
         let source = app_dir.join("model.gguf");
@@ -1559,6 +1661,45 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_connection_is_visible_but_never_acquires_process_ownership() {
+        let state = LlamaState::default();
+        let status = attach_llama_connection(&state, "reader".into(), 32123).unwrap();
+        assert!(status.running);
+        assert_eq!(status.log_path, None);
+        assert!(state
+            .running
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .child
+            .is_none());
+        assert_eq!(
+            active_llama_connection(&state).unwrap().unwrap().model_id,
+            "reader"
+        );
+        assert!(attach_llama_connection(&state, "other".into(), 32124).is_err());
+        assert_eq!(get_model_status(&state).unwrap().port, Some(32123));
+        assert!(stop_llama_process(&state).unwrap());
+        assert_eq!(active_llama_connection(&state).unwrap(), None);
+    }
+
+    #[test]
+    fn existing_reader_does_not_silently_change_model_or_launch_another_owner() {
+        let state = LlamaState::default();
+        attach_llama_connection(&state, "reader".into(), 32123).unwrap();
+        let dir = temp_dir("borrowed-reader");
+        assert!(start_llama_in_dir(&dir, &state, start_request("other"))
+            .unwrap_err()
+            .message
+            .contains("Stop the current"));
+        assert_eq!(
+            get_model_status(&state).unwrap().model_id,
+            Some("reader".into())
+        );
+    }
+
+    #[test]
     fn status_clears_exited_child_process() {
         let state = LlamaState::default();
         let app_dir = temp_dir("exited-child-status");
@@ -1575,7 +1716,7 @@ mod tests {
                 model_id: "model".to_string(),
                 port: 32123,
                 log_path: app_dir.join("llama-server.log"),
-                child,
+                child: Some(child),
             });
         }
 

@@ -358,10 +358,20 @@ fn default_enabled() -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn parses_pinned_recommended_pair() {
+    fn parses_pinned_recommended_target_projector_and_helper() {
         let manifest = bundled_model_manifest().unwrap();
 
-        assert_eq!(manifest.models.len(), 2);
+        assert_eq!(manifest.models.len(), 3);
+        assert_eq!(
+            manifest
+                .models
+                .iter()
+                .filter(|model| {
+                    model.id == format!("{}-assistant", crate::hf_cache::RECOMMENDED_ID)
+                })
+                .count(),
+            1
+        );
         assert!(manifest.models.iter().all(|m| m
             .source
             .as_ref()

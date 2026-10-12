@@ -1,7 +1,7 @@
 {
-  "version": "2026-10-07",
-  "updatedAt": "2026-10-07",
-  "notes": "Pinned Google instruction model and matching image/audio projector. Native-kit owns inference. No Python, CLI, hosted fallback, or app-owned copy of Hub weights.",
+  "version": "2026-10-12",
+  "updatedAt": "2026-10-12",
+  "notes": "Pinned Google instruction model, matching image/audio projector and Gemma MTP helper. Native-kit remains the fallback; a compatible local sidecar or explicit loopback owner can use the helper. No Python, hosted fallback or app-owned copy of Hub weights.",
   "models": [
     {
       "id": "gemma-4-12b-qat",
@@ -51,6 +51,32 @@
         "top_p": 1,
         "max_tokens": 3072
       },
+      "enabled": true
+    },
+    {
+      "id": "gemma-4-12b-qat-assistant",
+      "displayName": "Gemma 4 12B MTP helper",
+      "format": "gguf",
+      "family": "gemma4",
+      "source": {
+        "type": "huggingface",
+        "repo": "unsloth/gemma-4-12B-it-qat-GGUF",
+        "revision": "980b060c40a8539ac159e0501a3e0f66a6365af3",
+        "filename": "mtp-gemma-4-12B-it.gguf",
+        "url": "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/mtp-gemma-4-12B-it.gguf"
+      },
+      "sha256": "fcb35dea42c71333db904cee11baac525c9ef872818ee3753f6cb156f3c6f4f6",
+      "sizeBytes": 253708800,
+      "license": "Apache-2.0",
+      "minRamGb": 24,
+      "recommendedRamGb": 32,
+      "defaultContextTokens": 32768,
+      "defaultParams": {
+        "temperature": 0,
+        "top_p": 1,
+        "max_tokens": 3072
+      },
+      "notes": "A paired helper for the recommended Gemma 4 12B IT QAT target, never a primary reading model.",
       "enabled": true
     }
   ]
