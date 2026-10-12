@@ -248,6 +248,17 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Optimize the common reception function with the existing stock GEPA compiler.
+    OptimizeReception {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        prepare_only: bool,
+        #[arg(long)]
+        prepared: Option<PathBuf>,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Compare an already proposed instruction on one complete development pool.
     CompareClassification {
         #[arg(long)]
@@ -282,6 +293,7 @@ fn allows_local_student(command: &Command) -> bool {
             | Command::CompareClassification { .. }
             | Command::CompareContactReference { .. }
             | Command::EvaluateReception { .. }
+            | Command::OptimizeReception { .. }
     )
 }
 #[tokio::main]
@@ -294,6 +306,7 @@ async fn main() -> Result<()> {
             "Local selection applies to run/optimize; sealed hosted queues remain unchanged"
         );
     }
+    let optimize_reception = matches!(&args.command, Command::OptimizeReception { .. });
     match args.command {
         Command::QueuePlan {
             examples,
@@ -990,6 +1003,12 @@ async fn main() -> Result<()> {
             prepare_only,
             prepared,
             output,
+        }
+        | Command::OptimizeReception {
+            examples,
+            prepare_only,
+            prepared,
+            output,
         } => {
             ensure!(!output.exists(), "Preserve an existing reception attempt");
             let cases = catalogue::cases(&examples, "contact")?;
@@ -999,11 +1018,15 @@ async fn main() -> Result<()> {
                     prepared.is_none(),
                     "Preparation does not execute another plan"
                 );
-                reception::prepare(&cases, &book, &output)?
+                if optimize_reception {
+                    reception::prepare_optimization(&cases, &book, &output)?
+                } else {
+                    reception::prepare(&cases, &book, &output)?
+                }
             } else {
                 ensure!(
                     matches!(args.teacher, Teacher::Codex),
-                    "The fixed reception pilot uses the authorized Codex reviewer"
+                    "The bounded reception round uses the authorized Codex reviewer"
                 );
                 ensure!(
                     args.student_local_url.is_some() && args.student_model == local::MODEL,
@@ -1017,12 +1040,25 @@ async fn main() -> Result<()> {
                     &args.student_model,
                     http.clone(),
                     output.join("student"),
-                    4,
+                    if optimize_reception {
+                        reception::GEPA_LOCAL_CALLS
+                    } else {
+                        4
+                    },
                     14_000,
                 )?;
-                let teacher =
-                    teacher_model(args.teacher, args.codex, http, output.join("teacher"), 8)
-                        .await?;
+                let teacher = teacher_model(
+                    args.teacher,
+                    args.codex,
+                    http,
+                    output.join("teacher"),
+                    if optimize_reception {
+                        reception::GEPA_TEACHER_CALLS
+                    } else {
+                        8
+                    },
+                )
+                .await?;
                 let models = runner::Models {
                     student,
                     teacher,
@@ -1032,7 +1068,11 @@ async fn main() -> Result<()> {
                         &args.student_model,
                     ),
                 };
-                reception::evaluate(&cases, book, &prepared, &models, &output).await?
+                if optimize_reception {
+                    reception::optimize(&cases, book, &prepared, &models, &output).await?
+                } else {
+                    reception::evaluate(&cases, book, &prepared, &models, &output).await?
+                }
             };
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
@@ -1275,22 +1315,24 @@ mod cli_tests {
 
     #[test]
     fn narrow_reception_preparation_and_run_are_admitted_by_real_cli() {
-        for extra in ["--prepare-only", "--prepared"] {
-            let mut args = vec![
-                "horary-dspy",
-                "--teacher",
-                "codex",
-                "--student-local-url",
-                "http://127.0.0.1:63924/v1",
-                "evaluate-reception",
-                extra,
-            ];
-            if extra == "--prepared" {
-                args.push("synthetic-preparation");
+        for command in ["evaluate-reception", "optimize-reception"] {
+            for extra in ["--prepare-only", "--prepared"] {
+                let mut args = vec![
+                    "horary-dspy",
+                    "--teacher",
+                    "codex",
+                    "--student-local-url",
+                    "http://127.0.0.1:63924/v1",
+                    command,
+                    extra,
+                ];
+                if extra == "--prepared" {
+                    args.push("synthetic-preparation");
+                }
+                args.extend(["--output", "synthetic-output"]);
+                let parsed = Args::try_parse_from(args).unwrap();
+                assert!(allows_local_student(&parsed.command));
             }
-            args.extend(["--output", "synthetic-output"]);
-            let parsed = Args::try_parse_from(args).unwrap();
-            assert!(allows_local_student(&parsed.command));
         }
     }
 

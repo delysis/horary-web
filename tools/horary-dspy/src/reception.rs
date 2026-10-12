@@ -13,11 +13,15 @@ pub const PILOT_CASES: [&str; 4] = [
     "dspy-contact-first-008",
     "dspy-contact-first-011",
 ];
+pub const SOURCE_PAGES: [usize; 6] = [44, 71, 72, 73, 74, 75];
+pub const GEPA_METRICS: usize = 24;
+pub const GEPA_LOCAL_CALLS: usize = 32;
+pub const GEPA_TEACHER_CALLS: usize = 48;
 
 #[derive(dsrust::Signature)]
 /// Interpret ONLY the supplied directed reception, under the supplied primary text. The guest planet regards the host planet; never reverse that direction or assume reciprocity. Preserve all matching accepted role IDs when a planet has several roles. Report the exact native positive and negative dignity names separately, without summing or cancelling them. Give a concise qualified contextual implication about the regarding actor's inclination toward the regarded actor. Reception alone establishes neither ability nor an occasion, an action, delivery, an outcome or timing. Do not infer a psychological diagnosis, qualifications or an identity conflict. Return ONLY the seven requested output fields, beginning with edge_id; never reproduce source_text, question, accepted_roles or native_edge.
 pub struct InterpretReception {
-    /// Printed pp. 44 and 71–73, with exact primary passages and OCR witnesses.
+    /// Printed pp. 44 and 71–75, including minor qualities and ambivalence, with exact primary passages and OCR witnesses.
     #[input]
     pub source_text: String,
     /// Actual enquiry; contextual meaning is about this enquiry, not a generic horoscope.
@@ -53,7 +57,7 @@ pub struct InterpretReception {
 }
 
 #[derive(dsrust::Signature)]
-/// Grade ONLY qualified contextual interpretation of this single native reception. Rust independently checks exact edge identity, regarding/regarded accepted IDs and supplied qualities; a semantic pass cannot compensate for those failures. Use printed pp. 44/71–73 and concrete prediction quotes. Do not demand classification, extraction, full chart judgment, an answer, an event, a deadline or timing: these are outside this signature. Do not reward an event prediction made from reception alone. Distinguish actual regard direction, its contextual target and mixed positive/negative qualities; no invented strength sum, cancellation, diagnosis, qualifications or certainty. Return ONLY score, passed, contextual_meaning and feedback, beginning with score.
+/// Grade ONLY qualified contextual interpretation of this single native reception. Rust independently checks exact edge identity, regarding/regarded accepted IDs and supplied qualities; a semantic pass cannot compensate for those failures. Use printed pp. 44/71–75 and concrete prediction quotes. Do not demand classification, extraction, full chart judgment, an answer, an event, a deadline or timing: these are outside this signature. Do not reward an event prediction made from reception alone. Distinguish actual regard direction, its contextual target and mixed positive/negative qualities; no invented strength sum, cancellation, diagnosis, qualifications or certainty. Return ONLY score, passed, contextual_meaning and feedback, beginning with score.
 pub struct JudgeReception {
     #[input]
     pub inputs: String,
@@ -211,7 +215,7 @@ pub fn native_failures(input: &Example, prediction: &Prediction) -> Result<Vec<S
 }
 
 pub fn source(book: &Book) -> Result<String> {
-    book.pages(&BTreeSet::from([44, 71, 72, 73]))
+    book.pages(&BTreeSet::from(SOURCE_PAGES))
 }
 
 /// Selection policy: the target person's native planet regarding the principal
@@ -246,7 +250,7 @@ pub fn pilot_fixtures(cases: &[catalogue::Case], book: &Book) -> Result<Vec<Fixt
         let source = source(book)?;
         let mut example = dsrust::input!{source_text:source,question:case.question,accepted_roles:serde_json::to_string(&roles)?,native_edge:serde_json::to_string(&edge)?};
         example.set("case_id", json!(case.id));
-        example.set("expected", json!({"source_pages":[44,71,72,73],
+        example.set("expected", json!({"source_pages":SOURCE_PAGES,
             "task":"Qualified contextual interpretation of one supplied directed native reception",
             "must_explain":["the regarding actor's inclination toward the regarded actor, preserving direction and context", "mixed native positive and negative qualities without cancellation or a fabricated strength sum", "no automatic reciprocity, ability, occurrence, outcome or timing"],
             "must_not":["reverse or silently replace the edge", "infer an event, deadline or delivery", "invent qualifications, a psychological diagnosis or an identity conflict"]}));
@@ -264,11 +268,45 @@ pub fn judge_signature() -> dsrust::signature::Signature {
 }
 
 pub fn prepare(cases: &[catalogue::Case], book: &Book, directory: &Path) -> Result<Value> {
+    prepare_impl(cases, book, directory, false)
+}
+
+/// These diagnostic round pools contain only the four original training probes.
+/// Original case membership is neither changed nor represented as held-out gold.
+pub fn optimization_fixtures(cases: &[catalogue::Case], book: &Book) -> Result<Vec<Fixture>> {
+    let mut fixtures = pilot_fixtures(cases, book)?;
+    for (fixture, split) in fixtures
+        .iter_mut()
+        .zip(["train", "train", "development", "test"])
+    {
+        fixture.split = split.to_owned();
+    }
+    Ok(fixtures)
+}
+
+pub fn prepare_optimization(
+    cases: &[catalogue::Case],
+    book: &Book,
+    directory: &Path,
+) -> Result<Value> {
+    prepare_impl(cases, book, directory, true)
+}
+
+fn prepare_impl(
+    cases: &[catalogue::Case],
+    book: &Book,
+    directory: &Path,
+    optimizing: bool,
+) -> Result<Value> {
     ensure!(
         !directory.exists(),
         "Preserve the earlier reception preparation"
     );
-    let fixtures = pilot_fixtures(cases, book)?;
+    let fixtures = if optimizing {
+        optimization_fixtures(cases, book)?
+    } else {
+        pilot_fixtures(cases, book)?
+    };
     let predictor = optimize::plain(signature(), Arc::new(dsrust::DummyLM::new(vec![])))
         .with_config(LmConfig {
             max_tokens: Some(1024),
@@ -290,7 +328,7 @@ pub fn prepare(cases: &[catalogue::Case], book: &Book, directory: &Path) -> Resu
         directory.join("baseline-instructions.txt"),
         &predictor.signature.instructions,
     )?;
-    let plan = json!({"phase":"reception_preparation","function":"reception.interpretation",
+    let plan = json!({"phase":if optimizing{"reception_gepa_preparation"}else{"reception_preparation"},"function":"reception.interpretation",
         "case_ids":PILOT_CASES,"original_bank_count":cases.len(),
         "original_bank_sha256":crate::google::digest(serde_json::to_vec(cases)?),
         "fixtures_sha256":optimize::fixtures_digest(&fixtures)?,"book_sha256":crate::book::OCR_SHA256,
@@ -299,15 +337,98 @@ pub fn prepare(cases: &[catalogue::Case], book: &Book, directory: &Path) -> Resu
         "wire_preflight_sha256":crate::google::digest(fs::read(directory.join("wire-preflight.json"))?),
         "declared_inputs_sha256":crate::google::digest(fs::read(directory.join("declared-inputs.json"))?),
         "baseline_instructions_sha256":crate::google::digest(&predictor.signature.instructions),
-        "source_pages":[44,71,72,73],"edge_selection":"Unique target.person planet regarding principal.person planet from the native helper; not a gold edge ID or desired quality",
+        "source_pages":SOURCE_PAGES,"edge_selection":"Unique target.person planet regarding principal.person planet from the native helper; not a gold edge ID or desired quality",
         "actor_id_contract":"AcceptedReceptionRole.selected_id; all planet aliases remain allowed/required, including collisions",
         "input_authority":"Declared component consultation and calculated role references, not an observed classifier/extractor journey",
         "metric":"Exact native ID/direction/quality checks are noncompensating; teacher grades contextual_meaning only",
-        "student_generation_tokens":1024,"physical_bounds":{"student":4,"teacher":8},
+        "student_generation_tokens":1024,"physical_bounds":{"student":if optimizing{GEPA_LOCAL_CALLS}else{4},"teacher":if optimizing{GEPA_TEACHER_CALLS}else{8}},
+        "max_metric_calls_soft":if optimizing{Some(GEPA_METRICS)}else{None},
+        "round_pools":if optimizing{json!({"reflection":&PILOT_CASES[..2],"development_selection":[PILOT_CASES[2]],"final_diagnostic_check":[PILOT_CASES[3]]})}else{Value::Null},
+        "original_training_only":true,"original_development_or_reserved_validation_used":false,
+        "round_pool_limit":"One-case selection/check pools are diagnostic; no untouched validation claim. Original bank and original membership are preserved.",
         "bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,"provider_calls":0,
         "original_split_preserved":true,"application_promoted":false});
     crate::queue::write_json_atomic(&directory.join("preparation.json"), &plan)?;
     Ok(plan)
+}
+
+fn verify_preparation(
+    cases: &[catalogue::Case],
+    fixtures: &[Fixture],
+    prepared: &Path,
+    optimizing: bool,
+) -> Result<()> {
+    let plan: Value = serde_json::from_slice(&fs::read(prepared.join("preparation.json"))?)?;
+    let phase = if optimizing {
+        "reception_gepa_preparation"
+    } else {
+        "reception_preparation"
+    };
+    ensure!(
+        plan["phase"] == phase
+            && plan["case_ids"] == json!(PILOT_CASES)
+            && plan["original_bank_sha256"] == crate::google::digest(serde_json::to_vec(cases)?)
+            && plan["fixtures_sha256"] == optimize::fixtures_digest(fixtures)?
+            && plan["executable_sha256"]
+                == crate::google::digest(fs::read(std::env::current_exe()?)?)
+            && plan["teaching_sources_sha256"] == json!(optimize::teaching_sources())
+            && plan["baseline_instructions_sha256"]
+                == crate::google::digest(signature().instructions)
+            && plan["source_pages"] == json!(SOURCE_PAGES),
+        "Prepared reception sources or inputs differ"
+    );
+    for (file, key) in [
+        ("wire-preflight.json", "wire_preflight_sha256"),
+        ("declared-inputs.json", "declared_inputs_sha256"),
+    ] {
+        ensure!(
+            plan[key] == crate::google::digest(fs::read(prepared.join(file))?),
+            "Prepared reception artifact differs"
+        );
+    }
+    Ok(())
+}
+
+/// A thin call into the existing stock GEPA compiler. No new search, recovery,
+/// demonstration, or grading path is introduced here.
+pub async fn optimize(
+    cases: &[catalogue::Case],
+    book: Arc<Book>,
+    prepared: &Path,
+    models: &crate::runner::Models,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(
+        !directory.join("result.json").exists() && !directory.join("observations.jsonl").exists(),
+        "Preserve the earlier reception optimization"
+    );
+    let fixtures = optimization_fixtures(cases, &book)?;
+    verify_preparation(cases, &fixtures, prepared, true)?;
+    crate::queue::write_json_atomic(
+        &directory.join("round-scope.json"),
+        &json!({"source_coverage_repair":[74,75],"fresh_baseline":true,
+            "preparation_sha256":crate::google::digest(fs::read(prepared.join("preparation.json"))?),
+            "original_training_only":true,"reflection_cases":&PILOT_CASES[..2],
+            "selection_case":PILOT_CASES[2],"final_diagnostic_check_case":PILOT_CASES[3],
+            "one_case_selection_and_check_are_not_reserved_validation":true,
+            "student_call_cap":GEPA_LOCAL_CALLS,"teacher_call_cap":GEPA_TEACHER_CALLS,
+            "max_metric_calls_soft":GEPA_METRICS,"bootstrap_demos":0,
+            "evaluation_concurrency":1,"whole_reading_unobserved":true,
+            "previous_scores_or_optimizer_state_imported":false,"application_promoted":false}),
+    )?;
+    optimize::compile_fixtures(
+        &fixtures,
+        "common",
+        "reception",
+        book,
+        models,
+        directory,
+        optimize::CompileOptions {
+            max_metrics: GEPA_METRICS,
+            bootstrap_demos: 0,
+        },
+    )
+    .await
 }
 
 pub async fn evaluate(
@@ -322,28 +443,7 @@ pub async fn evaluate(
         "Preserve the earlier reception evaluation"
     );
     let fixtures = pilot_fixtures(cases, &book)?;
-    let plan: Value = serde_json::from_slice(&fs::read(prepared.join("preparation.json"))?)?;
-    ensure!(
-        plan["phase"] == "reception_preparation"
-            && plan["case_ids"] == json!(PILOT_CASES)
-            && plan["original_bank_sha256"] == crate::google::digest(serde_json::to_vec(cases)?)
-            && plan["fixtures_sha256"] == optimize::fixtures_digest(&fixtures)?
-            && plan["executable_sha256"]
-                == crate::google::digest(fs::read(std::env::current_exe()?)?)
-            && plan["teaching_sources_sha256"] == json!(optimize::teaching_sources())
-            && plan["baseline_instructions_sha256"]
-                == crate::google::digest(signature().instructions),
-        "Prepared reception sources or inputs differ"
-    );
-    for (file, key) in [
-        ("wire-preflight.json", "wire_preflight_sha256"),
-        ("declared-inputs.json", "declared_inputs_sha256"),
-    ] {
-        ensure!(
-            plan[key] == crate::google::digest(fs::read(prepared.join(file))?),
-            "Prepared reception artifact differs"
-        );
-    }
+    verify_preparation(cases, &fixtures, prepared, false)?;
     let all = fixtures
         .iter()
         .map(|f| f.example.clone())
@@ -567,5 +667,66 @@ mod tests {
                 .to_string()
                 .contains("membership")
         );
+    }
+
+    #[test]
+    fn gepa_round_pools_preserve_original_training_membership_and_exact_inputs() {
+        let book = Book::fixture();
+        let cases = catalogue::cases(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples"),
+            "contact",
+        )
+        .unwrap();
+        let original = serde_json::to_vec(&cases).unwrap();
+        let pilot = pilot_fixtures(&cases, &book).unwrap();
+        let round = optimization_fixtures(&cases, &book).unwrap();
+        assert_eq!(cases.len(), 20);
+        assert_eq!(
+            round.iter().map(|f| f.split.as_str()).collect::<Vec<_>>(),
+            ["train", "train", "development", "test"]
+        );
+        for (a, b) in pilot.iter().zip(&round) {
+            assert_eq!(a.split, "train");
+            assert_eq!(
+                a.example.inputs().unwrap().rendered(),
+                b.example.inputs().unwrap().rendered()
+            );
+            assert_eq!(a.example.get("expected"), b.example.get("expected"));
+        }
+        assert_eq!(serde_json::to_vec(&cases).unwrap(), original);
+        assert_eq!(
+            source(&book).unwrap(),
+            book.pages(&BTreeSet::from([44, 71, 72, 73, 74, 75]))
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn gepa_preparation_is_bound_to_its_round_phase_sources_and_native_inputs() {
+        let book = Book::fixture();
+        let cases = catalogue::cases(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples"),
+            "contact",
+        )
+        .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("prepared");
+        let prepared = prepare_optimization(&cases, &book, &directory).unwrap();
+        assert_eq!(prepared["phase"], "reception_gepa_preparation");
+        assert_eq!(
+            prepared["physical_bounds"],
+            json!({"student":32,"teacher":48})
+        );
+        assert_eq!(prepared["max_metric_calls_soft"], 24);
+        assert_eq!(prepared["provider_calls"], 0);
+        assert_eq!(prepared["original_training_only"], true);
+        let mut fixtures = optimization_fixtures(&cases, &book).unwrap();
+        verify_preparation(&cases, &fixtures, &directory, true).unwrap();
+        assert!(verify_preparation(&cases, &fixtures, &directory, false).is_err());
+        fixtures[0]
+            .example
+            .set("native_edge", json!("changed native input"));
+        assert!(verify_preparation(&cases, &fixtures, &directory, true).is_err());
+        assert!(prepare_optimization(&cases, &book, &directory).is_err());
     }
 }

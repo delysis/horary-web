@@ -278,3 +278,20 @@ horary-dspy --teacher codex --book /absolute/path/to/pinned-frawley-ocr.md \
 ```
 
 Preparation makes no provider calls and saves the exact stock-adapter requests. The separate resident-tokenizer receipt must bind `preparation_sha256`, the local model, a 32,768-token slot, and `add_generation_prompt`, `add_special` and `parse_special` flags. Its eight ordered rows bind arm, case ID and request SHA256 with an actual `token_count` and 4,096-token `generation_allowance`. Every rendered request must fit before execution. Execution rechecks the source-bound preparation and approved demonstration, then shares hard bounds of eight local calls and twelve Codex attempts across both arms. Raw responses, independent reviews and individual native/source failures remain available. A provider or reviewer error leaves the comparison unqualified; it never becomes a fabricated semantic zero or an automatic replay.
+
+### Common reception interpretation
+
+`evaluate-reception` executes four original training probes with stock `Evaluate`. The inputs are accepted actor bindings and one unchanged directed native reception. Exact edge identity, all regarding/regarded actor IDs and supplied positive/negative qualities are native requirements. Codex grades only qualified contextual meaning from printed pp. 44 and 71–75. A correctly cited but reversed edge cannot pass. This function supplies no occurrence, delivery or timing judgment and cannot qualify a complete reading.
+
+`optimize-reception` is a thin invocation of the existing `compile_fixtures` stock GEPA path, with zero demonstrations, seed 23 and a soft 24-metric limit. Hard caps are 32 local generations and 48 Codex attempts, shared across the sequential baseline, search, selection and final check. Its diagnostic round pools are original training cases 004/006 for reflection, 008 for development selection and 011 for the final check. The original twenty-case bank and its 12/4/4 membership remain unchanged. These one-case selection/check pools do not provide untouched reserved validation; their words, outputs and feedback never enter reflection.
+
+```sh
+horary-dspy --teacher codex optimize-reception --prepare-only \
+  --examples /absolute/path/to/original/examples --output /absolute/path/to/fresh-preparation
+
+horary-dspy --teacher codex --student-local-url http://127.0.0.1:63924/v1 \
+  optimize-reception --examples /absolute/path/to/original/examples \
+  --prepared /absolute/path/to/fresh-preparation --output /absolute/path/to/fresh-run
+```
+
+Preparation saves the exact stock-adapter requests with a 1,024-token generation allowance. The resident tokenizer must establish fit before the separately authorized one-shot launch. Execution verifies the exact executable, native fixtures, primary source, signature and preparation; no earlier score, optimizer state or paid response is imported across the source-coverage change. Adding printed pp. 74–75 is a source repair measured with a fresh baseline, not a learned improvement. Fully received output failures reach normal native feedback and GEPA traces; uncertain provider/review errors remain unknown and stop the run.
