@@ -5746,6 +5746,10 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
                     let mut contract = evidence.clone();
                     contract["maxItems"] = json!(condition_evidence_budget(key, None, facts));
                     contract
+                } else if stage == Stage::Contacts && *key == "event_order" && !ids.is_empty() {
+                    // An ordered chain can span more than six native events.
+                    // Keep the exact fact allowlist and its finite cardinality.
+                    list(choice(&ids), ids.len())
                 } else {
                     evidence.clone()
                 };
@@ -6241,10 +6245,14 @@ mod repair_message_tests {
     }
 
     fn captured_repair() -> (Value, Value, Value, Stage, Matter) {
-        let capture: Value = serde_json::from_str(include_str!(
-            "../test-fixtures/training-judgment-repair-messages.json"
-        ))
-        .unwrap();
+        let captured = include_str!("../test-fixtures/training-judgment-repair-messages.json");
+        // Historical requests remain byte-identical evidence. Current teaching
+        // is checked separately, not normalized back into this paid capture.
+        assert_eq!(
+            lessons::digest(captured),
+            "18718f26c8814e6aa7fb2e9e6f8289d8c157ecdc5dcdaff75b24f9fabe969561"
+        );
+        let capture: Value = serde_json::from_str(captured).unwrap();
         let messages = &capture["legacy_messages"];
         let first: Value = serde_json::from_str(messages[1]["content"].as_str().unwrap()).unwrap();
         let feedback: Value =
@@ -6260,18 +6268,28 @@ mod repair_message_tests {
         (capture, input, schema, stage, matter)
     }
 
-    fn legacy_system_with_required_summary(legacy: &Value) -> Value {
-        let old = "answer, evidence, unknowns. answer is the visible interpretation.";
-        let new = "answer, evidence, summary, unknowns. answer is the visible interpretation.";
-        let content = legacy["content"].as_str().unwrap();
-        assert_eq!(content.matches(old).count(), 1);
-        // Preserve the exact historical capture. This parity regression permits
-        // only the separately implemented summary field and the explicit new
-        // catalogue-version marker; no teaching, data or schema is normalized.
-        let historical = "version=\"frawley-reading-contracts-2026-10-10.2\"";
-        assert_eq!(content.matches(historical).count(), 1);
-        let current = format!("version=\"{}\"", crate::reading_contracts::VERSION);
-        json!({"role":"system","content":content.replacen(old, new, 1).replacen(historical,&current,1)})
+    fn assert_current_method_source_guide(
+        system: &Value,
+        stage: Stage,
+        matter: Matter,
+        input: &Value,
+    ) {
+        let original = crate::horary_step::original_input(input);
+        let method = serde_json::from_value(
+            original["reading_request"]["binding"]["frame"]["method"].clone(),
+        )
+        .unwrap();
+        let mut expected = lessons::guide_for_method(stage, matter, Some(method)).unwrap();
+        expected.push_str(&crate::reading_contracts::method_guide(method));
+        assert_eq!(system, &json!({"role":"system","content":expected}));
+        for id in lessons::source_passages(stage, matter, Some(method)) {
+            let card = lessons::passages()
+                .unwrap()
+                .iter()
+                .find(|card| card.id == id)
+                .unwrap();
+            assert!(system["content"].as_str().unwrap().contains(&card.quote));
+        }
     }
 
     #[test]
@@ -6281,7 +6299,8 @@ mod repair_message_tests {
         let actual: Value =
             serde_json::from_str(&prompt(stage, matter, &input, &schema).unwrap()).unwrap();
         assert_eq!(actual.as_array().unwrap().len(), 4);
-        assert_eq!(actual[0], legacy_system_with_required_summary(&legacy[0]));
+        assert_current_method_source_guide(&actual[0], stage, matter, &input);
+        assert_ne!(actual[0], legacy[0], "Current source-backed teaching intentionally differs from the retained historical system prompt");
         assert_eq!(actual[2], legacy[2]);
         let first: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
         assert_eq!(first["input"], input["original_input"]);
@@ -6339,10 +6358,8 @@ mod repair_message_tests {
             &prompt(stage, matter, &repair["original_input"], &schema).unwrap(),
         )
         .unwrap();
-        assert_eq!(
-            actual[0],
-            legacy_system_with_required_summary(&capture["legacy_messages"][0])
-        );
+        assert_current_method_source_guide(&actual[0], stage, matter, &repair["original_input"]);
+        assert_ne!(actual[0], capture["legacy_messages"][0]);
         let body: Value = serde_json::from_str(actual[1]["content"].as_str().unwrap()).unwrap();
         assert_eq!(body["input"], repair["original_input"]);
         assert_eq!(expanded_contract(&body["worksheet_contract"]), schema);
@@ -6411,6 +6428,30 @@ mod repair_message_tests {
             );
             assert!(presented.to_string().len() < original.to_string().len());
         }
+    }
+
+    #[test]
+    fn contact_event_order_keeps_eight_valid_events_but_rejects_foreign_ids() {
+        let facts = (0..8)
+            .map(|index| Fact {
+                id: format!("e{index}"),
+                kind: "event".into(),
+                label: "Authored ordering witness".into(),
+                detail: "No interpretation asserted".into(),
+                planets: vec![],
+                condition_facet: None,
+                event: None,
+                reception: None,
+            })
+            .collect::<Vec<_>>();
+        let contract = schema(Stage::Contacts, &facts);
+        let evidence = &contract["properties"]["checks"]["properties"]["event_order"]["properties"]
+            ["evidence"];
+        let mut citations = json!((0..8).map(|i| format!("e{i}")).collect::<Vec<_>>());
+        validate_shape(&citations, evidence).unwrap();
+        citations[7] = json!("foreign");
+        assert!(validate_shape(&citations, evidence).is_err());
+        assert_eq!(contract["properties"]["candidate_ids"]["maxItems"], 6);
     }
 
     #[test]
@@ -13480,9 +13521,7 @@ use crate::review_progress::{self, Progress};
 use crate::{
     geocode::{GeocodeState, LocationCandidate},
     hf_cache::AcquisitionState,
-    native_llama_worker::{
-        generate_native, start_native_llama_in_dir, NativeGenerateOptions, NativeLlamaState,
-    },
+    native_llama_worker::NativeGenerateOptions,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -13762,15 +13801,7 @@ pub fn prepare_reader(app: &tauri::AppHandle) -> Result<(), String> {
     }
     let state = app.state::<ConversationState>();
     state.check()?;
-    start_native_llama_in_dir(
-        &dir,
-        &app.state::<NativeLlamaState>(),
-        serde_json::from_value(
-            json!({"modelId":"gemma-4-12b-qat","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}),
-        )
-        .map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.message)?;
+    crate::reader_runtime::start_reading(app, &dir).map_err(|e| e.message)?;
     Ok(())
 }
 
@@ -13787,8 +13818,8 @@ pub fn transcribe(app: &tauri::AppHandle, audio: Vec<u8>) -> Result<String, Stri
     state.cancelled.store(false, Ordering::Release);
     prepare_reader(app)?;
     let prompt = json!([{"role":"user","content":TRANSCRIPTION_PROMPT}]).to_string();
-    let answer = generate_native(
-        &app.state::<NativeLlamaState>(),
+    let answer = crate::reader_runtime::generate(
+        app,
         prompt,
         NativeGenerateOptions {
             audio: Some(audio),
@@ -13881,8 +13912,8 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let wall = std::time::Instant::now();
-        let result = crate::native_llama_worker::generate_native_batch(
-            &self.app.state::<NativeLlamaState>(),
+        let result = crate::reader_runtime::generate_batch(
+            self.app,
             prompts,
             NativeGenerateOptions {
                 max_tokens: 1000,
@@ -13920,8 +13951,8 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
         audio: Option<&[u8]>,
     ) -> Result<crate::native_llama_worker::NativeGenerationResult, String> {
         let prompt = crate::horary_pipeline::prompt(stage, matter, input, schema)?;
-        let result = generate_native(
-            &self.app.state::<NativeLlamaState>(),
+        let result = crate::reader_runtime::generate(
+            self.app,
             prompt,
             NativeGenerateOptions {
                 max_tokens: if stage == crate::horary_lessons::Stage::Judgment {
@@ -14112,16 +14143,7 @@ fn run(
             acquisition.0.run(&dir).map_err(|e| e.message)?;
         }
         state.check()?;
-        let native = app.state::<NativeLlamaState>();
-        start_native_llama_in_dir(
-            &dir,
-            &native,
-            serde_json::from_value(
-                json!({"modelId":"gemma-4-12b-qat","ctxSize":crate::native_llama_worker::READING_CONTEXT_TOKENS,"nGpuLayers":"auto"}),
-            )
-            .map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.message)?;
+        crate::reader_runtime::start_reading(app, &dir).map_err(|e| e.message)?;
         note(
             &mut session,
             &dir,

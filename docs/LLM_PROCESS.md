@@ -207,7 +207,9 @@ flowchart TB
 
 The clipboard presents chart_context and event_context separately. Device location can supply the reader anchor without establishing an event venue. Ask about the venue when it matters to the selected question, rather than requiring it universally. Mentioning London or yesterday as the location/time of a lost object does not change the chart place or moment. A city-only clarification preserves the original question. A relative historical time needs the native clock in the **chosen place's** zone, not the model's guessed date. Nonexistent civil times fail; repeated civil times require an occurrence choice.
 
-## The cache and native batch boundary
+## The cache and selected local owner boundary
+
+The application selects its reader through `reader_runtime.rs`: an explicit loopback owner, the installed sidecar with the cached Gemma helper, or the existing native-kit fallback. The [local reader guide](LOCAL_READER.md) documents ownership, context and audio checks. A selected endpoint failure does not launch a second model. The following saved-prefix diagram describes native-kit; the server route instead uses its observed prompt cache and up to four independent HTTP requests through the same native stage controller. Neither route treats a cache metric or an accepted worksheet as proof of a correct interpretation.
 
 ```mermaid
 flowchart LR
@@ -305,7 +307,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `42102fc36b0245314a05e6989351b12fd1cf2feeba79ef4f7bfc7391ee84ba4a`
+Guide SHA256: `a274ae31e68e26468ebc6d6949c561b43d8eae149b097809eaa6b01f36aa20df`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -322,6 +324,8 @@ Work in this order:
 7. Return compact JSON, no prose or pretty-printing. In a repair, the earlier assistant object was REJECTED: none of its proposals were saved. Correct the specific native error using original_input, not the rejected proposal as evidence.
 
 CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
+For a binary occurrence question, a stated date or deadline sets the horizon; it does not turn the question into a timing request. Use timing when the user asks when or how long. Preserve the actual matter and the method’s declared branch and facet choices.
+
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.

@@ -649,6 +649,8 @@ Work in this order:
 7. Return compact JSON, no prose or pretty-printing. In a repair, the earlier assistant object was REJECTED: none of its proposals were saved. Correct the specific native error using original_input, not the rejected proposal as evidence.
 
 CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
+For a binary occurrence question, a stated date or deadline sets the horizon; it does not turn the question into a timing request. Use timing when the user asks when or how long. Preserve the actual matter and the method’s declared branch and facet choices.
+
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
@@ -5604,6 +5606,8 @@ Work in this order:
 7. Return compact JSON, no prose or pretty-printing. In a repair, the earlier assistant object was REJECTED: none of its proposals were saved. Correct the specific native error using original_input, not the rejected proposal as evidence.
 
 CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
+For a binary occurrence question, a stated date or deadline sets the horizon; it does not turn the question into a timing request. Use timing when the user asks when or how long. Preserve the actual matter and the method’s declared branch and facet choices.
+
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.
@@ -6344,6 +6348,8 @@ Work in this order:
 7. Return compact JSON, no prose or pretty-printing. In a repair, the earlier assistant object was REJECTED: none of its proposals were saved. Correct the specific native error using original_input, not the rejected proposal as evidence.
 
 CLASSIFICATION CATALOGUE (the selected program teaches the detailed recipe):
+For a binary occurrence question, a stated date or deadline sets the horizon; it does not turn the question into a timing request. Use timing when the user asks when or how long. Preserve the actual matter and the method’s declared branch and facet choices.
+
 relationship: Relationship, marriage and feelings — printed pp. 140, 191–200. Prospective partner is seventh even if no partner is named. Use operative capacity for a specific person's feelings (e.g. neighbour: third). House rulers have priority; never infer gender or allocate Sun/Venus by a name.
 lost_object: Lost inanimate possession — printed pp. 146–153, 244. Own lost object: compare Lords 2 and 4 with its supplied description. Someone else's: owner's turned second only. Prefer one justified main ruler; Moon is secondary only with a reason.
 lost_animal: Lost animal — printed pp. 1–3, 146–153. Kind determines sixth (dog/cat) versus twelfth (horse), not measured size. Do not turn every animal from its owner: the neighbour's cat example uses the ordinary sixth.

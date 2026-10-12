@@ -81,6 +81,10 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
                     let mut contract = evidence.clone();
                     contract["maxItems"] = json!(condition_evidence_budget(key, None, facts));
                     contract
+                } else if stage == Stage::Contacts && *key == "event_order" && !ids.is_empty() {
+                    // An ordered chain can span more than six native events.
+                    // Keep the exact fact allowlist and its finite cardinality.
+                    list(choice(&ids), ids.len())
                 } else {
                     evidence.clone()
                 };
@@ -759,6 +763,30 @@ mod repair_message_tests {
             );
             assert!(presented.to_string().len() < original.to_string().len());
         }
+    }
+
+    #[test]
+    fn contact_event_order_keeps_eight_valid_events_but_rejects_foreign_ids() {
+        let facts = (0..8)
+            .map(|index| Fact {
+                id: format!("e{index}"),
+                kind: "event".into(),
+                label: "Authored ordering witness".into(),
+                detail: "No interpretation asserted".into(),
+                planets: vec![],
+                condition_facet: None,
+                event: None,
+                reception: None,
+            })
+            .collect::<Vec<_>>();
+        let contract = schema(Stage::Contacts, &facts);
+        let evidence = &contract["properties"]["checks"]["properties"]["event_order"]["properties"]
+            ["evidence"];
+        let mut citations = json!((0..8).map(|i| format!("e{i}")).collect::<Vec<_>>());
+        validate_shape(&citations, evidence).unwrap();
+        citations[7] = json!("foreign");
+        assert!(validate_shape(&citations, evidence).is_err());
+        assert_eq!(contract["properties"]["candidate_ids"]["maxItems"], 6);
     }
 
     #[test]
