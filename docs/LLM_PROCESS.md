@@ -305,7 +305,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `b44f362cfeb04e21dd7a54e60779dcb38c0fe2dc0f7ecaa479269ede080ba121`
+Guide SHA256: `42102fc36b0245314a05e6989351b12fd1cf2feeba79ef4f7bfc7391ee84ba4a`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -372,6 +372,14 @@ Contrasts: a job not yet obtained is new_job; keeping the current post is existi
 Examples are editorial classification instructions, not textbook quotations:
 INPUT: What about Morgan?
 OUTPUT: {"intent":"read","question":"What about Morgan?","frame":{"method":"unclassified","facet":"unknown"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: Will the purchase of my bicycle complete on Monday?
+OUTPUT: {"intent":"read","question":"Will the purchase of my bicycle complete on Monday?","frame":{"method":"movable_deal","facet":"event"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: When will the purchase of my bicycle complete?
+OUTPUT: {"intent":"read","question":"When will the purchase of my bicycle complete?","frame":{"method":"movable_deal","facet":"timing"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: Will my father telephone me before Friday?
+OUTPUT: {"intent":"read","question":"Will my father telephone me before Friday?","frame":{"method":"contact","facet":"event"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+INPUT: When will my father telephone me?
+OUTPUT: {"intent":"read","question":"When will my father telephone me?","frame":{"method":"contact","facet":"timing"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: They offered me the position; would its hours suit me?
 OUTPUT: {"intent":"read","question":"They offered me the position; would its hours suit me?","frame":{"method":"job_offer","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: Will it rain at the picnic next week?
@@ -382,6 +390,8 @@ INPUT: I don't want a job; I want to know where my missing passport is.
 OUTPUT: {"intent":"read","question":"I don't want a job; I want to know where my missing passport is.","frame":{"method":"lost_object","facet":"location"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
 INPUT: My partner Jamie and I share a home, but things feel distant. How are things between us?
 OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but things feel distant. How are things between us?","frame":{"method":"relationship","facet":"situation"},"people":[],"subject":null,"updates":[],"heard":"","unavailable_quote":"","focus":"judgment","restore_revision":null}
+
+FINAL FACET CHECK: Identify the unknown being requested, not merely words about time. If the person supplies a date/deadline and asks WILL, the unknown is whether the event occurs within that condition: event. If they ask WHEN and want you to supply a date, the unknown is timing. 'On Monday', 'this week', 'before Friday' and 'within a year' do not turn WILL into WHEN. Preserve those words in the question for the selected extractor. Do not silently turn an exact count into either of these.
 
 ```
 
@@ -2795,7 +2805,7 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
 
 ### Condition and ability · condition
 
-Guide SHA256: `40ce004df854642d5216a1d6233eea01e6576be22de85a0bee5076113edb818c`
+Guide SHA256: `0d62d393e6e3d9146e11dd386285c1767867ca56cdcc1eca3b61bbc2bc3ad323`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -2850,9 +2860,10 @@ F — conjunction is the event. Sun is the required other-party significator; co
 G — a hypothetical partner. Lord 7 is a prospective partner, not a known person's medical record. Condition can qualify the prospects in this chart; it does not justify diagnosing or inventing the unknown person.
 H — honorary succedent. A missing object's planet occupies house 9 and native houseCapacity is neutral. ability_to_act uses state=supported with a finding describing middling capacity, not state=neutral. Do not mark ability contradicted merely because nine is geometrically cadent, or invent that the object is hidden/difficult to reach from that capacity. Its occupied house can still supply a separate location lead.
 I — weak succedent. A planet occupies house 8 with native weak capacity. Do not promote it to moderate capacity merely because eight is succedent. A documented contextual exception must be considered separately.
+J — two actors with different qualities. The supplied native evidence says seller Jupiter has term dignity (ID a1), while buyer Mercury is peregrine (ID a2). Both facts belong in own_dignity. Use {"state":"supported","evidence":["a1","a2"],"finding":"The seller has minor term dignity; the buyer is peregrine, with no own dignity."} The check supports the stated condition findings; it does NOT mean every actor is strong. Do not change state to "mixed", and do not remove the peregrine actor merely to retain "supported". Different qualities are described in finding. The example IDs are placeholders: substitute this input's actual essential-condition IDs.
 </worked_examples>
 
-<output_fields>checks own_dignity, ability_to_act, context_exceptions: each has state, current evidence IDs, and a NONEMPTY terse finding, even for not_relevant or unestablished. Allowed states are supported, contradicted, unestablished, not_relevant only: mixed, neutral, limited, weak and strong describe testimony in finding, not state labels. For context_exceptions with no relevant exception, use state=not_relevant and finding="No house or solar exception is relevant in the supplied context." An empty finding is rejected. Neutral native capacity does not mean practical inability. summary says what condition means in this question, keeping each main role and any emotional Moon distinct. unknowns lists genuinely missing native tests, not omitted supplied facts. Do not write placement numbers from memory.</output_fields>
+<output_fields>checks own_dignity, ability_to_act, context_exceptions: each has state, current evidence IDs, and a NONEMPTY terse finding, even for not_relevant or unestablished. Before returning, list every selected planet with supplied essential-condition evidence and include one actual ID for EACH in own_dignity.evidence, including peregrine, detriment and fall. The same coverage check applies to supplied house-capacity evidence in ability_to_act. Do not lose a previously covered actor during a repair. Allowed states are supported, contradicted, unestablished, not_relevant only: mixed, neutral, limited, weak and strong describe testimony in finding, not state labels. For context_exceptions with no relevant exception, use state=not_relevant and finding="No house or solar exception is relevant in the supplied context." An empty finding is rejected. Neutral native capacity does not mean practical inability. summary says what condition means in this question, keeping each main role and the Moon's actual contextual role distinct. unknowns lists genuinely missing native tests, not omitted supplied facts. Do not write placement numbers from memory.</output_fields>
 
 
 <book_extracts>
@@ -3112,7 +3123,7 @@ Being direct in motion is usually listed as a dignity. It isn't. This is the usu
 
 ### Who regards whom · reception
 
-Guide SHA256: `32362a09d42d91e378eced9a2cd6127404d14d2f338b0d3416b88de57f486f40`
+Guide SHA256: `03387b6eae8a43ab27375bd83ff89cfb63f99559a5ce6be62f6161a542736a67`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -3144,7 +3155,7 @@ Reception is directed. In the supplied native fact "A → B", A occupies a digni
 
 Domicile reception: strong positive regard, seeing/loving the other for what it is. Exaltation: strong positive but potentially exaggerated/idealized regard. Triplicity: moderate, comfortable regard, like friendship. Term and face: minor regard, insufficient to label major love. Detriment/fall reception: negative regard; this is different from a planet's OWN detriment/fall. Mixed positive/negative receptions can coexist.
 
-"Loves" is a context metaphor, not only romance: wages wanting to reach their owner; a party wanting a deal; a person valuing a job. House rulers can represent personality/head, Moon the querent's feelings/heart, and a supported natural sexual cosignificator another facet. Do not flatten contradictory head/heart testimonies into one absolute statement.
+"Loves" is a context metaphor: wages reaching their owner, a party wanting a deal, or an applicant valuing a job. Read the actual supplied role, not an assumed romantic or psychological role for that planet.
 </definitions>
 
 <procedure>
@@ -3152,19 +3163,18 @@ Domicile reception: strong positive regard, seeing/loving the other for what it 
 2. Complete direction: read each supplied guest → host fact literally and attach it to the guest's role. Repeat the direction as a short public check result.
 3. Complete strength_and_quality: distinguish domicile/exaltation, triplicity, minor term/face, negative detriment/fall and mixed testimony. No fact supplied means unestablished, not indifference or dislike proven.
 4. Complete contextual_motive: what would this regard make the actor want in this specific question? Positive regard can explain inclination but does not establish ability, opportunity or consent. Negative regard can be important without proving a future event impossible.
-5. Check reciprocity separately. Call it mutual ONLY if two directed native facts actually support it. Specify which pair: do not turn "Moon and partner like each other" into "all significators like each other." Inspect negative reception between the querent's own head/heart facets too; a mutual attraction to the prospective partner does not erase an internal conflict. Mutual reception is not automatically beneficial or enough to cause an event.
+5. Check reciprocity separately. Call it mutual ONLY if two directed native facts actually support it. Specify which actual pair and roles; one pair does not establish that all significators regard each other positively. Mutual reception is not automatically beneficial or enough to cause an event.
 6. A role's own dignity concerns its condition, not its feelings towards someone else. Exalting the job tells us the querent's expectations, not the job's objective quality. Evaluate the job's own condition in the condition record instead.
-7. For an unspecified prospective partner, explain symbolic chart testimony as prospects, not a diagnosis of a currently identifiable person. Do not invent private motives or a third party from an unassigned planet.
+7. Do not invent private motives, a psychological diagnosis or a third party from an unassigned planet.
 8. Summarize the strongest relevant inclination or tension in at most two short sentences. Cite the actual directed reception facts in the check fields, not a self-dignity fact.
 </procedure>
 
 <worked_examples>
 A — the book's Moon example. Moon at 3 Aries by day: native facts show Moon → Mars domicile, Moon → Sun exaltation/triplicity, Moon → Jupiter term, Moon → Venus detriment, Moon → Saturn fall. The Moon's role regards Mars strongly and idealizes the Sun; Jupiter is minor; Venus/Saturn are negative. None of this supplies Mars → Moon.
-B — reversed liking is forbidden. Querent=Venus; partner=Mars; native fact Venus → Mars by domicile; no reverse fact. Correct: "Your regard appears strong; their regard is not established by this fact." Wrong: "They love you" or "You love each other."
+B — reversed regard is forbidden. Buyer=Venus; seller=Mars; native fact Venus → Mars by domicile; no reverse fact. The buyer is well disposed toward the seller; the seller's attitude is not established by this fact. It does not prove agreement or mutual reception.
 C — own debility is different. Mercury's OWN fall is supplied, but no Mercury → Venus reception. It concerns Mercury's condition. Do not infer that Mercury hates Venus.
-D — minor versus major. Only Moon → Jupiter by term is supplied. This is a small inclination; do not promote it to domicile reception or certain commitment.
+D — minor versus major. Only Moon → Jupiter by term is supplied. This is a small inclination; do not promote it to domicile reception or a certain event.
 E — infatuation and job quality. Querent's planet exalts the job's planet. The querent can idealize the job. This does not make the job strong, reputable or desirable on its own merits.
-F — head/heart disagree. Lord 1 negatively regards the partner, but Moon positively regards that partner. State the conflict between considered position and feeling; do not discard one because the other is more convenient.
 G — objects are not literal lovers. Money positively regards its owner. In this question that can fit money returning to possession, but the event still needs relevant testimony.
 H — disputed planet in a location question. Lord 1 and a sister's missing watch share Jupiter; Jupiter negatively regards the sister's Saturn. Give Jupiter to the watch. Do not say the querent dislikes their sister or that the watch's location proves family tension. The question asks where the watch is; its relationship to the querent is secondary.
 </worked_examples>
@@ -3197,14 +3207,6 @@ Don't overstate this exaggeration: it does not mean that the person who is being
 
 <extract id="reception_triplicity" source="Frawley, The Horary Textbook, 2005" printed_pages="73–73" ocr_pages="82–82">
 If sign-rulership is like love and exaltation like infatuation, triplicity is like friendship: warm and comfortable, but with no grand passion. In most relationship questions, our querents would be hoping for more than this, but in many contexts it will do fine. 'Will I like this job?' and Lord 1 (querent) is in the triplicity ruled by Lord 10 (the job): 'Yes. It won't be the best job in the world, but you'll like it well enough'.
-</extract>
-
-<extract id="relationship_facets" source="Frawley, The Horary Textbook, 2005" printed_pages="193–193" ocr_pages="202–202">
-Each of the different significators shows a different facet of that person:
-
-* Lord 1 and Lord 7 show that person as thinking being, as personality, as 'head'
-
-* the Moon shows the querent, but specifically the querent's emotions: the heart
 </extract>
 </book_extracts>
 </stage>
