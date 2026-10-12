@@ -53,10 +53,16 @@ pub fn reader_requests(
     predictor: &dsrust::Predict,
 ) -> Result<Vec<Value>> {
     fixtures.iter().map(|fixture| {
-        let request = request_with_demos(&predictor.signature, &predictor.demos, &fixture.example)?;
+        let mut request = request_with_demos(&predictor.signature, &predictor.demos, &fixture.example)?;
+        let config = predictor.config();
+        ensure!(config.rollout_id.is_none(), "Budget preflight does not infer a rollout cache configuration");
+        request.config.temperature = config.temperature;
+        request.config.max_tokens = config.max_tokens;
+        request.config.n = config.completions;
+        let generation_tokens = request.config.max_tokens.context("Missing explicit generation budget")?;
         Ok(json!({"case_id":fixture.example.get("case_id"),"split":fixture.split,
             "request_sha256":google::digest(serde_json::to_vec(&request)?),"request":request,
-            "messages":request.wire_messages(),"generation_tokens":4096,"generation_submitted":false}))
+            "messages":request.wire_messages(),"generation_tokens":generation_tokens,"generation_submitted":false}))
     }).collect()
 }
 
@@ -293,6 +299,39 @@ mod wire_tests {
             })
             .unwrap();
         assert!(live.find("source_text").unwrap() < live.find("question").unwrap());
+    }
+
+    #[tokio::test]
+    async fn reception_preflight_matches_actual_short_predict_request() {
+        let captured = Arc::new(Mutex::new(None));
+        let predictor = crate::optimize::plain(
+            crate::reception::signature(),
+            Arc::new(Captured(captured.clone())),
+        )
+        .with_config(dsrust::lm::LmConfig {
+            temperature: Some(0.),
+            max_tokens: Some(1024),
+            ..Default::default()
+        });
+        let input = dsrust::input! {source_text:"Constant primary pages",question:"Actual enquiry",
+        accepted_roles:"Actual supplied actors",native_edge:"Actual native directed edge"};
+        let fixtures = [functions::Fixture {
+            split: "train".into(),
+            example: input.clone(),
+        }];
+        let expected = reader_requests(&fixtures, &predictor).unwrap();
+        // Captured emits the old reader fields; only the actual request is being
+        // checked here, not a fabricated reception or source-correct judgment.
+        assert!(predictor.forward(input).await.is_err());
+        let actual = captured.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            serde_json::to_value(&actual).unwrap(),
+            expected[0]["request"]
+        );
+        assert_eq!(expected[0]["generation_tokens"], 1024);
+        assert!(
+            actual.model.is_empty() && actual.output_schema().is_none() && actual.tools.is_empty()
+        );
     }
 }
 

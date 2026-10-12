@@ -1,5 +1,16 @@
 # Horary DSPy experiment
 
+`evaluate-reception --prepare-only` renders the actual short Predict requests for
+four original Contact training probes without calling a model. The reusable
+function accepts an `AcceptedReceptionRole`-shaped actor clipboard and one exact
+native `DirectedReception`, with printed pp. 44/71–73. Its native edge/role/quality
+checks cannot be compensated by a fluent review; Codex grades only qualified
+contextual meaning. `evaluate-reception --prepared <directory>` performs stock
+Evaluate sequentially, bounded to four local student calls and eight teacher
+attempts. It runs no bootstrap, reflection or selection and makes no full-reading
+or application qualification claim. Multiple native roles sharing a planet remain
+explicit; production integration can batch edges in the existing reception stage.
+
 This crate uses the full [getlatentic/dsrust](https://github.com/getlatentic/dsrust/tree/f24adde08c1d8850e4d7079d019643bb40f905cb) API directly. The repository-contained licensed [snapshot](vendor/dsrust) is `09d17e07e18e9db2d12e33e2a4a29ca639da65de`, a narrow fork of that revision. It retains the original 20-second default and permits a 300-second local nonstreaming call. It also carries exact received replies when the existing parser rejects them, allowing a format-failure metric without confusing missing transport with bad output. [Provenance](vendor/dsrust/HORARY-PROVENANCE.json) records both changes; provider wire formats, parsing decisions and optimizer algorithms remain the existing port. Rust derives the neural signatures; the port owns prompt rendering, parsing, demonstrations, evaluation and optimization. The local code supplies the Horary module, source context, provider transport and grading. It does not implement a replacement GEPA engine.
 
 ## Resident local student

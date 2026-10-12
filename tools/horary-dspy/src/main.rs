@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use dsrust::{Module, lm::DynChatModel};
 use horary_dspy::{
     book, catalogue, classification_export, codex, continuation, google, local, native_export,
-    optimize, preflight, queue, runner, signatures, teachers,
+    optimize, preflight, queue, reception, runner, signatures, teachers,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, sync::Arc};
@@ -237,6 +237,17 @@ enum Command {
         #[arg(long)]
         output: PathBuf,
     },
+    /// Evaluate four native single-edge reception probes; no reading or search.
+    EvaluateReception {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        prepare_only: bool,
+        #[arg(long)]
+        prepared: Option<PathBuf>,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Compare an already proposed instruction on one complete development pool.
     CompareClassification {
         #[arg(long)]
@@ -270,6 +281,7 @@ fn allows_local_student(command: &Command) -> bool {
             | Command::OptimizeReading { .. }
             | Command::CompareClassification { .. }
             | Command::CompareContactReference { .. }
+            | Command::EvaluateReception { .. }
     )
 }
 #[tokio::main]
@@ -973,6 +985,57 @@ async fn main() -> Result<()> {
             };
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
+        Command::EvaluateReception {
+            examples,
+            prepare_only,
+            prepared,
+            output,
+        } => {
+            ensure!(!output.exists(), "Preserve an existing reception attempt");
+            let cases = catalogue::cases(&examples, "contact")?;
+            let book = Arc::new(book::Book::open(&args.book)?);
+            let result = if prepare_only {
+                ensure!(
+                    prepared.is_none(),
+                    "Preparation does not execute another plan"
+                );
+                reception::prepare(&cases, &book, &output)?
+            } else {
+                ensure!(
+                    matches!(args.teacher, Teacher::Codex),
+                    "The fixed reception pilot uses the authorized Codex reviewer"
+                );
+                ensure!(
+                    args.student_local_url.is_some() && args.student_model == local::MODEL,
+                    "Use the resident local student"
+                );
+                let prepared =
+                    prepared.context("Execute the source-bound reception preparation")?;
+                let http = reqwest::Client::new();
+                let student = selected_student(
+                    args.student_local_url.as_deref(),
+                    &args.student_model,
+                    http.clone(),
+                    output.join("student"),
+                    4,
+                    14_000,
+                )?;
+                let teacher =
+                    teacher_model(args.teacher, args.codex, http, output.join("teacher"), 8)
+                        .await?;
+                let models = runner::Models {
+                    student,
+                    teacher,
+                    teacher_id: teacher_identity(args.teacher).into(),
+                    student_id: student_identity(
+                        args.student_local_url.as_deref(),
+                        &args.student_model,
+                    ),
+                };
+                reception::evaluate(&cases, book, &prepared, &models, &output).await?
+            };
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Command::CompareContactReference {
             examples,
             prepare_only,
@@ -1209,6 +1272,27 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn narrow_reception_preparation_and_run_are_admitted_by_real_cli() {
+        for extra in ["--prepare-only", "--prepared"] {
+            let mut args = vec![
+                "horary-dspy",
+                "--teacher",
+                "codex",
+                "--student-local-url",
+                "http://127.0.0.1:63924/v1",
+                "evaluate-reception",
+                extra,
+            ];
+            if extra == "--prepared" {
+                args.push("synthetic-preparation");
+            }
+            args.extend(["--output", "synthetic-output"]);
+            let parsed = Args::try_parse_from(args).unwrap();
+            assert!(allows_local_student(&parsed.command));
+        }
+    }
 
     #[test]
     fn released_contact_comparison_passes_local_gate_and_sealed_queue_does_not() {

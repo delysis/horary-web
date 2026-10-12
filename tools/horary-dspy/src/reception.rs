@@ -1,0 +1,571 @@
+//! One reusable judgment function, evaluated by the port's ordinary Predict.
+//! Actor binding and reception calculations are supplied native inputs.
+use crate::{book::Book, catalogue, functions::Fixture, optimize};
+use anyhow::{Context, Result, ensure};
+use dsrust::{Evaluate, Example, Module, SignatureSpec, example::Prediction, lm::LmConfig};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::{collections::BTreeSet, fs, path::Path, sync::Arc};
+
+pub const PILOT_CASES: [&str; 4] = [
+    "dspy-contact-first-004",
+    "dspy-contact-first-006",
+    "dspy-contact-first-008",
+    "dspy-contact-first-011",
+];
+
+#[derive(dsrust::Signature)]
+/// Interpret ONLY the supplied directed reception, under the supplied primary text. The guest planet regards the host planet; never reverse that direction or assume reciprocity. Preserve all matching accepted role IDs when a planet has several roles. Report the exact native positive and negative dignity names separately, without summing or cancelling them. Give a concise qualified contextual implication about the regarding actor's inclination toward the regarded actor. Reception alone establishes neither ability nor an occasion, an action, delivery, an outcome or timing. Do not infer a psychological diagnosis, qualifications or an identity conflict. Return ONLY the seven requested output fields, beginning with edge_id; never reproduce source_text, question, accepted_roles or native_edge.
+pub struct InterpretReception {
+    /// Printed pp. 44 and 71–73, with exact primary passages and OCR witnesses.
+    #[input]
+    pub source_text: String,
+    /// Actual enquiry; contextual meaning is about this enquiry, not a generic horoscope.
+    #[input]
+    pub question: String,
+    /// AcceptedReceptionRole-shaped rows: role_index, selected_id, label, house and planet. These are declared component inputs, not an observed acquisition journey.
+    #[input]
+    pub accepted_roles: String,
+    /// Exactly one fact_id and unchanged native DirectedReception (guestPlanet, hostPlanet, qualities). No reverse edge or event evidence is implied.
+    #[input]
+    pub native_edge: String,
+    /// Copy the supplied native fact_id exactly.
+    #[output]
+    pub edge_id: String,
+    /// JSON array of ALL accepted selected_id values for the guest planet. IDs, not labels.
+    #[output]
+    pub regarding_actor_ids: String,
+    /// JSON array of ALL accepted selected_id values for the host planet. IDs, not labels.
+    #[output]
+    pub regarded_actor_ids: String,
+    /// JSON array of exactly the supplied positive dignity names, e.g. domicile or termRuler. No new strength calculation.
+    #[output]
+    pub positive_qualities: String,
+    /// JSON array of exactly the supplied negative dignity names, e.g. detriment or fall.
+    #[output]
+    pub negative_qualities: String,
+    /// One or two sentences: who regards whom, qualified contextual meaning and contrary qualities. Cite printed pages for the interpretation.
+    #[output]
+    pub interpretation: String,
+    /// What cannot be inferred from this single edge, including no automatic reciprocity, occurrence or timing.
+    #[output]
+    pub limitations: String,
+}
+
+#[derive(dsrust::Signature)]
+/// Grade ONLY qualified contextual interpretation of this single native reception. Rust independently checks exact edge identity, regarding/regarded accepted IDs and supplied qualities; a semantic pass cannot compensate for those failures. Use printed pp. 44/71–73 and concrete prediction quotes. Do not demand classification, extraction, full chart judgment, an answer, an event, a deadline or timing: these are outside this signature. Do not reward an event prediction made from reception alone. Distinguish actual regard direction, its contextual target and mixed positive/negative qualities; no invented strength sum, cancellation, diagnosis, qualifications or certainty. Return ONLY score, passed, contextual_meaning and feedback, beginning with score.
+pub struct JudgeReception {
+    #[input]
+    pub inputs: String,
+    #[input]
+    pub prediction: String,
+    #[input]
+    pub rubric: String,
+    #[input]
+    pub source_text: String,
+    #[output]
+    pub score: f64,
+    #[output]
+    pub passed: bool,
+    /// pass, fail, or unobserved for contextual interpretation only.
+    #[output]
+    pub contextual_meaning: String,
+    /// Observed-output quotations and precise printed source witnesses.
+    #[output]
+    pub feedback: String,
+}
+
+/// Mirrors the application clipboard's AcceptedReceptionRole representation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptedRole {
+    pub role_index: usize,
+    pub selected_id: String,
+    pub label: String,
+    pub house: Option<u8>,
+    pub planet: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NativeEdge {
+    pub fact_id: String,
+    pub reception: crate::native_evidence::DirectedReception,
+}
+
+fn supplied(input: &Example) -> Result<(Vec<AcceptedRole>, NativeEdge)> {
+    let roles: Vec<AcceptedRole> = serde_json::from_str(
+        input
+            .get("accepted_roles")
+            .and_then(Value::as_str)
+            .context("No accepted roles")?,
+    )?;
+    let edge: NativeEdge = serde_json::from_str(
+        input
+            .get("native_edge")
+            .and_then(Value::as_str)
+            .context("No native edge")?,
+    )?;
+    let mut ids = BTreeSet::new();
+    let mut indices = BTreeSet::new();
+    ensure!(
+        !roles.is_empty()
+            && roles.iter().all(|r| {
+                !r.selected_id.is_empty()
+                    && !r.label.is_empty()
+                    && !r.planet.is_empty()
+                    && ids.insert(&r.selected_id)
+                    && indices.insert(r.role_index)
+            }),
+        "Ambiguous or missing accepted role identity"
+    );
+    ensure!(!edge.fact_id.is_empty(), "Missing native edge identity");
+    Ok((roles, edge))
+}
+
+fn role_ids(roles: &[AcceptedRole], planet: &str) -> BTreeSet<String> {
+    roles
+        .iter()
+        .filter(|r| r.planet == planet)
+        .map(|r| r.selected_id.clone())
+        .collect()
+}
+
+fn qualities(edge: &NativeEdge, polarity: &str) -> Result<BTreeSet<String>> {
+    let value = serde_json::to_value(&edge.reception.qualities)?;
+    value
+        .as_array()
+        .context("Native qualities are not an array")?
+        .iter()
+        .filter(|q| q["polarity"] == polarity)
+        .map(|q| {
+            q["dignity"]
+                .as_str()
+                .context("Missing native dignity")
+                .map(str::to_owned)
+        })
+        .collect::<Result<_>>()
+}
+
+fn check_array(
+    prediction: &Prediction,
+    field: &str,
+    expected: &BTreeSet<String>,
+    errors: &mut Vec<String>,
+) {
+    let parsed = optimize::text(prediction, field)
+        .and_then(|text| serde_json::from_str::<Vec<String>>(text).map_err(anyhow::Error::from));
+    match parsed {
+        Ok(values)
+            if values.iter().collect::<BTreeSet<_>>().len() == values.len()
+                && values.iter().cloned().collect::<BTreeSet<_>>() == *expected => {}
+        Ok(_) => errors.push(format!(
+            "{field}: differs from exact supplied native direction/qualities"
+        )),
+        Err(error) => errors.push(format!(
+            "{field}: native JSON string-array rejected: {error}"
+        )),
+    }
+}
+
+/// Compare against actual native inputs only. A received semantic/format error
+/// is observed rejection, while invalid source inputs remain authoring errors.
+pub fn native_failures(input: &Example, prediction: &Prediction) -> Result<Vec<String>> {
+    let (roles, edge) = supplied(input)?;
+    let mut errors = Vec::new();
+    if !optimize::text(prediction, "edge_id").is_ok_and(|id| id == edge.fact_id) {
+        errors.push("edge_id: differs from the supplied native fact".into());
+    }
+    check_array(
+        prediction,
+        "regarding_actor_ids",
+        &role_ids(&roles, &edge.reception.guest_planet),
+        &mut errors,
+    );
+    check_array(
+        prediction,
+        "regarded_actor_ids",
+        &role_ids(&roles, &edge.reception.host_planet),
+        &mut errors,
+    );
+    check_array(
+        prediction,
+        "positive_qualities",
+        &qualities(&edge, "positive")?,
+        &mut errors,
+    );
+    check_array(
+        prediction,
+        "negative_qualities",
+        &qualities(&edge, "negative")?,
+        &mut errors,
+    );
+    for field in ["interpretation", "limitations"] {
+        if !optimize::text(prediction, field).is_ok_and(|text| !text.trim().is_empty()) {
+            errors.push(format!(
+                "{field}: missing contextual interpretation or limits"
+            ));
+        }
+    }
+    Ok(errors)
+}
+
+pub fn source(book: &Book) -> Result<String> {
+    book.pages(&BTreeSet::from([44, 71, 72, 73]))
+}
+
+/// Selection policy: the target person's native planet regarding the principal
+/// person's native planet. Neither case gold/branch nor a desired quality chooses
+/// the edge. The four initial probes retain their original training membership.
+pub fn pilot_fixtures(cases: &[catalogue::Case], book: &Book) -> Result<Vec<Fixture>> {
+    PILOT_CASES.iter().map(|id| {
+        let case = cases.iter().find(|c| c.id == *id).context("Missing original training probe")?;
+        ensure!(case.split == "train" && case.method == "contact", "Reception pilot membership changed");
+        let reading = catalogue::example(case, "reading", book)?;
+        let chart: Value = serde_json::from_str(reading.get("chart_evidence").and_then(Value::as_str).context("No native chart")?)?;
+        let view = &chart["role_reference"];
+        let rows = view["role_rows"].as_array().context("No calculated role references")?;
+        let planet = |role: &str| -> Result<&str> {
+            rows.iter().find(|r| r["role_id"] == role).context("Missing declared role")?["ruler_planet"].as_str().context("Unresolved role planet")
+        };
+        let guest = planet("target.person")?;
+        let host = planet("principal.person")?;
+        let edges: Vec<_> = view["directed_reception"].as_array().context("No directed native edges")?.iter()
+            .filter(|e| e["guest_planet"] == guest && e["host_planet"] == host).collect();
+        ensure!(edges.len() == 1, "Target-to-principal native edge is unavailable or ambiguous");
+        let e = edges[0];
+        let roles = view["aliases"].as_array().context("No native actor aliases")?.iter().enumerate().map(|(role_index, a)| {
+            Ok(AcceptedRole { role_index,
+                selected_id:a["role_id"].as_str().context("No accepted alias ID")?.into(),
+                label:a["label"].as_str().context("No accepted label")?.into(),
+                house:a["significator_house"].as_u64().map(u8::try_from).transpose()?,
+                planet:a["planet"].as_str().context("No accepted alias planet")?.into() })
+        }).collect::<Result<Vec<_>>>()?;
+        let edge = NativeEdge {fact_id:e["fact_id"].as_str().context("No native edge ID")?.into(),
+            reception:serde_json::from_value(json!({"guestPlanet":e["guest_planet"],"hostPlanet":e["host_planet"],"qualities":e["qualities"]}))?};
+        let source = source(book)?;
+        let mut example = dsrust::input!{source_text:source,question:case.question,accepted_roles:serde_json::to_string(&roles)?,native_edge:serde_json::to_string(&edge)?};
+        example.set("case_id", json!(case.id));
+        example.set("expected", json!({"source_pages":[44,71,72,73],
+            "task":"Qualified contextual interpretation of one supplied directed native reception",
+            "must_explain":["the regarding actor's inclination toward the regarded actor, preserving direction and context", "mixed native positive and negative qualities without cancellation or a fabricated strength sum", "no automatic reciprocity, ability, occurrence, outcome or timing"],
+            "must_not":["reverse or silently replace the edge", "infer an event, deadline or delivery", "invent qualifications, a psychological diagnosis or an identity conflict"]}));
+        example.set("__review_source", json!(source));
+        example.set("__input_authority", json!("Independently supplied component consultation and native calculated role references; no classification/extraction journey observed"));
+        Ok(Fixture {split:case.split.clone(),example})
+    }).collect()
+}
+
+pub fn signature() -> dsrust::signature::Signature {
+    InterpretReception::signature()
+}
+pub fn judge_signature() -> dsrust::signature::Signature {
+    JudgeReception::signature()
+}
+
+pub fn prepare(cases: &[catalogue::Case], book: &Book, directory: &Path) -> Result<Value> {
+    ensure!(
+        !directory.exists(),
+        "Preserve the earlier reception preparation"
+    );
+    let fixtures = pilot_fixtures(cases, book)?;
+    let predictor = optimize::plain(signature(), Arc::new(dsrust::DummyLM::new(vec![])))
+        .with_config(LmConfig {
+            max_tokens: Some(1024),
+            temperature: Some(0.),
+            ..Default::default()
+        });
+    let requests = crate::preflight::reader_requests(&fixtures, &predictor)?;
+    let inputs = fixtures
+        .iter()
+        .map(|f| {
+            Ok(json!({"case_id":f.example.get("case_id"),
+        "split":f.split,"inputs":f.example.inputs()?.rendered()}))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    fs::create_dir(directory)?;
+    crate::queue::write_json_atomic(&directory.join("wire-preflight.json"), &json!(requests))?;
+    crate::queue::write_json_atomic(&directory.join("declared-inputs.json"), &json!(inputs))?;
+    fs::write(
+        directory.join("baseline-instructions.txt"),
+        &predictor.signature.instructions,
+    )?;
+    let plan = json!({"phase":"reception_preparation","function":"reception.interpretation",
+        "case_ids":PILOT_CASES,"original_bank_count":cases.len(),
+        "original_bank_sha256":crate::google::digest(serde_json::to_vec(cases)?),
+        "fixtures_sha256":optimize::fixtures_digest(&fixtures)?,"book_sha256":crate::book::OCR_SHA256,
+        "executable_sha256":crate::google::digest(fs::read(std::env::current_exe()?)?),
+        "teaching_sources_sha256":optimize::teaching_sources(),
+        "wire_preflight_sha256":crate::google::digest(fs::read(directory.join("wire-preflight.json"))?),
+        "declared_inputs_sha256":crate::google::digest(fs::read(directory.join("declared-inputs.json"))?),
+        "baseline_instructions_sha256":crate::google::digest(&predictor.signature.instructions),
+        "source_pages":[44,71,72,73],"edge_selection":"Unique target.person planet regarding principal.person planet from the native helper; not a gold edge ID or desired quality",
+        "actor_id_contract":"AcceptedReceptionRole.selected_id; all planet aliases remain allowed/required, including collisions",
+        "input_authority":"Declared component consultation and calculated role references, not an observed classifier/extractor journey",
+        "metric":"Exact native ID/direction/quality checks are noncompensating; teacher grades contextual_meaning only",
+        "student_generation_tokens":1024,"physical_bounds":{"student":4,"teacher":8},
+        "bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,"provider_calls":0,
+        "original_split_preserved":true,"application_promoted":false});
+    crate::queue::write_json_atomic(&directory.join("preparation.json"), &plan)?;
+    Ok(plan)
+}
+
+pub async fn evaluate(
+    cases: &[catalogue::Case],
+    book: Arc<Book>,
+    prepared: &Path,
+    models: &crate::runner::Models,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(
+        !directory.join("result.json").exists() && !directory.join("observations.jsonl").exists(),
+        "Preserve the earlier reception evaluation"
+    );
+    let fixtures = pilot_fixtures(cases, &book)?;
+    let plan: Value = serde_json::from_slice(&fs::read(prepared.join("preparation.json"))?)?;
+    ensure!(
+        plan["phase"] == "reception_preparation"
+            && plan["case_ids"] == json!(PILOT_CASES)
+            && plan["original_bank_sha256"] == crate::google::digest(serde_json::to_vec(cases)?)
+            && plan["fixtures_sha256"] == optimize::fixtures_digest(&fixtures)?
+            && plan["executable_sha256"]
+                == crate::google::digest(fs::read(std::env::current_exe()?)?)
+            && plan["teaching_sources_sha256"] == json!(optimize::teaching_sources())
+            && plan["baseline_instructions_sha256"]
+                == crate::google::digest(signature().instructions),
+        "Prepared reception sources or inputs differ"
+    );
+    for (file, key) in [
+        ("wire-preflight.json", "wire_preflight_sha256"),
+        ("declared-inputs.json", "declared_inputs_sha256"),
+    ] {
+        ensure!(
+            plan[key] == crate::google::digest(fs::read(prepared.join(file))?),
+            "Prepared reception artifact differs"
+        );
+    }
+    let all = fixtures
+        .iter()
+        .map(|f| f.example.clone())
+        .collect::<Vec<_>>();
+    let mut program = optimize::Graded::new(
+        "common",
+        "reception",
+        &all,
+        models.student.clone(),
+        models.teacher.clone(),
+        Some(book),
+    )?
+    .with_stream(directory.join("observations.jsonl"))?;
+    program.save(&directory.join("baseline-program.json"))?;
+    let evaluation = Evaluate::new(
+        all,
+        |input| program.forward(input),
+        optimize::Graded::metric,
+    )
+    .run()
+    .await;
+    program.save_observations(&directory.join("observations.json"))?;
+    let grades = optimize::evaluation_receipt(&evaluation);
+    let review_consistent = evaluation.results.iter().all(|r| {
+        r.prediction
+            .as_ref()
+            .is_ok_and(|p| p.get("__review_summary_consistent") == Some(&json!(true)))
+    });
+    let full_pass = evaluation
+        .results
+        .iter()
+        .filter(|r| {
+            r.prediction.as_ref().is_ok_and(|p| {
+                p.get("__passed") == Some(&json!(true))
+                    && p.get("__review_summary_consistent") == Some(&json!(true))
+            })
+        })
+        .count();
+    let result = json!({"function":"reception.interpretation","optimizer":"stock Evaluate; no search",
+        "teacher":models.teacher_id,"student":models.student_id,"case_ids":PILOT_CASES,"original_training_only":true,
+        "grades":grades,"preparation_sha256":crate::google::digest(fs::read(prepared.join("preparation.json"))?),
+        "execution_observed":evaluation.failure_count()==0,"bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,
+        "independent_review_consistent":review_consistent,"full_function_passes":full_pass,
+        "whole_reading_unobserved":true,"application_promoted":false});
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    ensure!(
+        evaluation.failure_count() == 0,
+        "An execution/review error remains unknown; no invented semantic zero"
+    );
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input() -> Example {
+        let roles = json!([
+            {"role_index":0,"selected_id":"person.self","label":"Person","house":7,"planet":"Mars"},
+            {"role_index":1,"selected_id":"querent.self","label":"Querent","house":1,"planet":"Saturn"},
+            {"role_index":2,"selected_id":"reply","label":"Reply","house":3,"planet":"Saturn"}]);
+        let edge = json!({"fact_id":"e42","reception":{"guestPlanet":"Mars","hostPlanet":"Saturn",
+            "qualities":[{"dignity":"termRuler","polarity":"positive"},{"dignity":"fall","polarity":"negative"}]}});
+        let mut input = dsrust::input! {source_text:"SYNTHETIC mechanics fixture, not a book quotation",question:"Will the person reply?",
+        accepted_roles:serde_json::to_string(&roles).unwrap(),native_edge:serde_json::to_string(&edge).unwrap()};
+        input.set("case_id", json!("synthetic-reception"));
+        input.set("expected", json!({"task":"contextual meaning only"}));
+        input
+    }
+    fn output() -> Example {
+        dsrust::example! {edge_id:"e42",regarding_actor_ids:r#"["person.self"]"#,
+        regarded_actor_ids:r#"["querent.self","reply"]"#,positive_qualities:r#"["termRuler"]"#,
+        negative_qualities:r#"["fall"]"#,interpretation:"Synthetic contextual interpretation, not qualified source truth.",
+        limitations:"This edge alone establishes neither reciprocity nor an event or timing."}
+    }
+    fn prediction() -> Prediction {
+        Prediction::new(output(), "Synthetic test output")
+    }
+
+    #[test]
+    fn native_direction_and_all_shared_role_ids_are_noncompensating() {
+        let input = input();
+        let mut p = prediction();
+        assert!(native_failures(&input, &p).unwrap().is_empty());
+        p.example
+            .set("regarding_actor_ids", json!(r#"["querent.self","reply"]"#));
+        p.example
+            .set("regarded_actor_ids", json!(r#"["person.self"]"#));
+        assert_eq!(native_failures(&input, &p).unwrap().len(), 2);
+        p = prediction();
+        p.example
+            .set("regarded_actor_ids", json!(r#"["querent.self"]"#));
+        assert_eq!(native_failures(&input, &p).unwrap().len(), 1);
+        p = prediction();
+        p.example
+            .set("regarded_actor_ids", json!(r#"["reply","querent.self"]"#));
+        assert!(native_failures(&input, &p).unwrap().is_empty());
+    }
+    #[test]
+    fn qualities_cannot_be_added_cancelled_or_duplicated() {
+        let input = input();
+        let mut p = prediction();
+        p.example
+            .set("positive_qualities", json!(r#"["domicile"]"#));
+        p.example.set("negative_qualities", json!("[]"));
+        assert_eq!(native_failures(&input, &p).unwrap().len(), 2);
+        p = prediction();
+        p.example
+            .set("positive_qualities", json!(r#"["termRuler","termRuler"]"#));
+        assert_eq!(native_failures(&input, &p).unwrap().len(), 1);
+        p = prediction();
+        p.example.set("edge_id", json!("e41"));
+        assert_eq!(native_failures(&input, &p).unwrap().len(), 1);
+    }
+    #[tokio::test]
+    async fn scoped_semantic_pass_needs_no_whole_reading_or_answer() {
+        let student = Arc::new(dsrust::DummyLM::new(vec![output()]));
+        let teacher = Arc::new(dsrust::DummyLM::new(vec![dsrust::example! {
+        score:1.,passed:true,contextual_meaning:"pass",feedback:"Synthetic scoped criterion met; not source qualification."}]));
+        let program =
+            optimize::Graded::new("common", "reception", &[input()], student, teacher, None)
+                .unwrap();
+        let p = program.forward(input()).await.unwrap();
+        assert_eq!(p.get("__score"), Some(&json!(1.)));
+        assert_eq!(p.get("__passed"), Some(&json!(true)));
+    }
+    #[tokio::test]
+    async fn fluent_teacher_pass_cannot_compensate_for_reversed_native_roles() {
+        let mut out = output();
+        out.set("regarding_actor_ids", json!(r#"["querent.self","reply"]"#));
+        let student = Arc::new(dsrust::DummyLM::new(vec![out]));
+        let teacher = Arc::new(dsrust::DummyLM::new(vec![dsrust::example! {
+        score:1.,passed:true,contextual_meaning:"pass",feedback:"Synthetic teacher false positive retained."}]));
+        let program =
+            optimize::Graded::new("common", "reception", &[input()], student, teacher, None)
+                .unwrap();
+        let p = program.forward(input()).await.unwrap();
+        assert_eq!(p.get("__score"), Some(&json!(0.)));
+        assert_eq!(p.get("__passed"), Some(&json!(false)));
+        assert!(
+            p.get("__feedback")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("regarding_actor_ids")
+        );
+    }
+    #[tokio::test]
+    async fn unobserved_context_is_not_invented_partial_credit() {
+        let student = Arc::new(dsrust::DummyLM::new(vec![output()]));
+        let teacher = Arc::new(dsrust::DummyLM::new(vec![dsrust::example! {
+        score:0.8,passed:false,contextual_meaning:"unobserved",feedback:"No contextual observation available."}]));
+        let program =
+            optimize::Graded::new("common", "reception", &[input()], student, teacher, None)
+                .unwrap();
+        assert!(
+            program
+                .forward(input())
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("unobserved")
+        );
+        assert!(
+            program
+                .forward(input())
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("no new call submitted")
+        );
+    }
+    #[test]
+    fn derived_training_probes_do_not_receive_branch_verdict_or_event_gold() {
+        let book = Book::fixture();
+        let mut cases = catalogue::cases(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("examples")
+                .as_path(),
+            "contact",
+        )
+        .unwrap();
+        let before = pilot_fixtures(&cases, &book).unwrap();
+        assert_eq!(before.len(), 4);
+        assert!(before.iter().all(|f| f.split == "train"));
+        for case in &mut cases {
+            case.expected.facet = "arbitrary-private-facet".into();
+            case.expected.must_explain = vec!["arbitrary private verdict".into()];
+            case.expected.must_not = vec!["private".into()];
+            case.expected.source_pages = vec![137, 138];
+        }
+        let after = pilot_fixtures(&cases, &book).unwrap();
+        for (a, b) in before.iter().zip(&after) {
+            let a = a.example.inputs().unwrap();
+            let b = b.example.inputs().unwrap();
+            assert_eq!(a.rendered(), b.rendered());
+            assert_eq!(a.fields().count(), 4);
+            assert!(a.get("expected").is_none());
+            assert!(
+                a.get("native_edge")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .contains("guestPlanet")
+            );
+            assert!(
+                a.get("source_text")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .contains("printed_page=\"71\"")
+            );
+        }
+        let c = cases.iter_mut().find(|c| c.id == PILOT_CASES[0]).unwrap();
+        c.split = "development".into();
+        assert!(
+            pilot_fixtures(&cases, &book)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("membership")
+        );
+    }
+}

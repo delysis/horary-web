@@ -202,11 +202,15 @@ pub fn dimensions(function: &str) -> Result<&'static [&'static str]> {
         "classification" => Ok(&["classification"]),
         "extraction" | "place" | "moment" | "update" => Ok(&["extraction"]),
         "reading" => Ok(&["reading", "answer_quality"]),
+        "reception" => Ok(&["contextual_meaning"]),
         _ => anyhow::bail!("Unknown graded function {function}"),
     }
 }
 
 pub fn grading_instruction(function: &str) -> Result<String> {
+    if function == "reception" {
+        return Ok("Grade only the single supplied reception's qualified contextual meaning. Native identity/direction/quality checks cannot be compensated by your score. No classification, extraction, event, timing or whole-reading answer is observed or required. Cite actual output and printed pp. 44/71–73. Preserve missing or uncertain observations; never invent a semantic score for transport uncertainty.".into());
+    }
     let applicable = dimensions(function)?.join(", ");
     Ok(format!(
         "This is ONLY the {function} function. Applicable dimensions: {applicable}. Mark all other dimensions unobserved. Grade only this declared-input function, not an absent conversation or downstream journey. `passed` and `score` summarize these applicable obligations only. Return observed output excerpts and printed source pages for each material finding. A reading component's accepted consultation and calculated chart are supplied independently: do not claim that classification or extraction ran. A coherent direct answer is part of a reading. A place/moment/update decision is input extraction and preservation, not a horoscope. Missing or contradictory information may correctly require clarification under its authored rubric."

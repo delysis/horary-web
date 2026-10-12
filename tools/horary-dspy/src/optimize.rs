@@ -141,7 +141,14 @@ impl Graded {
                 "Duplicate neural inputs have ambiguous labels"
             );
         }
-        let mut judge = plain(signatures::auxiliary("judge")?, teacher);
+        let mut judge = plain(
+            signatures::auxiliary(if function == "reception" {
+                "reception_judge"
+            } else {
+                "judge"
+            })?,
+            teacher,
+        );
         judge
             .signature
             .instructions
@@ -155,10 +162,10 @@ impl Graded {
                 )?))
             } else {
                 Oracle::Single(plain(signature, student).with_config(LmConfig {
-                    max_tokens: Some(if function == "classification" {
-                        512
-                    } else {
-                        4096
+                    max_tokens: Some(match function {
+                        "classification" => 512,
+                        "reception" => 1024,
+                        _ => 4096,
                     }),
                     temperature: Some(0.),
                     ..Default::default()
@@ -341,6 +348,8 @@ impl Graded {
             if let Err(error) = serde_json::from_str::<Vec<String>>(text(&prediction, "missing")?) {
                 errors.push(format!("Native missing-input array rejected: {error}"));
             }
+        } else if self.function == "reception" {
+            errors.extend(crate::reception::native_failures(&input, &prediction)?);
         } else if functions::AUXILIARY.contains(&self.function.as_str()) {
             errors.extend(functions::native_failures(
                 &self.function,
@@ -416,9 +425,20 @@ impl Graded {
                 errors.push("Unknown reading status".into());
             }
         }
-        let review = self.judge.forward(dsrust::input!{
-            function:self.function,inputs:serde_json::to_string(&input.rendered())?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
-        }).await?;
+        let mut review_input = dsrust::input! {
+            inputs:serde_json::to_string(&input.rendered())?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
+        };
+        if self.function != "reception" {
+            review_input.set("function", json!(self.function));
+            review_input = review_input.with_inputs([
+                "function",
+                "inputs",
+                "prediction",
+                "rubric",
+                "source_text",
+            ]);
+        }
+        let review = self.judge.forward(review_input).await?;
         let judged = review
             .get("score")
             .and_then(Value::as_f64)
@@ -432,13 +452,24 @@ impl Graded {
             !feedback.trim().is_empty(),
             "Independent review omitted its evidence"
         );
-        for dimension in ["classification", "extraction", "reading", "answer_quality"] {
+        let review_dimensions: &[&str] = if self.function == "reception" {
+            &["contextual_meaning"]
+        } else {
+            &["classification", "extraction", "reading", "answer_quality"]
+        };
+        for dimension in review_dimensions {
             ensure!(
                 matches!(text(&review, dimension)?, "pass" | "fail" | "unobserved"),
                 "Invalid function review dimension"
             );
         }
         let dimensions = functions::dimensions(&self.function)?;
+        if self.function == "reception" {
+            ensure!(
+                text(&review, "contextual_meaning")? != "unobserved",
+                "Reception contextual meaning remains unobserved; no semantic score inferred"
+            );
+        }
         let semantic_pass = dimensions
             .iter()
             .all(|dimension| text(&review, dimension).is_ok_and(|v| v == "pass"));
@@ -624,6 +655,7 @@ pub fn predictor_name(method: &str, function: &str) -> Result<String> {
             Ok(format!("{function}.{method}"))
         }
         "classification" | "place" | "moment" | "update" => Ok(function.to_owned()),
+        "reception" => Ok("reception.interpretation".into()),
         _ => anyhow::bail!("Unknown component function"),
     }
 }
@@ -649,6 +681,7 @@ pub fn teaching_sources() -> BTreeMap<String, String> {
     [
         ("book.rs", include_bytes!("book.rs").as_slice()),
         ("reading.rs", include_bytes!("reading.rs").as_slice()),
+        ("reception.rs", include_bytes!("reception.rs").as_slice()),
         (
             "new_job_reader.md",
             include_bytes!("../prompts/new_job_reader.md").as_slice(),

@@ -237,6 +237,8 @@ pub fn auxiliary(task: &str) -> Result<Signature> {
         "moment" => Ok(ResolveMoment::signature()),
         "update" => Ok(UpdateConsultation::signature()),
         "judge" => Ok(JudgeFunction::signature()),
+        "reception" => Ok(crate::reception::signature()),
+        "reception_judge" => Ok(crate::reception::judge_signature()),
         _ => bail!("Unknown auxiliary function {task}"),
     }
 }
