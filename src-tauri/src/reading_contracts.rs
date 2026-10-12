@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-pub const VERSION: &str = "frawley-reading-contracts-2026-10-10.2";
-const PREVIOUS_VERSION: &str = "frawley-reading-contracts-2026-10-07.1";
+pub const VERSION: &str = "frawley-reading-contracts-2026-10-12.3";
+const PREVIOUS_VERSION: &str = "frawley-reading-contracts-2026-10-10.2";
+const LEGACY_VERSION: &str = "frawley-reading-contracts-2026-10-07.1";
 
 macro_rules! names {
     ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
@@ -55,7 +56,8 @@ names!(Field {
     MoneySource => "money_source", Discretionary => "discretionary", JobContext => "job_context",
     WorkCapacity => "work_capacity", Priorities => "priorities", CurrentOption => "current_option",
     Alternatives => "alternatives", HomeMeaning => "home_meaning", Candidates => "candidates",
-    Sender => "sender", Visitor => "visitor", Expected => "expected", Affiliation => "affiliation",
+    Sender => "sender", Receiver => "receiver", ParcelTask => "parcel_task",
+    Visitor => "visitor", VisitorCapacity => "visitor_capacity", Expected => "expected", Affiliation => "affiliation",
     Competition => "competition", Claim => "claim", Parenthood => "parenthood",
     FertilityScope => "fertility_scope", AdoptionState => "adoption_state",
     BirthParent => "birth_parent", MedicalTask => "medical_task", Treatment => "treatment",
@@ -245,12 +247,16 @@ pub struct CatalogueMigration {
 /// earlier revisions. Never manufacture a title owner or deal action from an
 /// old role binding. Unknown catalogue versions remain blocked by `plan`.
 pub fn upgrade_catalogue(case: &mut Consultation) -> Option<CatalogueMigration> {
-    if case.catalogue_version != PREVIOUS_VERSION {
+    if !matches!(
+        case.catalogue_version.as_str(),
+        PREVIOUS_VERSION | LEGACY_VERSION
+    ) {
         return None;
     }
+    let from = case.catalogue_version.clone();
     let before_revision = case.revision;
     let mut recheck = Vec::new();
-    if case.is_deal() {
+    if case.is_deal() && from == LEGACY_VERSION {
         recheck.push(Field::DealActor.name().into());
         if case
             .frame
@@ -281,10 +287,24 @@ pub fn upgrade_catalogue(case: &mut Consultation) -> Option<CatalogueMigration> 
             }
         }
     }
+    if matches!(case.method(), Some(Method::Parcel | Method::Visit)) {
+        // Older message inputs allowed disconnected names. Retain them as
+        // proposals until recognition binds an actual participant; do not
+        // infer sender, parcel task or expectedness during migration.
+        for field in [Field::Sender, Field::Visitor, Field::Receiver] {
+            if let Some(Slot::Resolved { observation }) = case.facts.get(&field).cloned() {
+                case.facts.insert(field, Slot::Proposed { observation });
+                recheck.push(field.name().into());
+            }
+        }
+        if case.method() == Some(Method::Parcel) {
+            recheck.push(Field::ParcelTask.name().into());
+        }
+    }
     case.catalogue_version = VERSION.into();
     case.revision = case.revision.saturating_add(1);
     Some(CatalogueMigration {
-        from: PREVIOUS_VERSION.into(),
+        from,
         to: VERSION.into(),
         before_revision,
         after_revision: case.revision,
@@ -395,9 +415,10 @@ const fn subject_kinds(method: Method) -> &'static [&'static str] {
         | Method::MissingPerson
         | Method::WorkPerson
         | Method::Contact
-        | Method::Trust => &["person"],
+        | Method::Trust
+        | Method::Visit => &["person"],
         Method::PersonDescription => &["person", "person_role"],
-        Method::LostObject | Method::MovableDeal => &["movable"],
+        Method::LostObject | Method::MovableDeal | Method::Parcel => &["movable"],
         Method::Money | Method::Investment | Method::Bet => &["money", "movable"],
         Method::Property | Method::Rental | Method::BusinessProperty => &["property"],
         Method::LostAnimal => &["small_animal", "large_animal", "animal"],
@@ -501,11 +522,11 @@ pub const CATALOGUE: &[Contract] = &[
     card!(Contact, "Contact with someone", "165–166", Required, &[], EVENT_STATE, Implemented,
         "The person takes their operative relationship house.", "Contact with the person differs from the arrival of their parcel. An expected contact and long-lost return have different defaults."),
     card!(Parcel, "Arrival of a letter or parcel", "165–166", None,
-        &[required(Field::Sender)], EVENT_STATE, ExpertReview,
-        "Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.", "An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review."),
+        &[required(Field::ParcelTask), when(Field::Sender, Field::ParcelTask, "arrival"), when(Field::Sender, Field::ParcelTask, "past_receipt"), when(Field::Receiver, Field::Sender, "querent"), when(Field::Receiver, Field::PrincipalMode, "concerning_other")], EVENT_STATE, Implemented,
+        "Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third. Sender and receiver are bound participants; title ownership is not a delivery prerequisite.", "The native awaiting-receipt program preserves parcel, receiver and receiver's second-house pocket, with the effective principal's Moon only when appropriate. Arrival needs actual native parcel/receiver contact, not contact with the seller alone. Past sent-letter history and already-received branches remain explicitly unsupported; numerical timing remains unknown."),
     card!(Visit, "Expected visit", "166", None,
-        &[required(Field::Visitor), required(Field::Expected)], EVENT_STATE, ExpertReview,
-        "Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.", "Use the naturally limited contextual scale. Do not request birth data or full street address by habit."),
+        &[required(Field::Visitor), required(Field::Expected), when(Field::Receiver, Field::PrincipalMode, "concerning_other")], EVENT_STATE, Implemented,
+        "Visitor's actual capacity matters: friend eleventh, hired service provider sixth from the receiver. Visitor and receiver are bound separately; an agreed visit and a merely hoped-for visit have different defaults.", "The native program binds visitor-to-receiver or appropriate Moon contact. The book's preference is Ascendant, receiver, Moon, home cusp; Ascendant and home-cusp contact calculations are currently unknown, never fabricated. Unexpected Ascendant contact alone cannot establish physical arrival. Preserve the contextual window; astronomical hours cannot become a calendar prediction."),
     card!(Contest, "Sporting match or championship", "203–208", None,
         &[required(Field::Competition), required(Field::Affiliation)], EVENT_STATE, ExpertReview,
         "Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.", "Match versus season/championship differs. An indifferent spectator has no invented allegiance. Dedicated contest program awaits review."),
@@ -608,7 +629,10 @@ pub fn field_prompt(field: Field) -> &'static str {
         Field::Alternatives => "What are the alternatives you are comparing?",
         Field::Candidates => "Who are the candidates you could hire? A brief description of each will do.",
         Field::Sender => "Who is sending the parcel, and in what capacity?",
+        Field::Receiver => "Who is meant to receive it or the visitor?",
+        Field::ParcelTask => "Are you asking about its coming arrival, whether it was already received, or something about an item already in your possession?",
         Field::Visitor => "Who is coming to visit, and who are they to you?",
+        Field::VisitorCapacity => "Are they coming as someone you know, or as a service provider you hired?",
         Field::Expected => "Is this visit already expected, or are you hoping they will come?",
         Field::Affiliation => "Which side do you support, or are you asking about a bet's profit?",
         Field::Competition => "Is this about one match, a season, or a championship?",
@@ -668,6 +692,8 @@ pub fn allowed_values(field: Field) -> &'static [&'static str] {
         Field::Discretionary => &["owed", "discretionary"],
         Field::WorkCapacity => &["boss", "colleague", "subordinate"],
         Field::Expected | Field::TheftRaised => &["yes", "no"],
+        Field::ParcelTask => &["arrival", "received_possession", "past_receipt"],
+        Field::VisitorCapacity => &["relationship", "service_provider"],
         Field::Competition => &["match", "season", "championship"],
         Field::FertilityScope => &["conception", "carrying_to_term", "lifetime"],
         Field::AdoptionState => &["prospective", "prospective_known_parent", "completed"],
@@ -722,7 +748,9 @@ fn actor_reference_field(field: Field, method: Option<Method>) -> bool {
                 Method::MovableDeal | Method::Property | Method::Rental | Method::BusinessProperty
             )
         ),
-        Field::Sender => method == Some(Method::Money),
+        Field::Sender => matches!(method, Some(Method::Money | Method::Parcel)),
+        Field::Receiver => matches!(method, Some(Method::Parcel | Method::Visit)),
+        Field::Visitor => method == Some(Method::Visit),
         _ => false,
     }
 }
@@ -1323,6 +1351,20 @@ impl Consultation {
                     return Err("time_occurrence selects the first/earlier or second/later occurrence of a repeated civil chart time. An event being 'this morning' or 'earlier' is not a clock-overlap choice. Remove this entry unless the person explicitly selects that occurrence or answers the pending overlap question.".into());
                 }
             }
+            if update.field == Field::VisitorCapacity
+                && update.value == "service_provider"
+                && matches!(update.mode, UpdateMode::Supply | UpdateMode::Correct)
+                && !crate::message_programs::service_capacity_evidence(
+                    &update.quote,
+                    if words.contains(&update.quote) {
+                        words
+                    } else {
+                        original_question_words(self).unwrap_or(words)
+                    },
+                )
+            {
+                return Err("visitor_capacity=service_provider needs explicit hired-service or trade-role words in its source quote; a name or 'friend' does not establish this capacity.".into());
+            }
             let mut value = update.value.clone();
             if matches!(update.mode, UpdateMode::Supply | UpdateMode::Correct)
                 && actor_reference_field(update.field, self.method())
@@ -1754,6 +1796,19 @@ impl Consultation {
                 "A relay must identify the person whose own question this is.",
             );
         }
+        if frame.method == Method::Visit
+            && self.text(Field::Visitor).is_some()
+            && self.text(Field::Visitor) == crate::message_programs::receiver(self)
+        {
+            need(RequirementKey::Field(Field::Visitor), "conflicting_actor_roles", "The visitor and receiver are the same participant. Clarify the actual arrival relation instead of inventing a planet-to-itself contact.");
+        }
+        if frame.method == Method::Parcel
+            && self.text(Field::ParcelTask) != Some("received_possession")
+            && self.text(Field::Sender).is_some()
+            && crate::message_programs::receiver(self).is_none()
+        {
+            need(RequirementKey::Field(Field::Receiver), "missing_receiver", "The effective principal sent this item; bind the actual intended receiver instead of silently assuming it is arriving back to the sender.");
+        }
         if self.is_deal() {
             if let Some(slot) = self.facts.get(&Field::DealParty) {
                 if !matches!(slot, Slot::Missing | Slot::Resolved { .. }) {
@@ -1792,6 +1847,8 @@ impl Consultation {
             Field::DealBeneficiary,
             Field::Seller,
             Field::Sender,
+            Field::Receiver,
+            Field::Visitor,
             Field::DealParty,
         ] {
             if !actor_reference_field(field, Some(frame.method)) {
@@ -1812,11 +1869,24 @@ impl Consultation {
                         .get(id)
                         .is_some_and(|p| p.relationship == "unknown")
                 {
-                    need(
-                        RequirementKey::PersonRelationship(id.into()),
-                        "missing",
-                        "This actor's operative relationship changes the role.",
-                    );
+                    if field == Field::Visitor {
+                        if self.text(Field::VisitorCapacity) != Some("service_provider") {
+                            need(RequirementKey::Field(Field::VisitorCapacity), "missing", "Resolve the actual visitor capacity; a name alone cannot choose a house. A source-backed hired service provider has a method-specific sixth-house role.");
+                            if self.text(Field::VisitorCapacity) == Some("relationship") {
+                                need(
+                                    RequirementKey::PersonRelationship(id.into()),
+                                    "missing",
+                                    "This visitor's operative relationship determines their house.",
+                                );
+                            }
+                        }
+                    } else {
+                        need(
+                            RequirementKey::PersonRelationship(id.into()),
+                            "missing",
+                            "This actor's operative relationship changes the role.",
+                        );
+                    }
                 }
             }
         }
@@ -1837,6 +1907,13 @@ impl Consultation {
                 "The quesited must be identified.",
             ),
             Some(subject) => {
+                if frame.method == Method::Visit
+                    && self
+                        .text(Field::Visitor)
+                        .is_some_and(|visitor| visitor != subject.owner_id)
+                {
+                    need(RequirementKey::Subject, "visitor_binding_mismatch", "The visit subject must identify the actual bound visitor; a different person's name or an unbound role cannot stand in for them.");
+                }
                 if self.unbound_named_subject().is_some() {
                     need(
                         RequirementKey::Subject,
@@ -1854,6 +1931,10 @@ impl Consultation {
                 if !subject.owner_id.is_empty()
                     && subject.owner_id != "querent"
                     && frame.method != Method::WorkPerson
+                    && frame.method != Method::Parcel
+                    && !(frame.method == Method::Visit
+                        && self.text(Field::VisitorCapacity) == Some("service_provider")
+                        && self.text(Field::Visitor) == Some(subject.owner_id.as_str()))
                     && (!self.is_deal() || self.needs_title_owner())
                 {
                     match self.people.get(&subject.owner_id) {
@@ -1939,6 +2020,9 @@ impl Consultation {
             && self.text(Field::MoneySource) == Some("other")
         {
             plan.limitation=Some(Limitation{code:"money_source_needs_review".into(),message:"This source of money needs a more specific role assignment before I can interpret it. I have kept the question for review.".into(),printed_pages:card.printed_pages.into()});
+        }
+        if plan.limitation.is_none() {
+            plan.limitation = crate::message_programs::limitation(self);
         }
         plan
     }
@@ -2036,6 +2120,8 @@ impl ReadyReading {
                         Field::Seller,
                         Field::DealParty,
                         Field::Sender,
+                        Field::Receiver,
+                        Field::Visitor,
                     ]
                     .iter()
                     .any(|field| inputs.get(field).is_some_and(|actor| actor == *id))
@@ -2131,6 +2217,8 @@ fn relevant_input(case: &Consultation, field: Field) -> bool {
         return true;
     }
     match method {
+        Method::Parcel => matches!(field, Sender | Receiver | ParcelTask),
+        Method::Visit => matches!(field, Receiver | Visitor | VisitorCapacity | Expected),
         Method::LostObject | Method::LostAnimal | Method::MissingPerson => {
             matches!(field, Description | TheftRaised | SearchContext)
         }
@@ -2733,7 +2821,13 @@ fn classification_guide() -> String {
 
 pub fn method_guide(method: Method) -> String {
     let c = contract(method);
-    format!("\n<executable_reading_contract version=\"{VERSION}\" method=\"{}\">\nFrawley, The Horary Textbook, printed pp. {}.\n{}\n{}\nThe supplied reading_request is an immutable, native-checked handoff. Answer its original question and facet using its circumstances. A factual gap is request_input with a catalogue field ID; do not ask for chart data the controller owns. Model judgment is still a proposal, not proof that the source method was followed. Unknown event coverage is not a negative verdict; exact timing/counts need their own verified method.\n</executable_reading_contract>\n", method.name(), c.printed_pages, c.roles, c.judgment)
+    let program = crate::message_programs::guide(method);
+    let program = if program.is_empty() {
+        String::new()
+    } else {
+        format!("{program}\n")
+    };
+    format!("\n<executable_reading_contract version=\"{VERSION}\" method=\"{}\">\nFrawley, The Horary Textbook, printed pp. {}.\n{}\n{}\n{}The supplied reading_request is an immutable, native-checked handoff. Answer its original question and facet using its circumstances. A factual gap is request_input with a catalogue field ID; do not ask for chart data the controller owns. Model judgment is still a proposal, not proof that the source method was followed. Unknown event coverage is not a negative verdict; exact timing/counts need their own verified method.\n</executable_reading_contract>\n", method.name(), c.printed_pages, c.roles, c.judgment, program)
 }
 
 #[cfg(test)]

@@ -305,7 +305,7 @@ The complete request examples are in [prompt-examples.json](llm-process/prompt-e
 
 ### The actual question · intake
 
-Guide SHA256: `ad69b15225334ca9da51cb419355558c9a2c18a238283e79f1a30ff17f46b985`
+Guide SHA256: `b44f362cfeb04e21dd7a54e60779dcb38c0fe2dc0f7ecaa479269ede080ba121`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -340,8 +340,8 @@ business_property: Property used for business — printed pp. 170–171. Propert
 choice: Stay, change or compare alternatives — printed pp. 201–203. General stay/change: first is things as they are, seventh the changed situation. Specific work versus college can use the relevant houses. Current home versus homeland is conditional context.
 hiring: Hiring staff — printed pp. 189–190. Employee sixth. Candidate descriptions support a reviewed matching decision, not arbitrary planets.
 contact: Contact with someone — printed pp. 165–166. The person takes their operative relationship house.
-parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.
-visit: Expected visit — printed pp. 166. Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.
+parcel: Arrival of a letter or parcel — printed pp. 165–166. Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third. Sender and receiver are bound participants; title ownership is not a delivery prerequisite.
+visit: Expected visit — printed pp. 166. Visitor's actual capacity matters: friend eleventh, hired service provider sixth from the receiver. Visitor and receiver are bound separately; an agreed visit and a merely hoped-for visit have different defaults.
 contest: Sporting match or championship — printed pp. 203–208. Us/them depends on actual allegiance, not home/away or name order. Moon is not automatically the ordinary querent co-significator.
 bet: Profit from a bet — printed pp. 156–161, 203–204. Money/profit question, not the team's us/them match recipe.
 court_case: Civil trial or legal dispute — printed pp. 208–212. Parties first/seventh, legal process tenth, verdict fourth. A lawyer can relay the client's genuine question.
@@ -979,6 +979,81 @@ OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but th
               "field": {
                 "type": "string",
                 "enum": [
+                  "parcel_task"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "arrival",
+                  "received_possession",
+                  "past_receipt"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
+                  "visitor_capacity"
+                ]
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "supply",
+                  "correct",
+                  "propose"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "enum": [
+                  "relationship",
+                  "service_provider"
+                ]
+              },
+              "quote": {
+                "type": "string",
+                "maxLength": 700
+              }
+            },
+            "required": [
+              "field",
+              "mode",
+              "value",
+              "quote"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "field": {
+                "type": "string",
+                "enum": [
                   "expected"
                 ]
               },
@@ -1522,6 +1597,7 @@ OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but th
                   "alternatives",
                   "candidates",
                   "sender",
+                  "receiver",
                   "visitor",
                   "affiliation",
                   "claim",
@@ -1598,7 +1674,10 @@ OUTPUT: {"intent":"read","question":"My partner Jamie and I share a home, but th
                   "home_meaning",
                   "candidates",
                   "sender",
+                  "receiver",
+                  "parcel_task",
                   "visitor",
+                  "visitor_capacity",
                   "expected",
                   "affiliation",
                   "competition",
@@ -2142,6 +2221,7 @@ The quesited is shown by Lord 7 even if the relationship exists as yet only as a
                 "money_source",
                 "office",
                 "ownership",
+                "parcel_task",
                 "parenthood",
                 "political_capacity",
                 "principal_id",
@@ -2149,6 +2229,7 @@ The quesited is shown by Lord 7 even if the relationship exists as yet only as a
                 "priorities",
                 "question_time",
                 "reader_place",
+                "receiver",
                 "school_level",
                 "school_task",
                 "search_context",
@@ -2162,6 +2243,7 @@ The quesited is shown by Lord 7 even if the relationship exists as yet only as a
                 "treatment",
                 "unit",
                 "visitor",
+                "visitor_capacity",
                 "weather_scope",
                 "work_capacity"
               ]
@@ -2410,6 +2492,7 @@ sometimes both in the same chart. This is not as confusing as it sounds, because
                 "money_source",
                 "office",
                 "ownership",
+                "parcel_task",
                 "parenthood",
                 "political_capacity",
                 "principal_id",
@@ -2417,6 +2500,7 @@ sometimes both in the same chart. This is not as confusing as it sounds, because
                 "priorities",
                 "question_time",
                 "reader_place",
+                "receiver",
                 "school_level",
                 "school_task",
                 "search_context",
@@ -2430,6 +2514,7 @@ sometimes both in the same chart. This is not as confusing as it sounds, because
                 "treatment",
                 "unit",
                 "visitor",
+                "visitor_capacity",
                 "weather_scope",
                 "work_capacity"
               ]
@@ -2651,6 +2736,7 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
                 "money_source",
                 "office",
                 "ownership",
+                "parcel_task",
                 "parenthood",
                 "political_capacity",
                 "principal_id",
@@ -2658,6 +2744,7 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
                 "priorities",
                 "question_time",
                 "reader_place",
+                "receiver",
                 "school_level",
                 "school_task",
                 "search_context",
@@ -2671,6 +2758,7 @@ The planet that rules the sign in which a house cusp falls rules that house, or 
                 "treatment",
                 "unit",
                 "visitor",
+                "visitor_capacity",
                 "weather_scope",
                 "work_capacity"
               ]

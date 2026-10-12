@@ -324,12 +324,13 @@ pub fn validation_authority() -> &'static str {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     HASH.get_or_init(|| {
         crate::horary_lessons::digest(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("horary_step.rs"),
             include_str!("horary_contract.rs"),
             include_str!("reading_method.rs"),
             include_str!("horary_role_options.rs"),
             include_str!("reading_contracts.rs"),
+            include_str!("message_programs.rs"),
             include_str!("../../crates/horary-ai-core/src/chart_input.rs")
         ))
     })
@@ -783,6 +784,7 @@ pub fn check(
     if stage == Stage::Condition {
         condition_coverage(value, input, facts)?;
     }
+    crate::message_programs::check(stage, input, value, facts)?;
     let roles = if stage == Stage::Significators {
         let options: crate::horary_role_options::Options =
             serde_json::from_value(input["native_role_options"].clone())

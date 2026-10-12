@@ -131,7 +131,7 @@
     },
     {
       "path": "src-tauri/src/elicitation_eval.rs",
-      "sha256": "4a10af66f6bcdd881b3a5004f03c6e18d6a90f913aca3828f49a28987a25d117"
+      "sha256": "b2fb9caac4d7c6a31ff43193f0f8bb1ec5438b492a910251cd0426f8b8aea34c"
     },
     {
       "path": "src-tauri/src/first_message_journey_eval.rs",
@@ -147,7 +147,7 @@
     },
     {
       "path": "src-tauri/src/horary_contract.rs",
-      "sha256": "746455624627e40fa1f0d857c9e7a8a26ca9600e121b16ae792a56b0bf4a0c14"
+      "sha256": "8d11eaae61ad67caa8d79b84e9d6fe9b6dab6ce771f882851a07711a4f19dbd5"
     },
     {
       "path": "src-tauri/src/horary_conversation.rs",
@@ -163,7 +163,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "ec62f65b625465b18e51c88b3a588e1e3f40f5267a0dd65efe15f794f51d1dbe"
+      "sha256": "c1a59c6d287f12b2313caeaa6334c65cebb7d4416eae9b05333a907677efbcb9"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -235,11 +235,11 @@
     },
     {
       "path": "src-tauri/src/horary_role_options.rs",
-      "sha256": "8ab52d90945811fcc994c360f0b13cf5296bb55775568e37a99e39da41e69271"
+      "sha256": "1d60954707df45ca4f3448a5d3e905f60182ec66b5d4e04f23dc5d40271440a8"
     },
     {
       "path": "src-tauri/src/horary_step.rs",
-      "sha256": "3e632b0dfd17d455876d01e9797e20ece789a04394af9d3ff418d2ad3585407d"
+      "sha256": "6f9e59d06911a59abc44bdd8aa29fe2cdc4fecb02a0b249cf876a7f454e74b21"
     },
     {
       "path": "src-tauri/src/horary_step_tests.rs",
@@ -255,7 +255,7 @@
     },
     {
       "path": "src-tauri/src/lib.rs",
-      "sha256": "9224d675a966bf5255970692b3c23af269038ceacbe7d57aa01de6a51dbd6936"
+      "sha256": "ada15d0b015c92d2f0e5238f2e1262e7d829c402579f4690fb876cc43abe3e98"
     },
     {
       "path": "src-tauri/src/llama.rs",
@@ -264,6 +264,14 @@
     {
       "path": "src-tauri/src/local_dictation.rs",
       "sha256": "0f889bed5dbfeef4acb7bf12272b54ca664252d7cab86e76215c3c08ccf2a633"
+    },
+    {
+      "path": "src-tauri/src/message_programs.rs",
+      "sha256": "80a08ae76d65bac529cdffc78072501afa4db76d69e8dd1a287374876e01f40b"
+    },
+    {
+      "path": "src-tauri/src/message_programs/tests/journeys.rs",
+      "sha256": "b9c3ab16269c96adee3057c0c7eafe62e5b58772e2bdd6793503682e88bd9086"
     },
     {
       "path": "src-tauri/src/microphone_capture.rs",
@@ -295,7 +303,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "bc52ec1d40b0fb1912fae65553ee468f825b3c8abb795699cbd2e623900a0757"
+      "sha256": "c98ad28d78477d18f7c2e42ae28c79750883845c76ac047b3decf0c051f7d2ff"
     },
     {
       "path": "src-tauri/src/reading_contract_overview.md",
@@ -303,11 +311,11 @@
     },
     {
       "path": "src-tauri/src/reading_contract_tests.rs",
-      "sha256": "c86ee5f54097145ef1aaf3304066fe407505dac290d834815d3af91bb10877be"
+      "sha256": "efe6dca3952de6fa443276aa69827096e46adf9000499a3ee07609a555a8b7b1"
     },
     {
       "path": "src-tauri/src/reading_contracts.rs",
-      "sha256": "9d9ea5ce57592845d18821e7266f328edaa7ab31694b5b3bebbd562c72bdd415"
+      "sha256": "5723200352e028375b29235a13999fe6c5920bf044e3fe5ac1c39d6d0773815e"
     },
     {
       "path": "src-tauri/src/reading_eval.rs",
@@ -327,7 +335,7 @@
     },
     {
       "path": "src-tauri/src/recognition_programs.rs",
-      "sha256": "614c600215824dfef2f43829b72b5aff67253f81266d39c62635c299ae6348e0"
+      "sha256": "d12be3390c3b554c1fd0f808bb0dd557dd23a577cee786db2989a5ed24d044da"
     },
     {
       "path": "src-tauri/src/response_memo_tests.rs",
@@ -379,7 +387,7 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "97fd92d852e0e6a7e017d3fd086a370a0f0d0045a234c69aebc7e7ffddfc7991"
+      "sha256": "9d0bd1b5b5c8b3e1776c2295d92516242d1a956455a76576aeffce99b068ec24"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",

@@ -1,6 +1,6 @@
 {
   "authorship": "Generated from the production Rust catalogue; not model output or expert qualification",
-  "version": "frawley-reading-contracts-2026-10-10.2",
+  "version": "frawley-reading-contracts-2026-10-12.3",
   "contracts": [
     {
       "method": "relationship",
@@ -532,9 +532,41 @@
       "owner": "None",
       "requirements": [
         {
-          "field": "sender",
+          "field": "parcel_task",
           "guard": {
             "condition": "always"
+          }
+        },
+        {
+          "field": "sender",
+          "guard": {
+            "condition": "equals",
+            "field": "parcel_task",
+            "value": "arrival"
+          }
+        },
+        {
+          "field": "sender",
+          "guard": {
+            "condition": "equals",
+            "field": "parcel_task",
+            "value": "past_receipt"
+          }
+        },
+        {
+          "field": "receiver",
+          "guard": {
+            "condition": "equals",
+            "field": "sender",
+            "value": "querent"
+          }
+        },
+        {
+          "field": "receiver",
+          "guard": {
+            "condition": "equals",
+            "field": "principal_mode",
+            "value": "concerning_other"
           }
         }
       ],
@@ -543,18 +575,11 @@
         "situation",
         "timing"
       ],
-      "coverage": "ExpertReview",
-      "roles": "Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third.",
-      "judgment": "An aspect to the seller alone does not show arrival of the parcel. Dedicated sender/parcel program needs review.",
+      "coverage": "Implemented",
+      "roles": "Before receipt, a letter or ordered book takes the sender's third (usually radical ninth for a seventh-house seller); after receipt it takes the receiver's second. A sent letter initially takes the sender's third. Sender and receiver are bound participants; title ownership is not a delivery prerequisite.",
+      "judgment": "The native awaiting-receipt program preserves parcel, receiver and receiver's second-house pocket, with the effective principal's Moon only when appropriate. Arrival needs actual native parcel/receiver contact, not contact with the seller alone. Past sent-letter history and already-received branches remain explicitly unsupported; numerical timing remains unknown.",
       "subject_kinds": [
-        "person",
-        "movable",
-        "money",
-        "property",
-        "job",
-        "small_animal",
-        "large_animal",
-        "other"
+        "movable"
       ]
     },
     {
@@ -574,6 +599,14 @@
           "guard": {
             "condition": "always"
           }
+        },
+        {
+          "field": "receiver",
+          "guard": {
+            "condition": "equals",
+            "field": "principal_mode",
+            "value": "concerning_other"
+          }
         }
       ],
       "facets": [
@@ -581,18 +614,11 @@
         "situation",
         "timing"
       ],
-      "coverage": "ExpertReview",
-      "roles": "Visitor's capacity matters: plumber is not a friend. Establish whether the visit is actually expected.",
-      "judgment": "Use the naturally limited contextual scale. Do not request birth data or full street address by habit.",
+      "coverage": "Implemented",
+      "roles": "Visitor's actual capacity matters: friend eleventh, hired service provider sixth from the receiver. Visitor and receiver are bound separately; an agreed visit and a merely hoped-for visit have different defaults.",
+      "judgment": "The native program binds visitor-to-receiver or appropriate Moon contact. The book's preference is Ascendant, receiver, Moon, home cusp; Ascendant and home-cusp contact calculations are currently unknown, never fabricated. Unexpected Ascendant contact alone cannot establish physical arrival. Preserve the contextual window; astronomical hours cannot become a calendar prediction.",
       "subject_kinds": [
-        "person",
-        "movable",
-        "money",
-        "property",
-        "job",
-        "small_animal",
-        "large_animal",
-        "other"
+        "person"
       ]
     },
     {
@@ -1518,9 +1544,31 @@
       "labels": []
     },
     {
+      "id": "receiver",
+      "question": "Who is meant to receive it or the visitor?",
+      "labels": []
+    },
+    {
+      "id": "parcel_task",
+      "question": "Are you asking about its coming arrival, whether it was already received, or something about an item already in your possession?",
+      "labels": [
+        "arrival",
+        "received_possession",
+        "past_receipt"
+      ]
+    },
+    {
       "id": "visitor",
       "question": "Who is coming to visit, and who are they to you?",
       "labels": []
+    },
+    {
+      "id": "visitor_capacity",
+      "question": "Are they coming as someone you know, or as a service provider you hired?",
+      "labels": [
+        "relationship",
+        "service_provider"
+      ]
     },
     {
       "id": "expected",

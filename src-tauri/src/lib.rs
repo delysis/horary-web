@@ -60,6 +60,7 @@ mod imported_models;
 mod inference;
 mod llama;
 mod local_dictation;
+mod message_programs;
 mod microphone_capture;
 mod model_manifest;
 mod native_llama;

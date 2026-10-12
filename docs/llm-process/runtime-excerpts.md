@@ -1635,6 +1635,8 @@ fn generate_reading(
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
     let contact_context = contact_evidence(&all, &roles);
     let events = contact_mechanics(&contact_context);
+    let native_arrival =
+        crate::message_programs::clipboard(&ready, assignment.worksheet(), &roles, &events)?;
     let positions = relevant(&all, &roles, &["position", "boundary"]);
     let matter = session.method.brief.matter;
     let common = json!({"brief":reading_brief,"roles":roles});
@@ -1656,7 +1658,10 @@ fn generate_reading(
         ),
         (
             Stage::Contacts,
-            json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"facts":events}),
+            crate::message_programs::with_clipboard(
+                json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"facts":events}),
+                &native_arrival,
+            ),
             events.clone(),
         ),
     ];
@@ -1737,8 +1742,11 @@ fn generate_reading(
         session,
         runtime,
         Stage::Judgment,
-        json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
+        crate::message_programs::with_clipboard(
+            json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
             "native_reception":judgment_reception_clipboard(&reception_roles,&facts)}),
+            &native_arrival,
+        ),
         &facts,
     )?
     else {
@@ -6059,7 +6067,13 @@ mod repair_message_tests {
         let new = "answer, evidence, summary, unknowns. answer is the visible interpretation.";
         let content = legacy["content"].as_str().unwrap();
         assert_eq!(content.matches(old).count(), 1);
-        json!({"role":"system","content":content.replacen(old, new, 1)})
+        // Preserve the exact historical capture. This parity regression permits
+        // only the separately implemented summary field and the explicit new
+        // catalogue-version marker; no teaching, data or schema is normalized.
+        let historical = "version=\"frawley-reading-contracts-2026-10-10.2\"";
+        assert_eq!(content.matches(historical).count(), 1);
+        let current = format!("version=\"{}\"", crate::reading_contracts::VERSION);
+        json!({"role":"system","content":content.replacen(old, new, 1).replacen(historical,&current,1)})
     }
 
     #[test]
@@ -8942,12 +8956,13 @@ pub fn validation_authority() -> &'static str {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     HASH.get_or_init(|| {
         crate::horary_lessons::digest(&format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}\n{}\n{}",
             include_str!("horary_step.rs"),
             include_str!("horary_contract.rs"),
             include_str!("reading_method.rs"),
             include_str!("horary_role_options.rs"),
             include_str!("reading_contracts.rs"),
+            include_str!("message_programs.rs"),
             include_str!("../../crates/horary-ai-core/src/chart_input.rs")
         ))
     })
@@ -9401,6 +9416,7 @@ pub fn check(
     if stage == Stage::Condition {
         condition_coverage(value, input, facts)?;
     }
+    crate::message_programs::check(stage, input, value, facts)?;
     let roles = if stage == Stage::Significators {
         let options: crate::horary_role_options::Options =
             serde_json::from_value(input["native_role_options"].clone())
@@ -10824,6 +10840,23 @@ pub(crate) fn relationship_evidence(
     }
 }
 
+/// A method-local service capacity, separate from a personal relationship.
+/// Inspect the full source so trimming "not" from a quote cannot create it.
+pub(crate) fn service_capacity_evidence(quote: &str, source: &str) -> bool {
+    [
+        "plumber",
+        "electrician",
+        "repairer",
+        "technician",
+        "handyman",
+        "cleaner",
+    ]
+    .iter()
+    .any(|cue| positive_phrase(quote, source, cue, |_, _| true))
+        || quote.to_lowercase().contains("hired service provider")
+            && positive_phrase(quote, source, "service provider", |_, _| true)
+}
+
 /// Recognises a small set of explicit future-spouse phrases. The role's
 /// principal and the absence of an attached identity are checked in the full
 /// clause, even when the extractor quotes only its role words. This is a
@@ -11130,6 +11163,9 @@ pub fn build_for(
     subject: &Subject,
 ) -> Options {
     use crate::reading_contracts::{Field, Method};
+    if let Some(options) = crate::message_programs::roles(case, subject) {
+        return options;
+    }
     let method = case.method();
     if subject.kind == "person_role" && method != Some(Method::PersonDescription) {
         let mut options = build(

@@ -149,6 +149,9 @@ fn pending_parcel_requires_sender_not_receivers_title_and_keeps_source_allocatio
     consultation.question = resolved(
         "Will the book sent by the unrelated bookseller arrive? I have not received it.".into(),
     );
+    consultation
+        .facts
+        .insert(Field::ParcelTask, resolved("arrival".into()));
     let incomplete = consultation.plan(Some(&regression_anchor()));
     assert!(incomplete
         .needs
@@ -160,21 +163,24 @@ fn pending_parcel_requires_sender_not_receivers_title_and_keeps_source_allocatio
         .any(|need| need.key == RequirementKey::Owner));
     consultation
         .facts
-        .insert(Field::Sender, resolved("unrelated bookseller".into()));
+        .insert(Field::Sender, resolved("seller".into()));
+    consultation.people.insert(
+        "seller".into(),
+        Person {
+            id: "seller".into(),
+            label: "The seller".into(),
+            relationship: "other_party".into(),
+            source_quote: "the unrelated bookseller".into(),
+        },
+    );
     let complete = consultation.plan(Some(&regression_anchor()));
     assert!(complete.needs.is_empty());
-    assert_eq!(
-        complete
-            .limitation
-            .as_ref()
-            .map(|limit| limit.code.as_str()),
-        Some("judgment_program_needs_review")
-    );
+    assert!(complete.limitation.is_none());
     assert!(consultation.subject.resolved().unwrap().owner_id.is_empty());
-    assert!(ReadyReading::prepare(&consultation, regression_anchor()).is_err());
+    assert!(ReadyReading::prepare(&consultation, regression_anchor()).is_ok());
 
-    // This contract is teaching for an unqualified dedicated program. Protect
-    // the printed165–166 allocation without claiming a model chose these roles.
+    // Native handoff is now allowed for the supported incoming branch. It is
+    // not a claim that a hosted/on-device model interprets these roles correctly.
     let roles = contract(Method::Parcel).roles;
     assert!(roles.contains("sender's third"));
     assert!(roles.contains("radical ninth"));
@@ -406,6 +412,10 @@ fn actor_binding_applies_only_to_the_contracts_person_reference_fields() {
         (Method::Rental, Field::Seller),
         (Method::BusinessProperty, Field::DealParty),
         (Method::Money, Field::Sender),
+        (Method::Parcel, Field::Sender),
+        (Method::Parcel, Field::Receiver),
+        (Method::Visit, Field::Visitor),
+        (Method::Visit, Field::Receiver),
     ] {
         let mut consultation = case(method, "querent");
         consultation.people.insert(
@@ -441,8 +451,8 @@ fn actor_binding_applies_only_to_the_contracts_person_reference_fields() {
         quote: "Postal company".into(),
         mode: UpdateMode::Supply,
     });
-    parcel.apply(&update, 2, "Postal company", false).unwrap();
-    assert_eq!(parcel.text(Field::Sender), Some("Postal company"));
+    assert!(parcel.apply(&update, 2, "Postal company", false).is_err());
+    assert_eq!(parcel.text(Field::Sender), None);
 }
 
 #[test]
@@ -1610,7 +1620,7 @@ fn relay_principal_alias_is_one_contracting_party_not_both_sides() {
 #[test]
 fn catalogue_upgrade_preserves_sources_and_reopens_ambiguous_legacy_deal_records() {
     let mut deal = case(Method::Property, "querent");
-    deal.catalogue_version = PREVIOUS_VERSION.into();
+    deal.catalogue_version = LEGACY_VERSION.into();
     deal.facts
         .insert(Field::DealCapacity, resolved("profit".into()));
     let original_subject = serde_json::to_value(&deal.subject).unwrap()["observation"].clone();

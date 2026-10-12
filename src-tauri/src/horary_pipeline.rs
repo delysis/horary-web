@@ -1628,6 +1628,8 @@ fn generate_reading(
     let reception = relevant(&all, &roles, &["reception", "boundary"]);
     let contact_context = contact_evidence(&all, &roles);
     let events = contact_mechanics(&contact_context);
+    let native_arrival =
+        crate::message_programs::clipboard(&ready, assignment.worksheet(), &roles, &events)?;
     let positions = relevant(&all, &roles, &["position", "boundary"]);
     let matter = session.method.brief.matter;
     let common = json!({"brief":reading_brief,"roles":roles});
@@ -1649,7 +1651,10 @@ fn generate_reading(
         ),
         (
             Stage::Contacts,
-            json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"facts":events}),
+            crate::message_programs::with_clipboard(
+                json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"facts":events}),
+                &native_arrival,
+            ),
             events.clone(),
         ),
     ];
@@ -1730,8 +1735,11 @@ fn generate_reading(
         session,
         runtime,
         Stage::Judgment,
-        json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
+        crate::message_programs::with_clipboard(
+            json!({"reading_request":reading_request,"brief":reading_brief,"roles":roles,"condition":c,"reception":r,"contacts":contact,"location":location,"timing":timing,"facts":facts,
             "native_reception":judgment_reception_clipboard(&reception_roles,&facts)}),
+            &native_arrival,
+        ),
         &facts,
     )?
     else {

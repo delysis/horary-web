@@ -484,6 +484,23 @@ pub(crate) fn relationship_evidence(
     }
 }
 
+/// A method-local service capacity, separate from a personal relationship.
+/// Inspect the full source so trimming "not" from a quote cannot create it.
+pub(crate) fn service_capacity_evidence(quote: &str, source: &str) -> bool {
+    [
+        "plumber",
+        "electrician",
+        "repairer",
+        "technician",
+        "handyman",
+        "cleaner",
+    ]
+    .iter()
+    .any(|cue| positive_phrase(quote, source, cue, |_, _| true))
+        || quote.to_lowercase().contains("hired service provider")
+            && positive_phrase(quote, source, "service provider", |_, _| true)
+}
+
 /// Recognises a small set of explicit future-spouse phrases. The role's
 /// principal and the absence of an attached identity are checked in the full
 /// clause, even when the extractor quotes only its role words. This is a
@@ -790,6 +807,9 @@ pub fn build_for(
     subject: &Subject,
 ) -> Options {
     use crate::reading_contracts::{Field, Method};
+    if let Some(options) = crate::message_programs::roles(case, subject) {
+        return options;
+    }
     let method = case.method();
     if subject.kind == "person_role" && method != Some(Method::PersonDescription) {
         let mut options = build(

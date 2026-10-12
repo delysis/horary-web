@@ -1,0 +1,344 @@
+{
+  "purpose": "Native support inventory, not source-correct interpretation qualification",
+  "baseline": "9abfa83c63fc100a638e7fa02e1e17055c897c51",
+  "catalogue_version": "frawley-reading-contracts-2026-10-12.3",
+  "arrival_program": "frawley-physical-arrival-2026-10-12.1",
+  "families": [
+    {
+      "method": "relationship",
+      "printed_pages": "140, 191–200",
+      "native_handoff": true,
+      "native_support": "Operative person/partner houses, baseline, Moon claim priority; general evidence checks",
+      "remaining_obligations": "Natural roles, arranged-wedding defaults and contextual synthesis remain semantic judgments; source-correct interpretations are not certified.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "lost_object",
+      "printed_pages": "146–153, 244",
+      "native_handoff": true,
+      "native_support": "Owner's turned second; own-object second/fourth comparison; native location worksheet",
+      "remaining_obligations": "Object choice, plausible places, recovery exceptions and physical descriptions require source review; no exact GPS or complete recovery-event calculation.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "lost_animal",
+      "printed_pages": "1–3, 146–153",
+      "native_handoff": true,
+      "native_support": "Actual animal kind chooses ordinary sixth/twelfth; lost-matter/location path",
+      "remaining_obligations": "Recovery and location interpretation need context; no exact location, safety or complete event certification.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "missing_person",
+      "printed_pages": "146–153, 182–188",
+      "native_handoff": true,
+      "native_support": "Bound person's operative relationship; lost-matter/location path",
+      "remaining_obligations": "Safety/prognosis, recovery and whereabouts are distinct source obligations; a generic contact does not certify return alive.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "movable_deal",
+      "printed_pages": "156–161, 167–172",
+      "native_handoff": true,
+      "native_support": "Actual contracting parties; contextual asset, incoming money and beneficiary pocket roles",
+      "remaining_obligations": "Intermediation, regret, amount/quality versus completion require semantic adjudication; exact sales tallies remain unsupported.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "money",
+      "printed_pages": "156–161",
+      "native_handoff": true,
+      "native_support": "Source-specific money house; recipient/pocket and principal-only Moon obligations",
+      "remaining_obligations": "Whether receipt is likely versus whether an amount is good remains semantic; no exact currency value or complete event chain.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "investment",
+      "printed_pages": "156–161",
+      "native_handoff": true,
+      "native_support": "Owned possession/second-house role; general condition/reception checks",
+      "remaining_obligations": "Comparative value/profit synthesis remains source review; no exact return or indiscriminate payment-arrival aspect.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "new_job",
+      "printed_pages": "222–224",
+      "native_handoff": true,
+      "native_support": "External tenth with tenth-person exception; genuine worker/Moon obligations",
+      "remaining_obligations": "Intermediary, motive, competition and perfection synthesis remain semantic; certified symbolic timing unavailable.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "existing_job",
+      "printed_pages": "224–230",
+      "native_handoff": true,
+      "native_support": "Relevant person's turned tenth; general condition/reception/contact checks",
+      "remaining_obligations": "Existing stability versus disruption/default and career/boss collisions remain contextual judgments.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "return_to_job",
+      "printed_pages": "225–226",
+      "native_handoff": true,
+      "native_support": "Relevant worker/job with principal-only Moon for re-entry",
+      "remaining_obligations": "Old-job re-entry/default, mediation and sequence are semantic obligations; not a generic acquisition proof.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "job_offer",
+      "printed_pages": "224–226",
+      "native_handoff": true,
+      "native_support": "Job plus separate wages role and pay-priority obligation",
+      "remaining_obligations": "Quality and the person's priorities need contextual synthesis; available offer does not require invented acquisition.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "work_person",
+      "printed_pages": "224–225",
+      "native_handoff": true,
+      "native_support": "Native boss tenth, subordinate sixth, colleague seventh overrides",
+      "remaining_obligations": "Collisions and multiple work capacities need contextual review; the role guard alone is not an interpretation.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "property",
+      "printed_pages": "167–171",
+      "native_handoff": true,
+      "native_support": "Actual parties; fourth-house asset, tenth-house price and contextual property profit",
+      "remaining_obligations": "Pure completion, price/condition and opposition exception need semantic separation; no valuation amount or complete event proof.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "rental",
+      "printed_pages": "170–171",
+      "native_handoff": true,
+      "native_support": "Actual tenant/landlord parties; asset/price/profit roles; comparison inputs retained",
+      "remaining_obligations": "Quality versus finding a tenancy, opposition regret and alternatives remain semantic; not ordinary servant-sixth allocation.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "business_property",
+      "printed_pages": "170–171",
+      "native_handoff": false,
+      "native_support": "Elicitation contract only; generic role helper is not a business adjudication",
+      "remaining_obligations": "Dedicated business/property-profit role allocation and profit testimony are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "choice",
+      "printed_pages": "201–203",
+      "native_handoff": false,
+      "native_support": "Current option/alternatives contract only",
+      "remaining_obligations": "Dedicated first/seventh stay/change versus contextual-houses comparison and aggregation are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "hiring",
+      "printed_pages": "189–190",
+      "native_handoff": false,
+      "native_support": "Candidate-input contract only",
+      "remaining_obligations": "Dedicated sixth-house candidate matching/quality without compulsory acquisition aspect is missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "contact",
+      "printed_pages": "165–166",
+      "native_handoff": true,
+      "native_support": "Person's actual relationship house; generic future contacts and condition/reception",
+      "remaining_obligations": "A contact is not parcel arrival or a home visit; expectedness/long-lost defaults and timing are not separately enforced arrival programs.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "parcel",
+      "printed_pages": "165–166",
+      "native_handoff": true,
+      "native_support": "Source-bound sender/receiver; actual task allocation; physical-contact gate",
+      "remaining_obligations": "Past-receipt separating history/receipt-house proof and post-receipt question programs remain blocked; no numeric timing, complete no-aspect test or certified complex mediation.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "visit",
+      "printed_pages": "166",
+      "native_handoff": true,
+      "native_support": "Bound visitor/receiver; friendship versus service capacity; expectedness retained; physical-contact gate",
+      "remaining_obligations": "Ascendant/home-cusp contacts and their preference are unknown; no numeric timing, complete absence proof or certified complex mediation.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "contest",
+      "printed_pages": "203–208",
+      "native_handoff": false,
+      "native_support": "Competition/affiliation contract only",
+      "remaining_obligations": "Dedicated allegiance/observer assignment, match versus championship and nonordinary Moon adjudication are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "bet",
+      "printed_pages": "156–161, 203–204",
+      "native_handoff": false,
+      "native_support": "Money-question input contract only",
+      "remaining_obligations": "Dedicated stake/profit and winnings program distinct from team-performance adjudication is missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "court_case",
+      "printed_pages": "208–212",
+      "native_handoff": false,
+      "native_support": "Party/claim input contract only",
+      "remaining_obligations": "Dedicated parties, legal process tenth, verdict fourth and trial/default/perfection adjudication are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "vehicle",
+      "printed_pages": "142–143",
+      "native_handoff": false,
+      "native_support": "Vehicle/capacity input contract only",
+      "remaining_obligations": "Dedicated aboard/voyage first versus owned-possession second and safety testimony are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "person_description",
+      "printed_pages": "143–145, 191, 196",
+      "native_handoff": false,
+      "native_support": "Native named-person/future-spouse role distinction exists; adjudication blocked",
+      "remaining_obligations": "Dedicated main-significator descriptive synthesis and scope guards are missing; no exact height/ethnicity/marks inference.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "information",
+      "printed_pages": "164–165",
+      "native_handoff": false,
+      "native_support": "Claim/underlying-matter input contract only",
+      "remaining_obligations": "Dedicated veracity versus relocated substantive matter and prophecy testimony are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "trust",
+      "printed_pages": "165",
+      "native_handoff": true,
+      "native_support": "Actual person's operative house; native own dignity/ability evidence",
+      "remaining_obligations": "Contextual honesty/Mercury exceptions remain judgments; supplied dignity does not prove trustworthiness or accusations.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "pregnancy",
+      "printed_pages": "173–174",
+      "native_handoff": false,
+      "native_support": "Current-state/principal input contract only",
+      "remaining_obligations": "Dedicated current pregnancy/parent roles and present-state testimony are missing; no clinical determination.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "fertility",
+      "printed_pages": "174–177",
+      "native_handoff": false,
+      "native_support": "Scope/principal input contract only",
+      "remaining_obligations": "Dedicated conception, carrying, lifetime potential, coarse child-count and description programs are missing; no generic count substitute.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "adoption",
+      "printed_pages": "177–178",
+      "native_handoff": false,
+      "native_support": "Prospective/completed/known-parent input contract only",
+      "remaining_obligations": "Dedicated someone-else's child versus own-fifth roles and adoption/perfection testimony are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "medical",
+      "printed_pages": "179–189",
+      "native_handoff": false,
+      "native_support": "Patient/task/treatment input contract only",
+      "remaining_obligations": "Dedicated diagnosis/prognosis/treatment role and clinical-scope program are missing; Lord 6 is not automatically illness.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "politics",
+      "printed_pages": "212–214",
+      "native_handoff": false,
+      "native_support": "Office/incumbency/observer input contract only",
+      "remaining_obligations": "Dedicated supporter/impartial/foreign observer candidate allocation and election judgment are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "knowledge",
+      "printed_pages": "216–218",
+      "native_handoff": false,
+      "native_support": "Knowledge-quality versus earnings input contract only",
+      "remaining_obligations": "Dedicated ninth-house knowledge/tenth-house earnings and existing-profit interpretation are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "exam",
+      "printed_pages": "218",
+      "native_handoff": false,
+      "native_support": "Passing versus admission input contract only",
+      "remaining_obligations": "Dedicated result/profit-from-knowledge testimony and contextual default are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "undertaking",
+      "printed_pages": "219",
+      "native_handoff": false,
+      "native_support": "Activity/principal input contract only",
+      "remaining_obligations": "Dedicated undertaking quality versus its profit roles and benefit synthesis are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "dream",
+      "printed_pages": "219",
+      "native_handoff": false,
+      "native_support": "Meaning versus prophetic truth/dream-account input contract only",
+      "remaining_obligations": "Dedicated contextual characters versus ninth-house prophecy and interpretation are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "education",
+      "printed_pages": "219–221",
+      "native_handoff": false,
+      "native_support": "School/university/task input contract only",
+      "remaining_obligations": "Dedicated radical third/ninth institution and admission/enjoyment/quality/comparison program are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "tax",
+      "printed_pages": "231–232",
+      "native_handoff": false,
+      "native_support": "Principal/tax-question input contract only",
+      "remaining_obligations": "Dedicated government tenth/coffers eleventh/principal money second and assessment/ability interpretation are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "allegation",
+      "printed_pages": "233–234",
+      "native_handoff": false,
+      "native_support": "Reported claim input contract only",
+      "remaining_obligations": "Dedicated relationship/past-act testimony and allegation-scope judgment are missing; future contact cannot certify past harm.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "custody",
+      "printed_pages": "234–237",
+      "native_handoff": false,
+      "native_support": "Already-held versus not-held input contract only",
+      "remaining_obligations": "Dedicated radical/turned twelfth roles and entry/release default/testimony are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "weather",
+      "printed_pages": "238–240",
+      "native_handoff": false,
+      "native_support": "Target locality/period versus chart anchor contract only",
+      "remaining_obligations": "Dedicated general/event/season house allocation and ruler-weather interpretation are missing.",
+      "source_correct_interpretation": "unqualified"
+    },
+    {
+      "method": "election",
+      "printed_pages": "241–242",
+      "native_handoff": false,
+      "native_support": "Action/window/constraints input contract only",
+      "remaining_obligations": "Dedicated horary election program and exact future-action perfection calculations are missing.",
+      "source_correct_interpretation": "unqualified"
+    }
+  ]
+}

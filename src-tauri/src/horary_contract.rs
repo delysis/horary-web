@@ -493,7 +493,13 @@ mod repair_message_tests {
         let new = "answer, evidence, summary, unknowns. answer is the visible interpretation.";
         let content = legacy["content"].as_str().unwrap();
         assert_eq!(content.matches(old).count(), 1);
-        json!({"role":"system","content":content.replacen(old, new, 1)})
+        // Preserve the exact historical capture. This parity regression permits
+        // only the separately implemented summary field and the explicit new
+        // catalogue-version marker; no teaching, data or schema is normalized.
+        let historical = "version=\"frawley-reading-contracts-2026-10-10.2\"";
+        assert_eq!(content.matches(historical).count(), 1);
+        let current = format!("version=\"{}\"", crate::reading_contracts::VERSION);
+        json!({"role":"system","content":content.replacen(old, new, 1).replacen(historical,&current,1)})
     }
 
     #[test]

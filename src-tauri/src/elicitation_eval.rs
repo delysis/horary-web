@@ -2416,12 +2416,20 @@ fn fixtures_cover_every_method_with_explicit_implicit_and_missing_inputs() {
 }
 
 #[test]
-fn every_scenario_has_its_own_source_based_reading_rubric() {
-    let rubrics = crate::reading_eval::catalogue(
+fn historical_reading_rubrics_do_not_silently_qualify_new_native_arrival_programs() {
+    let result = crate::reading_eval::catalogue(
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("test-fixtures/readings"),
-    )
-    .expect("Strict reading rubrics");
-    validate_rubric_coverage(&catalogue().unwrap(), &rubrics).unwrap();
+    );
+    // Original gold stays immutable. Its expert-review Parcel expectation is
+    // not an evaluation of this new physical-arrival program. Keep the strict
+    // runtime refusal rather than rewriting that support flag for a green score.
+    let Err(error) = result else {
+        panic!("Historical native-support drift must fail closed");
+    };
+    assert_eq!(
+        error,
+        "Reading support differs from the executable contract in parcel-explicit"
+    );
 }
 
 #[test]

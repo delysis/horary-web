@@ -236,6 +236,8 @@ const SOURCES: &[&str] = &[
     "src-tauri/src/horary_step.rs",
     "src-tauri/src/horary_role_options.rs",
     "src-tauri/src/reading_contracts.rs",
+    "src-tauri/src/message_programs.rs",
+    "src-tauri/src/message_programs/tests/journeys.rs",
     "src-tauri/src/recognition_programs.rs",
     "src-tauri/src/elicitation_eval.rs",
     "src-tauri/src/first_message_journey_eval.rs",
@@ -612,6 +614,8 @@ The bank contains only fixed teaching messages, not private question inputs or a
     let reference = json!({"authorship":"Generated exact live prompts plus explicitly authored scheduler fixture; no model invoked","fixture":examples,"lessons":guides,"bookOcrSha256":lessons::BOOK_OCR_SHA256});
     let manifest = json!({"purpose":"Source fingerprint; no private app data","sources":manifest});
     Ok(vec![
+        ("docs/NATIVE_READING_SUPPORT.md", crate::message_programs::support_documentation()),
+        ("docs/llm-process/native-reading-support.json", format!("{}\n", serde_json::to_string_pretty(&json!({"purpose":"Native support inventory, not source-correct interpretation qualification","baseline":"9abfa83c63fc100a638e7fa02e1e17055c897c51","catalogue_version":crate::reading_contracts::VERSION,"arrival_program":crate::message_programs::VERSION,"families":crate::message_programs::inventory()})).map_err(|e|e.to_string())?)),
         (
             "docs/READING_CONTRACTS.md",
             crate::reading_contracts::documentation(),
