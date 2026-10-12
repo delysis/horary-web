@@ -636,6 +636,7 @@ pub fn check(
         if value["reply"].as_str().is_none_or(|s| s.trim().is_empty()) {
             return Err("The reader must give a nonempty conversational reply.".into());
         }
+        crate::horary_conversation::validate_work_claim(input, value)?;
         return Ok(Checked::Data(CheckedData {
             stage,
             input_sha256: crate::horary_lessons::digest(&input.to_string()),

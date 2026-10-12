@@ -240,6 +240,11 @@ pub(crate) fn clipboard(session: &Session) -> Value {
         })
         .map(|r| json!({"stage":r.stage,"finding":r.worksheet}))
         .collect();
+    let result_kind = session.method.result.as_ref().map(|result| match result {
+        ReadingResult::Judgment { .. } => "judgment",
+        ReadingResult::NeedsInformation { .. } => "needs_information",
+        ReadingResult::Limited { .. } => "limited",
+    });
     json!({"latest_words":session.messages.iter().rev().find(|m|m.role=="user").map(|m|&m.text),
         "dialogue":dialogue,"canonical_question":session.question,
         "consultation":session.method.consultation.as_ref().map(|c|c.recognition_snapshot()),"reminders":reminders,
@@ -249,6 +254,12 @@ pub(crate) fn clipboard(session: &Session) -> Value {
         "anchor_policy":"For an ordinary consultation, use the reader's location and when the question became clear. Device place is this app's default reader location, not the event venue. An explicit earlier consultation or corrected reader location requires its own verified anchor.",
         "chart_state":if anchor.is_some(){"cast"}else{"not_cast"},
         "state_reminder":if anchor.is_some(){"A chart exists; distinguish its facts from unfinished judgment."}else{"No chart has been cast. Discuss the question or the book's method, never findings from this chart."},
+        // respond() is the end of this turn, after native preparation has
+        // stopped. A user request or an old job is not scheduled future work.
+        "action_state":{"after_reply":"wait_for_user","scheduled_actions":[],
+            "chart_available":anchor.is_some(),"answer_available":current_answer(session).is_some(),
+            "result":result_kind,
+            "authority":"This reply does not schedule chart casting, preparation or a reading. Report completed work only when available; explain an actual limit or obtain a genuine missing answer."},
         "reader_place":session.place,"device_place_available":device,
         "specialist_findings":specialists,"unfinished_requests":session.method.flow.pending,
         "authority":"The clipboard owns accepted facts and readiness. This response speaks to the person; it cannot authorize a chart or unsupported judgment."})
@@ -281,6 +292,95 @@ pub(crate) fn validate_ask(input: &Value, value: &Value) -> Result<(), String> {
         {
             return Err(format!(
                 "The current native request is still answerable and unresolved. Bind ask to one of these current actionable reminders: {allowed:?}, and obtain its answer in your own words. You may choose the order of genuine gaps. No sourced unavailability or method limit permits abandoning them. The binding alone is not evidence that your prose asks the right question."
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A narrow backstop for explicit first-person work claims. The native action
+/// boundary and state-selected instruction are primary; this does not certify
+/// all conversational meaning or treat a phrase match as a scheduled action.
+pub(crate) fn validate_work_claim(input: &Value, value: &Value) -> Result<(), String> {
+    let Some(reply) = value["reply"].as_str() else {
+        return Ok(()); // The response schema owns its type.
+    };
+    for clause in reply.split(['.', '!', '?', ';', ':', '\n']) {
+        let normalized = clause.to_lowercase().replace('’', "'");
+        let words: Vec<_> = normalized
+            .split(|c: char| !c.is_alphabetic() && c != '\'')
+            .filter(|word| !word.is_empty())
+            .collect();
+        for (start, word) in words.iter().enumerate() {
+            let (offset, completed) = match (*word, words.get(start + 1).copied()) {
+                ("i", Some("will" | "am")) | ("we", Some("will" | "are")) => (2, false),
+                ("i", Some("have")) | ("we", Some("have")) => (2, true),
+                ("i" | "we", Some("cast" | "calculated" | "drew" | "prepared")) => (1, true),
+                ("i'll" | "i'm" | "we'll" | "we're", _) => (1, false),
+                ("i've" | "we've", _) => (1, true),
+                ("let", Some("me" | "us")) => (2, false),
+                ("let's", _) => (1, false),
+                _ => continue,
+            };
+            // Conditional capability and explicit negation do not announce
+            // execution. Keep them usable for honest explanations of a gap.
+            if words[..start]
+                .iter()
+                .any(|w| matches!(*w, "if" | "once" | "when" | "unless"))
+            {
+                continue;
+            }
+            let work = &words[start + offset..];
+            let Some(action) = work.iter().take(5).position(|w| {
+                matches!(
+                    *w,
+                    "cast"
+                        | "casting"
+                        | "calculate"
+                        | "calculating"
+                        | "calculated"
+                        | "draw"
+                        | "drawing"
+                        | "drew"
+                        | "prepare"
+                        | "preparing"
+                        | "prepared"
+                        | "begin"
+                        | "beginning"
+                        | "start"
+                        | "starting"
+                )
+            }) else {
+                continue;
+            };
+            let Some(object) = work
+                .iter()
+                .skip(action + 1)
+                .take(8)
+                .position(|w| matches!(*w, "chart" | "reading"))
+            else {
+                continue;
+            };
+            let end = action + 1 + object;
+            if work[..=end]
+                .iter()
+                .any(|w| matches!(*w, "not" | "never" | "no"))
+                || work[end + 1..]
+                    .iter()
+                    .any(|w| matches!(*w, "if" | "once" | "when" | "unless"))
+            {
+                continue;
+            }
+            let chart = work[end] == "chart";
+            if completed && chart && input["chart_state"] == "cast" {
+                continue;
+            }
+            if completed && !chart && input["action_state"]["answer_available"] == true {
+                continue;
+            }
+            return Err(format!(
+                "The reply claims chart casting or reading preparation without its native authority. chart_state={}; this conversation ends the turn and schedules no further calculation. Report only actual completed work, explain the current method limit if present, or ask for a genuine bound missing answer. Do not promise casting/preparation or imply that work continues after this reply.",
+                input["chart_state"].as_str().unwrap_or("unknown")
             ));
         }
     }
@@ -339,7 +439,7 @@ pub(crate) fn schema(input: &Value) -> Value {
     };
     json!({"type":"object","properties":{
         "ask":{"type":"string","enum":choices,"description":"Choose the exact missing-answer reminder before composing reply. Empty means no fact is being elicited. The spoken question must obtain this reminder's answer, not a different detail."},
-        "reply":{"type":"string","maxLength":1600,"description":"Speak naturally to the person. If ask is nonempty, obtain that exact missing answer in one contextual question, preserving known names and circumstances."}
+        "reply":{"type":"string","maxLength":1600,"description":"Speak naturally to the person within action_state: no chart casting or reading preparation follows this reply. Explain an actual limit without a preparation promise. If ask is nonempty, obtain that exact missing answer in one contextual question, preserving known names and circumstances."}
     },"required":["reply","ask"],"additionalProperties":false})
 }
 
@@ -469,6 +569,134 @@ mod tests {
             },
         });
         clipboard(&session)
+    }
+
+    #[test]
+    fn limited_question_has_no_casting_authority_despite_available_device_place() {
+        let mut session = complete_case_session();
+        session.chart = None;
+        session.candidates.push(session.place.clone().unwrap());
+        let case = session.method.consultation.as_mut().unwrap();
+        case.frame = resolved(reading_contracts::Frame {
+            method: reading_contracts::Method::Undertaking,
+            facet: reading_contracts::Facet::Event,
+        });
+        let plan = case.plan(None);
+        let limitation = plan.limitation.as_ref().unwrap();
+        session.method.result = Some(ReadingResult::Limited {
+            limitation: limitation.into(),
+        });
+        let input = clipboard(&session);
+        assert_eq!(input["chart_state"], "not_cast");
+        assert_eq!(input["device_place_available"], true);
+        assert_eq!(input["action_state"]["scheduled_actions"], json!([]));
+        assert_eq!(input["action_state"]["result"], "limited");
+        assert_eq!(input["action_state"]["chart_available"], false);
+        assert_eq!(required_ask(&input), None);
+        assert!(horary_step::check(Stage::Conversation, Matter::Other,
+            &json!({"reply":"I haven't cast a chart, and I haven't established an answer to that undertaking.","ask":""}),
+            &input, &[]).is_ok());
+        for reply in [
+            "I'm casting the chart now.",
+            "I'll prepare your reading.",
+            "I have cast your chart.",
+            "I cast the chart.",
+            "Let me calculate the chart for you.",
+        ] {
+            let error = horary_step::check(
+                Stage::Conversation,
+                Matter::Other,
+                &json!({"reply":reply,"ask":""}),
+                &input,
+                &[],
+            )
+            .err()
+            .unwrap();
+            assert!(
+                error.contains("schedules no further calculation"),
+                "{reply}: {error}"
+            );
+        }
+        assert!(session.chart.is_none());
+        assert!(matches!(
+            session.method.result,
+            Some(ReadingResult::Limited { .. })
+        ));
+    }
+
+    #[test]
+    fn completed_chart_allows_factual_report_but_not_unscheduled_preparation() {
+        let input = clipboard(&complete_case_session());
+        assert_eq!(input["chart_state"], "cast");
+        assert_eq!(input["action_state"]["answer_available"], false);
+        validate_work_claim(
+            &input,
+            &json!({"reply":"I have cast the chart, but haven't established an answer."}),
+        )
+        .unwrap();
+        for reply in [
+            "I'll calculate another chart now.",
+            "I'm preparing your reading.",
+            "I have prepared your reading.",
+        ] {
+            assert!(validate_work_claim(&input, &json!({"reply":reply})).is_err());
+        }
+        let mut completed = input;
+        completed["action_state"]["answer_available"] = json!(true);
+        validate_work_claim(&completed, &json!({"reply":"I have prepared the reading."})).unwrap();
+    }
+
+    #[test]
+    fn work_claim_repair_retains_original_authority_and_actual_ask_binding() {
+        let mut input = pending_owner_input();
+        input["chart_state"] = json!("not_cast");
+        input["action_state"]["chart_available"] = json!(false);
+        let rejected =
+            json!({"reply":"I'll cast the chart now. Who owns the books?","ask":"need_0"});
+        assert!(
+            horary_step::check(Stage::Conversation, Matter::Other, &rejected, &input, &[]).is_err()
+        );
+        let repair =
+            json!({"original_input":input,"previous_worksheet":rejected,"chart_state":"cast"});
+        assert!(horary_step::check(
+            Stage::Conversation,
+            Matter::Other,
+            &json!({"reply":"I have cast the chart. Who owns the books?","ask":"need_0"}),
+            &repair,
+            &[]
+        )
+        .is_err());
+        assert!(horary_step::check(
+            Stage::Conversation,
+            Matter::Other,
+            &json!({"reply":"Before I weigh this sale, who owns the books?","ask":"need_0"}),
+            &repair,
+            &[]
+        )
+        .is_ok());
+        assert!(horary_step::check(
+            Stage::Conversation,
+            Matter::Other,
+            &json!({"reply":"Who owns the books?","ask":""}),
+            &repair,
+            &[]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn negative_conditional_and_method_explanations_do_not_announce_work() {
+        let input = json!({"chart_state":"not_cast","action_state":{"scheduled_actions":[]}});
+        for reply in [
+            "I'm not casting a chart yet.",
+            "I have not prepared a reading.",
+            "If the question is clear, I will cast the chart using the reader's place.",
+            "I will prepare a reading when those necessary facts are available.",
+            "I cast charts for the moment a question becomes clear.",
+            "I can't judge that outcome with the available procedure.",
+        ] {
+            validate_work_claim(&input, &json!({"reply":reply})).unwrap();
+        }
     }
 
     #[test]
