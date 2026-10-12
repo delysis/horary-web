@@ -1,0 +1,22 @@
+{
+  "bundle": {
+    "externalBin": [],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "infoPlist": "Info.plist"
+    },
+    "resources": {
+      "../docs/NATIVE_AUDIO_LICENSE.txt": "licenses/native-audio.txt",
+      "../docs/LLAMA_SERVER_LICENSE.txt": "licenses/llama-server.txt",
+      "binaries/llama-server-aarch64-apple-darwin": "binaries/llama-server-aarch64-apple-darwin",
+      "binaries/libllama-server-impl.dylib": "binaries/libllama-server-impl.dylib",
+      "binaries/libllama-common.0.dylib": "binaries/libllama-common.0.dylib",
+      "binaries/libmtmd.0.dylib": "binaries/libmtmd.0.dylib",
+      "binaries/libllama.0.dylib": "binaries/libllama.0.dylib",
+      "binaries/libggml.0.dylib": "binaries/libggml.0.dylib",
+      "binaries/libggml-cpu.0.dylib": "binaries/libggml-cpu.0.dylib",
+      "binaries/libggml-metal.0.dylib": "binaries/libggml-metal.0.dylib",
+      "binaries/libggml-base.0.dylib": "binaries/libggml-base.0.dylib"
+    }
+  }
+}

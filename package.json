@@ -34,7 +34,8 @@
     "check:ai-core:commands": "cargo fmt --check --manifest-path crates/horary-ai-core/Cargo.toml && cargo test --manifest-path crates/horary-ai-core/Cargo.toml && cargo clippy --manifest-path crates/horary-ai-core/Cargo.toml -- -D warnings",
     "check:tauri:commands": "npm run check:ai-core && cargo fmt --check --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "check:all:commands": "npm run check && npm run test:coverage && npm audit && npm run check:tauri",
-    "tauri:build:release:commands": "tauri build --config src-tauri/tauri.release.conf.json"
+    "tauri:build:release:commands": "tauri build --config src-tauri/tauri.release.conf.json",
+    "tauri:build:macos-mtp": "npm run check:release-assets && tauri build --config src-tauri/tauri.mtp-macos.conf.json --features native-llama-metal --bundles app"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
