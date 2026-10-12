@@ -29,6 +29,14 @@ pub fn new_job_reader_baseline() -> Result<String> {
     Ok(instruction)
 }
 
+/// The declared family union plus the common page supplied by every existing
+/// NewJob branch allocation. No case label chooses these primary passages.
+pub fn new_job_family_source(book: &Book) -> Result<String> {
+    let mut source = catalogue::method_source(book, "new_job", true)?;
+    source.push_str(&book.pages(&[225].into_iter().collect())?);
+    Ok(source)
+}
+
 #[derive(dsrust::Signature)]
 /// Select the book's judgment branch within the supplied reading family using only the person's original question and accepted consultation. Return one exact branch ID from the taxonomy. Select the requested outcome, not an incidental deadline or an unrequested reframing. Do not invent absent situational inputs. If no branch is supportable, return unknown. This selects source context; it does not answer the question.
 pub struct SelectReadingBranch {

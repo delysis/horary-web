@@ -196,7 +196,7 @@ enum Command {
         #[arg(long, default_value_t = 2)]
         bootstrap_demos: usize,
     },
-    /// Optimize only the NewJob reader; actual branch selection stays unchanged.
+    /// Optimize one NewJob Predict with the complete salient family source.
     OptimizeReading {
         #[arg(long, default_value = "examples")]
         examples: PathBuf,
@@ -825,7 +825,7 @@ async fn main() -> Result<()> {
                 &output,
                 &cases,
                 &args.book,
-                serde_json::json!({"command":"optimize-reading","method":"new_job","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":max_metric_calls,"reflection_minibatch":3,"seed":23,"bootstrap_demos":0,"optimizable_predictors":["reading.new_job"],"branch_selector":"unchanged, executed and traced from actual accepted consultation","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
+                serde_json::json!({"command":"optimize-reading","method":"new_job","program_kind":"direct_family_reading","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":max_metric_calls,"reflection_minibatch":3,"seed":23,"bootstrap_demos":0,"optimizable_predictors":["reading.new_job"],"branch_selector":"none; declared family uses complete salient branch union, never a gold branch","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
             )?;
             fs::write(output.join("baseline-instructions.txt"), &baseline)?;
             let book = Arc::new(book::Book::open(&args.book)?);
@@ -834,7 +834,13 @@ async fn main() -> Result<()> {
                 .map(|case| {
                     Ok(horary_dspy::functions::Fixture {
                         split: case.split.clone(),
-                        example: catalogue::example(case, "reading", &book)?,
+                        example: {
+                            let mut example = catalogue::example(case, "reading", &book)?;
+                            let source = horary_dspy::reading::new_job_family_source(&book)?;
+                            example.set("source_text", serde_json::json!(&source));
+                            example.set("__review_source", serde_json::json!(source));
+                            example
+                        },
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;

@@ -49,6 +49,10 @@ pub fn manifest(
         .get("student")
         .and_then(Value::as_str)
         .unwrap_or(google::STUDENT);
+    let student_inputs = configuration
+        .get("component_inputs")
+        .and_then(Value::as_str)
+        .unwrap_or("original question and actual device context only");
     let receipt = json!({"teacher":teacher,"student":student,"configuration":configuration,
         "executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),
         "book_sha256":google::digest(fs::read(book_path)?),"dataset_sha256":google::digest(&data),
@@ -61,7 +65,7 @@ pub fn manifest(
         "port_predict_sha256":google::digest(include_bytes!("../vendor/dsrust/src/predict.rs")),
         "port_openai_sha256":google::digest(include_bytes!("../vendor/dsrust/src/lm/openai/mod.rs")),
         "cargo_lock_sha256":google::digest(include_bytes!("../Cargo.lock")),
-        "provider_schema":false,"student_inputs":"original question and actual device context only",
+        "provider_schema":false,"student_inputs":student_inputs,
         "case_count":cases.len(),"qualified":false});
     let path = output.join("manifest.json");
     if path.exists() {

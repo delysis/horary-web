@@ -228,7 +228,7 @@ impl Graded {
             }
             Oracle::Reading(program) => program.forward_traced(input.clone(), trace).await,
         };
-        let oracle_stages = trace[from..].iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>();
+        let mut oracle_stages = trace[from..].iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>();
         let mut prediction = match attempted {
             Ok(prediction) => prediction,
             Err(error) => {
@@ -240,6 +240,21 @@ impl Graded {
                 // Missing output fields are an observed format rejection, with no
                 // fabricated semantic fields and no extra judge or provider call.
                 let raw = observed.response.first_text();
+                // A single Predict has an unambiguous failed function. Retain
+                // its received raw output in the ordinary optimizer trace so
+                // reflection can address this format failure. A composed
+                // program's absent trace cannot identify its failed predictor.
+                if matches!(&self.oracle, Oracle::Single(_)) {
+                    trace.push(TraceStep {
+                        predictor: self.predictor_name.clone(),
+                        inputs: input.clone(),
+                        outputs: dsrust::example! {
+                            __received_output: raw,
+                            __format_rejection: observed.reason,
+                        },
+                    });
+                    oracle_stages = trace[from..].iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect();
+                }
                 let feedback = format!(
                     "Native output-format rejection: {}. No valid function output was supplied. Fully received model reply:\n{raw}\nSALIENT PRIMARY FRAWLEY CONTEXT FOR THIS QUESTION TYPE:\n{source}",
                     observed.reason
@@ -516,8 +531,8 @@ impl Module for Graded {
 }
 
 /// A standard Module view: only the chosen predictor's instruction is mutable.
-/// Forward still executes the complete program, including its unchanged actual
-/// branch selector. Saving uses the full program rather than this narrow view.
+/// Forward still executes the complete program. A composed program retains its
+/// actual selector; a direct reader has one Predict. Saving uses the full state.
 struct FunctionView<'a> {
     program: &'a mut Graded,
     name: String,
@@ -1080,9 +1095,10 @@ pub async fn compile_fixtures(
     .await
 }
 
-/// Instruction-only compilation of a reader, with the actual unchanged branch
-/// selector retained in execution and full saved state. The caller supplies a
-/// source-reviewed baseline in this reader's declared output contract.
+/// Instruction-only compilation of a reader. NewJob uses its declared family
+/// and complete book-defined branch union in a single Predict; other families
+/// retain their actual selector. The caller supplies a source-reviewed baseline
+/// in this reader's declared output contract.
 #[allow(clippy::too_many_arguments)]
 pub async fn compile_reader_fixtures(
     fixtures: &[Fixture],
@@ -1127,6 +1143,21 @@ async fn compile_fixtures_inner(
         "GEPA needs a positive metric budget"
     );
     fs::create_dir_all(directory)?;
+    let direct_family_reader = reader_baseline.is_some() && method == "new_job";
+    if direct_family_reader {
+        let source = crate::reading::new_job_family_source(&book)?;
+        ensure!(
+            fixtures.iter().all(|fixture| {
+                fixture.example.get("source_text").and_then(Value::as_str) == Some(&source)
+                    && fixture
+                        .example
+                        .get("__review_source")
+                        .and_then(Value::as_str)
+                        == Some(&source)
+            }),
+            "Direct family reader requires the complete book-defined source union"
+        );
+    }
     let mut train = Vec::new();
     let mut development = Vec::new();
     let mut test = Vec::new();
@@ -1157,6 +1188,13 @@ async fn compile_fixtures_inner(
         Some(book.clone()),
     )?
     .with_stream(directory.join("observations.jsonl"))?;
+    // This family is already declared by its function signature. Its three
+    // branches share the same primary chapter; choosing another neural route
+    // adds a failure prerequisite without narrowing the necessary source.
+    if direct_family_reader {
+        program.oracle =
+            Oracle::Single(plain(signatures::reading(method)?, models.student.clone()));
+    }
     let optimizable_predictors = if let Some(baseline) = reader_baseline {
         program.judge.signature.instructions.push_str(" Return ONLY the requested output fields score, passed, classification, extraction, reading, answer_quality and feedback, in their requested field markers, beginning with score. Never copy the input, prediction, rubric or source_text fields. Keep feedback specific and concise, with observed quotations and printed source references.");
         let name = predictor_name(method, function)?;
@@ -1253,15 +1291,24 @@ async fn compile_fixtures_inner(
         "GEPA encountered an unobserved execution/review failure; provisional engine scores/candidate are withheld"
     );
     program.save(&directory.join("compiled.json"))?;
-    crate::queue::write_json_atomic(
-        &directory.join("component-source.json"),
-        &source_receipt(
-            method,
-            function,
-            &fs::read(directory.join("compiled.json"))?,
-            &dataset_digest,
-        )?,
+    let mut receipt = source_receipt(
+        method,
+        function,
+        &fs::read(directory.join("compiled.json"))?,
+        &dataset_digest,
     )?;
+    if direct_family_reader {
+        receipt["version"] = json!(3);
+        receipt["program_kind"] = json!("direct_family_reading");
+        receipt["predictor_names"] = json!([predictor_name(method, function)?]);
+        receipt["source_selection"] =
+            json!("Book-defined complete NewJob branch union; no expected branch");
+        receipt
+            .as_object_mut()
+            .unwrap()
+            .remove("branch_declaration_sha256");
+    }
+    crate::queue::write_json_atomic(&directory.join("component-source.json"), &receipt)?;
     let after = Evaluate::new(
         development.clone(),
         |input| program.forward(input),
@@ -1283,6 +1330,12 @@ async fn compile_fixtures_inner(
         .iter()
         .all(|observation| observation["review_summary_consistent"] == true);
     let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":models.student_id,"bootstrap_demos":demos,"optimizable_predictors":optimizable_predictors,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
+    let mut result = result;
+    result["program_kind"] = json!(if direct_family_reader {
+        "direct_family_reading"
+    } else {
+        "original_component"
+    });
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     ensure!(
         observed,
@@ -1605,6 +1658,132 @@ mod component_tests {
             reloaded.reader.signature.instructions,
             "Source-adapted synthetic reader only"
         );
+    }
+    #[tokio::test]
+    async fn direct_new_job_gepa_uses_one_predict_and_the_full_family_source_without_gold_branch() {
+        let book = Arc::new(Book::fixture());
+        let source = crate::reading::new_job_family_source(&book).unwrap();
+        assert!(source.contains("printed_page=\"225\""));
+        let fixtures = ["train", "development", "test"].map(|split| {
+            let mut example = crate::reading::tests::input(json!({"facts":[]}));
+            example.set("question", json!(format!("Synthetic {split} job question")));
+            example.set("source_text", json!(&source));
+            example.set("__review_source", json!(&source));
+            Fixture {
+                split: split.into(),
+                example,
+            }
+        });
+        let oracle = Arc::new(DummyLM::new((0..50).map(|_| {
+            dsrust::example! {status:"method_limit",answer:"Synthetic answer only.",analysis:"e1 boundary",evidence:"e1",unresolved:"Synthetic calculation limit"}
+        })));
+        let judge =
+            Arc::new(DummyLM::new((0..50).map(|_| {
+                review("unobserved", "unobserved", "pass", "pass", true)
+            })));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: judge,
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let result = compile_reader_fixtures(
+            &fixtures,
+            "new_job",
+            book.clone(),
+            &models,
+            directory.path(),
+            CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+            "Synthetic direct-family reader baseline",
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["program_kind"], "direct_family_reading");
+        assert_eq!(result["optimizable_predictors"], json!(["reading.new_job"]));
+        let compiled: Value =
+            serde_json::from_slice(&fs::read(directory.path().join("compiled.json")).unwrap())
+                .unwrap();
+        assert_eq!(compiled.as_object().unwrap().len(), 2);
+        assert!(compiled["reading.new_job"].is_object());
+        assert!(compiled.get("reading_branch.new_job").is_none());
+        let receipt: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("component-source.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(receipt["version"], 3);
+        assert_eq!(receipt["program_kind"], "direct_family_reading");
+        assert!(receipt.get("branch_declaration_sha256").is_none());
+        let observations: Vec<Value> =
+            serde_json::from_slice(&fs::read(directory.path().join("observations.json")).unwrap())
+                .unwrap();
+        assert!(observations.iter().all(|row| {
+            let stages = row["oracle_stages"].as_array().unwrap();
+            let inputs: BTreeMap<String, String> =
+                serde_json::from_value::<Vec<(String, String)>>(stages[0]["inputs"].clone())
+                    .unwrap()
+                    .into_iter()
+                    .collect();
+            let outputs: BTreeMap<String, String> =
+                serde_json::from_value::<Vec<(String, String)>>(stages[0]["outputs"].clone())
+                    .unwrap()
+                    .into_iter()
+                    .collect();
+            stages.len() == 1
+                && stages[0]["predictor"] == "reading.new_job"
+                && inputs.get("source_text") == Some(&source)
+                && !inputs.contains_key("expected")
+                && !outputs.contains_key("__reading_branch")
+        }));
+        assert!(!format!("{:?}", oracle.asked()).contains("PRIVATE GOLD"));
+        let mut legacy = ReadingProgram::new("new_job", book, oracle).unwrap();
+        assert!(
+            load_reading_component(
+                &mut legacy,
+                &directory.path().join("compiled.json"),
+                "new_job",
+                &fixtures_digest(&fixtures).unwrap(),
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn direct_new_job_rejects_incomplete_source_before_any_model_submission() {
+        let fixtures = ["train", "development", "test"].map(|split| Fixture {
+            split: split.into(),
+            example: crate::reading::tests::input(json!({"facts":[]})),
+        });
+        let oracle = Arc::new(DummyLM::new([]));
+        let teacher = Arc::new(DummyLM::new([]));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: teacher.clone(),
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        assert!(
+            compile_reader_fixtures(
+                &fixtures,
+                "new_job",
+                Arc::new(Book::fixture()),
+                &models,
+                directory.path(),
+                CompileOptions {
+                    max_metrics: 1,
+                    bootstrap_demos: 0
+                },
+                "Synthetic baseline",
+            )
+            .await
+            .is_err()
+        );
+        assert!(oracle.asked().is_empty());
+        assert!(teacher.asked().is_empty());
     }
     #[tokio::test]
     async fn fixed_comparison_changes_instruction_only_and_never_reflects_on_development() {
@@ -2043,7 +2222,11 @@ mod component_tests {
             None,
         )
         .unwrap();
-        let rejection = program.forward(input.clone()).await.unwrap();
+        let mut trace = Vec::new();
+        let rejection = program
+            .forward_traced(input.clone(), &mut trace)
+            .await
+            .unwrap();
         assert_eq!(rejection.get("__score"), Some(&json!(0.)));
         assert_eq!(rejection.get("__passed"), Some(&json!(false)));
         for field in ["method", "facet", "branch", "principal", "clarification"] {
@@ -2057,6 +2240,23 @@ mod component_tests {
         );
         assert!(judge.asked().is_empty());
         assert!(!program.failed.load(Ordering::SeqCst));
+        assert_eq!(trace.len(), 1);
+        assert_eq!(trace[0].predictor, "classification");
+        assert_eq!(
+            trace[0].inputs.rendered(),
+            input.inputs().unwrap().rendered()
+        );
+        assert_eq!(trace[0].outputs.fields().count(), 2);
+        assert!(
+            trace[0]
+                .outputs
+                .get("__received_output")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("Observed copied input")
+        );
+        assert!(trace[0].outputs.get("__format_rejection").is_some());
         let valid = program.forward(input).await.unwrap();
         assert_eq!(valid.get("__passed"), Some(&json!(true)));
         assert_eq!(judge.asked().len(), 1);
