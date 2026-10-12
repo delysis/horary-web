@@ -831,7 +831,7 @@
     },
     {
       "path": "tools/horary-dspy/src/catalogue.rs",
-      "sha256": "dffd71c261118c33c008e627fb7e4fa55092b45da05792d2a574d484ba694737"
+      "sha256": "89170806e189e991f0848915fafec2b5d3c4196960595001f419a01d9532cc47"
     },
     {
       "path": "tools/horary-dspy/src/classification_export.rs",
