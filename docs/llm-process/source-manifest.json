@@ -855,7 +855,7 @@
     },
     {
       "path": "tools/horary-dspy/src/gold.rs",
-      "sha256": "d4797264b572f223937452717e9d9375a18dd1aa3c8e76595e17063e95f91d20"
+      "sha256": "4a22f1c57cd2abbe7de3f80ccca4d588ba381d0a8c8b0e6b921d0d737b086e2d"
     },
     {
       "path": "tools/horary-dspy/src/google.rs",
