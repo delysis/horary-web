@@ -546,6 +546,31 @@ pub fn contact_role_reference(
                    house: Option<u8>,
                    optional: bool,
                    sources: Vec<String>| {
+        let selection_id = match id {
+            "principal.person" => principal.map(|_| "querent.self".to_owned()),
+            "target.person" => target.map(|actor| {
+                if Some(actor) == principal {
+                    "querent.self".to_owned()
+                } else {
+                    format!("{actor}.self")
+                }
+            }),
+            _ => None,
+        };
+        let selections: Vec<_> = accepted_roles
+            .into_iter()
+            .flatten()
+            .filter(|role| selection_id.as_deref() == Some(role.selected_id.as_str()))
+            .collect();
+        let selection = (selections.len() == 1).then(|| selections[0]);
+        // The final fact allowlist can omit cusps after native role acceptance.
+        // Preserve that accepted binding; missing reference IDs stay absent.
+        let accepted_row = accepted_roles.is_some() && !optional;
+        let house = if accepted_row {
+            selection.and_then(|role| role.house)
+        } else {
+            house
+        };
         let house_facts: Vec<_> = native
             .iter()
             .filter(|fact| {
@@ -553,10 +578,19 @@ pub fn contact_role_reference(
                     && house.is_some_and(|house| fact.label == format!("House {house}"))
             })
             .collect();
-        let cusp = (house_facts.len() == 1).then(|| house_facts[0]);
-        let ruler =
-            cusp.and_then(|fact| (fact.planets.len() == 1).then(|| fact.planets[0].as_str()));
-        if house.is_some() && ruler.is_none() {
+        let cusp = (house_facts.len() == 1)
+            .then(|| house_facts[0])
+            .filter(|fact| selection.is_none_or(|role| fact.planets == [role.planet.as_str()]));
+        let ruler = if accepted_row {
+            selection.map(|role| role.planet.as_str())
+        } else {
+            cusp.and_then(|fact| (fact.planets.len() == 1).then(|| fact.planets[0].as_str()))
+        };
+        if accepted_row && selection.is_none() {
+            unknowns.push(format!(
+                "{id}: the unique accepted role selection is unavailable."
+            ));
+        } else if !accepted_row && house.is_some() && ruler.is_none() {
             unknowns.push(format!(
                 "{id}: the unique native cusp/ruler is unavailable."
             ));
@@ -569,9 +603,11 @@ pub fn contact_role_reference(
             })
             .map(|fact| fact.id.as_str())
             .collect();
-        rows.push(json!({"role_id":id,"actor_id":actor,"label":actor.map(label),
+        rows.push(json!({"role_id":id,"actor_id":actor,"label":selection.map(|role|role.label.clone()).or_else(||actor.map(label)),
             "significator_house":house,"cusp_fact_id":cusp.map(|fact|&fact.id),
-            "ruler_planet":ruler,"position_fact_ids":positions,"optional":optional,"source_fields":sources}));
+            "ruler_planet":ruler,"position_fact_ids":positions,"optional":optional,"source_fields":sources,
+            "authority":if accepted_row{"native_accepted_selection"}else{"calculated_reference"},
+            "selected_id":selection.map(|role|&role.selected_id)}));
     };
     add(
         "principal.person",
@@ -639,10 +675,17 @@ pub fn contact_role_reference(
         .collect();
     let moon_available = principal.is_some()
         && moon_claims.is_empty()
-        && rows
-            .iter()
-            .filter(|row| row["optional"] == false)
-            .all(|row| row["ruler_planet"].is_string());
+        && match accepted_roles {
+            Some(roles) => roles.iter().any(|role| {
+                role.selected_id == "moon.contextual"
+                    && role.planet == "Moon"
+                    && role.house.is_none()
+            }),
+            None => rows
+                .iter()
+                .filter(|row| row["optional"] == false)
+                .all(|row| row["ruler_planet"].is_string()),
+        };
     if accepted_roles.is_none() && moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
             "label":"The principal's contextual Moon","significator_house":null,"planet":"Moon","optional":true}));
@@ -1032,6 +1075,89 @@ mod tests {
             view["directed_reception"].as_array().unwrap().is_empty(),
             "An unselected optional message role cannot become an accepted reception alias"
         );
+    }
+
+    #[test]
+    fn contact_accepted_reference_keeps_roles_and_moon_when_final_facts_omit_cusps() {
+        let native: Vec<_> = contact_native_facts()
+            .into_iter()
+            .filter(|fact| {
+                matches!(
+                    fact.kind.as_str(),
+                    "condition" | "reception" | "event" | "position" | "moon" | "boundary"
+                )
+            })
+            .collect();
+        let mut selected = vec![
+            ContactAcceptedRole {
+                selected_id: "querent.self".into(),
+                label: "Accepted principal".into(),
+                house: Some(1),
+                planet: "Saturn".into(),
+            },
+            ContactAcceptedRole {
+                selected_id: "alma.self".into(),
+                label: "Accepted Alma".into(),
+                house: Some(10),
+                planet: "Mars".into(),
+            },
+            ContactAcceptedRole {
+                selected_id: "moon.contextual".into(),
+                label: "Accepted contextual Moon".into(),
+                house: None,
+                planet: "Moon".into(),
+            },
+        ];
+        let view = contact_role_reference(&contact_projection(), &native, Some(&selected));
+        for (row, role) in view["role_rows"].as_array().unwrap()[..2]
+            .iter()
+            .zip(&selected)
+        {
+            assert_eq!(row["authority"], "native_accepted_selection");
+            assert_eq!(row["selected_id"], role.selected_id);
+            assert_eq!(row["label"], role.label);
+            assert_eq!(row["significator_house"], json!(role.house));
+            assert_eq!(row["ruler_planet"], role.planet);
+            assert!(row["cusp_fact_id"].is_null());
+        }
+        assert_eq!(view["role_rows"][0]["position_fact_ids"], json!(["e3"]));
+        assert_eq!(view["role_rows"][1]["position_fact_ids"], json!([]));
+        assert_eq!(view["moon"]["available_as_contextual_reference"], true);
+        assert_eq!(view["aliases"][2]["role_id"], "moon.contextual");
+        assert!(view["role_rows"][2]["ruler_planet"].is_null());
+        assert_eq!(view["role_rows"][2]["authority"], "calculated_reference");
+        let missing_target = [selected[0].clone(), selected[2].clone()];
+        let missing = contact_role_reference(&contact_projection(), &native, Some(&missing_target));
+        assert!(missing["role_rows"][1]["selected_id"].is_null());
+        assert!(missing["role_rows"][1]["significator_house"].is_null());
+        assert!(missing["role_rows"][1]["ruler_planet"].is_null());
+        assert!(missing["unknowns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|unknown| {
+                unknown.as_str().is_some_and(|text| {
+                    text.contains(
+                        "target.person: the unique accepted role selection is unavailable",
+                    )
+                })
+            }));
+        let component = contact_role_reference(&contact_projection(), &native, None);
+        assert!(component["role_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["ruler_planet"].is_null()));
+        assert_eq!(
+            component["moon"]["available_as_contextual_reference"],
+            false
+        );
+        selected.pop();
+        selected[1].planet = "Moon".into();
+        let claimed = contact_role_reference(&contact_projection(), &native, Some(&selected));
+        assert_eq!(claimed["role_rows"][1]["ruler_planet"], "Moon");
+        assert_eq!(claimed["moon"]["house_claims"][0]["role_id"], "alma.self");
+        assert_eq!(claimed["moon"]["available_as_contextual_reference"], false);
     }
 
     #[test]

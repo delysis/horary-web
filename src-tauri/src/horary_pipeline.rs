@@ -2059,29 +2059,62 @@ mod tests {
             input["contact_role_reference"]
         );
         assert_eq!(final_input["facts"], input["facts"]);
-        let without_positions: Vec<_> = native
+        let final_facts: Vec<_> = native
             .iter()
-            .filter(|fact| fact.kind != "position")
+            .filter(|fact| {
+                matches!(
+                    fact.kind.as_str(),
+                    "condition" | "reception" | "event" | "position" | "moon" | "boundary"
+                )
+            })
             .cloned()
             .collect();
         let limited = native_contact_role_reference(
             &case,
             &input["reading_request"],
             &selected,
-            &without_positions,
+            &final_facts,
         )
         .unwrap();
-        assert!(limited["role_rows"].as_array().unwrap().iter().all(|row|row["position_fact_ids"].as_array().unwrap().is_empty()),
-            "A reference must not reintroduce position IDs omitted from the actual judgment contract");
+        for row in limited["role_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["optional"] == false)
+        {
+            let role = selected
+                .iter()
+                .find(|role| row["selected_id"] == role.selected_id)
+                .expect("Final role rows retain actual native accepted selections");
+            assert_eq!(row["label"], role.label);
+            assert_eq!(row["significator_house"], json!(role.house));
+            assert_eq!(row["ruler_planet"], role.planet);
+            assert!(row["cusp_fact_id"].is_null());
+        }
+        assert_eq!(
+            limited["moon"]["available_as_contextual_reference"],
+            selected
+                .iter()
+                .any(|role| role.selected_id == "moon.contextual")
+                && !selected
+                    .iter()
+                    .any(|role| role.planet == "Moon" && role.house.is_some())
+        );
+        for id in limited["role_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|row| row["position_fact_ids"].as_array().unwrap())
+        {
+            assert!(final_facts.iter().any(|fact| id == &fact.id));
+        }
         for edge in limited["directed_reception"]
             .as_array()
             .unwrap()
             .iter()
             .chain(limited["event_endpoints"].as_array().unwrap())
         {
-            assert!(without_positions
-                .iter()
-                .any(|fact| edge["fact_id"] == fact.id));
+            assert!(final_facts.iter().any(|fact| edge["fact_id"] == fact.id));
         }
         let mut other = case;
         if let contracts::Slot::Resolved { observation } = &mut other.frame {
