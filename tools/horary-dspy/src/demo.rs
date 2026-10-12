@@ -15,6 +15,7 @@ const OMIT: &[&str] = &[
     "__feedback",
     "__passed",
     "__review_source",
+    "__review_summary_consistent",
 ];
 const HEADER: &str = "ID\tKIND\tLABEL\tCALCULATED TESTIMONY";
 const SUBSET: &str = "Demonstration only: native facts retain all cited IDs, planet positions, house cusps, Moon rows and calculation boundaries. Omitted rows are not evidence of absence in the original chart.";

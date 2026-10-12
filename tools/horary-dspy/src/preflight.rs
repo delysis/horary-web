@@ -12,12 +12,20 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, io::Write, path::Path, time::Duration};
 
 fn request(signature: &Signature, example: &Example) -> Result<LmRequest> {
+    request_with_demos(signature, &[], example)
+}
+
+fn request_with_demos(
+    signature: &Signature,
+    demos: &[Example],
+    example: &Example,
+) -> Result<LmRequest> {
     let selected = example.inputs()?;
     let inputs = selected
         .fields()
         .map(|(name, value)| Input::new(name, value.clone()))
         .collect::<Vec<_>>();
-    let (system, turns) = ChatAdapter::without_json_fallback().format(signature, &[], &inputs)?;
+    let (system, turns) = ChatAdapter::without_json_fallback().format(signature, demos, &inputs)?;
     let mut messages = vec![LmMessage::system(vec![LmPart::text(system)])];
     for turn in turns {
         messages.push(LmMessage::new(
@@ -36,6 +44,20 @@ fn request(signature: &Signature, example: &Example) -> Result<LmRequest> {
             ..Default::default()
         }),
     )
+}
+
+/// Render the port's real direct-reader exchanges, including its accepted
+/// demonstrations. No provider is called; tokenizer preflight stays separate.
+pub fn reader_requests(
+    fixtures: &[functions::Fixture],
+    predictor: &dsrust::Predict,
+) -> Result<Vec<Value>> {
+    fixtures.iter().map(|fixture| {
+        let request = request_with_demos(&predictor.signature, &predictor.demos, &fixture.example)?;
+        Ok(json!({"case_id":fixture.example.get("case_id"),"split":fixture.split,
+            "request_sha256":google::digest(serde_json::to_vec(&request)?),"request":request,
+            "messages":request.wire_messages(),"generation_tokens":4096,"generation_submitted":false}))
+    }).collect()
 }
 
 /// Exact baseline exchanges for every declared fixture. A standalone reader

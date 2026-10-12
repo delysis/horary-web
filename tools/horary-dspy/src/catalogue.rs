@@ -378,11 +378,16 @@ pub fn method_source(book: &Book, method: &str, reading: bool) -> Result<String>
 /// chosen by the declared component family, never a fixture's expected branch.
 pub fn family_reader_source(book: &Book, method: &str) -> Result<String> {
     let pages = method_source_pages(method)?;
-    let extra = common_branch_pages(method)
+    let mut extra: BTreeSet<_> = common_branch_pages(method)
         .iter()
         .copied()
         .filter(|page| !pages.contains(page))
         .collect();
+    // Contact teaching needs both translation variants, not only the shared
+    // excerpt's already-separated example. Original case/gold bytes are unchanged.
+    if method == "contact" {
+        extra.extend([92, 93]);
+    }
     let mut source = method_source(book, method, true)?;
     source.push_str(&book.pages(&extra)?);
     Ok(source)

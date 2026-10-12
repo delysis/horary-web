@@ -200,6 +200,12 @@ enum Command {
     OptimizeReading {
         #[arg(long, default_value = "new_job")]
         method: String,
+        /// Produce one source-reviewed teacher demo only; no student inference.
+        #[arg(long)]
+        bootstrap_only: bool,
+        /// Use the retained completed bootstrap instead of buying it again.
+        #[arg(long)]
+        bootstrap_program: Option<PathBuf>,
         #[arg(long, default_value = "examples")]
         examples: PathBuf,
         #[arg(long)]
@@ -800,6 +806,8 @@ async fn main() -> Result<()> {
         }
         Command::OptimizeReading {
             method,
+            bootstrap_only,
+            bootstrap_program,
             examples,
             output,
             max_metric_calls,
@@ -807,11 +815,23 @@ async fn main() -> Result<()> {
             teacher_call_cap,
         } => {
             ensure!(
+                !bootstrap_only || bootstrap_program.is_none(),
+                "Bootstrap-only does not import another phase"
+            );
+            let teacher_call_cap = if bootstrap_only {
+                teacher_call_cap.min(24)
+            } else {
+                teacher_call_cap
+            };
+            let student_call_cap = if bootstrap_only { 0 } else { student_call_cap };
+            ensure!(
                 args.student_local_url.is_some(),
                 "This bounded reader round requires the resident local student"
             );
             ensure!(
-                max_metric_calls > 0 && student_call_cap > 0 && teacher_call_cap > 0,
+                max_metric_calls > 0
+                    && (bootstrap_only || student_call_cap > 0)
+                    && teacher_call_cap > 0,
                 "Reader budgets must be positive"
             );
             ensure!(
@@ -832,7 +852,7 @@ async fn main() -> Result<()> {
                 &output,
                 &cases,
                 &args.book,
-                serde_json::json!({"command":"optimize-reading","method":method,"program_kind":"direct_family_reading","student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":max_metric_calls,"reflection_minibatch":3,"seed":23,"bootstrap_demos":0,"optimizable_predictors":[optimize::predictor_name(&method,"reading")?],"branch_selector":"none; declared family uses complete salient branch union, never a gold branch","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
+                serde_json::json!({"command":"optimize-reading","method":method,"program_kind":"direct_family_reading","phase":if bootstrap_only{"bootstrap_only"}else{"gepa"},"bootstrap_program":bootstrap_program,"bootstrap_program_sha256":bootstrap_program.as_ref().map(|path|fs::read(path).map(google::digest)).transpose()?,"student":student_identity(args.student_local_url.as_deref(), &args.student_model),"student_local_url":args.student_local_url,"teacher":teacher_identity(args.teacher),"max_metric_calls_soft":if bootstrap_only{None}else{Some(max_metric_calls)},"reflection_minibatch":3,"seed":23,"bootstrap_demos":if bootstrap_only||bootstrap_program.is_some(){1}else{0},"max_labeled_demos":0,"bootstrap_max_rounds":1,"bootstrap_metric_threshold":1.0,"optimizable_predictors":[optimize::predictor_name(&method,"reading")?],"branch_selector":"none; declared family uses complete salient branch union, never a gold branch","student_call_cap":student_call_cap,"teacher_call_cap":teacher_call_cap,"component_inputs":"Independently supplied accepted consultation, actual device clock/place and native calculated chart; no acquisition journey claimed","baseline_instruction_sha256":google::digest(&baseline),"evaluation_concurrency":1,"application_installation":false}),
             )?;
             fs::write(output.join("baseline-instructions.txt"), &baseline)?;
             let book = Arc::new(book::Book::open(&args.book)?);
@@ -907,19 +927,26 @@ async fn main() -> Result<()> {
                     &args.student_model,
                 ),
             };
-            let result = optimize::compile_direct_reader_fixtures(
-                &fixtures,
-                &method,
-                book,
-                &models,
-                &output,
-                optimize::CompileOptions {
-                    max_metrics: max_metric_calls,
-                    bootstrap_demos: 0,
-                },
-                &baseline,
-            )
-            .await?;
+            let options = optimize::CompileOptions {
+                max_metrics: max_metric_calls,
+                bootstrap_demos: 0,
+            };
+            let result = if bootstrap_only {
+                optimize::bootstrap_direct_reader_fixtures(
+                    &fixtures, &method, book, &models, &output, &baseline,
+                )
+                .await?
+            } else if let Some(path) = bootstrap_program {
+                optimize::compile_direct_reader_from_bootstrap(
+                    &fixtures, &method, book, &models, &output, options, &baseline, &path,
+                )
+                .await?
+            } else {
+                optimize::compile_direct_reader_fixtures(
+                    &fixtures, &method, book, &models, &output, options, &baseline,
+                )
+                .await?
+            };
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
         Command::OptimizeClassification {

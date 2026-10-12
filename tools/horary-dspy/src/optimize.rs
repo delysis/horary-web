@@ -460,6 +460,9 @@ impl Graded {
         prediction.example.set("__score", json!(score));
         prediction.example.set("__feedback",json!(format!("Native checks: {errors:?}. Applicable dimensions: {dimensions:?}. Independent summary consistent with those dimensions: {summary_consistent}. Independent review: {feedback}\nSALIENT PRIMARY FRAWLEY CONTEXT FOR THIS QUESTION TYPE:\n{source}")));
         prediction.example.set("__passed", json!(passed));
+        prediction
+            .example
+            .set("__review_summary_consistent", json!(summary_consistent));
         let observation = json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"oracle_stages":oracle_stages,"prediction":fields(&prediction),"review":fields(&review),"native_failures":errors,"applicable_dimensions":dimensions,"review_summary_consistent":summary_consistent,"score":score,"passed":passed});
         self.record(false, &observation)?;
         self.observations
@@ -490,6 +493,15 @@ impl Graded {
             .get("__score")
             .and_then(Value::as_f64)
             .unwrap_or(0.)
+    }
+    fn full_pass_metric(example: &Example, prediction: &Prediction) -> f64 {
+        if prediction.get("__passed") == Some(&json!(true))
+            && prediction.get("__review_summary_consistent") == Some(&json!(true))
+        {
+            Self::metric(example, prediction)
+        } else {
+            0.
+        }
     }
     pub fn feedback(example: &Example, prediction: &Prediction) -> Feedback {
         Feedback::new(
@@ -823,6 +835,30 @@ fn validated_state(
     method: &str,
     function: &str,
 ) -> Result<dsrust::module::ProgramState> {
+    validated_state_kind(path, method, function, false)
+}
+
+fn direct_source_receipt(method: &str, compiled: &[u8], dataset: &str) -> Result<Value> {
+    let mut receipt = source_receipt(method, "reading", compiled, dataset)?;
+    receipt["version"] = json!(3);
+    receipt["program_kind"] = json!("direct_family_reading");
+    receipt["predictor_names"] = json!([predictor_name(method, "reading")?]);
+    receipt["source_selection"] = json!(format!(
+        "Book-defined complete {method} branch union; no expected branch"
+    ));
+    receipt
+        .as_object_mut()
+        .unwrap()
+        .remove("branch_declaration_sha256");
+    Ok(receipt)
+}
+
+fn validated_state_kind(
+    path: &Path,
+    method: &str,
+    function: &str,
+    direct: bool,
+) -> Result<dsrust::module::ProgramState> {
     let compiled = fs::read(path)?;
     let receipt: Value = serde_json::from_slice(&fs::read(
         path.parent()
@@ -837,11 +873,23 @@ fn validated_state(
         "Invalid component dataset identity"
     );
     ensure!(
-        receipt == source_receipt(method, function, &compiled, dataset_digest)?,
+        receipt
+            == if direct {
+                direct_source_receipt(method, &compiled, dataset_digest)?
+            } else {
+                source_receipt(method, function, &compiled, dataset_digest)?
+            },
         "Compiled component source identity differs"
     );
     let value: Value = serde_json::from_slice(&compiled)?;
-    let declarations = declarations(method, function)?;
+    let declarations = if direct {
+        BTreeMap::from([(
+            predictor_name(method, "reading")?,
+            signatures::reading(method)?,
+        )])
+    } else {
+        declarations(method, function)?
+    };
     let mut keys = vec!["metadata"];
     keys.extend(declarations.keys().map(String::as_str));
     exact_keys(&value, &keys)?;
@@ -1090,7 +1138,7 @@ pub async fn compile_fixtures(
     options: CompileOptions,
 ) -> Result<Value> {
     compile_fixtures_inner(
-        fixtures, method, function, book, models, directory, options, None, false,
+        fixtures, method, function, book, models, directory, options, None, false, None,
     )
     .await
 }
@@ -1122,6 +1170,7 @@ pub async fn compile_reader_fixtures(
         options,
         Some(baseline),
         false,
+        None,
     )
     .await
 }
@@ -1153,8 +1202,156 @@ pub async fn compile_direct_reader_fixtures(
         options,
         Some(baseline),
         true,
+        None,
     )
     .await
+}
+
+/// Continue with a completed, source-matched BootstrapFewShot program. The
+/// conventional GEPA compiler starts afresh; teacher work is not repurchased.
+#[allow(clippy::too_many_arguments)]
+pub async fn compile_direct_reader_from_bootstrap(
+    fixtures: &[Fixture],
+    method: &str,
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    directory: &Path,
+    options: CompileOptions,
+    baseline: &str,
+    bootstrap: &Path,
+) -> Result<Value> {
+    ensure!(
+        options.bootstrap_demos == 0,
+        "Use the retained completed bootstrap only"
+    );
+    compile_fixtures_inner(
+        fixtures,
+        method,
+        "reading",
+        book,
+        models,
+        directory,
+        options,
+        Some(baseline),
+        true,
+        Some(bootstrap),
+    )
+    .await
+}
+
+fn direct_program(
+    fixtures: &[Fixture],
+    method: &str,
+    book: Arc<Book>,
+    student: Arc<dyn DynChatModel>,
+    teacher: Arc<dyn DynChatModel>,
+    baseline: &str,
+    stream: &Path,
+) -> Result<Graded> {
+    ensure!(!baseline.trim().is_empty(), "Reader baseline is empty");
+    let source = catalogue::family_reader_source(&book, method)?;
+    ensure!(
+        fixtures.iter().all(
+            |f| matches!(f.split.as_str(), "train" | "development" | "test")
+                && f.example.get("source_text").and_then(Value::as_str) == Some(&source)
+                && f.example.get("__review_source").and_then(Value::as_str) == Some(&source)
+        ),
+        "Direct bootstrap requires exact source and original known splits"
+    );
+    let all = fixtures
+        .iter()
+        .map(|f| f.example.clone())
+        .collect::<Vec<_>>();
+    let mut program = Graded::new(
+        method,
+        "reading",
+        &all,
+        student.clone(),
+        teacher,
+        Some(book),
+    )?
+    .with_stream(stream.to_path_buf())?;
+    program.oracle = Oracle::Single(plain(signatures::reading(method)?, student));
+    for predictor in program.named_predictors() {
+        predictor.signature.instructions = baseline.into();
+    }
+    program.judge.signature.instructions.push_str(" Return ONLY score, passed, classification, extraction, reading, answer_quality and feedback in their requested field markers. Never echo inputs. Give specific observed reasons and printed source references.");
+    Ok(program)
+}
+
+/// Teacher-only phase of upstream BootstrapFewShot. It walks training once,
+/// stops at one fully correct source-reviewed reading, and never calls student.
+pub async fn bootstrap_direct_reader_fixtures(
+    fixtures: &[Fixture],
+    method: &str,
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    directory: &Path,
+    baseline: &str,
+) -> Result<Value> {
+    fs::create_dir_all(directory)?;
+    let train = fixtures
+        .iter()
+        .filter(|f| f.split == "train")
+        .map(|f| f.example.clone())
+        .collect::<Vec<_>>();
+    ensure!(!train.is_empty(), "Bootstrap needs original training cases");
+    let mut student = direct_program(
+        fixtures,
+        method,
+        book.clone(),
+        models.student.clone(),
+        models.teacher.clone(),
+        baseline,
+        &directory.join("unused-student-observations.jsonl"),
+    )?;
+    let mut teacher = direct_program(
+        fixtures,
+        method,
+        book,
+        models.teacher.clone(),
+        models.teacher.clone(),
+        baseline,
+        &directory.join("teacher-observations.jsonl"),
+    )?;
+    let mut bootstrap = BootstrapFewShot::new(Graded::full_pass_metric);
+    bootstrap.max_bootstrapped_demos = 1;
+    bootstrap.max_labeled_demos = 0;
+    bootstrap.max_rounds = 1;
+    bootstrap.metric_threshold = Some(1.);
+    bootstrap.max_errors = 1;
+    let outcome = bootstrap
+        .compile_with_teacher(&mut student, &mut teacher, &train)
+        .await;
+    teacher.save_observations(&directory.join("teacher-observations.json"))?;
+    student.save(&directory.join("bootstrapped-full.json"))?;
+    let demos = outcome?;
+    ensure!(
+        demos == 1,
+        "No fully correct source-reviewed training demonstration; no student evaluation submitted"
+    );
+    for predictor in student.named_predictors() {
+        for demo in predictor.demos {
+            *demo = crate::demo::compact(demo)?;
+        }
+    }
+    student.save(&directory.join("bootstrapped.json"))?;
+    let bytes = fs::read(directory.join("bootstrapped.json"))?;
+    let dataset = fixtures_digest(fixtures)?;
+    crate::queue::write_json_atomic(
+        &directory.join("component-source.json"),
+        &direct_source_receipt(method, &bytes, &dataset)?,
+    )?;
+    let Oracle::Single(predictor) = &student.oracle else {
+        anyhow::bail!("Direct bootstrap is not a single Predict")
+    };
+    crate::queue::write_json_atomic(
+        &directory.join("student-preflight.json"),
+        &json!({"provider_calls":0,"requests":crate::preflight::reader_requests(fixtures, predictor)?}),
+    )?;
+    let result = json!({"phase":"bootstrap_only","method":method,"optimizer":"upstream BootstrapFewShot","accepted_demos":demos,"student_calls":0,"max_labeled_demos":0,"max_rounds":1,"metric_threshold":1.0,"max_errors":1,"training_cases_available":train.len(),"source_summary_consistent_required":true,"compiled_sha256":crate::google::digest(&bytes),"dataset_sha256":dataset,"teacher_observations_sha256":crate::google::digest(fs::read(directory.join("teacher-observations.json"))?),"application_promoted":false,"token_preflight_qualified":false});
+    crate::queue::write_json_atomic(&directory.join("bootstrap-result.json"), &result)?;
+    Ok(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1168,6 +1365,7 @@ async fn compile_fixtures_inner(
     options: CompileOptions,
     reader_baseline: Option<&str>,
     direct_family_reader: bool,
+    bootstrap_program: Option<&Path>,
 ) -> Result<Value> {
     ensure!(
         options.max_metrics > 0,
@@ -1247,8 +1445,41 @@ async fn compile_fixtures_inner(
             .map(|p| p.name)
             .collect()
     };
-    program.save(&directory.join("baseline-program.json"))?;
+    if bootstrap_program.is_some() {
+        program.save(&directory.join("authored-program.json"))?;
+    }
     let dataset_digest = fixtures_digest(fixtures)?;
+    if let Some(path) = bootstrap_program {
+        ensure!(
+            direct_family_reader && options.bootstrap_demos == 0,
+            "Load only a completed direct-reader bootstrap; do not repurchase it"
+        );
+        require_dataset(path, &dataset_digest)?;
+        let state = validated_state_kind(path, method, "reading", true)?;
+        let saved = state
+            .get(&predictor_name(method, "reading")?)
+            .context("No bootstrapped reader")?;
+        ensure!(
+            saved.signature.instructions == reader_baseline.unwrap() && saved.demos.len() == 1,
+            "Bootstrap changed the instruction or lacks the single verified demonstration"
+        );
+        let result: Value = serde_json::from_slice(&fs::read(
+            path.parent().unwrap().join("bootstrap-result.json"),
+        )?)?;
+        ensure!(
+            result["phase"] == "bootstrap_only"
+                && result["accepted_demos"] == 1
+                && result["student_calls"] == 0
+                && result["compiled_sha256"] == crate::google::digest(fs::read(path)?),
+            "No completed teacher-only bootstrap receipt"
+        );
+        program.load_state(&state);
+        crate::queue::write_json_atomic(
+            &directory.join("bootstrap-import.json"),
+            &json!({"path":path,"compiled_sha256":crate::google::digest(fs::read(path)?),"dataset_sha256":dataset_digest,"replay_teacher":false,"optimizer_state_imported":false}),
+        )?;
+    }
+    program.save(&directory.join("baseline-program.json"))?;
     let before = Evaluate::new(
         development.clone(),
         |input| program.forward(input),
@@ -1263,7 +1494,12 @@ async fn compile_fixtures_inner(
         "Baseline contains execution/review errors; no learned comparison can be qualified"
     );
     let demos = if options.bootstrap_demos == 0 {
-        0
+        program
+            .named_predictors()
+            .iter()
+            .map(|predictor| predictor.demos.len())
+            .max()
+            .unwrap_or(0)
     } else {
         let mut strong = Graded::new(
             method,
@@ -1324,24 +1560,12 @@ async fn compile_fixtures_inner(
         "GEPA encountered an unobserved execution/review failure; provisional engine scores/candidate are withheld"
     );
     program.save(&directory.join("compiled.json"))?;
-    let mut receipt = source_receipt(
-        method,
-        function,
-        &fs::read(directory.join("compiled.json"))?,
-        &dataset_digest,
-    )?;
-    if direct_family_reader {
-        receipt["version"] = json!(3);
-        receipt["program_kind"] = json!("direct_family_reading");
-        receipt["predictor_names"] = json!([predictor_name(method, function)?]);
-        receipt["source_selection"] = json!(format!(
-            "Book-defined complete {method} branch union; no expected branch"
-        ));
-        receipt
-            .as_object_mut()
-            .unwrap()
-            .remove("branch_declaration_sha256");
-    }
+    let bytes = fs::read(directory.join("compiled.json"))?;
+    let receipt = if direct_family_reader {
+        direct_source_receipt(method, &bytes, &dataset_digest)?
+    } else {
+        source_receipt(method, function, &bytes, &dataset_digest)?
+    };
     crate::queue::write_json_atomic(&directory.join("component-source.json"), &receipt)?;
     let after = Evaluate::new(
         development.clone(),
@@ -1824,10 +2048,9 @@ mod component_tests {
     async fn contact_direct_reader_reaches_the_target_without_a_selector_or_gold_branch() {
         let book = Arc::new(Book::fixture());
         let source = catalogue::family_reader_source(&book, "contact").unwrap();
-        assert_eq!(
-            source,
-            catalogue::method_source(&book, "contact", true).unwrap()
-        );
+        assert!(source.starts_with(&catalogue::method_source(&book, "contact", true).unwrap()));
+        assert!(source.contains("printed_page=\"92\""));
+        assert!(source.contains("printed_page=\"93\""));
         assert!(source.contains("printed_page=\"165\""));
         assert!(source.contains("printed_page=\"166\""));
         let fixtures = ["train", "development", "test"].map(|split| {
@@ -1893,6 +2116,162 @@ mod component_tests {
             let stages = row["oracle_stages"].as_array().unwrap();
             stages.len() == 1 && stages[0]["predictor"] == "reading.contact"
         }));
+    }
+
+    fn direct_contact_fixtures(book: &Book) -> Vec<Fixture> {
+        let source = catalogue::family_reader_source(book, "contact").unwrap();
+        ["train", "development", "test"]
+            .into_iter()
+            .map(|split| {
+                let mut example = crate::reading::tests::input(json!({"facts":[]}));
+                example.set(
+                    "question",
+                    json!(format!("Synthetic {split} contact question")),
+                );
+                example.set("source_text", json!(&source));
+                example.set("__review_source", json!(&source));
+                Fixture {
+                    split: split.into(),
+                    example,
+                }
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn direct_bootstrap_calls_only_teacher_and_retains_one_fully_reviewed_training_demo() {
+        let book = Arc::new(Book::fixture());
+        let fixtures = direct_contact_fixtures(&book);
+        let student = Arc::new(DummyLM::new((0..20).map(|_|dsrust::example!{status:"method_limit",answer:"Synthetic answer.",analysis:"e1 actual boundary",evidence:"e1",unresolved:"Unknown computation"})));
+        let teacher = Arc::new(DummyLM::new(std::iter::once(dsrust::example!{status:"method_limit",answer:"Synthetic worked answer.",analysis:"e1 actual boundary",evidence:"e1",unresolved:"Unknown computation"}).chain((0..20).map(|_|review("unobserved","unobserved","pass","pass",true)))));
+        let models = crate::runner::Models {
+            student: student.clone(),
+            teacher: teacher.clone(),
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let baseline = crate::reading::direct_reader_baseline("contact").unwrap();
+        let result = bootstrap_direct_reader_fixtures(
+            &fixtures,
+            "contact",
+            book.clone(),
+            &models,
+            directory.path(),
+            &baseline,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["accepted_demos"], 1);
+        assert_eq!(teacher.asked().len(), 2);
+        assert!(student.asked().is_empty());
+        assert!(!format!("{:?}", teacher.asked()[0]).contains("PRIVATE GOLD"));
+        let path = directory.path().join("bootstrapped.json");
+        let state = validated_state_kind(&path, "contact", "reading", true).unwrap();
+        let demo = &state.get("reading.contact").unwrap().demos[0];
+        assert_eq!(demo["question"], "Synthetic train contact question");
+        assert!(!demo.contains_key("source_text"));
+        assert!(demo.keys().all(|k| !k.starts_with("__")));
+        let rendered: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("student-preflight.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(rendered["provider_calls"], 0);
+        assert_eq!(rendered["requests"].as_array().unwrap().len(), 3);
+        assert!(
+            rendered["requests"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|row| !row["messages"].to_string().contains("PRIVATE GOLD"))
+        );
+        let mut changed = fixtures.clone();
+        changed[0]
+            .example
+            .set("question", json!("Changed source bank"));
+        let failed = tempfile::tempdir().unwrap();
+        assert!(
+            compile_direct_reader_from_bootstrap(
+                &changed,
+                "contact",
+                book.clone(),
+                &models,
+                failed.path(),
+                CompileOptions {
+                    max_metrics: 1,
+                    bootstrap_demos: 0
+                },
+                &baseline,
+                &path
+            )
+            .await
+            .is_err()
+        );
+        assert!(student.asked().is_empty());
+        let compiled = tempfile::tempdir().unwrap();
+        let run = compile_direct_reader_from_bootstrap(
+            &fixtures,
+            "contact",
+            book,
+            &models,
+            compiled.path(),
+            CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+            &baseline,
+            &path,
+        )
+        .await
+        .unwrap();
+        assert_eq!(run["bootstrap_demos"], 1);
+        let seed: Value = serde_json::from_slice(
+            &fs::read(compiled.path().join("baseline-program.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            seed["reading.contact"]["demos"].as_array().unwrap().len(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_withholds_a_contradictory_review_without_lowering_its_saved_raw_score() {
+        let book = Arc::new(Book::fixture());
+        let fixtures = direct_contact_fixtures(&book);
+        let student = Arc::new(DummyLM::new([]));
+        let teacher = Arc::new(DummyLM::new([
+            dsrust::example! {status:"method_limit",answer:"Synthetic worked answer.",analysis:"e1 boundary",evidence:"e1",unresolved:"Unknown"},
+            review("unobserved", "unobserved", "pass", "pass", false),
+        ]));
+        let models = crate::runner::Models {
+            student: student.clone(),
+            teacher: teacher.clone(),
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        assert!(
+            bootstrap_direct_reader_fixtures(
+                &fixtures,
+                "contact",
+                book,
+                &models,
+                directory.path(),
+                &crate::reading::direct_reader_baseline("contact").unwrap()
+            )
+            .await
+            .is_err()
+        );
+        assert!(student.asked().is_empty());
+        assert_eq!(teacher.asked().len(), 2);
+        assert!(!directory.path().join("bootstrapped.json").exists());
+        let rows: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("teacher-observations.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(rows[0]["score"], 1.0);
+        assert_eq!(rows[0]["review_summary_consistent"], false);
     }
     #[tokio::test]
     async fn fixed_comparison_changes_instruction_only_and_never_reflects_on_development() {
