@@ -622,7 +622,39 @@
           25.0,
           26.0
         ],
-        "moonTravelDegrees": 13.549157087466767
+        "moonTravelDegrees": 13.549157087466767,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            25.0,
+            26.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 226.3300948057997,
+              "estimatedSignedTravelDegrees": 13.549157087466776,
+              "estimatedPathDistanceDegrees": 13.549157087466776,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 12.392675587990425,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Jupiter",
+              "chartLongitudeDegrees": 136.11586347341412,
+              "estimatedPerfectionLongitudeDegrees": 136.3300948057997,
+              "estimatedSignedTravelDegrees": 0.21423133238557482,
+              "estimatedPathDistanceDegrees": 0.21423133238557482,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.19875816115882117,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.1977115474940092,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       "longGapNeedsReview": false,
       "context": "isVoid reports absence of an aspect before sign exit. Frawley also treats a long gap, roughly 15 degrees or more, as possible void-like stagnation; this requires contextual judgment (printed p. 65).",
@@ -640,7 +672,39 @@
           25.0,
           26.0
         ],
-        "moonTravelDegrees": 13.549157087466767
+        "moonTravelDegrees": 13.549157087466767,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            25.0,
+            26.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 226.3300948057997,
+              "estimatedSignedTravelDegrees": 13.549157087466776,
+              "estimatedPathDistanceDegrees": 13.549157087466776,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 12.392675587990425,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Jupiter",
+              "chartLongitudeDegrees": 136.11586347341412,
+              "estimatedPerfectionLongitudeDegrees": 136.3300948057997,
+              "estimatedSignedTravelDegrees": 0.21423133238557482,
+              "estimatedPathDistanceDegrees": 0.21423133238557482,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.19875816115882117,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.1977115474940092,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -653,7 +717,39 @@
           37.0,
           38.0
         ],
-        "moonTravelDegrees": 19.61611674460312
+        "moonTravelDegrees": 19.61611674460312,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            37.0,
+            38.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 232.39705446293604,
+              "estimatedSignedTravelDegrees": 19.616116744603122,
+              "estimatedPathDistanceDegrees": 19.616116744603122,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 12.267672909867088,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Mars",
+              "chartLongitudeDegrees": 111.43499084962906,
+              "estimatedPerfectionLongitudeDegrees": 112.39705446293604,
+              "estimatedSignedTravelDegrees": 0.9620636133069973,
+              "estimatedPathDistanceDegrees": 0.9620636133069973,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.6129372516315925,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.6103331648027961,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -666,7 +762,39 @@
           39.0,
           40.0
         ],
-        "moonTravelDegrees": 20.51942294123907
+        "moonTravelDegrees": 20.51942294123907,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            39.0,
+            40.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Sun",
+              "chartLongitudeDegrees": 171.69598113271422,
+              "estimatedPerfectionLongitudeDegrees": 173.300360659572,
+              "estimatedSignedTravelDegrees": 1.6043795268577774,
+              "estimatedPathDistanceDegrees": 1.6043795268577774,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.9739383646374336,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.9747833465225995,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 233.300360659572,
+              "estimatedSignedTravelDegrees": 20.519422941239064,
+              "estimatedPathDistanceDegrees": 20.519422941239064,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 12.248140395895234,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -679,7 +807,39 @@
           74.0,
           75.0
         ],
-        "moonTravelDegrees": 38.11775584860524
+        "moonTravelDegrees": 38.11775584860524,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            74.0,
+            75.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 250.89869356693816,
+              "estimatedSignedTravelDegrees": 38.117755848605256,
+              "estimatedPathDistanceDegrees": 38.117755848605256,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.977368022086239,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Mercury",
+              "chartLongitudeDegrees": 185.95867456857988,
+              "estimatedPerfectionLongitudeDegrees": 190.89869356693816,
+              "estimatedSignedTravelDegrees": 4.940018998358295,
+              "estimatedPathDistanceDegrees": 4.940018998358295,
+              "initialIntervalMeanSpeedDegreesPerDay": 1.6202752892863828,
+              "perfectionBracketMeanSpeedDegreesPerDay": 1.565816248333249,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -692,7 +852,39 @@
           76.0,
           77.0
         ],
-        "moonTravelDegrees": 39.30249409435012
+        "moonTravelDegrees": 39.30249409435012,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            76.0,
+            77.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 252.08343181268305,
+              "estimatedSignedTravelDegrees": 39.30249409435011,
+              "estimatedPathDistanceDegrees": 39.30249409435011,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.966365593222918,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Saturn",
+              "chartLongitudeDegrees": 12.312025153388875,
+              "estimatedPerfectionLongitudeDegrees": 12.083431812683022,
+              "estimatedSignedTravelDegrees": -0.22859334070592435,
+              "estimatedPathDistanceDegrees": 0.22859334070592435,
+              "initialIntervalMeanSpeedDegreesPerDay": -0.07023327967067416,
+              "perfectionBracketMeanSpeedDegreesPerDay": -0.07258983700398858,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -705,7 +897,39 @@
           86.0,
           87.0
         ],
-        "moonTravelDegrees": 44.043300471922834
+        "moonTravelDegrees": 44.043300471922834,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            86.0,
+            87.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 256.82423819025576,
+              "estimatedSignedTravelDegrees": 44.043300471922834,
+              "estimatedPathDistanceDegrees": 44.043300471922834,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.919243442699553,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Jupiter",
+              "chartLongitudeDegrees": 136.11586347341412,
+              "estimatedPerfectionLongitudeDegrees": 136.82423819025576,
+              "estimatedSignedTravelDegrees": 0.7083747168416344,
+              "estimatedPathDistanceDegrees": 0.7083747168416344,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.19875816115882117,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.19504759520282278,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -718,7 +942,39 @@
           91.0,
           92.0
         ],
-        "moonTravelDegrees": null
+        "moonTravelDegrees": null,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            91.0,
+            92.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Mercury",
+              "chartLongitudeDegrees": 185.95867456857988,
+              "estimatedPerfectionLongitudeDegrees": 192.0374704525429,
+              "estimatedSignedTravelDegrees": 6.078795883963024,
+              "estimatedPathDistanceDegrees": 6.078795883963024,
+              "initialIntervalMeanSpeedDegreesPerDay": 1.6202752892863828,
+              "perfectionBracketMeanSpeedDegreesPerDay": 1.553534369613999,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Saturn",
+              "chartLongitudeDegrees": 12.312025153388875,
+              "estimatedPerfectionLongitudeDegrees": 12.037470452542896,
+              "estimatedSignedTravelDegrees": -0.27455470084599765,
+              "estimatedPathDistanceDegrees": 0.27455470084599765,
+              "initialIntervalMeanSpeedDegreesPerDay": -0.07023327967067416,
+              "perfectionBracketMeanSpeedDegreesPerDay": -0.0730106710200289,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -731,7 +987,39 @@
           104.0,
           105.0
         ],
-        "moonTravelDegrees": 53.17071113623214
+        "moonTravelDegrees": 53.17071113623214,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            104.0,
+            105.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Sun",
+              "chartLongitudeDegrees": 171.69598113271422,
+              "estimatedPerfectionLongitudeDegrees": 175.95164885456506,
+              "estimatedSignedTravelDegrees": 4.255667721850837,
+              "estimatedPathDistanceDegrees": 4.255667721850837,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.9739383646374336,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.9762129207520047,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 265.95164885456506,
+              "estimatedSignedTravelDegrees": 53.170711136232136,
+              "estimatedPathDistanceDegrees": 53.170711136232136,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.86871013935388,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -744,7 +1032,39 @@
           122.0,
           123.0
         ],
-        "moonTravelDegrees": 62.03402295978438
+        "moonTravelDegrees": 62.03402295978438,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            122.0,
+            123.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 274.8149606781173,
+              "estimatedSignedTravelDegrees": 62.03402295978439,
+              "estimatedPathDistanceDegrees": 62.03402295978439,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.863681650152103,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Venus",
+              "chartLongitudeDegrees": 212.18674751032384,
+              "estimatedPerfectionLongitudeDegrees": 214.8149606781173,
+              "estimatedSignedTravelDegrees": 2.6282131677934712,
+              "estimatedPathDistanceDegrees": 2.6282131677934712,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.5724929839207107,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.4516219419524532,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -757,7 +1077,39 @@
           136.0,
           137.0
         ],
-        "moonTravelDegrees": 69.11833836219583
+        "moonTravelDegrees": 69.11833836219583,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            136.0,
+            137.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 281.89927608052875,
+              "estimatedSignedTravelDegrees": 69.11833836219581,
+              "estimatedPathDistanceDegrees": 69.11833836219581,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.891524941978787,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Saturn",
+              "chartLongitudeDegrees": 12.312025153388875,
+              "estimatedPerfectionLongitudeDegrees": 11.899276080528718,
+              "estimatedSignedTravelDegrees": -0.41274907286028034,
+              "estimatedPathDistanceDegrees": 0.41274907286028034,
+              "initialIntervalMeanSpeedDegreesPerDay": -0.07023327967067416,
+              "perfectionBracketMeanSpeedDegreesPerDay": -0.07418330624636837,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -770,7 +1122,39 @@
           143.0,
           144.0
         ],
-        "moonTravelDegrees": 72.58374235810626
+        "moonTravelDegrees": 72.58374235810626,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            143.0,
+            144.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 285.3646800764392,
+              "estimatedSignedTravelDegrees": 72.58374235810625,
+              "estimatedPathDistanceDegrees": 72.58374235810625,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 11.915755117534445,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Mercury",
+              "chartLongitudeDegrees": 185.95867456857988,
+              "estimatedPerfectionLongitudeDegrees": 195.36468007643916,
+              "estimatedSignedTravelDegrees": 9.40600550785929,
+              "estimatedPathDistanceDegrees": 9.40600550785929,
+              "initialIntervalMeanSpeedDegreesPerDay": 1.6202752892863828,
+              "perfectionBracketMeanSpeedDegreesPerDay": 1.5162711406685503,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       },
       {
         "type": "perfectionCandidate",
@@ -783,7 +1167,39 @@
           164.0,
           165.0
         ],
-        "moonTravelDegrees": 82.81515212810163
+        "moonTravelDegrees": 82.81515212810163,
+        "perfectionMotion": {
+          "estimateMethod": "sample_interval_linear_interpolation",
+          "bracketHours": [
+            164.0,
+            165.0
+          ],
+          "bodyMotion": [
+            {
+              "planet": "Moon",
+              "chartLongitudeDegrees": 212.78093771833292,
+              "estimatedPerfectionLongitudeDegrees": 295.59608984643455,
+              "estimatedSignedTravelDegrees": 82.81515212810163,
+              "estimatedPathDistanceDegrees": 82.81515212810163,
+              "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+              "perfectionBracketMeanSpeedDegreesPerDay": 12.028365725481763,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            },
+            {
+              "planet": "Mars",
+              "chartLongitudeDegrees": 111.43499084962906,
+              "estimatedPerfectionLongitudeDegrees": 115.59608984643454,
+              "estimatedSignedTravelDegrees": 4.161098996805548,
+              "estimatedPathDistanceDegrees": 4.161098996805548,
+              "initialIntervalMeanSpeedDegreesPerDay": 0.6129372516315925,
+              "perfectionBracketMeanSpeedDegreesPerDay": 0.6010662186295122,
+              "sampledMotionReversalObserved": false,
+              "zeroMeanMotionIntervalObserved": false
+            }
+          ],
+          "intraIntervalMotionResolved": false
+        }
       }
     ],
     "eventSearch": {
@@ -801,7 +1217,39 @@
             25.0,
             26.0
           ],
-          "moonTravelDegrees": 13.549157087466767
+          "moonTravelDegrees": 13.549157087466767,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              25.0,
+              26.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 226.3300948057997,
+                "estimatedSignedTravelDegrees": 13.549157087466776,
+                "estimatedPathDistanceDegrees": 13.549157087466776,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 12.392675587990425,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Jupiter",
+                "chartLongitudeDegrees": 136.11586347341412,
+                "estimatedPerfectionLongitudeDegrees": 136.3300948057997,
+                "estimatedSignedTravelDegrees": 0.21423133238557482,
+                "estimatedPathDistanceDegrees": 0.21423133238557482,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.19875816115882117,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.1977115474940092,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -814,7 +1262,39 @@
             37.0,
             38.0
           ],
-          "moonTravelDegrees": 19.61611674460312
+          "moonTravelDegrees": 19.61611674460312,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              37.0,
+              38.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 232.39705446293604,
+                "estimatedSignedTravelDegrees": 19.616116744603122,
+                "estimatedPathDistanceDegrees": 19.616116744603122,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 12.267672909867088,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Mars",
+                "chartLongitudeDegrees": 111.43499084962906,
+                "estimatedPerfectionLongitudeDegrees": 112.39705446293604,
+                "estimatedSignedTravelDegrees": 0.9620636133069973,
+                "estimatedPathDistanceDegrees": 0.9620636133069973,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.6129372516315925,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.6103331648027961,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -827,7 +1307,39 @@
             39.0,
             40.0
           ],
-          "moonTravelDegrees": 20.51942294123907
+          "moonTravelDegrees": 20.51942294123907,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              39.0,
+              40.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Sun",
+                "chartLongitudeDegrees": 171.69598113271422,
+                "estimatedPerfectionLongitudeDegrees": 173.300360659572,
+                "estimatedSignedTravelDegrees": 1.6043795268577774,
+                "estimatedPathDistanceDegrees": 1.6043795268577774,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.9739383646374336,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.9747833465225995,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 233.300360659572,
+                "estimatedSignedTravelDegrees": 20.519422941239064,
+                "estimatedPathDistanceDegrees": 20.519422941239064,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 12.248140395895234,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -840,7 +1352,39 @@
             74.0,
             75.0
           ],
-          "moonTravelDegrees": 38.11775584860524
+          "moonTravelDegrees": 38.11775584860524,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              74.0,
+              75.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 250.89869356693816,
+                "estimatedSignedTravelDegrees": 38.117755848605256,
+                "estimatedPathDistanceDegrees": 38.117755848605256,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.977368022086239,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Mercury",
+                "chartLongitudeDegrees": 185.95867456857988,
+                "estimatedPerfectionLongitudeDegrees": 190.89869356693816,
+                "estimatedSignedTravelDegrees": 4.940018998358295,
+                "estimatedPathDistanceDegrees": 4.940018998358295,
+                "initialIntervalMeanSpeedDegreesPerDay": 1.6202752892863828,
+                "perfectionBracketMeanSpeedDegreesPerDay": 1.565816248333249,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -853,7 +1397,39 @@
             76.0,
             77.0
           ],
-          "moonTravelDegrees": 39.30249409435012
+          "moonTravelDegrees": 39.30249409435012,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              76.0,
+              77.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 252.08343181268305,
+                "estimatedSignedTravelDegrees": 39.30249409435011,
+                "estimatedPathDistanceDegrees": 39.30249409435011,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.966365593222918,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Saturn",
+                "chartLongitudeDegrees": 12.312025153388875,
+                "estimatedPerfectionLongitudeDegrees": 12.083431812683022,
+                "estimatedSignedTravelDegrees": -0.22859334070592435,
+                "estimatedPathDistanceDegrees": 0.22859334070592435,
+                "initialIntervalMeanSpeedDegreesPerDay": -0.07023327967067416,
+                "perfectionBracketMeanSpeedDegreesPerDay": -0.07258983700398858,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -866,7 +1442,39 @@
             86.0,
             87.0
           ],
-          "moonTravelDegrees": 44.043300471922834
+          "moonTravelDegrees": 44.043300471922834,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              86.0,
+              87.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 256.82423819025576,
+                "estimatedSignedTravelDegrees": 44.043300471922834,
+                "estimatedPathDistanceDegrees": 44.043300471922834,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.919243442699553,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Jupiter",
+                "chartLongitudeDegrees": 136.11586347341412,
+                "estimatedPerfectionLongitudeDegrees": 136.82423819025576,
+                "estimatedSignedTravelDegrees": 0.7083747168416344,
+                "estimatedPathDistanceDegrees": 0.7083747168416344,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.19875816115882117,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.19504759520282278,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -879,7 +1487,39 @@
             91.0,
             92.0
           ],
-          "moonTravelDegrees": null
+          "moonTravelDegrees": null,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              91.0,
+              92.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Mercury",
+                "chartLongitudeDegrees": 185.95867456857988,
+                "estimatedPerfectionLongitudeDegrees": 192.0374704525429,
+                "estimatedSignedTravelDegrees": 6.078795883963024,
+                "estimatedPathDistanceDegrees": 6.078795883963024,
+                "initialIntervalMeanSpeedDegreesPerDay": 1.6202752892863828,
+                "perfectionBracketMeanSpeedDegreesPerDay": 1.553534369613999,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Saturn",
+                "chartLongitudeDegrees": 12.312025153388875,
+                "estimatedPerfectionLongitudeDegrees": 12.037470452542896,
+                "estimatedSignedTravelDegrees": -0.27455470084599765,
+                "estimatedPathDistanceDegrees": 0.27455470084599765,
+                "initialIntervalMeanSpeedDegreesPerDay": -0.07023327967067416,
+                "perfectionBracketMeanSpeedDegreesPerDay": -0.0730106710200289,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -892,7 +1532,39 @@
             104.0,
             105.0
           ],
-          "moonTravelDegrees": 53.17071113623214
+          "moonTravelDegrees": 53.17071113623214,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              104.0,
+              105.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Sun",
+                "chartLongitudeDegrees": 171.69598113271422,
+                "estimatedPerfectionLongitudeDegrees": 175.95164885456506,
+                "estimatedSignedTravelDegrees": 4.255667721850837,
+                "estimatedPathDistanceDegrees": 4.255667721850837,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.9739383646374336,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.9762129207520047,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 265.95164885456506,
+                "estimatedSignedTravelDegrees": 53.170711136232136,
+                "estimatedPathDistanceDegrees": 53.170711136232136,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.86871013935388,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -905,7 +1577,39 @@
             122.0,
             123.0
           ],
-          "moonTravelDegrees": 62.03402295978438
+          "moonTravelDegrees": 62.03402295978438,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              122.0,
+              123.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 274.8149606781173,
+                "estimatedSignedTravelDegrees": 62.03402295978439,
+                "estimatedPathDistanceDegrees": 62.03402295978439,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.863681650152103,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Venus",
+                "chartLongitudeDegrees": 212.18674751032384,
+                "estimatedPerfectionLongitudeDegrees": 214.8149606781173,
+                "estimatedSignedTravelDegrees": 2.6282131677934712,
+                "estimatedPathDistanceDegrees": 2.6282131677934712,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.5724929839207107,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.4516219419524532,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -918,7 +1622,39 @@
             136.0,
             137.0
           ],
-          "moonTravelDegrees": 69.11833836219583
+          "moonTravelDegrees": 69.11833836219583,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              136.0,
+              137.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 281.89927608052875,
+                "estimatedSignedTravelDegrees": 69.11833836219581,
+                "estimatedPathDistanceDegrees": 69.11833836219581,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.891524941978787,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Saturn",
+                "chartLongitudeDegrees": 12.312025153388875,
+                "estimatedPerfectionLongitudeDegrees": 11.899276080528718,
+                "estimatedSignedTravelDegrees": -0.41274907286028034,
+                "estimatedPathDistanceDegrees": 0.41274907286028034,
+                "initialIntervalMeanSpeedDegreesPerDay": -0.07023327967067416,
+                "perfectionBracketMeanSpeedDegreesPerDay": -0.07418330624636837,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -931,7 +1667,39 @@
             143.0,
             144.0
           ],
-          "moonTravelDegrees": 72.58374235810626
+          "moonTravelDegrees": 72.58374235810626,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              143.0,
+              144.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 285.3646800764392,
+                "estimatedSignedTravelDegrees": 72.58374235810625,
+                "estimatedPathDistanceDegrees": 72.58374235810625,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 11.915755117534445,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Mercury",
+                "chartLongitudeDegrees": 185.95867456857988,
+                "estimatedPerfectionLongitudeDegrees": 195.36468007643916,
+                "estimatedSignedTravelDegrees": 9.40600550785929,
+                "estimatedPathDistanceDegrees": 9.40600550785929,
+                "initialIntervalMeanSpeedDegreesPerDay": 1.6202752892863828,
+                "perfectionBracketMeanSpeedDegreesPerDay": 1.5162711406685503,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         {
           "type": "perfectionCandidate",
@@ -944,7 +1712,39 @@
             164.0,
             165.0
           ],
-          "moonTravelDegrees": 82.81515212810163
+          "moonTravelDegrees": 82.81515212810163,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              164.0,
+              165.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 295.59608984643455,
+                "estimatedSignedTravelDegrees": 82.81515212810163,
+                "estimatedPathDistanceDegrees": 82.81515212810163,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 12.028365725481763,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Mars",
+                "chartLongitudeDegrees": 111.43499084962906,
+                "estimatedPerfectionLongitudeDegrees": 115.59608984643454,
+                "estimatedSignedTravelDegrees": 4.161098996805548,
+                "estimatedPathDistanceDegrees": 4.161098996805548,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.6129372516315925,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.6010662186295122,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         }
       ],
       "ingresses": [
@@ -978,7 +1778,39 @@
             25.0,
             26.0
           ],
-          "moonTravelDegrees": 13.549157087466767
+          "moonTravelDegrees": 13.549157087466767,
+          "perfectionMotion": {
+            "estimateMethod": "sample_interval_linear_interpolation",
+            "bracketHours": [
+              25.0,
+              26.0
+            ],
+            "bodyMotion": [
+              {
+                "planet": "Moon",
+                "chartLongitudeDegrees": 212.78093771833292,
+                "estimatedPerfectionLongitudeDegrees": 226.3300948057997,
+                "estimatedSignedTravelDegrees": 13.549157087466776,
+                "estimatedPathDistanceDegrees": 13.549157087466776,
+                "initialIntervalMeanSpeedDegreesPerDay": 12.688504340108693,
+                "perfectionBracketMeanSpeedDegreesPerDay": 12.392675587990425,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              },
+              {
+                "planet": "Jupiter",
+                "chartLongitudeDegrees": 136.11586347341412,
+                "estimatedPerfectionLongitudeDegrees": 136.3300948057997,
+                "estimatedSignedTravelDegrees": 0.21423133238557482,
+                "estimatedPathDistanceDegrees": 0.21423133238557482,
+                "initialIntervalMeanSpeedDegreesPerDay": 0.19875816115882117,
+                "perfectionBracketMeanSpeedDegreesPerDay": 0.1977115474940092,
+                "sampledMotionReversalObserved": false,
+                "zeroMeanMotionIntervalObserved": false
+              }
+            ],
+            "intraIntervalMotionResolved": false
+          }
         },
         "longGapNeedsReview": false,
         "context": "isVoid reports absence of an aspect before sign exit. Frawley also treats a long gap, roughly 15 degrees or more, as possible void-like stagnation; this requires contextual judgment (printed p. 65).",

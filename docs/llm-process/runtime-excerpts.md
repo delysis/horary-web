@@ -1773,9 +1773,9 @@ fn generate_reading(
         .get(3)
         .and_then(Option::as_ref)
         .map(CheckedData::worksheet);
-    // Current ephemeris supplies brackets, not the applying planet's travel
-    // to exact perfection. Skip speculative timing inference entirely.
-    let timing = json!({"timing_status":"unestablished","reason":"The native calculation has not supplied travel to exact perfection. Astronomical hours are not symbolic calendar timing."});
+    // Approximate per-body candidate motion is not a completed traditional
+    // symbolic timing judgment. No actor or calendar unit is chosen here.
+    let timing = json!({"timing_status":"unestablished","reason":"The native calculation supplies approximate candidate mechanics, not an established symbolic timing judgment. Astronomical hours are not symbolic calendar timing."});
     session
         .audit
         .push(json!({"event":"native_stage","stage":"timing","result":timing}));
@@ -2323,6 +2323,7 @@ mod tests {
             event: hours.map(|astronomical_hours| reading_method::EventCandidate {
                 within_current_signs: Some(true),
                 astronomical_hours,
+                perfection_motion: None,
             }),
             reception: None,
         };

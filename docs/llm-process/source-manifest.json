@@ -27,7 +27,7 @@
     },
     {
       "path": "crates/horary-ai-core/src/events.rs",
-      "sha256": "c9f93a235fa86508b1f178639cea6cd163a7ef0e8d397a6fab8baea5db0f051a"
+      "sha256": "f5246dd82c08c090d191681ce0c00c158d03a266350f5af0fad9d4a1242fa847"
     },
     {
       "path": "crates/horary-prompt-program/Cargo.lock",
@@ -167,7 +167,7 @@
     },
     {
       "path": "src-tauri/src/horary_pipeline.rs",
-      "sha256": "a2603482043617ff1f9b618bd6d7bde263c5b6b2b6c0d24a6ce705e48f46e6d0"
+      "sha256": "7fe743a4aef15145022c1d8fa1bb37469053104cce3c9d5a34c0ed74c91ab300"
     },
     {
       "path": "src-tauri/src/horary_prompts/condition.md",
@@ -295,7 +295,7 @@
     },
     {
       "path": "src-tauri/src/message_programs.rs",
-      "sha256": "80a08ae76d65bac529cdffc78072501afa4db76d69e8dd1a287374876e01f40b"
+      "sha256": "000a4d53112e0dc5a13142fad2ef2bca501d7e0e81ff256f5041623e13ceaa54"
     },
     {
       "path": "src-tauri/src/message_programs/tests/journeys.rs",
@@ -331,7 +331,7 @@
     },
     {
       "path": "src-tauri/src/process_reference.rs",
-      "sha256": "c7dd95c55e5f015cc65fadbd97f909d64cfc58effc64ab1a5f8481e0b927cac3"
+      "sha256": "3f1933c4bbd11f3d3769fdd2a15e1934687b5c846509cf3d390b7e847f4953e0"
     },
     {
       "path": "src-tauri/src/reader_runtime.rs",
@@ -355,7 +355,7 @@
     },
     {
       "path": "src-tauri/src/reading_method.rs",
-      "sha256": "e65a06f76916a2992619f6799893284d4261ff4c392126c48395a43ccbf0d966"
+      "sha256": "f8fe32f310bf109857a31fbb6277b78213f4fc84dd421285aabd567ea77e43bf"
     },
     {
       "path": "src-tauri/src/reading_neural_eval.rs",
@@ -419,11 +419,11 @@
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
-      "sha256": "916c584cdb8c2c03f03d687de6268705999a8a42960860d7293da43fa8f9265a"
+      "sha256": "1451045905785999bcc6fd7bfb1ac9616e1af5c4b1888621b335c16d95675dd3"
     },
     {
       "path": "src-tauri/test-fixtures/process-reference-chart.json",
-      "sha256": "83f06fd06c828d90efcd849aca92eaad70d02aa9c8f9c25258eddb91b7e99fbd"
+      "sha256": "be73db3e906d9340cf638c1d8dea4a6c4ae1d9c20833454b90de6a21208c0775"
     },
     {
       "path": "src-tauri/test-fixtures/readings/core-rubrics.json",
