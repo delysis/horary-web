@@ -96,6 +96,12 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
                 ("unknowns".into(), list(text(150), 4)),
             ]);
             match stage {
+                Stage::Reception => {
+                    fields.insert(
+                        "edge_interpretations".into(),
+                        reception_rows_schema(None, facts),
+                    );
+                }
                 Stage::Contacts => {
                     fields.insert(
                         "basis".into(),
@@ -189,6 +195,62 @@ pub(crate) fn condition_schema(input: &Value, facts: &[Fact]) -> Value {
             ["maxItems"] = json!(condition_evidence_budget(key, Some(&planets), facts));
     }
     contract
+}
+
+/// The stage remains one batched call. Its finite rows follow the actual typed
+/// native edges, and its actor IDs come only from accepted native selections.
+pub(crate) fn reception_schema(input: &Value, facts: &[Fact]) -> Value {
+    let mut contract = schema(Stage::Reception, facts);
+    contract["properties"]["edge_interpretations"] = reception_rows_schema(Some(input), facts);
+    contract
+}
+
+fn reception_rows_schema(input: Option<&Value>, facts: &[Fact]) -> Value {
+    use reading_method::ReceptionPolarity;
+    use std::collections::BTreeSet;
+    let edges = facts
+        .iter()
+        .filter(|fact| fact.kind == "reception" && fact.reception.is_some())
+        .collect::<Vec<_>>();
+    let edge_ids = edges
+        .iter()
+        .map(|fact| fact.id.as_str())
+        .collect::<Vec<_>>();
+    let roles = input.map(|input| {
+        input["native_reception"]["accepted_roles"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|role| role["selected_id"].as_str())
+            .collect::<Vec<_>>()
+    });
+    let actors = match roles {
+        Some(ids) => list(choice(&ids), ids.len()),
+        None => list(text(100), 8), // Native role selection itself has a maximum of eight.
+    };
+    let quality_list = |polarity| {
+        let names: BTreeSet<_> = edges
+            .iter()
+            .flat_map(|fact| &fact.reception.as_ref().expect("Typed edge").qualities)
+            .filter(|quality| quality.polarity == polarity)
+            .map(|quality| quality.dignity.native_name())
+            .collect();
+        list(
+            choice(&names.iter().copied().collect::<Vec<_>>()),
+            names.len(),
+        )
+    };
+    list(
+        object(json!({
+            "edge_id":choice(&edge_ids),
+            "regarding_actor_ids":actors,"regarded_actor_ids":actors,
+            "positive_qualities":quality_list(ReceptionPolarity::Positive),
+            "negative_qualities":quality_list(ReceptionPolarity::Negative),
+            "interpretation":{"type":"string","minLength":1,"maxLength":240,"description":"One short qualified contextual sentence. This is a model proposal, not native semantic authority."},
+            "limitations":{"type":"string","minLength":1,"maxLength":180,"description":"Short limits: no automatic reverse regard, ability, occurrence or timing."}
+        })),
+        edges.len(),
+    )
 }
 
 fn condition_evidence_budget(
@@ -1124,7 +1186,7 @@ mod protected_output_protocol_tests {
                 json!({"state":"not_relevant","evidence":[],"finding":"Synthetic shape only"}),
             );
         }
-        let value = json!({"checks":checks,"summary":"Synthetic shape only","unknowns":[]});
+        let value = json!({"checks":checks,"summary":"Synthetic shape only","unknowns":[],"edge_interpretations":[]});
         validate_shape(&value, &schema).unwrap();
         let field = schema["oneOf"][1]["properties"]["request_input"]["properties"]["field"]
             ["enum"][0]
@@ -1314,11 +1376,12 @@ fn validate_resource_bounds(
         Value::Array(a) => {
             // A synthesis may cite the whole finite native fact allowlist.
             // Exact per-check/stage limits and IDs still come from its schema.
-            let resource_maximum = if path.ends_with(".evidence") {
-                native_evidence_budget.max(40)
-            } else {
-                40
-            };
+            let resource_maximum =
+                if path.ends_with(".evidence") || path == "$.edge_interpretations" {
+                    native_evidence_budget.max(40)
+                } else {
+                    40
+                };
             let maximum = schema["maxItems"]
                 .as_u64()
                 .and_then(|maximum| usize::try_from(maximum).ok())
@@ -1362,6 +1425,75 @@ fn validate_resource_bounds(
 #[cfg(test)]
 mod resource_bounds_tests {
     use super::*;
+
+    #[test]
+    fn reception_all_typed_rows_fit_exact_count_without_generic_forty_row_conflict() {
+        use reading_method::{
+            DirectedReception, ReceptionDignity, ReceptionPolarity, ReceptionQuality,
+        };
+        let planets = [
+            "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+        ];
+        let roles = planets
+            .iter()
+            .map(|planet| json!({"selected_id":format!("{planet}.fixture"),"planet":planet}))
+            .collect::<Vec<_>>();
+        // Dense synthetic contract data, not a claim about a possible chart.
+        let mut facts = Vec::new();
+        let mut rows = Vec::new();
+        for guest in planets {
+            for host in planets.into_iter().filter(|host| *host != guest) {
+                let id = format!("e{}", facts.len());
+                facts.push(Fact {
+                    id: id.clone(),
+                    kind: "reception".into(),
+                    label: format!("{guest} → {host}"),
+                    detail: "Synthetic resource fixture only.".into(),
+                    planets: vec![guest.into(), host.into()],
+                    condition_facet: None,
+                    event: None,
+                    reception: Some(DirectedReception {
+                        guest_planet: guest.into(),
+                        host_planet: host.into(),
+                        qualities: vec![ReceptionQuality {
+                            dignity: ReceptionDignity::Domicile,
+                            polarity: ReceptionPolarity::Positive,
+                        }],
+                    }),
+                });
+                rows.push(json!({"edge_id":id,"regarding_actor_ids":[format!("{guest}.fixture")],"regarded_actor_ids":[format!("{host}.fixture")],
+                    "positive_qualities":["domicile"],"negative_qualities":[],"interpretation":"Synthetic resource test; semantic truth unqualified.","limitations":"No event or timing is established."}));
+            }
+        }
+        let input = json!({"native_reception":{"accepted_roles":roles},"facts":facts});
+        let mut checks = serde_json::Map::new();
+        for key in Stage::Reception.checks() {
+            checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Synthetic resource test only."}));
+        }
+        let value = json!({"checks":checks,"summary":"No reading qualification.","unknowns":[],"edge_interpretations":rows});
+        let contract = reception_schema(&input, &facts);
+        assert_eq!(
+            contract["properties"]["edge_interpretations"]["maxItems"],
+            42
+        );
+        validate_for(Stage::Reception, Matter::Other, &value, &facts).unwrap();
+        validate_shape(&value, &contract).unwrap();
+        let mut oversized = value.clone();
+        oversized["edge_interpretations"]
+            .as_array_mut()
+            .unwrap()
+            .push(rows[0].clone());
+        assert!(
+            validate_for(Stage::Reception, Matter::Other, &oversized, &facts)
+                .unwrap_err()
+                .contains("maximum is 42")
+        );
+        let mut foreign = value;
+        foreign["edge_interpretations"][0]["regarding_actor_ids"] = json!(["Unassigned label"]);
+        assert!(validate_shape(&foreign, &contract)
+            .unwrap_err()
+            .contains("allowed values"));
+    }
 
     fn full_native_judgment() -> (Value, Vec<Fact>) {
         let facts: Vec<_> = (0..81)
@@ -2138,7 +2270,10 @@ mod shape_feedback_tests {
                 .get("maxLength")
                 .is_none()
         );
-        validate_shape(&value, &contract).unwrap();
+        let mut current = value.clone();
+        current["edge_interpretations"] = json!([]); // No typed payload exists in this historical formatting witness.
+        validate_shape(&current, &contract).unwrap();
+        assert_eq!(current["checks"], value["checks"]);
         assert_eq!(value, before); // No shortening or altered historical data.
     }
 
@@ -2158,7 +2293,7 @@ mod shape_feedback_tests {
             "direction":{"state":"supported","evidence":["e0"],"finding":"Venus regards Mars; this fact does not establish the reverse direction."},
             "strength_and_quality":{"state":"supported","evidence":["e0"],"finding":"The supplied domicile reception indicates strong positive regard."},
             "contextual_motive":{"state":"unestablished","evidence":[],"finding":"The fixture supplies no context for a motive assessment."}
-        },"summary":"An observed directed regard is not a prediction of an event.","unknowns":[]});
+        },"summary":"An observed directed regard is not a prediction of an event.","unknowns":[],"edge_interpretations":[]});
         (value, facts)
     }
 

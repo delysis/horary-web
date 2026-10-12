@@ -436,6 +436,8 @@ pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &
     if stage != Stage::Significators {
         let data = if stage == Stage::Condition {
             horary_contract::condition_schema(original_input(input), facts)
+        } else if stage == Stage::Reception {
+            horary_contract::reception_schema(original_input(input), facts)
         } else {
             horary_contract::schema_for(stage, matter, facts)
         };
@@ -513,6 +515,40 @@ pub fn original_input(mut input: &Value) -> &Value {
         input = original;
     }
     input
+}
+
+/// Finite output allowance for one complete batch worksheet, including repair.
+/// Reception's added rows grow with supplied typed edges and literal alias IDs.
+/// This is an output allowance, not a tokenizer measurement or semantic gate.
+pub fn generation_token_budget(stage: Stage, input: &Value) -> u32 {
+    if stage != Stage::Reception {
+        return if stage == Stage::Judgment { 1400 } else { 1000 };
+    }
+    let input = original_input(input);
+    let roles = input["native_reception"]["accepted_roles"].as_array();
+    let mut edges = 0usize;
+    let mut alias_bytes = 0usize;
+    for fact in input["facts"].as_array().into_iter().flatten() {
+        if fact["kind"] != "reception" || !fact["reception"].is_object() {
+            continue;
+        }
+        edges += 1;
+        for endpoint in ["guestPlanet", "hostPlanet"] {
+            alias_bytes += roles
+                .into_iter()
+                .flatten()
+                .filter(|role| role["planet"] == fact["reception"][endpoint])
+                .filter_map(|role| role["selected_id"].as_str())
+                .map(str::len)
+                .sum::<usize>();
+        }
+    }
+    // Leave the other stages unchanged and fit the reader's existing 16K cap.
+    // Short per-edge prose is independently bounded in the response contract.
+    (1000usize
+        .saturating_add(edges.saturating_mul(384))
+        .saturating_add(alias_bytes))
+    .min(16_384) as u32
 }
 
 /// The schema constrains decoding, while this boundary also governs raw batch
@@ -783,6 +819,31 @@ pub fn check(
     }
     if stage == Stage::Condition {
         condition_coverage(value, input, facts)?;
+    }
+    if stage == Stage::Reception {
+        horary_contract::validate_shape(value, &horary_contract::reception_schema(input, facts))?;
+        let roles: Vec<crate::reading_method::ReceptionRoleIdentity> = serde_json::from_value(
+            input["native_reception"]["accepted_roles"].clone(),
+        )
+        .map_err(|_| "The controller must supply the accepted native reception role clipboard.")?;
+        let rows: Vec<crate::reading_method::ReceptionInterpretation> =
+            serde_json::from_value(value["edge_interpretations"].clone())
+                .map_err(|error| format!("$.edge_interpretations: {error}"))?;
+        let failures =
+            crate::reading_method::reception_interpretation_failures(&roles, facts, &rows)?;
+        if !failures.is_empty() {
+            return Err(failures.join("\n"));
+        }
+        if rows.is_empty()
+            && Stage::Reception.checks().iter().any(|key| {
+                matches!(
+                    value["checks"][*key]["state"].as_str(),
+                    Some("supported" | "contradicted")
+                )
+            })
+        {
+            return Err("No typed native reception edges are supplied. Keep direction, quality and motive unestablished or not_relevant; do not turn unavailable evidence into a finding.".into());
+        }
     }
     crate::message_programs::check(stage, input, value, facts)?;
     let roles = if stage == Stage::Significators {
@@ -1082,13 +1143,85 @@ mod analytical_shape_repair_tests {
         let input = json!({"roles":[
             {"label":"First synthetic party","planet":"Venus","house":null},
             {"label":"Second synthetic party","planet":"Mars","house":null}
-        ],"facts":facts});
+        ],"facts":facts,"native_reception":{"accepted_roles":[
+            {"role_index":0,"selected_id":"first.self","label":"First synthetic party","planet":"Venus","house":null},
+            {"role_index":1,"selected_id":"second.self","label":"Second synthetic party","planet":"Mars","house":null}
+        ]}});
         let value = json!({"checks":{
             "direction":{"state":"supported","evidence":[id],"finding":"The supplied fact gives Venus's regard for Mars; the reverse is not supplied."},
             "strength_and_quality":{"state":"supported","evidence":[id],"finding":"The supplied domicile quality gives positive regard in this direction."},
             "contextual_motive":{"state":"unestablished","evidence":[],"finding":"No motive follows from this synthetic fact alone."}
-        },"summary":"Synthetic directed-reception worksheet; no event prediction.","unknowns":[]});
+        },"summary":"Synthetic directed-reception worksheet; no event prediction.","unknowns":[],
+        "edge_interpretations":[{"edge_id":id,"regarding_actor_ids":["first.self"],"regarded_actor_ids":["second.self"],
+            "positive_qualities":["domicile"],"negative_qualities":[],"interpretation":"A synthetic direction fixture, not a qualified interpretation.",
+            "limitations":"No reverse regard, occurrence or timing is established."}]});
         (input, value, facts)
+    }
+
+    #[test]
+    fn reception_output_budget_follows_source_rows_and_survives_repair() {
+        let (input, _, facts) = reception();
+        let budget = generation_token_budget(Stage::Reception, &input);
+        assert!(budget > 1000);
+        assert_eq!(
+            generation_token_budget(
+                Stage::Reception,
+                &json!({"original_input":input,"previous_worksheet":{}})
+            ),
+            budget
+        );
+        for stage in Stage::ALL
+            .iter()
+            .copied()
+            .filter(|stage| *stage != Stage::Reception)
+        {
+            assert_eq!(
+                generation_token_budget(stage, &input),
+                if stage == Stage::Judgment { 1400 } else { 1000 }
+            );
+        }
+        let mut unavailable = input.clone();
+        unavailable["facts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("reception");
+        assert_eq!(
+            generation_token_budget(Stage::Reception, &unavailable),
+            1000
+        );
+        let dense = (0..42)
+            .map(|index| {
+                let mut fact = serde_json::to_value(&facts[0]).unwrap();
+                fact["id"] = json!(format!("e{index}"));
+                fact
+            })
+            .collect::<Vec<_>>();
+        let mut larger = input;
+        larger["facts"] = json!(dense);
+        assert!(generation_token_budget(Stage::Reception, &larger) > budget);
+        assert!(generation_token_budget(Stage::Reception, &larger) <= 16_384);
+    }
+
+    #[test]
+    fn unavailable_typed_reception_keeps_native_checks_unknown() {
+        let (input, mut value, mut facts) = reception();
+        facts[0].reception = None;
+        let mut input = input;
+        input["facts"] = json!(facts);
+        value["edge_interpretations"] = json!([]);
+        assert!(
+            check(Stage::Reception, Matter::Other, &value, &input, &facts)
+                .err()
+                .unwrap()
+                .contains("No typed native reception")
+        );
+        for key in Stage::Reception.checks() {
+            value["checks"][key]["state"] = json!("unestablished");
+        }
+        assert!(matches!(
+            check(Stage::Reception, Matter::Other, &value, &input, &facts).unwrap(),
+            Checked::Data(_)
+        ));
     }
 
     #[test]

@@ -392,7 +392,12 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
         let prompts = tasks
             .iter()
             .map(|(stage, matter, input, contract)| {
-                crate::horary_pipeline::prompt(*stage, *matter, input, contract).map(|p| (p, 1000))
+                crate::horary_pipeline::prompt(*stage, *matter, input, contract).map(|p| {
+                    (
+                        p,
+                        crate::horary_step::generation_token_budget(*stage, input),
+                    )
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         let wall = std::time::Instant::now();
@@ -439,11 +444,7 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
             self.app,
             prompt,
             NativeGenerateOptions {
-                max_tokens: if stage == crate::horary_lessons::Stage::Judgment {
-                    1400
-                } else {
-                    1000
-                },
+                max_tokens: crate::horary_step::generation_token_budget(stage, input),
                 temperature: 0.,
                 response_schema: audio.is_none().then(|| schema.to_string()),
                 audio: audio.map(<[u8]>::to_vec),

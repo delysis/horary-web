@@ -400,6 +400,15 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             "reception_action_context",
         ]);
     }
+    if stage == Stage::Reception {
+        ids.extend_from_slice(&[
+            "occasion_motive_ability",
+            "reception_minor",
+            "reception_negative",
+            "reception_fall",
+            "reception_ambivalence_context",
+        ]);
+    }
     ids
 }
 
@@ -443,6 +452,9 @@ pub fn guide_for_method(
     if stage == Stage::Reception && matter == Matter::Relationship {
         text.push_str(include_str!("horary_prompts/reception_relationship.md"));
     }
+    if stage == Stage::Reception {
+        text.push_str(include_str!("horary_prompts/reception_rows.md"));
+    }
     if method == Some(Method::Contact) && stage == Stage::Judgment {
         text.push_str(include_str!("horary_prompts/contact_answer.md"));
     }
@@ -465,6 +477,45 @@ pub fn digest(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reception_rows_keep_source_context_and_existing_method_lessons() {
+        for (matter, method) in [
+            (Matter::Other, Some(Method::Contact)),
+            (Matter::Work, Some(Method::NewJob)),
+            (Matter::Relationship, Some(Method::Relationship)),
+            (Matter::LostObject, None),
+        ] {
+            let guide = guide_for_method(Stage::Reception, matter, method).unwrap();
+            assert!(guide.contains("<native_edge_contract>"));
+            for id in [
+                "occasion_motive_ability",
+                "reception_minor",
+                "reception_negative",
+                "reception_fall",
+                "reception_ambivalence_context",
+            ] {
+                assert!(source_passages(Stage::Reception, matter, method).contains(&id));
+            }
+            if method == Some(Method::NewJob) {
+                assert!(guide.contains(include_str!("horary_prompts/new_job_reception.md")));
+                assert!(!guide.contains("printed_pages=\"193–193\""));
+            }
+            if method == Some(Method::Relationship) {
+                assert!(guide.contains(include_str!("horary_prompts/reception_relationship.md")));
+            }
+            if matter == Matter::LostObject {
+                assert!(
+                    source_passages(Stage::Reception, matter, method).contains(&"moon_object_role")
+                );
+            }
+        }
+        assert!(
+            !guide_for_method(Stage::Condition, Matter::Work, Some(Method::NewJob))
+                .unwrap()
+                .contains("<native_edge_contract>")
+        );
+    }
     #[test]
     fn new_job_teaching_is_method_scoped_and_has_salient_book_sources() {
         for (stage, expected_ids) in [

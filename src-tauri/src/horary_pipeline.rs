@@ -1655,6 +1655,18 @@ fn with_contact_judgment_limits(mut input: Value, facts: &[Fact]) -> Result<Valu
                 }
             }
         }
+        if let Some(rows) = worksheet
+            .get_mut("edge_interpretations")
+            .filter(|_| name == "reception")
+            .and_then(Value::as_array_mut)
+        {
+            for row in rows.iter_mut().filter_map(Value::as_object_mut) {
+                // Only the five mechanically checked identity/quality fields
+                // reach final Contact synthesis. Original prose stays recorded.
+                row.remove("interpretation");
+                row.remove("limitations");
+            }
+        }
     }
     Ok(input)
 }
@@ -1687,6 +1699,24 @@ fn reception_clipboard_view(
         })
         .collect();
     json!({"accepted_roles":roles,"edges":edges})
+}
+
+#[cfg(test)]
+fn reception_receipt_fixture(input: &Value) -> Value {
+    let input = step::original_input(input);
+    let roles = input["native_reception"]["accepted_roles"].as_array();
+    let rows = input["facts"].as_array().into_iter().flatten().filter_map(|fact| {
+        if fact["kind"] != "reception" || !fact["reception"].is_object() {return None;}
+        let ids = |endpoint| roles.into_iter().flatten().filter(|role|role["planet"]==fact["reception"][endpoint])
+            .map(|role|role["selected_id"].clone()).collect::<Vec<_>>();
+        let qualities = |polarity| fact["reception"]["qualities"].as_array().into_iter().flatten()
+            .filter(|quality|quality["polarity"]==polarity).map(|quality|quality["dignity"].clone()).collect::<Vec<_>>();
+        Some(json!({"edge_id":fact["id"],"regarding_actor_ids":ids("guestPlanet"),"regarded_actor_ids":ids("hostPlanet"),
+            "positive_qualities":qualities("positive"),"negative_qualities":qualities("negative"),
+            "interpretation":"Receipt-only offline fixture; contextual truth is unobserved.",
+            "limitations":"No event, reverse regard or timing is established."}))
+    }).collect::<Vec<_>>();
+    json!(rows)
 }
 
 fn generate_reading(
@@ -2462,6 +2492,104 @@ mod tests {
         .err()
         .unwrap();
         assert!(error.contains("house ruler has first claim"));
+    }
+
+    #[test]
+    fn reception_rows_cross_real_clipboard_repair_and_contact_final_boundary() {
+        let (role_input, role_worksheet, facts) = reception_binding_fixture();
+        let step::Checked::Data(permit) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &role_worksheet,
+            &role_input,
+            &facts,
+        )
+        .unwrap() else {
+            panic!("Actual native role permit required")
+        };
+        let roles = accepted_reception_roles(&permit).unwrap();
+        let clipboard = reception_clipboard(&roles, &facts);
+        let rows = facts
+            .iter()
+            .filter_map(|fact| {
+                let edge = fact
+                    .reception
+                    .as_ref()
+                    .filter(|_| fact.kind == "reception")?;
+                let ids = |planet: &str| {
+                    roles
+                        .iter()
+                        .filter(|role| role.planet == planet)
+                        .map(|role| role.selected_id.clone())
+                        .collect::<Vec<_>>()
+                };
+                let qualities = |polarity| {
+                    edge.qualities
+                        .iter()
+                        .filter(|quality| quality.polarity == polarity)
+                        .map(|quality| quality.dignity.native_name().to_owned())
+                        .collect::<Vec<_>>()
+                };
+                Some(reading_method::ReceptionInterpretation {
+                    edge_id: fact.id.clone(),
+                    regarding_actor_ids: ids(&edge.guest_planet),
+                    regarded_actor_ids: ids(&edge.host_planet),
+                    positive_qualities: qualities(reading_method::ReceptionPolarity::Positive),
+                    negative_qualities: qualities(reading_method::ReceptionPolarity::Negative),
+                    interpretation: "UNQUALIFIED_RECEPTION_STORY".into(),
+                    limitations: "UNQUALIFIED_RECEPTION_LIMIT_PROSE".into(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let input = json!({"roles":permit.roles(),"facts":facts,"native_reception":clipboard});
+        let mut checks = serde_json::Map::new();
+        for key in Stage::Reception.checks() {
+            checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Offline native receipt test only."}));
+        }
+        let worksheet = json!({"checks":checks,"summary":"No semantic reading qualification.","unknowns":[],"edge_interpretations":rows});
+        let before = worksheet.clone();
+        let mut rejected = worksheet.clone();
+        rejected["edge_interpretations"][0]["regarding_actor_ids"] = json!([]);
+        let error = step::check(Stage::Reception, Matter::Other, &rejected, &input, &facts)
+            .err()
+            .unwrap();
+        assert!(error.contains("regarding_actor_ids"));
+        let repair = json!({"original_input":input,"previous_worksheet":rejected,"native_validation_error":error});
+        let step::Checked::Data(accepted) =
+            step::check(Stage::Reception, Matter::Other, &worksheet, &repair, &facts).unwrap()
+        else {
+            panic!("Corrected same-stage row should complete")
+        };
+        assert_eq!(accepted.worksheet(), &before);
+        let final_input = json!({"reading_request":{"binding":{"frame":{"method":"contact"}}},
+            "reception":accepted.worksheet(),"timing":{"timing_status":"unestablished"},
+            "contacts":{"candidate_ids":[]},"facts":facts,"roles":permit.roles()});
+        let final_view = with_contact_judgment_limits(final_input.clone(), &facts).unwrap();
+        assert!(!final_view.to_string().contains("UNQUALIFIED_RECEPTION_"));
+        assert!(final_input
+            .to_string()
+            .contains("UNQUALIFIED_RECEPTION_STORY"));
+        for (projected, original) in final_view["reception"]["edge_interpretations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(&rows)
+        {
+            let original = serde_json::to_value(original).unwrap();
+            assert_eq!(projected.as_object().unwrap().len(), 5);
+            for key in [
+                "edge_id",
+                "regarding_actor_ids",
+                "regarded_actor_ids",
+                "positive_qualities",
+                "negative_qualities",
+            ] {
+                assert_eq!(projected[key], original[key]);
+            }
+        }
+        assert_eq!(final_view["facts"], final_input["facts"]);
+        assert_eq!(final_view["roles"], final_input["roles"]);
+        assert_eq!(worksheet, before);
     }
 
     #[test]
@@ -3308,6 +3436,9 @@ mod selected_stage_execution_tests {
                         checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Offline mechanics only"}));
                     }
                     let mut value = json!({"checks":checks,"summary":"Offline mechanics only; no source-correct reading claimed","unknowns":[]});
+                    if stage == Stage::Reception {
+                        value["edge_interpretations"] = reception_receipt_fixture(original);
+                    }
                     if stage == Stage::Condition {
                         for (facet, key) in [
                             ("essential", "own_dignity"),
@@ -3987,7 +4118,7 @@ mod real_reading {
                 &self.state,
                 prompt.clone(),
                 NativeGenerateOptions {
-                    max_tokens: if stage == Stage::Judgment { 1400 } else { 1000 },
+                    max_tokens: step::generation_token_budget(stage, input),
                     temperature: 0.,
                     cache_lesson: audio.is_none(),
                     audio: audio.map(<[u8]>::to_vec),
@@ -4014,7 +4145,8 @@ mod real_reading {
             let prompts = tasks
                 .iter()
                 .map(|(stage, matter, input, contract)| {
-                    prompt(*stage, *matter, input, contract).map(|p| (p, 1000))
+                    prompt(*stage, *matter, input, contract)
+                        .map(|p| (p, step::generation_token_budget(*stage, input)))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let result = generate_native_batch(
@@ -4641,6 +4773,9 @@ fn process_examples_with_chart(
                         checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Authored fixture, not a model assessment."}));
                     }
                     let mut answer = json!({"checks":checks,"summary":"Authored fixture; no astrology interpretation is asserted.","unknowns":[]});
+                    if stage == Stage::Reception {
+                        answer["edge_interpretations"] = reception_receipt_fixture(input);
+                    }
                     if stage == Stage::Condition {
                         // The source-export fixture satisfies native coverage
                         // without inventing an interpretation of any fact.

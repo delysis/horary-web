@@ -66,6 +66,18 @@ pub enum ReceptionDignity {
 }
 
 impl ReceptionDignity {
+    pub fn native_name(self) -> &'static str {
+        match self {
+            Self::Domicile => "domicile",
+            Self::Exaltation => "exaltation",
+            Self::TriplicityRuler => "triplicityRuler",
+            Self::TermRuler => "termRuler",
+            Self::FaceRuler => "faceRuler",
+            Self::Detriment => "detriment",
+            Self::Fall => "fall",
+        }
+    }
+
     fn from_native(value: &str) -> Option<Self> {
         Some(match value {
             "domicile" => Self::Domicile,
@@ -104,6 +116,134 @@ impl ReceptionDignity {
 pub enum ReceptionPolarity {
     Positive,
     Negative,
+}
+
+/// Only the identity fields of the already accepted role clipboard are needed
+/// for this mechanical check. Labels and role/house choices remain untouched.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ReceptionRoleIdentity {
+    pub selected_id: String,
+    pub planet: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReceptionInterpretation {
+    pub edge_id: String,
+    pub regarding_actor_ids: Vec<String>,
+    pub regarded_actor_ids: Vec<String>,
+    pub positive_qualities: Vec<String>,
+    pub negative_qualities: Vec<String>,
+    pub interpretation: String,
+    pub limitations: String,
+}
+
+/// Invalid supplied identity is a source error. Received model mismatches are
+/// observed rejections. Neither result grades the truth of interpretation prose.
+/// DSPy can use this same pure guard after parsing its string-array outputs.
+pub fn reception_interpretation_failures(
+    roles: &[ReceptionRoleIdentity],
+    facts: &[Fact],
+    rows: &[ReceptionInterpretation],
+) -> Result<Vec<String>, String> {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut role_ids = BTreeSet::new();
+    if roles.len() > 8
+        || roles.iter().any(|role| {
+            role.selected_id.is_empty()
+                || role.planet.is_empty()
+                || !role_ids.insert(role.selected_id.as_str())
+        })
+    {
+        return Err(
+            "The native reception clipboard has ambiguous or missing accepted role IDs.".into(),
+        );
+    }
+    let mut edges = BTreeMap::new();
+    for fact in facts.iter().filter(|fact| fact.kind == "reception") {
+        let Some(edge) = fact.reception.as_ref() else {
+            continue; // Legacy prose cannot mint a typed directed edge.
+        };
+        if fact.id.is_empty()
+            || fact.planets != [edge.guest_planet.as_str(), edge.host_planet.as_str()]
+            || edges.insert(fact.id.as_str(), edge).is_some()
+        {
+            return Err("The supplied native reception edge identity is inconsistent.".into());
+        }
+    }
+    if !edges.is_empty() && roles.is_empty() {
+        return Err("Native reception edges require the accepted role clipboard.".into());
+    }
+    let ids_for = |planet: &str| {
+        roles
+            .iter()
+            .filter(|role| role.planet == planet)
+            .map(|role| role.selected_id.as_str())
+            .collect::<BTreeSet<_>>()
+    };
+    let qualities_for = |edge: &DirectedReception, polarity: ReceptionPolarity| {
+        edge.qualities
+            .iter()
+            .filter(|quality| quality.polarity == polarity)
+            .map(|quality| quality.dignity.native_name())
+            .collect::<BTreeSet<_>>()
+    };
+    let mut failures = Vec::new();
+    let mut seen = BTreeSet::new();
+    for (index, row) in rows.iter().enumerate() {
+        let path = format!("$.edge_interpretations[{index}]");
+        if !seen.insert(row.edge_id.as_str()) {
+            failures.push(format!("{path}.edge_id: duplicate {}.", row.edge_id));
+        }
+        let Some(edge) = edges.get(row.edge_id.as_str()) else {
+            failures.push(format!(
+                "{path}.edge_id: {} is not a supplied typed reception edge.",
+                row.edge_id
+            ));
+            continue;
+        };
+        for (field, actual, expected) in [
+            (
+                "regarding_actor_ids",
+                &row.regarding_actor_ids,
+                ids_for(&edge.guest_planet),
+            ),
+            (
+                "regarded_actor_ids",
+                &row.regarded_actor_ids,
+                ids_for(&edge.host_planet),
+            ),
+            (
+                "positive_qualities",
+                &row.positive_qualities,
+                qualities_for(edge, ReceptionPolarity::Positive),
+            ),
+            (
+                "negative_qualities",
+                &row.negative_qualities,
+                qualities_for(edge, ReceptionPolarity::Negative),
+            ),
+        ] {
+            let actual_set: BTreeSet<_> = actual.iter().map(String::as_str).collect();
+            if actual_set.len() != actual.len() || actual_set != expected {
+                failures.push(format!("{path}.{field}: use exactly {expected:?} for the supplied {} → {} edge; retain every accepted alias and quality without duplicates.", edge.guest_planet, edge.host_planet));
+            }
+        }
+        for (field, text) in [
+            ("interpretation", &row.interpretation),
+            ("limitations", &row.limitations),
+        ] {
+            if text.trim().is_empty() {
+                failures.push(format!("{path}.{field}: a short contextual proposal or explicit limitation is required."));
+            }
+        }
+    }
+    for id in edges.keys().filter(|id| !seen.contains(**id)) {
+        failures.push(format!(
+            "$.edge_interpretations: missing supplied typed edge {id}."
+        ));
+    }
+    Ok(failures)
 }
 
 struct ReceptionRow {
@@ -1158,6 +1298,109 @@ mod tests {
         assert_eq!(claimed["role_rows"][1]["ruler_planet"], "Moon");
         assert_eq!(claimed["moon"]["house_claims"][0]["role_id"], "alma.self");
         assert_eq!(claimed["moon"]["available_as_contextual_reference"], false);
+    }
+
+    #[test]
+    fn reception_rows_preserve_direction_shared_aliases_and_mixed_qualities() {
+        let facts = facts(Some(&json!({"derived":{"receptions":[
+            {"guestPlanet":"Mars","hostPlanet":"Saturn","dignity":"termRuler","polarity":"positive"},
+            {"guestPlanet":"Mars","hostPlanet":"Saturn","dignity":"fall","polarity":"negative"}
+        ]}})));
+        let roles = vec![
+            ReceptionRoleIdentity {
+                selected_id: "alma.self".into(),
+                planet: "Mars".into(),
+            },
+            ReceptionRoleIdentity {
+                selected_id: "querent.self".into(),
+                planet: "Saturn".into(),
+            },
+            ReceptionRoleIdentity {
+                selected_id: "subject.primary".into(),
+                planet: "Saturn".into(),
+            },
+        ];
+        let row = ReceptionInterpretation {
+            edge_id: facts[0].id.clone(),
+            regarding_actor_ids: vec!["alma.self".into()],
+            regarded_actor_ids: vec!["querent.self".into(), "subject.primary".into()],
+            positive_qualities: vec!["termRuler".into()],
+            negative_qualities: vec!["fall".into()],
+            interpretation: "Mechanical fixture only; contextual meaning is unqualified.".into(),
+            limitations: "No reverse regard, event or timing follows from this row alone.".into(),
+        };
+        assert!(
+            reception_interpretation_failures(&roles, &facts, std::slice::from_ref(&row))
+                .unwrap()
+                .is_empty()
+        );
+        for (field, mutate) in [
+            ("regarding_actor_ids", 0),
+            ("regarded_actor_ids", 1),
+            ("positive_qualities", 2),
+            ("negative_qualities", 3),
+        ] {
+            let mut rejected = row.clone();
+            match mutate {
+                0 => rejected.regarding_actor_ids = row.regarded_actor_ids.clone(),
+                1 => {
+                    rejected.regarded_actor_ids.pop();
+                }
+                2 => rejected.positive_qualities.push("termRuler".into()),
+                _ => rejected.negative_qualities.clear(),
+            }
+            let errors = reception_interpretation_failures(&roles, &facts, &[rejected]).unwrap();
+            assert!(
+                errors.iter().any(|error| error.contains(field)),
+                "{errors:?}"
+            );
+        }
+        let mut foreign = row.clone();
+        foreign.edge_id = "not_supplied".into();
+        let errors = reception_interpretation_failures(&roles, &facts, &[foreign]).unwrap();
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("not a supplied typed")));
+        assert!(errors
+            .iter()
+            .any(|error| error.contains("missing supplied typed")));
+        assert!(
+            reception_interpretation_failures(&roles, &facts, &[row.clone(), row])
+                .unwrap()
+                .iter()
+                .any(|error| error.contains("duplicate"))
+        );
+        assert!(reception_interpretation_failures(&roles, &facts, &[])
+            .unwrap()
+            .iter()
+            .any(|error| error.contains("missing supplied typed")));
+    }
+
+    #[test]
+    fn reception_rows_distinguish_unavailable_native_payload_from_bad_source() {
+        let mut native = facts(Some(&json!({"derived":{"receptions":[
+            {"guestPlanet":"Moon","hostPlanet":"Mars","dignity":"domicile","polarity":"positive"}
+        ]}})));
+        let roles = [ReceptionRoleIdentity {
+            selected_id: "moon.contextual".into(),
+            planet: "Moon".into(),
+        }];
+        let before = serde_json::to_value(&native).unwrap();
+        assert!(reception_interpretation_failures(&[], &native, &[]).is_err());
+        assert_eq!(serde_json::to_value(&native).unwrap(), before);
+        native[0].reception = None;
+        assert!(
+            reception_interpretation_failures(&roles, &native, &[])
+                .unwrap()
+                .is_empty(),
+            "Legacy prose cannot silently become typed reception testimony"
+        );
+        assert!(reception_interpretation_failures(
+            &[roles[0].clone(), roles[0].clone()],
+            &native,
+            &[]
+        )
+        .is_err());
     }
 
     #[test]

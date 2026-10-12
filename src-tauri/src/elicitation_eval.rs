@@ -1770,7 +1770,7 @@ impl Runtime for Reader<'_> {
             request["memo_wire_request"] = crate::hosted_gemma_eval::wire_request(
                 &prompt,
                 schema,
-                if stage == Stage::Judgment { 1400 } else { 1000 },
+                crate::horary_step::generation_token_budget(stage, input),
             )?;
         }
         let cached = self.memoized(&request, None)?;
@@ -1810,7 +1810,7 @@ impl Runtime for Reader<'_> {
             dispatcher
                 .send(BatchCall {
                     prompt,
-                    max_tokens: if stage == Stage::Judgment { 1400 } else { 1000 },
+                    max_tokens: crate::horary_step::generation_token_budget(stage, input),
                     response,
                 })
                 .map_err(|_| "Exploration dispatcher disconnected before submission")?;
@@ -1822,7 +1822,7 @@ impl Runtime for Reader<'_> {
                 self.state,
                 prompt,
                 NativeGenerateOptions {
-                    max_tokens: if stage == Stage::Judgment { 1400 } else { 1000 },
+                    max_tokens: crate::horary_step::generation_token_budget(stage, input),
                     temperature: 0.,
                     seed: 0,
                     response_schema: audio.is_none().then(|| schema.to_string()),
@@ -1860,7 +1860,13 @@ impl Runtime for Reader<'_> {
             .collect::<Result<Vec<_>, _>>()?;
         let prompts: Vec<(String, u32)> = prepared
             .iter()
-            .map(|(prompt, _)| (prompt.clone(), 1000))
+            .zip(tasks)
+            .map(|((prompt, _), (stage, _, input, _))| {
+                (
+                    prompt.clone(),
+                    crate::horary_step::generation_token_budget(*stage, input),
+                )
+            })
             .collect();
         let mut request = json!({"sequence":sequence,"tasks":tasks,"prompts":prompts.iter()
             .map(|(p,_)|serde_json::from_str::<Value>(p)).collect::<Result<Vec<_>,_>>().map_err(|e|e.to_string())?,
