@@ -48,6 +48,83 @@ pub struct Change {
     pub before: String,
     pub after: String,
 }
+/// The one completed student request explicitly authorized by a closed-owner
+/// receipt. This is a transport slot, never a model-answer repair.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct StudentRecovery {
+    pub version: u32,
+    pub model: String,
+    pub original_key: String,
+    pub original_request_sha256: String,
+    pub closure_receipt_sha256: String,
+    pub recovery_key: String,
+    pub witnesses: BTreeMap<String, String>,
+    pub maximum_new_attempts: usize,
+    pub first_physical_ordinal: usize,
+    pub last_physical_ordinal: usize,
+    pub original_physical_cap: usize,
+}
+
+impl StudentRecovery {
+    pub fn expected_key(&self) -> String {
+        google::digest(format!(
+            "horary-student-completed-transient-recovery-v1\0{}\0{}\0{}",
+            self.original_key, self.original_request_sha256, self.closure_receipt_sha256
+        ))
+    }
+    /// Check the local imported carrier only. No network operation or old-key
+    /// submission is permitted; every fresh artifact uses `recovery_key`.
+    pub fn verify_witnesses(&self, directory: &Path) -> Result<()> {
+        ensure!(
+            self.version == 1
+                && self.model == google::STUDENT
+                && self.original_key.len() == 64
+                && self.original_key.bytes().all(|b| b.is_ascii_hexdigit())
+                && self.original_request_sha256.len() == 64
+                && self
+                    .original_request_sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit())
+                && self.closure_receipt_sha256.len() == 64
+                && self
+                    .closure_receipt_sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit())
+                && self.recovery_key == self.expected_key()
+                && (1..=3).contains(&self.maximum_new_attempts)
+                && self.first_physical_ordinal > 0
+                && self
+                    .first_physical_ordinal
+                    .checked_add(self.maximum_new_attempts - 1)
+                    == Some(self.last_physical_ordinal)
+                && self.last_physical_ordinal <= self.original_physical_cap,
+            "Invalid bounded student recovery identity or cumulative span"
+        );
+        for (name, hash) in &self.witnesses {
+            ensure!(
+                google::digest(fs::read(directory.join(safe_relative(name)?))?) == *hash,
+                "Student recovery witness changed: {name}"
+            );
+        }
+        let expected_request = format!("{}.request.json", self.original_key);
+        ensure!(
+            self.witnesses.get(&expected_request) == Some(&self.original_request_sha256),
+            "Student recovery lacks its exact original request seal"
+        );
+        for suffix in ["response.json", "raw.json", "receipt.json"] {
+            ensure!(
+                !directory
+                    .join(format!("{}.{suffix}", self.original_key))
+                    .exists(),
+                "Student recovery cannot replace a completed or parsed model answer"
+            );
+        }
+        validate_student_failure(directory, &self.original_key, &self.witnesses)?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
@@ -67,6 +144,8 @@ pub struct Manifest {
     pub teacher_start_route: usize,
     pub teacher_start_model: String,
     pub known_unusable_teacher_review: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub student_recovery: Option<StudentRecovery>,
     pub imported_cache_files: BTreeMap<String, String>,
     pub policy: String,
 }
@@ -80,6 +159,101 @@ fn safe_relative(name: &str) -> Result<&Path> {
         "Unsafe evidence path"
     );
     Ok(path)
+}
+fn validate_student_failure(
+    directory: &Path,
+    key: &str,
+    witnesses: &BTreeMap<String, String>,
+) -> Result<()> {
+    let failure_name = format!("{key}.failure.json");
+    ensure!(
+        witnesses.contains_key(&failure_name),
+        "Student recovery has no sealed completed failure"
+    );
+    let failure = value(&directory.join(failure_name))?;
+    ensure!(
+        failure["response_complete"] == true
+            && failure["automatic_retry"] == false
+            && failure["disposition"] == "quota_or_unavailable",
+        "Only a settled transient HTTP failure can authorize this student slot"
+    );
+    let count = failure["physical_submissions"]
+        .as_u64()
+        .context("No settled student-attempt count")? as usize;
+    ensure!((1..=3).contains(&count), "Invalid old student attempt span");
+    let logical_bytes = fs::read(directory.join(format!("{key}.request.json")))?;
+    let logical: Value = serde_json::from_slice(&logical_bytes)?;
+    ensure!(
+        logical["model"] == google::STUDENT,
+        "Wrong failed student model"
+    );
+    let expected_attempts = (1..=count)
+        .map(|attempt| format!("{key}.attempt-{attempt}.request.json"))
+        .collect::<std::collections::BTreeSet<_>>();
+    let actual_attempts = witnesses
+        .keys()
+        .filter(|name| name.contains(".attempt-") && name.ends_with(".request.json"))
+        .cloned()
+        .collect();
+    ensure!(
+        expected_attempts == actual_attempts,
+        "Student failure attempt set differs"
+    );
+    let mut previous = None;
+    for attempt in 1..=count {
+        let stem = format!("{key}.attempt-{attempt}");
+        for suffix in ["request.json", "result.json", "body"] {
+            ensure!(
+                witnesses.contains_key(&format!("{stem}.{suffix}")),
+                "Student failure lacks a sealed request/result/body witness"
+            );
+        }
+        let request = value(&directory.join(format!("{stem}.request.json")))?;
+        let result = value(&directory.join(format!("{stem}.result.json")))?;
+        let body = fs::read(directory.join(format!("{stem}.body")))?;
+        let status = result["http_status"]
+            .as_u64()
+            .context("Missing completed HTTP status")?;
+        let ordinal = request["physical_call"]
+            .as_u64()
+            .context("Missing physical ordinal")?;
+        if status == 429 {
+            let hints = google::quota_hints(
+                &serde_json::from_slice(&body)?,
+                result["provider_quota_advice"]["retry_after_header"].as_str(),
+                google::STUDENT,
+            );
+            ensure!(
+                hints["zero_quota"] != true && hints["daily_quota"] != true,
+                "Zero or daily quota cannot authorize this student transient slot"
+            );
+        }
+        ensure!(
+            matches!(status, 429 | 500 | 502 | 503 | 504)
+                && result["response_complete"] == true
+                && result["body_sha256"] == google::digest(&body)
+                && request["model"] == google::STUDENT
+                && request["logical_key"] == key
+                && result["logical_key"] == key
+                && request["attempt"] == attempt
+                && result["attempt"] == attempt
+                && result["physical_call"] == ordinal
+                && ordinal > 0
+                && previous.is_none_or(|old| ordinal == old + 1)
+                && request["request_sha256"] == google::digest(&logical_bytes)
+                && request["body"] == logical["body"]
+                && request["body_sha256"] == google::digest(serde_json::to_vec(&logical["body"])?),
+            "Student failure is incomplete, mismatched, non-transient or includes a model answer"
+        );
+        if attempt == count {
+            ensure!(
+                result["automatic_retry"] == false && failure["http_status"] == status,
+                "Student failure does not match its final settled attempt"
+            );
+        }
+        previous = Some(ordinal);
+    }
+    Ok(())
 }
 fn carrier_files(directory: &Path, prefix: &str) -> Result<std::collections::BTreeSet<String>> {
     let mut files = std::collections::BTreeSet::new();
@@ -322,6 +496,96 @@ fn changes(
         .collect()
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StudentAuthorization {
+    mode: String,
+    logical_key: String,
+    request_sha256: String,
+    failure_sha256: String,
+    maximum_new_attempts: usize,
+    explicit_replacement: bool,
+}
+
+fn student_slot(
+    campaign: &Path,
+    audit: &Value,
+    authorization: &Value,
+    student: &Budget,
+    closure_sha256: &str,
+) -> Result<StudentRecovery> {
+    let authorization: StudentAuthorization = serde_json::from_value(authorization.clone())?;
+    ensure!(
+        authorization.mode == "completed_student_transient"
+            && authorization.explicit_replacement
+            && (1..=3).contains(&authorization.maximum_new_attempts)
+            && student.remaining >= authorization.maximum_new_attempts,
+        "Student recovery exceeds its explicit span or original cumulative budget"
+    );
+    let prefix = format!("run/student/{}.", authorization.logical_key);
+    let witnesses = audit["source_seals"]
+        .as_object()
+        .context("No student carrier seals")?
+        .iter()
+        .filter(|(name, _)| name.starts_with(&prefix))
+        .map(|(name, hash)| {
+            Ok((
+                name.strip_prefix("run/student/")
+                    .context("Wrong student carrier")?
+                    .to_owned(),
+                hash.as_str()
+                    .context("Invalid student witness hash")?
+                    .to_owned(),
+            ))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    ensure!(
+        witnesses.get(&format!("{}.failure.json", authorization.logical_key))
+            == Some(&authorization.failure_sha256),
+        "Explicit student failure seal differs from closed evidence"
+    );
+    let mut slot = StudentRecovery {
+        version: 1,
+        model: google::STUDENT.into(),
+        original_key: authorization.logical_key,
+        original_request_sha256: authorization.request_sha256,
+        closure_receipt_sha256: closure_sha256.into(),
+        recovery_key: String::new(),
+        witnesses,
+        maximum_new_attempts: authorization.maximum_new_attempts,
+        first_physical_ordinal: student.inherited + 1,
+        last_physical_ordinal: student.inherited + authorization.maximum_new_attempts,
+        original_physical_cap: student.maximum,
+    };
+    slot.recovery_key = slot.expected_key();
+    slot.verify_witnesses(&campaign.join("run/student"))?;
+    let failure = value(&campaign.join(format!("run/student/{}.failure.json", slot.original_key)))?;
+    let count = failure["physical_submissions"]
+        .as_u64()
+        .context("No old attempt count")?;
+    let last = value(&campaign.join(format!(
+        "run/student/{}.attempt-{count}.result.json",
+        slot.original_key
+    )))?;
+    ensure!(
+        last["physical_call"] == student.inherited,
+        "The explicitly recoverable failure is not the final settled student operation"
+    );
+    Ok(slot)
+}
+
+fn version_matches(manifest: &Manifest) -> bool {
+    match manifest.version {
+        1 => {
+            manifest.student_recovery.is_none() && !manifest.known_unusable_teacher_review.is_null()
+        }
+        2 => {
+            manifest.student_recovery.is_some() && manifest.known_unusable_teacher_review.is_null()
+        }
+        _ => false,
+    }
+}
+
 /// Read-only preparation. The caller explicitly records review of source changes.
 /// Frozen pool words, labels, scores and traces never become optimizer checkpoint input.
 pub fn prepare(
@@ -343,6 +607,16 @@ pub fn prepare(
         "Parent plan does not match closure receipt"
     );
     let parent: Plan = serde_json::from_slice(&fs::read(&parent_plan.path)?)?;
+    if let Some(binding) = parent
+        .configuration
+        .get("continuation")
+        .filter(|v| !v.is_null())
+    {
+        let seal: FileSeal = serde_json::from_value(binding.clone())?;
+        seal.verify()?;
+        let predecessor = load(&seal.path)?;
+        verify(&predecessor, &parent).context("Predecessor continuation ancestry differs")?;
+    }
     ensure!(
         parent.book_sha256 == current.book_sha256
             && parent.banks_sha256 == current.banks_sha256
@@ -377,6 +651,24 @@ pub fn prepare(
         "Classification, extraction or auxiliary component inputs drifted"
     );
     let source_changes = changes(&parent.source_sha256, &current.source_sha256);
+    let reviewed_deltas: BTreeMap<String, Change> = audit
+        .get("reviewed_protected_source_changes")
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()?
+        .unwrap_or_default();
+    ensure!(
+        reviewed_deltas.iter().all(|(name, delta)| {
+            matches!(
+                name.as_str(),
+                "book.rs"
+                    | "reading.rs"
+                    | "native_export.rs"
+                    | "preflight.rs"
+                    | "classification_export.rs"
+            ) && source_changes.get(name) == Some(delta)
+        }),
+        "Reviewed protected source deltas differ from exact current before/after hashes"
+    );
     ensure!(
         source_changes.keys().all(|name| matches!(
             name.as_str(),
@@ -392,7 +684,7 @@ pub fn prepare(
                 | "optimize.rs"
                 | "demo.rs"
                 | "source-manifest.json"
-        )),
+        ) || reviewed_deltas.contains_key(name)),
         "This carrier continuation cannot authorize book, method signatures, schemas, native calculations or other semantic source changes"
     );
     let student = budget(&audit, &parent, "student", &campaign)?;
@@ -411,29 +703,65 @@ pub fn prepare(
         .as_str()
         .context("No teacher logical key")?;
     let base = campaign.join(format!("run/teacher/{model}/{key}"));
-    let raw_path = base.with_extension("raw.json");
-    let raw = value(&raw_path)?;
-    let attempt_body = fs::read(
-        campaign.join(
-            last["path"]
-                .as_str()
-                .context("No last teacher request")?
-                .replace(".request.json", ".body"),
-        ),
-    )?;
-    ensure!(
-        raw == serde_json::from_slice::<Value>(&attempt_body)?,
-        "The MAX_TOKENS witness differs from the completed physical response body"
-    );
-    ensure!(
-        last["http_status"] == 200
-            && raw["candidates"]
-                .as_array()
-                .is_some_and(|rows| !rows.is_empty()
-                    && rows.iter().all(|row| row["finishReason"] == "MAX_TOKENS"))
-            && !base.with_extension("response.json").exists(),
-        "Only the witnessed completed MAX_TOKENS review without a settled normalized answer may be replaced"
-    );
+    let alternate = audit.get("recovery").filter(|value| !value.is_null());
+    let (known_unusable_teacher_review, student_recovery) = if let Some(alternate) = alternate {
+        ensure!(
+            alternate["mode"] == "completed_student_transient"
+                && alternate["explicit_replacement"] == true,
+            "Unknown or unauthorized alternate recovery closure mode"
+        );
+        let response: dsrust::lm::api::LmResponse =
+            serde_json::from_slice(&fs::read(base.with_extension("response.json"))?)?;
+        let receipt = value(&base.with_extension("receipt.json"))?;
+        ensure!(
+            last["http_status"] == 200
+                && response.model.as_deref() == Some(model.as_str())
+                && !response.first_text().trim().is_empty()
+                && receipt["model"] == model
+                && receipt["shared_physical_calls"] == teacher.inherited
+                && receipt["request_sha256"]
+                    == google::digest(fs::read(base.with_extension("request.json"))?),
+            "Student recovery teacher route must come from its last settled completed receipt"
+        );
+        (
+            Value::Null,
+            Some(student_slot(
+                &campaign,
+                &audit,
+                alternate,
+                &student,
+                &closure_receipt.sha256,
+            )?),
+        )
+    } else {
+        let raw_path = base.with_extension("raw.json");
+        let raw = value(&raw_path)?;
+        let attempt_body = fs::read(
+            campaign.join(
+                last["path"]
+                    .as_str()
+                    .context("No last teacher request")?
+                    .replace(".request.json", ".body"),
+            ),
+        )?;
+        ensure!(
+            raw == serde_json::from_slice::<Value>(&attempt_body)?,
+            "The MAX_TOKENS witness differs from the completed physical response body"
+        );
+        ensure!(
+            last["http_status"] == 200
+                && raw["candidates"]
+                    .as_array()
+                    .is_some_and(|rows| !rows.is_empty()
+                        && rows.iter().all(|row| row["finishReason"] == "MAX_TOKENS"))
+                && !base.with_extension("response.json").exists(),
+            "Only the witnessed completed MAX_TOKENS review without a settled normalized answer may be replaced"
+        );
+        (
+            json!({"model":model,"key":key,"physical_call":last["physical_call"],"raw_sha256":google::digest(fs::read(raw_path)?),"http_status":200,"finish_reason":"MAX_TOKENS","parsed_semantic_review":false,"known_completed_replacement_only":true}),
+            None,
+        )
+    };
     let teacher_start_route = parent.configuration["teacher_sequence"]
         .as_array()
         .context("No frozen teacher order")?
@@ -456,7 +784,7 @@ pub fn prepare(
             })
         })
         .collect();
-    Ok(Manifest {version:1,parent_campaign:campaign.clone(),closure_receipt,parent_plan,parent_guard:FileSeal::read(&campaign.join("run/queue-started.json"))?,parent_executable_sha256:parent.executable_sha256,new_executable_sha256:current.executable_sha256.clone(),new_sources_sha256:current.source_sha256.clone(),source_changes,reviewed_source_changes:review_note.to_owned(),changed_reading_datasets,student,teacher,teacher_start_route,teacher_start_model:model.clone(),known_unusable_teacher_review:json!({"model":model,"key":key,"physical_call":last["physical_call"],"raw_sha256":google::digest(fs::read(raw_path)?),"http_status":200,"finish_reason":"MAX_TOKENS","parsed_semantic_review":false,"known_completed_replacement_only":true}),imported_cache_files,policy:"Replay the conventional compiler with exact settled carrier caches; deduct all inherited physical attempts. Keep failed/partial runs and original guards. No partial GEPA state, forced grades, development reflection or automatic installation. Changed reading input bytes require a new baseline.".into()})
+    Ok(Manifest {version:if student_recovery.is_some(){2}else{1},parent_campaign:campaign.clone(),closure_receipt,parent_plan,parent_guard:FileSeal::read(&campaign.join("run/queue-started.json"))?,parent_executable_sha256:parent.executable_sha256,new_executable_sha256:current.executable_sha256.clone(),new_sources_sha256:current.source_sha256.clone(),source_changes,reviewed_source_changes:review_note.to_owned(),changed_reading_datasets,student,teacher,teacher_start_route,teacher_start_model:model.clone(),known_unusable_teacher_review,student_recovery,imported_cache_files,policy:"Replay the conventional compiler with exact settled carrier caches; deduct all inherited physical attempts. Keep failed/partial runs and original guards. No partial GEPA state, forced grades, development reflection or automatic installation. Changed reading input bytes require a new baseline.".into()})
 }
 pub fn load(path: &Path) -> Result<Manifest> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
@@ -471,7 +799,7 @@ pub fn verify_configuration(current: &Plan) -> Result<()> {
         seal.verify()?;
         let manifest = load(&seal.path)?;
         ensure!(
-            manifest.version == 1
+            version_matches(&manifest)
                 && manifest.new_executable_sha256 == current.executable_sha256
                 && manifest.new_sources_sha256 == current.source_sha256,
             "Sealed continuation source identity differs from queue"
@@ -486,7 +814,7 @@ pub fn verify_configuration(current: &Plan) -> Result<()> {
 }
 pub fn verify(manifest: &Manifest, current: &Plan) -> Result<()> {
     ensure!(
-        manifest.version == 1
+        version_matches(manifest)
             && manifest.new_executable_sha256 == current.executable_sha256
             && manifest.new_sources_sha256 == current.source_sha256,
         "Continuation executable/source identity differs"
@@ -535,7 +863,7 @@ pub fn import(manifest: &Manifest, current: &Plan, output: &Path) -> Result<()> 
     }
     crate::queue::write_json_atomic(
         &output.join("continuation-import.json"),
-        &json!({"manifest_sha256":google::digest(serde_json::to_vec(manifest)?),"files":manifest.imported_cache_files,"student_inherited_physical_attempts":manifest.student.inherited,"teacher_inherited_physical_attempts":manifest.teacher.inherited,"fresh_student_ordinal":manifest.student.inherited+1,"fresh_teacher_ordinal":manifest.teacher.inherited+1,"student_remaining":manifest.student.remaining,"teacher_remaining":manifest.teacher.remaining,"optimizer_state_imported":false,"semantic_scores_imported":false,"source_and_input_changes_require_fresh_observed_evaluation":true}),
+        &json!({"manifest_sha256":google::digest(serde_json::to_vec(manifest)?),"files":manifest.imported_cache_files,"student_inherited_physical_attempts":manifest.student.inherited,"teacher_inherited_physical_attempts":manifest.teacher.inherited,"fresh_student_ordinal":manifest.student.inherited+1,"fresh_teacher_ordinal":manifest.teacher.inherited+1,"student_remaining":manifest.student.remaining,"teacher_remaining":manifest.teacher.remaining,"student_recovery":manifest.student_recovery,"optimizer_state_imported":false,"semantic_scores_imported":false,"source_and_input_changes_require_fresh_observed_evaluation":true}),
     )
 }
 
@@ -666,6 +994,261 @@ mod tests {
             &json!({"version":1,"campaign":directory.canonicalize().unwrap(),"owner_exit":exit,"execute_exit":exit,"completed_jobs":0,"later_jobs_executed":false,"raw_answers_preserved":true,"exact_pid_absence":{"pids":[99999999,99999998]},"source_seals":seals,"immutable_plan_sha256":plan_sha,"actual_paid_ledgers":ledgers}),
         );
         (audit, current)
+    }
+    #[cfg(unix)]
+    fn reseal(directory: &Path, audit: &Path, data: &mut Value) {
+        let names = data["source_seals"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut seals = BTreeMap::new();
+        for name in names {
+            if !name.starts_with("run/student/") && !name.starts_with("run/teacher/") {
+                seals.insert(
+                    name.clone(),
+                    google::digest(fs::read(directory.join(&name)).unwrap()),
+                );
+            }
+        }
+        for group in ["student", "teacher"] {
+            for name in carrier_files(
+                &directory.join(format!("run/{group}")),
+                &format!("run/{group}"),
+            )
+            .unwrap()
+            {
+                seals.insert(
+                    name.clone(),
+                    google::digest(fs::read(directory.join(name)).unwrap()),
+                );
+            }
+        }
+        data["source_seals"] = json!(seals);
+        write(audit, data);
+    }
+    #[cfg(unix)]
+    fn closed_student(directory: &Path) -> (PathBuf, Plan) {
+        let (audit, mut current) = closed(directory);
+        current.configuration["student_call_cap"] = json!(6);
+        let mut parent: Plan =
+            serde_json::from_value(value(&directory.join("run/queue-plan.json")).unwrap()).unwrap();
+        parent.configuration["student_call_cap"] = json!(6);
+        write(&directory.join("run/queue-plan.json"), &json!(parent));
+        let plan_sha = google::digest(fs::read(directory.join("run/queue-plan.json")).unwrap());
+        write(
+            &directory.join("run/queue-started.json"),
+            &json!({"pid":99999998,"plan_sha256":plan_sha}),
+        );
+        for entry in fs::read_dir(directory.join("run/student")).unwrap() {
+            fs::remove_file(entry.unwrap().path()).unwrap();
+        }
+        let key = "a".repeat(64);
+        let prefix = format!("run/student/{key}");
+        let submitted = json!({"synthetic":"identical bounded recovery body"});
+        write(
+            &directory.join(format!("{prefix}.request.json")),
+            &json!({"model":google::STUDENT,"request":{"synthetic":"same request"},"body":submitted}),
+        );
+        let request_sha =
+            google::digest(fs::read(directory.join(format!("{prefix}.request.json"))).unwrap());
+        let mut attempts = Vec::new();
+        for (attempt, status) in [(1, 500), (2, 429), (3, 500)] {
+            let name = format!("{prefix}.attempt-{attempt}.request.json");
+            write(
+                &directory.join(&name),
+                &json!({"physical_call":attempt,"logical_key":key,"attempt":attempt,"model":google::STUDENT,"request_sha256":request_sha,"body":submitted,"body_sha256":google::digest(serde_json::to_vec(&submitted).unwrap())}),
+            );
+            let body = serde_json::to_vec(
+                &json!({"error":{"code":status,"message":"Synthetic fully received transient"}}),
+            )
+            .unwrap();
+            fs::write(
+                directory.join(format!("{prefix}.attempt-{attempt}.body")),
+                &body,
+            )
+            .unwrap();
+            write(
+                &directory.join(format!("{prefix}.attempt-{attempt}.result.json")),
+                &json!({"response_complete":true,"http_status":status,"physical_call":attempt,"logical_key":key,"attempt":attempt,"automatic_retry":attempt<3,"body_sha256":google::digest(&body)}),
+            );
+            attempts.push(json!({"path":name,"physical_call":attempt,"logical_key":key,"http_status":status,"model":google::STUDENT}));
+        }
+        write(
+            &directory.join(format!("{prefix}.failure.json")),
+            &json!({"http_status":500,"response_complete":true,"automatic_retry":false,"physical_submissions":3,"disposition":"quota_or_unavailable"}),
+        );
+        let teacher_prefix = "run/teacher/gemini-test/key";
+        let teacher_raw = json!({"candidates":[{"content":{"parts":[{"text":"Existing paid teacher answer"}]},"finishReason":"STOP"}]});
+        let teacher_body = serde_json::to_vec(&teacher_raw).unwrap();
+        fs::write(
+            directory.join(format!("{teacher_prefix}.attempt-1.body")),
+            &teacher_body,
+        )
+        .unwrap();
+        write(
+            &directory.join(format!("{teacher_prefix}.attempt-1.result.json")),
+            &json!({"http_status":200,"response_complete":true,"physical_call":1,"logical_key":"key","attempt":1,"body_sha256":google::digest(&teacher_body)}),
+        );
+        write(
+            &directory.join(format!("{teacher_prefix}.raw.json")),
+            &teacher_raw,
+        );
+        let response = dsrust::lm::api::LmResponse {
+            model: Some("gemini-test".into()),
+            outputs: vec![dsrust::lm::api::LmOutput::text(
+                "Existing paid teacher answer",
+            )],
+            ..Default::default()
+        };
+        write(
+            &directory.join(format!("{teacher_prefix}.response.json")),
+            &serde_json::to_value(response).unwrap(),
+        );
+        write(
+            &directory.join(format!("{teacher_prefix}.receipt.json")),
+            &json!({"model":"gemini-test","shared_physical_calls":1,"request_sha256":google::digest(fs::read(directory.join(format!("{teacher_prefix}.request.json"))).unwrap())}),
+        );
+        let mut data = value(&audit).unwrap();
+        data["immutable_plan_sha256"] = json!(plan_sha);
+        data["actual_paid_ledgers"]["student"] = json!({"physical_attempts":3,"maximum_ordinal":3,"uncertain_attempts":0,"settled_success_caches":0,"attempts":attempts});
+        data["actual_paid_ledgers"]["teacher"]["settled_success_caches"] = json!(1);
+        data["recovery"] = json!({"mode":"completed_student_transient","logical_key":key,"request_sha256":request_sha,"failure_sha256":google::digest(fs::read(directory.join(format!("{prefix}.failure.json"))).unwrap()),"maximum_new_attempts":3,"explicit_replacement":true});
+        reseal(directory, &audit, &mut data);
+        (audit, current)
+    }
+    #[test]
+    #[cfg(unix)]
+    fn completed_student_slot_is_explicit_source_bound_and_preserves_all_old_attempts() {
+        let directory = tempfile::tempdir().unwrap();
+        let (audit, current) = closed_student(directory.path());
+        let manifest = prepare(
+            directory.path(),
+            &audit,
+            &current,
+            "Reviewed bounded student transport recovery",
+        )
+        .unwrap();
+        assert_eq!(manifest.version, 2);
+        assert!(manifest.known_unusable_teacher_review.is_null());
+        let slot = manifest.student_recovery.as_ref().unwrap();
+        assert_eq!(
+            (slot.first_physical_ordinal, slot.last_physical_ordinal),
+            (4, 6)
+        );
+        assert_eq!(manifest.student.inherited, 3);
+        assert_eq!(manifest.teacher.inherited, 1);
+        assert_eq!(manifest.teacher_start_model, "gemini-test");
+        assert_ne!(slot.recovery_key, slot.original_key);
+        let output = tempfile::tempdir().unwrap();
+        import(&manifest, &current, output.path()).unwrap();
+        slot.verify_witnesses(&output.path().join("student"))
+            .unwrap();
+        assert!(
+            output
+                .path()
+                .join(format!("student/{}.failure.json", slot.original_key))
+                .exists()
+        );
+        assert!(
+            !output
+                .path()
+                .join(format!("student/{}.request.json", slot.recovery_key))
+                .exists()
+        );
+        assert!(!output.path().join("jobs").exists());
+        let mut without_authorization = value(&audit).unwrap();
+        without_authorization
+            .as_object_mut()
+            .unwrap()
+            .remove("recovery");
+        write(&audit, &without_authorization);
+        assert!(
+            prepare(
+                directory.path(),
+                &audit,
+                &current,
+                "Prose cannot grant a recovery slot"
+            )
+            .is_err()
+        );
+    }
+    #[test]
+    #[cfg(unix)]
+    fn student_slot_rejects_uncertainty_model_answers_nontransients_and_oversized_spans() {
+        for status in [200, 400, 401, 404, 408, 501] {
+            let directory = tempfile::tempdir().unwrap();
+            let (audit, current) = closed_student(directory.path());
+            let mut data = value(&audit).unwrap();
+            let key = data["recovery"]["logical_key"].as_str().unwrap().to_owned();
+            let result_path = directory
+                .path()
+                .join(format!("run/student/{key}.attempt-3.result.json"));
+            let mut result = value(&result_path).unwrap();
+            result["http_status"] = json!(status);
+            write(&result_path, &result);
+            data["actual_paid_ledgers"]["student"]["attempts"][2]["http_status"] = json!(status);
+            reseal(directory.path(), &audit, &mut data);
+            assert!(
+                prepare(
+                    directory.path(),
+                    &audit,
+                    &current,
+                    "No semantic answer retry"
+                )
+                .is_err(),
+                "status {status}"
+            );
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let (audit, current) = closed_student(directory.path());
+        let mut data = value(&audit).unwrap();
+        data["recovery"]["maximum_new_attempts"] = json!(4);
+        write(&audit, &data);
+        assert!(prepare(directory.path(), &audit, &current, "No enlarged span").is_err());
+        data["recovery"]["maximum_new_attempts"] = json!(3);
+        let key = data["recovery"]["logical_key"].as_str().unwrap().to_owned();
+        let result_path = directory
+            .path()
+            .join(format!("run/student/{key}.attempt-2.result.json"));
+        let mut result = value(&result_path).unwrap();
+        result["response_complete"] = json!(false);
+        write(&result_path, &result);
+        reseal(directory.path(), &audit, &mut data);
+        assert!(prepare(directory.path(), &audit, &current, "No uncertain replay").is_err());
+    }
+    #[test]
+    #[cfg(unix)]
+    fn protected_reading_source_delta_needs_exact_recorded_hashes() {
+        let directory = tempfile::tempdir().unwrap();
+        let (audit, mut current) = closed_student(directory.path());
+        current
+            .source_sha256
+            .insert("reading.rs".into(), "new-reviewed-reader".into());
+        assert!(
+            prepare(
+                directory.path(),
+                &audit,
+                &current,
+                "Arbitrary prose is insufficient"
+            )
+            .is_err()
+        );
+        let mut data = value(&audit).unwrap();
+        data["reviewed_protected_source_changes"] =
+            json!({"reading.rs":{"before":"","after":"new-reviewed-reader"}});
+        write(&audit, &data);
+        prepare(
+            directory.path(),
+            &audit,
+            &current,
+            "Exact reviewed reading delta; fresh baseline",
+        )
+        .unwrap();
+        data["reviewed_protected_source_changes"]["reading.rs"]["after"] = json!("other-reader");
+        write(&audit, &data);
+        assert!(prepare(directory.path(), &audit, &current, "Wrong hash").is_err());
     }
     #[test]
     fn inherited_reservations_are_not_reset_and_keep_their_original_ordinals() {

@@ -120,6 +120,10 @@ fn sources() -> BTreeMap<String, String> {
                 "native_export.rs",
                 include_bytes!("native_export.rs").as_slice(),
             ),
+            (
+                "classification_export.rs",
+                include_bytes!("classification_export.rs").as_slice(),
+            ),
             ("Cargo.toml", include_bytes!("../Cargo.toml").as_slice()),
             ("Cargo.lock", include_bytes!("../Cargo.lock").as_slice()),
             (

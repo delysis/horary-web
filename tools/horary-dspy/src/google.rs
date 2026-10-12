@@ -714,6 +714,7 @@ pub struct Google {
     max_submissions: usize,
     quota_block: Mutex<Option<BlockedModel>>,
     serial: Mutex<()>,
+    student_recovery: Option<crate::continuation::StudentRecovery>,
     // Fixed in production; credential-free unit tests substitute a local server.
     api: String,
 }
@@ -746,6 +747,7 @@ impl Google {
             max_submissions: MAX_SUBMISSIONS,
             quota_block: Mutex::new(None),
             serial: Mutex::new(()),
+            student_recovery: None,
             api: API.into(),
         })
     }
@@ -784,6 +786,7 @@ impl Google {
             max_submissions,
             quota_block: Mutex::new(None),
             serial: Mutex::new(()),
+            student_recovery: None,
             api: API.into(),
         })
     }
@@ -796,6 +799,24 @@ impl Google {
     }
     pub fn model_id(&self) -> &str {
         &self.model
+    }
+    /// Only an explicitly closed, source-bound carrier continuation can install
+    /// this slot. The request body stays identical; fresh artifacts never use
+    /// the failed original key or overwrite any inherited attempt.
+    pub fn with_student_recovery(
+        mut self,
+        slot: crate::continuation::StudentRecovery,
+    ) -> Result<Self> {
+        ensure!(
+            self.model == STUDENT
+                && !self.interactions
+                && self.budget.maximum == slot.original_physical_cap
+                && self.budget.spent() + 1 == slot.first_physical_ordinal,
+            "Student recovery requires its original seeded cumulative budget"
+        );
+        slot.verify_witnesses(&self.directory)?;
+        self.student_recovery = Some(slot);
+        Ok(self)
     }
     fn routed_key(&self, request: &LmRequest) -> (LmRequest, String) {
         let mut routed = request.clone();
@@ -818,6 +839,24 @@ impl Google {
             "This experiment permits unconstrained text only"
         );
         let (routed, key) = self.routed_key(request);
+        if let Some(slot) = self
+            .student_recovery
+            .as_ref()
+            .filter(|s| s.original_key == key)
+        {
+            slot.verify_witnesses(&self.directory)?;
+        }
+        if let Some(response) = self.cached_key(&routed, &key)? {
+            return Ok(Some(response));
+        }
+        if let Some(recovery_key) = self.recovery_key(&routed, &key)? {
+            let slot = self.student_recovery.as_ref().context("No recovery slot")?;
+            ensure!(recovery_key == slot.recovery_key, "Recovery key drifted");
+            return self.settled_recovery(slot);
+        }
+        Ok(None)
+    }
+    fn cached_key(&self, routed: &LmRequest, key: &str) -> Result<Option<LmResponse>> {
         let cached = self.directory.join(format!("{key}.response.json"));
         if !cached.exists() {
             return Ok(None);
@@ -826,7 +865,7 @@ impl Google {
             self.directory.join(format!("{key}.request.json")),
         )?)?;
         ensure!(
-            saved["model"] == self.model && saved["request"] == serde_json::to_value(&routed)?,
+            saved["model"] == self.model && saved["request"] == serde_json::to_value(routed)?,
             "Cached Google response request identity differs"
         );
         let mut result: LmResponse = serde_json::from_slice(&fs::read(cached)?)?;
@@ -837,6 +876,128 @@ impl Google {
         );
         result.cache_hit = true;
         Ok(Some(result))
+    }
+    fn recovery_key(&self, routed: &LmRequest, key: &str) -> Result<Option<String>> {
+        let Some(slot) = self
+            .student_recovery
+            .as_ref()
+            .filter(|s| s.original_key == key)
+        else {
+            return Ok(None);
+        };
+        slot.verify_witnesses(&self.directory)?;
+        let saved: Value = serde_json::from_slice(&fs::read(
+            self.directory.join(format!("{key}.request.json")),
+        )?)?;
+        ensure!(
+            saved["model"] == STUDENT && saved["request"] == serde_json::to_value(routed)?,
+            "Explicit student recovery request differs from its completed failure"
+        );
+        let binding_path = self
+            .directory
+            .join(format!("{}.recovery.json", slot.recovery_key));
+        if binding_path.exists() {
+            ensure!(
+                serde_json::from_slice::<Value>(&fs::read(&binding_path)?)?
+                    == serde_json::to_value(slot)?,
+                "Saved student recovery binding differs from its explicit ancestry"
+            );
+        } else {
+            ensure!(
+                !self
+                    .directory
+                    .join(format!("{}.response.json", slot.recovery_key))
+                    .exists(),
+                "Recovered response lacks its explicit closed-owner ancestry"
+            );
+        }
+        Ok(Some(slot.recovery_key.clone()))
+    }
+    fn settled_recovery(
+        &self,
+        slot: &crate::continuation::StudentRecovery,
+    ) -> Result<Option<LmResponse>> {
+        slot.verify_witnesses(&self.directory)?;
+        let original: Value = serde_json::from_slice(&fs::read(
+            self.directory
+                .join(format!("{}.request.json", slot.original_key)),
+        )?)?;
+        let request: LmRequest = serde_json::from_value(original["request"].clone())?;
+        self.recovery_key(&request, &slot.original_key)?;
+        let key = &slot.recovery_key;
+        let Some(response) = self.cached_key(&request, key)? else {
+            return Ok(None);
+        };
+        let read = |suffix: &str| -> Result<Value> {
+            Ok(serde_json::from_slice(&fs::read(
+                self.directory.join(format!("{key}.{suffix}")),
+            )?)?)
+        };
+        let logical_bytes = fs::read(self.directory.join(format!("{key}.request.json")))?;
+        let logical: Value = serde_json::from_slice(&logical_bytes)?;
+        let receipt = read("receipt.json")?;
+        let attempt = receipt["physical_submissions"]
+            .as_u64()
+            .context("No recovered attempt count")? as usize;
+        ensure!(
+            (1..=slot.maximum_new_attempts).contains(&attempt)
+                && logical == original
+                && receipt["model"] == STUDENT
+                && receipt["request_sha256"] == digest(&logical_bytes),
+            "Recovered success has a changed request/body or unbound receipt"
+        );
+        let physical = read(&format!("attempt-{attempt}.request.json"))?;
+        let result = read(&format!("attempt-{attempt}.result.json"))?;
+        let body = fs::read(self.directory.join(format!("{key}.attempt-{attempt}.body")))?;
+        let raw = read("raw.json")?;
+        let ordinal = slot.first_physical_ordinal + attempt - 1;
+        ensure!(
+            physical["logical_key"] == *key
+                && physical["model"] == STUDENT
+                && physical["attempt"] == attempt
+                && physical["physical_call"] == ordinal
+                && physical["request_sha256"] == digest(&logical_bytes)
+                && physical["body"] == original["body"]
+                && physical["body_sha256"] == digest(serde_json::to_vec(&original["body"])?),
+            "Recovered success physical request is outside the exact authorized slot"
+        );
+        ensure!(
+            receipt["shared_physical_calls"] == ordinal
+                && result["logical_key"] == *key
+                && result["attempt"] == attempt
+                && result["physical_call"] == ordinal
+                && result["response_complete"] == true
+                && result["http_status"] == 200
+                && result["automatic_retry"] == false
+                && result["body_sha256"] == digest(&body)
+                && raw == serde_json::from_slice::<Value>(&body)?,
+            "Recovered success lacks a complete hash-bound physical response"
+        );
+        let candidates = raw["candidates"]
+            .as_array()
+            .context("Recovered response has no candidates")?;
+        ensure!(
+            candidates.len() == response.outputs.len()
+                && candidates
+                    .iter()
+                    .zip(&response.outputs)
+                    .all(|(raw, output)| {
+                        let text = raw["content"]["parts"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter(|part| part["thought"] != true)
+                            .filter_map(|part| part["text"].as_str())
+                            .collect::<String>();
+                        raw["finishReason"] != "MAX_TOKENS"
+                            && !text.trim().is_empty()
+                            && output.as_text() == text
+                            && !output.truncated
+                            && output.finish_reason.as_deref() == raw["finishReason"].as_str()
+                    }),
+            "Recovered normalized answer differs from its complete native provider response"
+        );
+        Ok(Some(response))
     }
     /// Verify saved transport evidence without a network operation. Only listed
     /// ordinary text teachers with a complete HTTP200/MAX_TOKENS response qualify.
@@ -1052,13 +1213,26 @@ impl Google {
         tokens: usize,
         request_sha256: &str,
     ) -> Result<(Vec<u8>, usize)> {
+        let recovery = self
+            .student_recovery
+            .as_ref()
+            .filter(|slot| slot.recovery_key == key);
+        let maximum_submissions =
+            recovery.map_or(self.max_submissions, |slot| slot.maximum_new_attempts);
         let endpoint = if self.interactions {
             format!("{}/interactions", self.api)
         } else {
             format!("{}/models/{}:generateContent", self.api, self.model)
         };
         let mut delay = Duration::ZERO;
-        for attempt in 1..=self.max_submissions {
+        for attempt in 1..=maximum_submissions {
+            if let Some(slot) = recovery {
+                ensure!(
+                    self.budget.spent() + 1 == slot.first_physical_ordinal + attempt - 1
+                        && self.budget.spent() < slot.last_physical_ordinal,
+                    "Explicit student recovery ordinal span is stale or exhausted; no submission"
+                );
+            }
             if self.budget.remaining() == 0 {
                 return Err(self.failure(
                     Disposition::BudgetExhausted,
@@ -1183,7 +1357,7 @@ impl Google {
             }
             let next_delay = retry_delay(status.as_u16(), true, attempt, self.budget.remaining())
                 .filter(|_| {
-                    attempt < self.max_submissions
+                    attempt < maximum_submissions
                         && !advice.zero_quota
                         && (!advice.daily_quota
                             || self.model == STUDENT && advice.retry_after.is_some())
@@ -1242,10 +1416,18 @@ impl Google {
             request.output_schema().is_none() && request.tools.is_empty(),
             "This experiment permits unconstrained text only"
         );
-        let (routed, key) = self.routed_key(request);
+        let (routed, canonical_key) = self.routed_key(request);
         let _guard = self.serial.lock().await;
         if let Some(response) = self.cached_response(request)? {
             return Ok(response);
+        }
+        let recovery_key = self.recovery_key(&routed, &canonical_key)?;
+        let key = recovery_key.unwrap_or(canonical_key);
+        if let Some(slot) = &self.student_recovery {
+            ensure!(
+                key == slot.recovery_key || self.settled_recovery(slot)?.is_some(),
+                "The explicit student recovery is unresolved; unrelated fresh submissions are withheld"
+            );
         }
         if self.failed.load(Ordering::Relaxed) {
             return Err(self.failure(
@@ -1322,6 +1504,59 @@ impl Google {
         } else {
             legacy_body.clone()
         };
+        if let Some(slot) = self
+            .student_recovery
+            .as_ref()
+            .filter(|slot| slot.recovery_key == key)
+        {
+            ensure!(
+                self.budget.spent() + 1 == slot.first_physical_ordinal,
+                "Another fresh student call consumed this explicit recovery span"
+            );
+            let original: Value = serde_json::from_slice(&fs::read(
+                self.directory
+                    .join(format!("{}.request.json", slot.original_key)),
+            )?)?;
+            ensure!(
+                body == original["body"],
+                "Student recovery may not change the prompt, generation configuration or provider body"
+            );
+            let binding_path = self.directory.join(format!("{key}.recovery.json"));
+            let binding = serde_json::to_value(slot)?;
+            if binding_path.exists() {
+                ensure!(
+                    serde_json::from_slice::<Value>(&fs::read(&binding_path)?)? == binding,
+                    "Existing student recovery ancestry differs"
+                );
+            } else {
+                write_new(&binding_path, &serde_json::to_vec_pretty(&binding)?)?;
+            }
+            // Restore actual provider limits rather than rediscovering them in
+            // the fresh process. Waiting a witnessed retry interval again is
+            // conservative; it cannot bypass the provider's recorded cooldown.
+            for name in slot
+                .witnesses
+                .keys()
+                .filter(|name| name.ends_with(".result.json"))
+            {
+                let result: Value = serde_json::from_slice(&fs::read(self.directory.join(name))?)?;
+                if result["http_status"] == 429 {
+                    let body_path = name
+                        .strip_suffix("result.json")
+                        .context("Invalid result path")?
+                        .to_owned()
+                        + "body";
+                    let bytes = fs::read(self.directory.join(body_path))?;
+                    let header = result["provider_quota_advice"]["retry_after_header"].as_str();
+                    let advice = quota_advice(&bytes, header, &self.model);
+                    ensure!(
+                        !advice.zero_quota && !advice.daily_quota,
+                        "Zero or daily quota cannot use this completed-transient recovery slot"
+                    );
+                    self.limiter.observe(&advice).await;
+                }
+            }
+        }
         let counted = self.directory.join(format!("{key}.tokens.json"));
         let count: Value = if counted.exists() {
             serde_json::from_slice(&fs::read(&counted)?)?
@@ -1694,6 +1929,251 @@ pub(crate) mod tests {
     fn artifact(directory: &Path, key: &str, suffix: &str) -> Value {
         serde_json::from_slice(&fs::read(directory.join(format!("{key}.{suffix}"))).unwrap())
             .unwrap()
+    }
+
+    fn completed_student_slot(
+        directory: &Path,
+        request: &LmRequest,
+        cap: usize,
+    ) -> crate::continuation::StudentRecovery {
+        let key = request.cache_key(STUDENT);
+        let body = json!({"systemInstruction":{"parts":[{"text":request.system()}]},"contents":[{"role":"user","parts":[{"text":request.wire_messages()[1]["content"]}]}],"generationConfig":{"temperature":0.0,"maxOutputTokens":4096,"thinkingConfig":{"thinkingLevel":"MINIMAL","includeThoughts":false}}});
+        let logical =
+            serde_json::to_vec_pretty(&json!({"model":STUDENT,"request":request,"body":body}))
+                .unwrap();
+        fs::write(directory.join(format!("{key}.request.json")), &logical).unwrap();
+        for (attempt, status) in [(1, 500), (2, 429), (3, 500)] {
+            let response = format!(
+                "{{\"error\":{{\"code\":{status},\"message\":\"Synthetic completed transient\"}}}}"
+            );
+            fs::write(directory.join(format!("{key}.attempt-{attempt}.request.json")), json!({"logical_key":key,"attempt":attempt,"physical_call":attempt,"model":STUDENT,"request_sha256":digest(&logical),"body":body,"body_sha256":digest(serde_json::to_vec(&body).unwrap())}).to_string()).unwrap();
+            fs::write(
+                directory.join(format!("{key}.attempt-{attempt}.body")),
+                &response,
+            )
+            .unwrap();
+            fs::write(directory.join(format!("{key}.attempt-{attempt}.result.json")), json!({"logical_key":key,"attempt":attempt,"physical_call":attempt,"http_status":status,"response_complete":true,"automatic_retry":attempt<3,"body_sha256":digest(response)}).to_string()).unwrap();
+        }
+        fs::write(directory.join(format!("{key}.failure.json")), json!({"http_status":500,"response_complete":true,"automatic_retry":false,"disposition":"quota_or_unavailable","physical_submissions":3}).to_string()).unwrap();
+        let witnesses = fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                (
+                    entry.file_name().to_str().unwrap().to_owned(),
+                    digest(fs::read(entry.path()).unwrap()),
+                )
+            })
+            .collect();
+        let mut slot = crate::continuation::StudentRecovery {
+            version: 1,
+            model: STUDENT.into(),
+            original_key: key,
+            original_request_sha256: digest(logical),
+            closure_receipt_sha256: digest("Synthetic authoritative closure"),
+            recovery_key: String::new(),
+            witnesses,
+            maximum_new_attempts: 3,
+            first_physical_ordinal: 4,
+            last_physical_ordinal: 6,
+            original_physical_cap: cap,
+        };
+        slot.recovery_key = slot.expected_key();
+        slot
+    }
+
+    #[tokio::test]
+    async fn explicit_completed_student_recovery_uses_distinct_artifacts_and_reuses_success() {
+        let mock = Mock::new(vec![
+            Reply::Complete(200, SUCCESS),
+            Reply::Complete(200, SUCCESS),
+        ]);
+        let directory = tempfile::tempdir().unwrap();
+        let request = prompt("Synthetic original first message");
+        let slot = completed_student_slot(directory.path(), &request, 20);
+        fs::write(
+            directory
+                .path()
+                .join(format!("{}.tokens.json", slot.recovery_key)),
+            json!({"totalTokens":20}).to_string(),
+        )
+        .unwrap();
+        let mut model = mock.model(directory.path(), 20, 100_000);
+        model.budget = CallBudget::seeded(20, 3).unwrap();
+        let model = model.with_student_recovery(slot.clone()).unwrap();
+        let response = model
+            .forward(&reqwest::Client::new(), &request)
+            .await
+            .unwrap();
+        assert_eq!(response.first_text(), "Observed response");
+        assert_eq!(model.budget.spent(), 4);
+        assert_eq!(
+            artifact(
+                directory.path(),
+                &slot.recovery_key,
+                "attempt-1.request.json"
+            )["physical_call"],
+            4
+        );
+        assert_eq!(
+            artifact(directory.path(), &slot.recovery_key, "recovery.json"),
+            json!(slot)
+        );
+        for (name, hash) in &slot.witnesses {
+            assert_eq!(
+                digest(fs::read(directory.path().join(name)).unwrap()),
+                *hash
+            );
+        }
+        let reused = model
+            .forward(&reqwest::Client::new(), &request)
+            .await
+            .unwrap();
+        assert!(reused.cache_hit);
+        assert_eq!(mock.requests.lock().unwrap().len(), 1);
+        assert_eq!(model.budget.spent(), 4);
+        let next = prompt("Unrelated fresh work after a settled recovery");
+        counted(directory.path(), &next, 20);
+        model.forward(&reqwest::Client::new(), &next).await.unwrap();
+        assert_eq!(model.budget.spent(), 5);
+        assert_eq!(mock.requests.lock().unwrap().len(), 2);
+        let response_path = directory
+            .path()
+            .join(format!("{}.response.json", slot.recovery_key));
+        let mut altered = artifact(directory.path(), &slot.recovery_key, "response.json");
+        altered["outputs"][0]["parts"][0]["text"] = json!("Invented replacement");
+        fs::write(&response_path, serde_json::to_vec(&altered).unwrap()).unwrap();
+        assert!(model.cached_response(&request).is_err());
+    }
+
+    #[tokio::test]
+    async fn unresolved_explicit_slot_blocks_an_unrelated_uncached_prompt_without_spending_259() {
+        let mock = Mock::new(vec![]);
+        let directory = tempfile::tempdir().unwrap();
+        let original = prompt("Exact synthetic failed first message");
+        let mut slot = completed_student_slot(directory.path(), &original, 18_000);
+        for attempt in 1..=3 {
+            for suffix in ["request.json", "result.json"] {
+                let name = format!("{}.attempt-{attempt}.{suffix}", slot.original_key);
+                let mut data = artifact(
+                    directory.path(),
+                    &slot.original_key,
+                    &format!("attempt-{attempt}.{suffix}"),
+                );
+                data["physical_call"] = json!(255 + attempt);
+                fs::write(
+                    directory.path().join(&name),
+                    serde_json::to_vec(&data).unwrap(),
+                )
+                .unwrap();
+                slot.witnesses.insert(
+                    name.clone(),
+                    digest(fs::read(directory.path().join(name)).unwrap()),
+                );
+            }
+        }
+        slot.first_physical_ordinal = 259;
+        slot.last_physical_ordinal = 261;
+        let mut model = mock.model(directory.path(), 18_000, 100_000);
+        model.budget = CallBudget::seeded(18_000, 258).unwrap();
+        let model = model.with_student_recovery(slot).unwrap();
+        let unrelated = prompt("Unrelated uncached request before recovery");
+        let error = model
+            .forward(&reqwest::Client::new(), &unrelated)
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("unrelated fresh submissions are withheld")
+        );
+        assert_eq!(model.budget.spent(), 258);
+        assert!(mock.requests.lock().unwrap().is_empty());
+        assert!(
+            !directory
+                .path()
+                .join(format!("{}.request.json", unrelated.cache_key(STUDENT)))
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_student_recovery_cannot_repeat_a_failed_or_uncertain_fresh_slot() {
+        for uncertain in [false, true] {
+            let replies = if uncertain {
+                vec![Reply::Disconnect]
+            } else {
+                vec![
+                    Reply::Complete(500, "Known complete transient"),
+                    Reply::Complete(500, "Known complete transient"),
+                    Reply::Complete(500, "Known complete transient"),
+                ]
+            };
+            let mock = Mock::new(replies);
+            let directory = tempfile::tempdir().unwrap();
+            let request = prompt("One explicit synthetic recovery");
+            let slot = completed_student_slot(directory.path(), &request, 6);
+            fs::write(
+                directory
+                    .path()
+                    .join(format!("{}.tokens.json", slot.recovery_key)),
+                json!({"totalTokens":20}).to_string(),
+            )
+            .unwrap();
+            let mut model = mock.model(directory.path(), 6, 100_000);
+            model.budget = CallBudget::seeded(6, 3).unwrap();
+            let model = model.with_student_recovery(slot.clone()).unwrap();
+            let error = model
+                .forward(&reqwest::Client::new(), &request)
+                .await
+                .unwrap_err();
+            assert_eq!(
+                disposition(&error).unwrap().disposition,
+                if uncertain {
+                    Disposition::Uncertain
+                } else {
+                    Disposition::QuotaOrUnavailable
+                }
+            );
+            let calls = mock.requests.lock().unwrap().len();
+            assert_eq!(calls, if uncertain { 1 } else { 3 });
+            assert!(
+                model
+                    .forward(&reqwest::Client::new(), &request)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(mock.requests.lock().unwrap().len(), calls);
+            assert_eq!(model.budget.spent(), if uncertain { 4 } else { 6 });
+            for (name, hash) in &slot.witnesses {
+                assert_eq!(
+                    digest(fs::read(directory.path().join(name)).unwrap()),
+                    *hash
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_student_slot_rejects_changed_request_witness_or_reset_budget_before_network() {
+        let mock = Mock::new(vec![]);
+        let directory = tempfile::tempdir().unwrap();
+        let request = prompt("Original synthetic question");
+        let slot = completed_student_slot(directory.path(), &request, 6);
+        let model = mock.model(directory.path(), 6, 100_000);
+        assert!(model.with_student_recovery(slot.clone()).is_err());
+        let mut model = mock.model(directory.path(), 6, 100_000);
+        model.budget = CallBudget::seeded(6, 3).unwrap();
+        let model = model.with_student_recovery(slot.clone()).unwrap();
+        fs::write(
+            directory
+                .path()
+                .join(format!("{}.attempt-2.body", slot.original_key)),
+            "Modified old evidence",
+        )
+        .unwrap();
+        assert!(model.cached_response(&request).is_err());
+        assert!(mock.requests.lock().unwrap().is_empty());
     }
 
     #[test]

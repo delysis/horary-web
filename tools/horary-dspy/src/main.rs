@@ -329,13 +329,20 @@ async fn main() -> Result<()> {
             )?;
             let student_info: google::ModelInfo =
                 serde_json::from_value(listing["student"].clone()).context("No listed student")?;
-            let student = Arc::new(google::Google::from_listing(
+            let mut student = google::Google::from_listing(
                 student_info,
                 http.clone(),
                 output.join("student"),
                 student_budget,
                 student_limiter,
-            )?);
+            )?;
+            if let Some(slot) = carried
+                .as_ref()
+                .and_then(|manifest| manifest.student_recovery.clone())
+            {
+                student = student.with_student_recovery(slot)?;
+            }
+            let student = Arc::new(student);
             let teacher = if let Some(carried) = &carried {
                 ensure!(
                     matches!(configuration.teacher, Teacher::Pool),
