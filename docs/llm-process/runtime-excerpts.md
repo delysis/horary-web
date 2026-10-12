@@ -146,6 +146,9 @@ fn follow_up_words(session: &Session) -> String {
 }
 
 fn is_resume_request(words: &str) -> bool {
+    if is_chart_request(words) {
+        return true;
+    }
     let words = words
         .trim()
         .trim_end_matches(['.', '!', '?'])
@@ -159,6 +162,39 @@ fn is_resume_request(words: &str) -> bool {
             | "cast the chart"
             | "finish the reading"
             | "continue the reading"
+    )
+}
+
+/// An explicit calculation request is separate from permission to interpret.
+/// Match whole commands so questions about casting, refusals and quoted plans
+/// cannot start a calculation accidentally.
+fn is_chart_request(words: &str) -> bool {
+    let normalized = words
+        .trim()
+        .trim_end_matches(['.', '!', '?'])
+        .to_lowercase();
+    let mut command = normalized.as_str();
+    loop {
+        let next = [
+            "ok ",
+            "okay ",
+            "please ",
+            "can you ",
+            "could you ",
+            "would you ",
+        ]
+        .iter()
+        .find_map(|prefix| command.strip_prefix(prefix));
+        match next {
+            Some(next) => command = next,
+            None => break,
+        }
+    }
+    command = command.strip_suffix(" now").unwrap_or(command);
+    command = command.strip_suffix(" please").unwrap_or(command);
+    matches!(
+        command,
+        "cast the chart" | "cast a chart" | "run the chart" | "run a chart"
     )
 }
 
@@ -1224,10 +1260,18 @@ fn prepare_reading(
         .expect("Consultation installed")
         .plan(None);
     session.audit.push(json!({"event":"contract_plan","catalogueVersion":contracts::VERSION,"caseRevision":session.method.consultation.as_ref().map(|c|c.revision),"plan":plan}));
-    if plan
-        .limitation
-        .as_ref()
-        .is_some_and(|l| l.code == "unsupported_facet")
+    let chart_only_limit = is_chart_request(&words)
+        && session
+            .method
+            .consultation
+            .as_ref()
+            .is_some_and(|case| case.understood())
+        && plan.limitation.is_some();
+    if !chart_only_limit
+        && plan
+            .limitation
+            .as_ref()
+            .is_some_and(|l| l.code == "unsupported_facet")
     {
         contract_limitation(
             session,
@@ -1236,12 +1280,22 @@ fn prepare_reading(
         return Ok(None);
     }
     if let Some(need) = plan.needs.iter().find(|need| {
-        need.key != RequirementKey::ChartPlace || need.state != "native_acquisition_pending"
+        (!chart_only_limit
+            || matches!(
+                need.key,
+                RequirementKey::ChartPlace
+                    | RequirementKey::ChartMoment
+                    | RequirementKey::Field(
+                        contracts::Field::ReaderPlace | contracts::Field::QuestionTime
+                    )
+            ))
+            && (need.key != RequirementKey::ChartPlace
+                || need.state != "native_acquisition_pending")
     }) {
         contract_question(session, need);
         return Ok(None);
     }
-    if let Some(limitation) = &plan.limitation {
+    if let Some(limitation) = plan.limitation.as_ref().filter(|_| !chart_only_limit) {
         contract_limitation(session, limitation);
         return Ok(None);
     }
@@ -1445,6 +1499,14 @@ fn prepare_reading(
         session.sections.clear();
         session.status = "The sky at this question’s moment…".into();
         runtime.publish(session)?;
+    }
+    if chart_only_limit {
+        let limitation = plan.limitation.as_ref().expect("Explicit chart-only limit");
+        session.audit.push(json!({"event":"explicit_chart_calculation",
+            "chart_exists":true,"interpretation_executed":false,"limitation":limitation,
+            "basis":"The person explicitly requested the chart. Calculation does not authorize an unsupported interpretation."}));
+        contract_limitation(session, limitation);
+        return Ok(None);
     }
     let anchor = contracts::Anchor {
         timestamp_ms: timestamp,
@@ -1662,6 +1724,18 @@ fn with_contact_judgment_limits(mut input: Value, facts: &[Fact]) -> Result<Valu
                 }
             }
         }
+        if let Some(rows) = worksheet
+            .get_mut("edge_interpretations")
+            .filter(|_| name == "reception")
+            .and_then(Value::as_array_mut)
+        {
+            for row in rows.iter_mut().filter_map(Value::as_object_mut) {
+                // Only the five mechanically checked identity/quality fields
+                // reach final Contact synthesis. Original prose stays recorded.
+                row.remove("interpretation");
+                row.remove("limitations");
+            }
+        }
     }
     Ok(input)
 }
@@ -1694,6 +1768,24 @@ fn reception_clipboard_view(
         })
         .collect();
     json!({"accepted_roles":roles,"edges":edges})
+}
+
+#[cfg(test)]
+pub(crate) fn reception_receipt_fixture(input: &Value) -> Value {
+    let input = step::original_input(input);
+    let roles = input["native_reception"]["accepted_roles"].as_array();
+    let rows = input["facts"].as_array().into_iter().flatten().filter_map(|fact| {
+        if fact["kind"] != "reception" || !fact["reception"].is_object() {return None;}
+        let ids = |endpoint| roles.into_iter().flatten().filter(|role|role["planet"]==fact["reception"][endpoint])
+            .map(|role|role["selected_id"].clone()).collect::<Vec<_>>();
+        let qualities = |polarity| fact["reception"]["qualities"].as_array().into_iter().flatten()
+            .filter(|quality|quality["polarity"]==polarity).map(|quality|quality["dignity"].clone()).collect::<Vec<_>>();
+        Some(json!({"edge_id":fact["id"],"regarding_actor_ids":ids("guestPlanet"),"regarded_actor_ids":ids("hostPlanet"),
+            "positive_qualities":qualities("positive"),"negative_qualities":qualities("negative"),
+            "interpretation":"Receipt-only offline fixture; contextual truth is unobserved.",
+            "limitations":"No event, reverse regard or timing is established."}))
+    }).collect::<Vec<_>>();
+    json!(rows)
 }
 
 fn generate_reading(
@@ -2469,6 +2561,104 @@ mod tests {
         .err()
         .unwrap();
         assert!(error.contains("house ruler has first claim"));
+    }
+
+    #[test]
+    fn reception_rows_cross_real_clipboard_repair_and_contact_final_boundary() {
+        let (role_input, role_worksheet, facts) = reception_binding_fixture();
+        let step::Checked::Data(permit) = step::check(
+            Stage::Significators,
+            Matter::Other,
+            &role_worksheet,
+            &role_input,
+            &facts,
+        )
+        .unwrap() else {
+            panic!("Actual native role permit required")
+        };
+        let roles = accepted_reception_roles(&permit).unwrap();
+        let clipboard = reception_clipboard(&roles, &facts);
+        let rows = facts
+            .iter()
+            .filter_map(|fact| {
+                let edge = fact
+                    .reception
+                    .as_ref()
+                    .filter(|_| fact.kind == "reception")?;
+                let ids = |planet: &str| {
+                    roles
+                        .iter()
+                        .filter(|role| role.planet == planet)
+                        .map(|role| role.selected_id.clone())
+                        .collect::<Vec<_>>()
+                };
+                let qualities = |polarity| {
+                    edge.qualities
+                        .iter()
+                        .filter(|quality| quality.polarity == polarity)
+                        .map(|quality| quality.dignity.native_name().to_owned())
+                        .collect::<Vec<_>>()
+                };
+                Some(reading_method::ReceptionInterpretation {
+                    edge_id: fact.id.clone(),
+                    regarding_actor_ids: ids(&edge.guest_planet),
+                    regarded_actor_ids: ids(&edge.host_planet),
+                    positive_qualities: qualities(reading_method::ReceptionPolarity::Positive),
+                    negative_qualities: qualities(reading_method::ReceptionPolarity::Negative),
+                    interpretation: "UNQUALIFIED_RECEPTION_STORY".into(),
+                    limitations: "UNQUALIFIED_RECEPTION_LIMIT_PROSE".into(),
+                })
+            })
+            .collect::<Vec<_>>();
+        let input = json!({"roles":permit.roles(),"facts":facts,"native_reception":clipboard});
+        let mut checks = serde_json::Map::new();
+        for key in Stage::Reception.checks() {
+            checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Offline native receipt test only."}));
+        }
+        let worksheet = json!({"checks":checks,"summary":"No semantic reading qualification.","unknowns":[],"edge_interpretations":rows});
+        let before = worksheet.clone();
+        let mut rejected = worksheet.clone();
+        rejected["edge_interpretations"][0]["regarding_actor_ids"] = json!([]);
+        let error = step::check(Stage::Reception, Matter::Other, &rejected, &input, &facts)
+            .err()
+            .unwrap();
+        assert!(error.contains("regarding_actor_ids"));
+        let repair = json!({"original_input":input,"previous_worksheet":rejected,"native_validation_error":error});
+        let step::Checked::Data(accepted) =
+            step::check(Stage::Reception, Matter::Other, &worksheet, &repair, &facts).unwrap()
+        else {
+            panic!("Corrected same-stage row should complete")
+        };
+        assert_eq!(accepted.worksheet(), &before);
+        let final_input = json!({"reading_request":{"binding":{"frame":{"method":"contact"}}},
+            "reception":accepted.worksheet(),"timing":{"timing_status":"unestablished"},
+            "contacts":{"candidate_ids":[]},"facts":facts,"roles":permit.roles()});
+        let final_view = with_contact_judgment_limits(final_input.clone(), &facts).unwrap();
+        assert!(!final_view.to_string().contains("UNQUALIFIED_RECEPTION_"));
+        assert!(final_input
+            .to_string()
+            .contains("UNQUALIFIED_RECEPTION_STORY"));
+        for (projected, original) in final_view["reception"]["edge_interpretations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .zip(&rows)
+        {
+            let original = serde_json::to_value(original).unwrap();
+            assert_eq!(projected.as_object().unwrap().len(), 5);
+            for key in [
+                "edge_id",
+                "regarding_actor_ids",
+                "regarded_actor_ids",
+                "positive_qualities",
+                "negative_qualities",
+            ] {
+                assert_eq!(projected[key], original[key]);
+            }
+        }
+        assert_eq!(final_view["facts"], final_input["facts"]);
+        assert_eq!(final_view["roles"], final_input["roles"]);
+        assert_eq!(worksheet, before);
     }
 
     #[test]
@@ -3315,6 +3505,9 @@ mod selected_stage_execution_tests {
                         checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Offline mechanics only"}));
                     }
                     let mut value = json!({"checks":checks,"summary":"Offline mechanics only; no source-correct reading claimed","unknowns":[]});
+                    if stage == Stage::Reception {
+                        value["edge_interpretations"] = reception_receipt_fixture(original);
+                    }
                     if stage == Stage::Condition {
                         for (facet, key) in [
                             ("essential", "own_dignity"),
@@ -3425,6 +3618,134 @@ mod selected_stage_execution_tests {
     }
     fn execute(target: Option<Stage>, reject_first: bool) -> (Session, Reader, Result<(), String>) {
         execute_with(target, reject_first, JudgmentReply::Answer)
+    }
+
+    #[test]
+    fn explicit_chart_request_calculates_despite_interpretation_limit_and_keeps_anchor() {
+        use crate::reading_contracts as contracts;
+        use contracts::{Consultation, Evidence, Facet, Frame, Method, Observation, Slot};
+        fn resolved<T>(value: T) -> Slot<T> {
+            Slot::Resolved {
+                observation: Observation {
+                    value,
+                    evidence: Evidence::Migration {
+                        detail: "Synthetic chart execution regression".into(),
+                    },
+                },
+            }
+        }
+        for facet in [Facet::Event, Facet::Situation] {
+            let reader = Reader {
+                dir: tempfile::tempdir().unwrap(),
+                target: None,
+                calls: Mutex::new(vec![]),
+                reject_first: AtomicBool::new(false),
+                judgment: JudgmentReply::Answer,
+            };
+            let question = "Will my application launch successfully?";
+            let mut session = Session {
+                question: question.into(),
+                ..Default::default()
+            };
+            session.method.brief.question = question.into();
+            session.method.consultation = Some(Consultation {
+                question: resolved(question.into()),
+                frame: resolved(Frame {
+                    method: Method::Undertaking,
+                    facet,
+                }),
+                subject: resolved(crate::horary_role_options::Subject {
+                    name: "My application launch".into(),
+                    kind: "other".into(),
+                    owner_id: "querent".into(),
+                    source_quote: "my application".into(),
+                }),
+                ..Default::default()
+            });
+            session.candidates.push(place());
+            session.candidate_moment_ms = Some(1789387200000.);
+            session.messages.push(Message {
+                role: "user".into(),
+                text: "continue".into(),
+            });
+            let previous = session.clone();
+            assert!(prepare_reading(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387300000.,
+                None,
+                &previous
+            )
+            .unwrap()
+            .is_none());
+            assert!(
+                session.chart.is_none(),
+                "An ordinary resume must retain the interpretation limit"
+            );
+            session.messages.push(Message {
+                role: "user".into(),
+                text: "OK can you run the chart now".into(),
+            });
+            let previous = session.clone();
+            assert!(prepare_reading(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387400000.,
+                None,
+                &previous
+            )
+            .unwrap()
+            .is_none());
+            assert_eq!(
+                session.chart.as_ref().unwrap()["timestampMs"],
+                1789387200000.
+            );
+            assert!(matches!(
+                session.method.result,
+                Some(contracts::ReadingResult::Limited { .. })
+            ));
+            assert!(session.sections.is_empty());
+            assert!(
+                reader.calls.lock().unwrap().is_empty(),
+                "No specialist or judgment bypass"
+            );
+            let chart = session.chart.clone();
+            let previous = session.clone();
+            prepare_reading(
+                &mut session,
+                &reader,
+                &GeocodeState::default(),
+                1789387500000.,
+                None,
+                &previous,
+            )
+            .unwrap();
+            assert_eq!(
+                session.chart, chart,
+                "Repeated request keeps the understood question's sky"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_commands_exclude_negation_explanation_and_other_matter() {
+        for words in [
+            "cast the chart",
+            "Please cast the chart",
+            "OK can you run the chart now?",
+        ] {
+            assert!(is_chart_request(words));
+        }
+        for words in [
+            "Don't cast the chart",
+            "Why didn't you cast the chart?",
+            "Can you explain the chart now",
+            "Will I cast the chart successfully?",
+        ] {
+            assert!(!is_chart_request(words));
+        }
     }
     fn execute_with(
         target: Option<Stage>,
@@ -3994,7 +4315,7 @@ mod real_reading {
                 &self.state,
                 prompt.clone(),
                 NativeGenerateOptions {
-                    max_tokens: if stage == Stage::Judgment { 1400 } else { 1000 },
+                    max_tokens: step::generation_token_budget(stage, input),
                     temperature: 0.,
                     cache_lesson: audio.is_none(),
                     audio: audio.map(<[u8]>::to_vec),
@@ -4021,7 +4342,8 @@ mod real_reading {
             let prompts = tasks
                 .iter()
                 .map(|(stage, matter, input, contract)| {
-                    prompt(*stage, *matter, input, contract).map(|p| (p, 1000))
+                    prompt(*stage, *matter, input, contract)
+                        .map(|p| (p, step::generation_token_budget(*stage, input)))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let result = generate_native_batch(
@@ -4648,6 +4970,9 @@ fn process_examples_with_chart(
                         checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Authored fixture, not a model assessment."}));
                     }
                     let mut answer = json!({"checks":checks,"summary":"Authored fixture; no astrology interpretation is asserted.","unknowns":[]});
+                    if stage == Stage::Reception {
+                        answer["edge_interpretations"] = reception_receipt_fixture(input);
+                    }
                     if stage == Stage::Condition {
                         // The source-export fixture satisfies native coverage
                         // without inventing an interpretation of any fact.
@@ -5469,6 +5794,11 @@ pub(crate) fn clipboard(session: &Session) -> Value {
         })
         .map(|r| json!({"stage":r.stage,"finding":r.worksheet}))
         .collect();
+    let result_kind = session.method.result.as_ref().map(|result| match result {
+        ReadingResult::Judgment { .. } => "judgment",
+        ReadingResult::NeedsInformation { .. } => "needs_information",
+        ReadingResult::Limited { .. } => "limited",
+    });
     json!({"latest_words":session.messages.iter().rev().find(|m|m.role=="user").map(|m|&m.text),
         "dialogue":dialogue,"canonical_question":session.question,
         "consultation":session.method.consultation.as_ref().map(|c|c.recognition_snapshot()),"reminders":reminders,
@@ -5478,6 +5808,12 @@ pub(crate) fn clipboard(session: &Session) -> Value {
         "anchor_policy":"For an ordinary consultation, use the reader's location and when the question became clear. Device place is this app's default reader location, not the event venue. An explicit earlier consultation or corrected reader location requires its own verified anchor.",
         "chart_state":if anchor.is_some(){"cast"}else{"not_cast"},
         "state_reminder":if anchor.is_some(){"A chart exists; distinguish its facts from unfinished judgment."}else{"No chart has been cast. Discuss the question or the book's method, never findings from this chart."},
+        // respond() is the end of this turn, after native preparation has
+        // stopped. A user request or an old job is not scheduled future work.
+        "action_state":{"after_reply":"wait_for_user","scheduled_actions":[],
+            "chart_available":anchor.is_some(),"answer_available":current_answer(session).is_some(),
+            "result":result_kind,
+            "authority":"This reply does not schedule chart casting, preparation or a reading. Report completed work only when available; explain an actual limit or obtain a genuine missing answer."},
         "reader_place":session.place,"device_place_available":device,
         "specialist_findings":specialists,"unfinished_requests":session.method.flow.pending,
         "authority":"The clipboard owns accepted facts and readiness. This response speaks to the person; it cannot authorize a chart or unsupported judgment."})
@@ -5510,6 +5846,95 @@ pub(crate) fn validate_ask(input: &Value, value: &Value) -> Result<(), String> {
         {
             return Err(format!(
                 "The current native request is still answerable and unresolved. Bind ask to one of these current actionable reminders: {allowed:?}, and obtain its answer in your own words. You may choose the order of genuine gaps. No sourced unavailability or method limit permits abandoning them. The binding alone is not evidence that your prose asks the right question."
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A narrow backstop for explicit first-person work claims. The native action
+/// boundary and state-selected instruction are primary; this does not certify
+/// all conversational meaning or treat a phrase match as a scheduled action.
+pub(crate) fn validate_work_claim(input: &Value, value: &Value) -> Result<(), String> {
+    let Some(reply) = value["reply"].as_str() else {
+        return Ok(()); // The response schema owns its type.
+    };
+    for clause in reply.split(['.', '!', '?', ';', ':', '\n']) {
+        let normalized = clause.to_lowercase().replace('’', "'");
+        let words: Vec<_> = normalized
+            .split(|c: char| !c.is_alphabetic() && c != '\'')
+            .filter(|word| !word.is_empty())
+            .collect();
+        for (start, word) in words.iter().enumerate() {
+            let (offset, completed) = match (*word, words.get(start + 1).copied()) {
+                ("i", Some("will" | "am")) | ("we", Some("will" | "are")) => (2, false),
+                ("i", Some("have")) | ("we", Some("have")) => (2, true),
+                ("i" | "we", Some("cast" | "calculated" | "drew" | "prepared")) => (1, true),
+                ("i'll" | "i'm" | "we'll" | "we're", _) => (1, false),
+                ("i've" | "we've", _) => (1, true),
+                ("let", Some("me" | "us")) => (2, false),
+                ("let's", _) => (1, false),
+                _ => continue,
+            };
+            // Conditional capability and explicit negation do not announce
+            // execution. Keep them usable for honest explanations of a gap.
+            if words[..start]
+                .iter()
+                .any(|w| matches!(*w, "if" | "once" | "when" | "unless"))
+            {
+                continue;
+            }
+            let work = &words[start + offset..];
+            let Some(action) = work.iter().take(5).position(|w| {
+                matches!(
+                    *w,
+                    "cast"
+                        | "casting"
+                        | "calculate"
+                        | "calculating"
+                        | "calculated"
+                        | "draw"
+                        | "drawing"
+                        | "drew"
+                        | "prepare"
+                        | "preparing"
+                        | "prepared"
+                        | "begin"
+                        | "beginning"
+                        | "start"
+                        | "starting"
+                )
+            }) else {
+                continue;
+            };
+            let Some(object) = work
+                .iter()
+                .skip(action + 1)
+                .take(8)
+                .position(|w| matches!(*w, "chart" | "reading"))
+            else {
+                continue;
+            };
+            let end = action + 1 + object;
+            if work[..=end]
+                .iter()
+                .any(|w| matches!(*w, "not" | "never" | "no"))
+                || work[end + 1..]
+                    .iter()
+                    .any(|w| matches!(*w, "if" | "once" | "when" | "unless"))
+            {
+                continue;
+            }
+            let chart = work[end] == "chart";
+            if completed && chart && input["chart_state"] == "cast" {
+                continue;
+            }
+            if completed && !chart && input["action_state"]["answer_available"] == true {
+                continue;
+            }
+            return Err(format!(
+                "The reply claims chart casting or reading preparation without its native authority. chart_state={}; this conversation ends the turn and schedules no further calculation. Report only actual completed work, explain the current method limit if present, or ask for a genuine bound missing answer. Do not promise casting/preparation or imply that work continues after this reply.",
+                input["chart_state"].as_str().unwrap_or("unknown")
             ));
         }
     }
@@ -5568,7 +5993,7 @@ pub(crate) fn schema(input: &Value) -> Value {
     };
     json!({"type":"object","properties":{
         "ask":{"type":"string","enum":choices,"description":"Choose the exact missing-answer reminder before composing reply. Empty means no fact is being elicited. The spoken question must obtain this reminder's answer, not a different detail."},
-        "reply":{"type":"string","maxLength":1600,"description":"Speak naturally to the person. If ask is nonempty, obtain that exact missing answer in one contextual question, preserving known names and circumstances."}
+        "reply":{"type":"string","maxLength":1600,"description":"Speak naturally to the person within action_state: no chart casting or reading preparation follows this reply. Explain an actual limit without a preparation promise. If ask is nonempty, obtain that exact missing answer in one contextual question, preserving known names and circumstances."}
     },"required":["reply","ask"],"additionalProperties":false})
 }
 
@@ -5698,6 +6123,134 @@ mod tests {
             },
         });
         clipboard(&session)
+    }
+
+    #[test]
+    fn limited_question_has_no_casting_authority_despite_available_device_place() {
+        let mut session = complete_case_session();
+        session.chart = None;
+        session.candidates.push(session.place.clone().unwrap());
+        let case = session.method.consultation.as_mut().unwrap();
+        case.frame = resolved(reading_contracts::Frame {
+            method: reading_contracts::Method::Undertaking,
+            facet: reading_contracts::Facet::Event,
+        });
+        let plan = case.plan(None);
+        let limitation = plan.limitation.as_ref().unwrap();
+        session.method.result = Some(ReadingResult::Limited {
+            limitation: limitation.into(),
+        });
+        let input = clipboard(&session);
+        assert_eq!(input["chart_state"], "not_cast");
+        assert_eq!(input["device_place_available"], true);
+        assert_eq!(input["action_state"]["scheduled_actions"], json!([]));
+        assert_eq!(input["action_state"]["result"], "limited");
+        assert_eq!(input["action_state"]["chart_available"], false);
+        assert_eq!(required_ask(&input), None);
+        assert!(horary_step::check(Stage::Conversation, Matter::Other,
+            &json!({"reply":"I haven't cast a chart, and I haven't established an answer to that undertaking.","ask":""}),
+            &input, &[]).is_ok());
+        for reply in [
+            "I'm casting the chart now.",
+            "I'll prepare your reading.",
+            "I have cast your chart.",
+            "I cast the chart.",
+            "Let me calculate the chart for you.",
+        ] {
+            let error = horary_step::check(
+                Stage::Conversation,
+                Matter::Other,
+                &json!({"reply":reply,"ask":""}),
+                &input,
+                &[],
+            )
+            .err()
+            .unwrap();
+            assert!(
+                error.contains("schedules no further calculation"),
+                "{reply}: {error}"
+            );
+        }
+        assert!(session.chart.is_none());
+        assert!(matches!(
+            session.method.result,
+            Some(ReadingResult::Limited { .. })
+        ));
+    }
+
+    #[test]
+    fn completed_chart_allows_factual_report_but_not_unscheduled_preparation() {
+        let input = clipboard(&complete_case_session());
+        assert_eq!(input["chart_state"], "cast");
+        assert_eq!(input["action_state"]["answer_available"], false);
+        validate_work_claim(
+            &input,
+            &json!({"reply":"I have cast the chart, but haven't established an answer."}),
+        )
+        .unwrap();
+        for reply in [
+            "I'll calculate another chart now.",
+            "I'm preparing your reading.",
+            "I have prepared your reading.",
+        ] {
+            assert!(validate_work_claim(&input, &json!({"reply":reply})).is_err());
+        }
+        let mut completed = input;
+        completed["action_state"]["answer_available"] = json!(true);
+        validate_work_claim(&completed, &json!({"reply":"I have prepared the reading."})).unwrap();
+    }
+
+    #[test]
+    fn work_claim_repair_retains_original_authority_and_actual_ask_binding() {
+        let mut input = pending_owner_input();
+        input["chart_state"] = json!("not_cast");
+        input["action_state"]["chart_available"] = json!(false);
+        let rejected =
+            json!({"reply":"I'll cast the chart now. Who owns the books?","ask":"need_0"});
+        assert!(
+            horary_step::check(Stage::Conversation, Matter::Other, &rejected, &input, &[]).is_err()
+        );
+        let repair =
+            json!({"original_input":input,"previous_worksheet":rejected,"chart_state":"cast"});
+        assert!(horary_step::check(
+            Stage::Conversation,
+            Matter::Other,
+            &json!({"reply":"I have cast the chart. Who owns the books?","ask":"need_0"}),
+            &repair,
+            &[]
+        )
+        .is_err());
+        assert!(horary_step::check(
+            Stage::Conversation,
+            Matter::Other,
+            &json!({"reply":"Before I weigh this sale, who owns the books?","ask":"need_0"}),
+            &repair,
+            &[]
+        )
+        .is_ok());
+        assert!(horary_step::check(
+            Stage::Conversation,
+            Matter::Other,
+            &json!({"reply":"Who owns the books?","ask":""}),
+            &repair,
+            &[]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn negative_conditional_and_method_explanations_do_not_announce_work() {
+        let input = json!({"chart_state":"not_cast","action_state":{"scheduled_actions":[]}});
+        for reply in [
+            "I'm not casting a chart yet.",
+            "I have not prepared a reading.",
+            "If the question is clear, I will cast the chart using the reader's place.",
+            "I will prepare a reading when those necessary facts are available.",
+            "I cast charts for the moment a question becomes clear.",
+            "I can't judge that outcome with the available procedure.",
+        ] {
+            validate_work_claim(&input, &json!({"reply":reply})).unwrap();
+        }
     }
 
     #[test]
@@ -6152,6 +6705,12 @@ pub fn schema(stage: Stage, facts: &[Fact]) -> Value {
                 ("unknowns".into(), list(text(150), 4)),
             ]);
             match stage {
+                Stage::Reception => {
+                    fields.insert(
+                        "edge_interpretations".into(),
+                        reception_rows_schema(None, facts),
+                    );
+                }
                 Stage::Contacts => {
                     fields.insert(
                         "basis".into(),
@@ -6245,6 +6804,62 @@ pub(crate) fn condition_schema(input: &Value, facts: &[Fact]) -> Value {
             ["maxItems"] = json!(condition_evidence_budget(key, Some(&planets), facts));
     }
     contract
+}
+
+/// The stage remains one batched call. Its finite rows follow the actual typed
+/// native edges, and its actor IDs come only from accepted native selections.
+pub(crate) fn reception_schema(input: &Value, facts: &[Fact]) -> Value {
+    let mut contract = schema(Stage::Reception, facts);
+    contract["properties"]["edge_interpretations"] = reception_rows_schema(Some(input), facts);
+    contract
+}
+
+fn reception_rows_schema(input: Option<&Value>, facts: &[Fact]) -> Value {
+    use reading_method::ReceptionPolarity;
+    use std::collections::BTreeSet;
+    let edges = facts
+        .iter()
+        .filter(|fact| fact.kind == "reception" && fact.reception.is_some())
+        .collect::<Vec<_>>();
+    let edge_ids = edges
+        .iter()
+        .map(|fact| fact.id.as_str())
+        .collect::<Vec<_>>();
+    let roles = input.map(|input| {
+        input["native_reception"]["accepted_roles"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|role| role["selected_id"].as_str())
+            .collect::<Vec<_>>()
+    });
+    let actors = match roles {
+        Some(ids) => list(choice(&ids), ids.len()),
+        None => list(text(100), 8), // Native role selection itself has a maximum of eight.
+    };
+    let quality_list = |polarity| {
+        let names: BTreeSet<_> = edges
+            .iter()
+            .flat_map(|fact| &fact.reception.as_ref().expect("Typed edge").qualities)
+            .filter(|quality| quality.polarity == polarity)
+            .map(|quality| quality.dignity.native_name())
+            .collect();
+        list(
+            choice(&names.iter().copied().collect::<Vec<_>>()),
+            names.len(),
+        )
+    };
+    list(
+        object(json!({
+            "edge_id":choice(&edge_ids),
+            "regarding_actor_ids":actors,"regarded_actor_ids":actors,
+            "positive_qualities":quality_list(ReceptionPolarity::Positive),
+            "negative_qualities":quality_list(ReceptionPolarity::Negative),
+            "interpretation":{"type":"string","minLength":1,"maxLength":240,"description":"One short qualified contextual sentence. This is a model proposal, not native semantic authority."},
+            "limitations":{"type":"string","minLength":1,"maxLength":180,"description":"Short limits: no automatic reverse regard, ability, occurrence or timing."}
+        })),
+        edges.len(),
+    )
 }
 
 fn condition_evidence_budget(
@@ -7180,7 +7795,7 @@ mod protected_output_protocol_tests {
                 json!({"state":"not_relevant","evidence":[],"finding":"Synthetic shape only"}),
             );
         }
-        let value = json!({"checks":checks,"summary":"Synthetic shape only","unknowns":[]});
+        let value = json!({"checks":checks,"summary":"Synthetic shape only","unknowns":[],"edge_interpretations":[]});
         validate_shape(&value, &schema).unwrap();
         let field = schema["oneOf"][1]["properties"]["request_input"]["properties"]["field"]
             ["enum"][0]
@@ -7370,11 +7985,12 @@ fn validate_resource_bounds(
         Value::Array(a) => {
             // A synthesis may cite the whole finite native fact allowlist.
             // Exact per-check/stage limits and IDs still come from its schema.
-            let resource_maximum = if path.ends_with(".evidence") {
-                native_evidence_budget.max(40)
-            } else {
-                40
-            };
+            let resource_maximum =
+                if path.ends_with(".evidence") || path == "$.edge_interpretations" {
+                    native_evidence_budget.max(40)
+                } else {
+                    40
+                };
             let maximum = schema["maxItems"]
                 .as_u64()
                 .and_then(|maximum| usize::try_from(maximum).ok())
@@ -7418,6 +8034,75 @@ fn validate_resource_bounds(
 #[cfg(test)]
 mod resource_bounds_tests {
     use super::*;
+
+    #[test]
+    fn reception_all_typed_rows_fit_exact_count_without_generic_forty_row_conflict() {
+        use reading_method::{
+            DirectedReception, ReceptionDignity, ReceptionPolarity, ReceptionQuality,
+        };
+        let planets = [
+            "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+        ];
+        let roles = planets
+            .iter()
+            .map(|planet| json!({"selected_id":format!("{planet}.fixture"),"planet":planet}))
+            .collect::<Vec<_>>();
+        // Dense synthetic contract data, not a claim about a possible chart.
+        let mut facts = Vec::new();
+        let mut rows = Vec::new();
+        for guest in planets {
+            for host in planets.into_iter().filter(|host| *host != guest) {
+                let id = format!("e{}", facts.len());
+                facts.push(Fact {
+                    id: id.clone(),
+                    kind: "reception".into(),
+                    label: format!("{guest} → {host}"),
+                    detail: "Synthetic resource fixture only.".into(),
+                    planets: vec![guest.into(), host.into()],
+                    condition_facet: None,
+                    event: None,
+                    reception: Some(DirectedReception {
+                        guest_planet: guest.into(),
+                        host_planet: host.into(),
+                        qualities: vec![ReceptionQuality {
+                            dignity: ReceptionDignity::Domicile,
+                            polarity: ReceptionPolarity::Positive,
+                        }],
+                    }),
+                });
+                rows.push(json!({"edge_id":id,"regarding_actor_ids":[format!("{guest}.fixture")],"regarded_actor_ids":[format!("{host}.fixture")],
+                    "positive_qualities":["domicile"],"negative_qualities":[],"interpretation":"Synthetic resource test; semantic truth unqualified.","limitations":"No event or timing is established."}));
+            }
+        }
+        let input = json!({"native_reception":{"accepted_roles":roles},"facts":facts});
+        let mut checks = serde_json::Map::new();
+        for key in Stage::Reception.checks() {
+            checks.insert((*key).into(),json!({"state":"unestablished","evidence":[],"finding":"Synthetic resource test only."}));
+        }
+        let value = json!({"checks":checks,"summary":"No reading qualification.","unknowns":[],"edge_interpretations":rows});
+        let contract = reception_schema(&input, &facts);
+        assert_eq!(
+            contract["properties"]["edge_interpretations"]["maxItems"],
+            42
+        );
+        validate_for(Stage::Reception, Matter::Other, &value, &facts).unwrap();
+        validate_shape(&value, &contract).unwrap();
+        let mut oversized = value.clone();
+        oversized["edge_interpretations"]
+            .as_array_mut()
+            .unwrap()
+            .push(rows[0].clone());
+        assert!(
+            validate_for(Stage::Reception, Matter::Other, &oversized, &facts)
+                .unwrap_err()
+                .contains("maximum is 42")
+        );
+        let mut foreign = value;
+        foreign["edge_interpretations"][0]["regarding_actor_ids"] = json!(["Unassigned label"]);
+        assert!(validate_shape(&foreign, &contract)
+            .unwrap_err()
+            .contains("allowed values"));
+    }
 
     fn full_native_judgment() -> (Value, Vec<Fact>) {
         let facts: Vec<_> = (0..81)
@@ -8194,7 +8879,10 @@ mod shape_feedback_tests {
                 .get("maxLength")
                 .is_none()
         );
-        validate_shape(&value, &contract).unwrap();
+        let mut current = value.clone();
+        current["edge_interpretations"] = json!([]); // No typed payload exists in this historical formatting witness.
+        validate_shape(&current, &contract).unwrap();
+        assert_eq!(current["checks"], value["checks"]);
         assert_eq!(value, before); // No shortening or altered historical data.
     }
 
@@ -8214,7 +8902,7 @@ mod shape_feedback_tests {
             "direction":{"state":"supported","evidence":["e0"],"finding":"Venus regards Mars; this fact does not establish the reverse direction."},
             "strength_and_quality":{"state":"supported","evidence":["e0"],"finding":"The supplied domicile reception indicates strong positive regard."},
             "contextual_motive":{"state":"unestablished","evidence":[],"finding":"The fixture supplies no context for a motive assessment."}
-        },"summary":"An observed directed regard is not a prediction of an event.","unknowns":[]});
+        },"summary":"An observed directed regard is not a prediction of an event.","unknowns":[],"edge_interpretations":[]});
         (value, facts)
     }
 
@@ -9931,6 +10619,8 @@ pub fn response_schema_for(stage: Stage, matter: Matter, input: &Value, facts: &
     if stage != Stage::Significators {
         let data = if stage == Stage::Condition {
             horary_contract::condition_schema(original_input(input), facts)
+        } else if stage == Stage::Reception {
+            horary_contract::reception_schema(original_input(input), facts)
         } else {
             horary_contract::schema_for(stage, matter, facts)
         };
@@ -10008,6 +10698,40 @@ pub fn original_input(mut input: &Value) -> &Value {
         input = original;
     }
     input
+}
+
+/// Finite output allowance for one complete batch worksheet, including repair.
+/// Reception's added rows grow with supplied typed edges and literal alias IDs.
+/// This is an output allowance, not a tokenizer measurement or semantic gate.
+pub fn generation_token_budget(stage: Stage, input: &Value) -> u32 {
+    if stage != Stage::Reception {
+        return if stage == Stage::Judgment { 1400 } else { 1000 };
+    }
+    let input = original_input(input);
+    let roles = input["native_reception"]["accepted_roles"].as_array();
+    let mut edges = 0usize;
+    let mut alias_bytes = 0usize;
+    for fact in input["facts"].as_array().into_iter().flatten() {
+        if fact["kind"] != "reception" || !fact["reception"].is_object() {
+            continue;
+        }
+        edges += 1;
+        for endpoint in ["guestPlanet", "hostPlanet"] {
+            alias_bytes += roles
+                .into_iter()
+                .flatten()
+                .filter(|role| role["planet"] == fact["reception"][endpoint])
+                .filter_map(|role| role["selected_id"].as_str())
+                .map(str::len)
+                .sum::<usize>();
+        }
+    }
+    // Leave the other stages unchanged and fit the reader's existing 16K cap.
+    // Short per-edge prose is independently bounded in the response contract.
+    (1000usize
+        .saturating_add(edges.saturating_mul(384))
+        .saturating_add(alias_bytes))
+    .min(16_384) as u32
 }
 
 /// The schema constrains decoding, while this boundary also governs raw batch
@@ -10095,6 +10819,7 @@ pub fn check(
         if value["reply"].as_str().is_none_or(|s| s.trim().is_empty()) {
             return Err("The reader must give a nonempty conversational reply.".into());
         }
+        crate::horary_conversation::validate_work_claim(input, value)?;
         return Ok(Checked::Data(CheckedData {
             stage,
             input_sha256: crate::horary_lessons::digest(&input.to_string()),
@@ -10278,6 +11003,31 @@ pub fn check(
     }
     if stage == Stage::Condition {
         condition_coverage(value, input, facts)?;
+    }
+    if stage == Stage::Reception {
+        horary_contract::validate_shape(value, &horary_contract::reception_schema(input, facts))?;
+        let roles: Vec<crate::reading_method::ReceptionRoleIdentity> = serde_json::from_value(
+            input["native_reception"]["accepted_roles"].clone(),
+        )
+        .map_err(|_| "The controller must supply the accepted native reception role clipboard.")?;
+        let rows: Vec<crate::reading_method::ReceptionInterpretation> =
+            serde_json::from_value(value["edge_interpretations"].clone())
+                .map_err(|error| format!("$.edge_interpretations: {error}"))?;
+        let failures =
+            crate::reading_method::reception_interpretation_failures(&roles, facts, &rows)?;
+        if !failures.is_empty() {
+            return Err(failures.join("\n"));
+        }
+        if rows.is_empty()
+            && Stage::Reception.checks().iter().any(|key| {
+                matches!(
+                    value["checks"][*key]["state"].as_str(),
+                    Some("supported" | "contradicted")
+                )
+            })
+        {
+            return Err("No typed native reception edges are supplied. Keep direction, quality and motive unestablished or not_relevant; do not turn unavailable evidence into a finding.".into());
+        }
     }
     crate::message_programs::check(stage, input, value, facts)?;
     let roles = if stage == Stage::Significators {
@@ -10577,13 +11327,85 @@ mod analytical_shape_repair_tests {
         let input = json!({"roles":[
             {"label":"First synthetic party","planet":"Venus","house":null},
             {"label":"Second synthetic party","planet":"Mars","house":null}
-        ],"facts":facts});
+        ],"facts":facts,"native_reception":{"accepted_roles":[
+            {"role_index":0,"selected_id":"first.self","label":"First synthetic party","planet":"Venus","house":null},
+            {"role_index":1,"selected_id":"second.self","label":"Second synthetic party","planet":"Mars","house":null}
+        ]}});
         let value = json!({"checks":{
             "direction":{"state":"supported","evidence":[id],"finding":"The supplied fact gives Venus's regard for Mars; the reverse is not supplied."},
             "strength_and_quality":{"state":"supported","evidence":[id],"finding":"The supplied domicile quality gives positive regard in this direction."},
             "contextual_motive":{"state":"unestablished","evidence":[],"finding":"No motive follows from this synthetic fact alone."}
-        },"summary":"Synthetic directed-reception worksheet; no event prediction.","unknowns":[]});
+        },"summary":"Synthetic directed-reception worksheet; no event prediction.","unknowns":[],
+        "edge_interpretations":[{"edge_id":id,"regarding_actor_ids":["first.self"],"regarded_actor_ids":["second.self"],
+            "positive_qualities":["domicile"],"negative_qualities":[],"interpretation":"A synthetic direction fixture, not a qualified interpretation.",
+            "limitations":"No reverse regard, occurrence or timing is established."}]});
         (input, value, facts)
+    }
+
+    #[test]
+    fn reception_output_budget_follows_source_rows_and_survives_repair() {
+        let (input, _, facts) = reception();
+        let budget = generation_token_budget(Stage::Reception, &input);
+        assert!(budget > 1000);
+        assert_eq!(
+            generation_token_budget(
+                Stage::Reception,
+                &json!({"original_input":input,"previous_worksheet":{}})
+            ),
+            budget
+        );
+        for stage in Stage::ALL
+            .iter()
+            .copied()
+            .filter(|stage| *stage != Stage::Reception)
+        {
+            assert_eq!(
+                generation_token_budget(stage, &input),
+                if stage == Stage::Judgment { 1400 } else { 1000 }
+            );
+        }
+        let mut unavailable = input.clone();
+        unavailable["facts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("reception");
+        assert_eq!(
+            generation_token_budget(Stage::Reception, &unavailable),
+            1000
+        );
+        let dense = (0..42)
+            .map(|index| {
+                let mut fact = serde_json::to_value(&facts[0]).unwrap();
+                fact["id"] = json!(format!("e{index}"));
+                fact
+            })
+            .collect::<Vec<_>>();
+        let mut larger = input;
+        larger["facts"] = json!(dense);
+        assert!(generation_token_budget(Stage::Reception, &larger) > budget);
+        assert!(generation_token_budget(Stage::Reception, &larger) <= 16_384);
+    }
+
+    #[test]
+    fn unavailable_typed_reception_keeps_native_checks_unknown() {
+        let (input, mut value, mut facts) = reception();
+        facts[0].reception = None;
+        let mut input = input;
+        input["facts"] = json!(facts);
+        value["edge_interpretations"] = json!([]);
+        assert!(
+            check(Stage::Reception, Matter::Other, &value, &input, &facts)
+                .err()
+                .unwrap()
+                .contains("No typed native reception")
+        );
+        for key in Stage::Reception.checks() {
+            value["checks"][key]["state"] = json!("unestablished");
+        }
+        assert!(matches!(
+            check(Stage::Reception, Matter::Other, &value, &input, &facts).unwrap(),
+            Checked::Data(_)
+        ));
     }
 
     #[test]
@@ -13840,6 +14662,15 @@ pub fn source_passages(stage: Stage, matter: Matter, method: Option<Method>) -> 
             "reception_action_context",
         ]);
     }
+    if stage == Stage::Reception {
+        ids.extend_from_slice(&[
+            "occasion_motive_ability",
+            "reception_minor",
+            "reception_negative",
+            "reception_fall",
+            "reception_ambivalence_context",
+        ]);
+    }
     ids
 }
 
@@ -13883,6 +14714,9 @@ pub fn guide_for_method(
     if stage == Stage::Reception && matter == Matter::Relationship {
         text.push_str(include_str!("horary_prompts/reception_relationship.md"));
     }
+    if stage == Stage::Reception {
+        text.push_str(include_str!("horary_prompts/reception_rows.md"));
+    }
     if method == Some(Method::Contact) && stage == Stage::Judgment {
         text.push_str(include_str!("horary_prompts/contact_answer.md"));
     }
@@ -13905,6 +14739,45 @@ pub fn digest(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reception_rows_keep_source_context_and_existing_method_lessons() {
+        for (matter, method) in [
+            (Matter::Other, Some(Method::Contact)),
+            (Matter::Work, Some(Method::NewJob)),
+            (Matter::Relationship, Some(Method::Relationship)),
+            (Matter::LostObject, None),
+        ] {
+            let guide = guide_for_method(Stage::Reception, matter, method).unwrap();
+            assert!(guide.contains("<native_edge_contract>"));
+            for id in [
+                "occasion_motive_ability",
+                "reception_minor",
+                "reception_negative",
+                "reception_fall",
+                "reception_ambivalence_context",
+            ] {
+                assert!(source_passages(Stage::Reception, matter, method).contains(&id));
+            }
+            if method == Some(Method::NewJob) {
+                assert!(guide.contains(include_str!("horary_prompts/new_job_reception.md")));
+                assert!(!guide.contains("printed_pages=\"193–193\""));
+            }
+            if method == Some(Method::Relationship) {
+                assert!(guide.contains(include_str!("horary_prompts/reception_relationship.md")));
+            }
+            if matter == Matter::LostObject {
+                assert!(
+                    source_passages(Stage::Reception, matter, method).contains(&"moon_object_role")
+                );
+            }
+        }
+        assert!(
+            !guide_for_method(Stage::Condition, Matter::Work, Some(Method::NewJob))
+                .unwrap()
+                .contains("<native_edge_contract>")
+        );
+    }
     #[test]
     fn new_job_teaching_is_method_scoped_and_has_salient_book_sources() {
         for (stage, expected_ids) in [
@@ -14488,7 +15361,12 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
         let prompts = tasks
             .iter()
             .map(|(stage, matter, input, contract)| {
-                crate::horary_pipeline::prompt(*stage, *matter, input, contract).map(|p| (p, 1000))
+                crate::horary_pipeline::prompt(*stage, *matter, input, contract).map(|p| {
+                    (
+                        p,
+                        crate::horary_step::generation_token_budget(*stage, input),
+                    )
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         let wall = std::time::Instant::now();
@@ -14535,11 +15413,7 @@ impl crate::horary_pipeline::Runtime for PipelineRuntime<'_> {
             self.app,
             prompt,
             NativeGenerateOptions {
-                max_tokens: if stage == crate::horary_lessons::Stage::Judgment {
-                    1400
-                } else {
-                    1000
-                },
+                max_tokens: crate::horary_step::generation_token_budget(stage, input),
                 temperature: 0.,
                 response_schema: audio.is_none().then(|| schema.to_string()),
                 audio: audio.map(<[u8]>::to_vec),

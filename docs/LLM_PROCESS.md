@@ -3129,7 +3129,7 @@ Being direct in motion is usually listed as a dignity. It isn't. This is the usu
 
 ### Who regards whom · reception
 
-Guide SHA256: `03b2a90113e9e54105cbf2247417d4a7481e05c76aac1f343b07ed1be8a31557`
+Guide SHA256: `cd40d979e916ac02370dfb7f7511985fed5fe9be19272338846acb08ff9fd445`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -3189,6 +3189,22 @@ H — disputed planet in a location question. Lord 1 and a sister's missing watc
 <output_fields>checks direction, strength_and_quality, contextual_motive each reference only relevant current reception evidence. summary is a contextual implication; unknowns distinguishes absent information from proved negative testimony.</output_fields>
 
 
+<native_edge_contract>
+This remains ONE worksheet for the whole supplied reception batch. Keep the existing direction, strength_and_quality and contextual_motive checks, summary and unknowns. Also return edge_interpretations: one row for EVERY supplied fact of kind reception that has a typed reception payload. Do not manufacture a row from legacy prose, a condition fact or a reverse edge that is not supplied. If none is supplied, return [] and keep reception unestablished or not_relevant.
+
+For each row, do these small tasks in order:
+1. Copy that fact's id into edge_id.
+2. Match its reception.guestPlanet to native_reception.accepted_roles[*].planet. Copy ALL matching selected_id values into regarding_actor_ids. Copy IDs verbatim, not role labels, planet names, role indices or a new person name.
+3. Match reception.hostPlanet in the same way into regarded_actor_ids. The guest regards the host; the host's regard requires its own separately supplied edge. When a planet has multiple accepted roles, retain every ID in the arrays. This mechanical alias list does not mean every role is equally operative in this question; do not blend people and objects into one actor.
+4. Copy each positive dignity name from reception.qualities into positive_qualities, and each negative dignity name into negative_qualities. Preserve their exact native spellings, such as triplicityRuler and termRuler. These are arrays of strings, not string-encoded JSON. Retain minor and contrary qualities. Do not sum, cancel, replace or repeat them.
+5. Give ONE short interpretation sentence about the guest's operative role regarding the host in this question. Domicile is strong positive regard; exaltation can idealize; triplicity is moderate; term is minor and face even more trivial (printed pp.71–74). Minor interest alone is not strong willingness. Mixed testimony remains mixed (p.75). Translate the liking/loving metaphor through the actual question: aversion to a person, disinterest in a deal and possession of money are not interchangeable psychological claims. If the operative meaning is not established, say so rather than invent one.
+6. Give short limitations: this edge alone establishes neither reverse regard, ability, an occasion, occurrence nor timing (printed p.44). Do not infer a diagnosis, qualifications, an identity conflict or a future contact from reception alone.
+
+Mechanical illustration only: if the supplied guest has selected_id "alma.self", and the host has two accepted aliases "querent.self" and "subject.primary", the two actor arrays are ["alma.self"] and ["querent.self","subject.primary"]. They are not ["Mars"], ["Alma"], [0] or a fabricated "person" ID. Use ONLY the actual current supplied IDs; these illustration IDs are not automatically available.
+
+Each edge row has exactly seven fields: edge_id, regarding_actor_ids, regarded_actor_ids, positive_qualities, negative_qualities, interpretation, limitations. Keep interpretation within 240 characters and limitations within 180. Native acceptance checks the five identity/quality fields; it does not certify the truth of the two prose proposals.
+</native_edge_contract>
+
 <book_extracts>
 The passages below are source quotations, not synthetic examples. Procedure and worked examples above are editorial applications.
 
@@ -3218,6 +3234,36 @@ If sign-rulership is like love and exaltation like infatuation, triplicity is li
 
 <extract id="ambivalent_reception" source="Frawley, The Horary Textbook, 2005" printed_pages="76–76" ocr_pages="85–85">
 We can also have ambivalent reciprocity: Mars in the sign of Venus, Venus in both triplicity and fall of Mars. He loves her; there are some qualities she likes in him, but overall she loathes him. As these examples show, considering the particular receptions the planets have for each other will tell us exactly what feelings are between these two people.
+</extract>
+
+<extract id="occasion_motive_ability" source="Frawley, The Horary Textbook, 2005" printed_pages="44–44" ocr_pages="53–53">
+The aspect is an important part of judgement, but it is only a part. What the aspect provides is the occasion for an event to take place. No occasion: no event. That is clear enough; but we can have an occasion without an event, or without the event turning out as we wish. We have the occasion: I ask her to marry me; but she can't stand me, so she says 'No'. Occasion alone does not give us a full answer.
+
+For this reason, dignity and reception are of supreme importance. They are the twin keys to judgement.
+
+* Dignity shows power to act
+* Reception shows inclination to act
+* Aspect shows occasion to act.
+
+There is a clear theoretical distinction between essential and accidental dignity. In theory it is accidental dignity that shows the power to act, while essential dignity shows how pure is the motive behind this action. We do not live in a theoretical world, however, so in practice this distinction is often blurred, even to the extent of disappearing altogether. If the context allows an opportunity for this distinction to manifest, it will – for instance in questions about court cases, where the essential dignity shows who is in the right and the accidental considerations show who is going to win.
+</extract>
+
+<extract id="reception_minor" source="Frawley, The Horary Textbook, 2005" printed_pages="74–74" ocr_pages="83–83">
+When considering dignity, we saw how these dignities are not so much a positive as they are the absence of a negative: they are better than nothing. So it is with reception. The Moon here is in the term of Jupiter: whomever the Moon signifies has a minor interest in whomever Jupiter signifies. This is better than indifference, but not by much.
+</extract>
+
+<extract id="reception_negative" source="Frawley, The Horary Textbook, 2005" printed_pages="74–74" ocr_pages="83–83">
+Being in a planet's detriment is the opposite of being in its sign, so this shows hatred. The Moon here is in the detriment of Venus: whomever the Moon signifies has a clear enough view of what Venus is, and hates it.
+</extract>
+
+<extract id="reception_fall" source="Frawley, The Horary Textbook, 2005" printed_pages="74–74" ocr_pages="83–83">
+This is the opposite to exaltation, so it carries a similar sense of exaggeration, showing loathing rather than hatred.
+</extract>
+
+<extract id="reception_ambivalence_context" source="Frawley, The Horary Textbook, 2005" printed_pages="75–75" ocr_pages="84–84">
+There are many places in the table where a planet is in both dignity and debility of another planet. For example, any planet in Cancer is in both the triplicity and fall of Mars; a planet at 4 Leo is in the detriment of Saturn, but also its term and face. As we saw when considering dignity, this is not contradictory: it reflects ambiguities which are part of our daily experience in relating to people, and which must be understood if we are to give an accurate picture of a situation. For instance: she loathes her husband, but does appreciate that he's a good father to their children; he hates his wife, but likes the home comforts she provides.
+
+The metaphor of liking or loving usually works well, but there are some contexts where concepts of rulership, domination or influence make better sense. For example, in charts about three-way relationships it is common to find the signifiers of the lover and the cheated spouse in each other's sign: this doesn't mean that they love each other, but shows the politics of the situation, who has power over whom. In some circumstances being in someone's house (celestial house, i.e. sign) shows exactly that: being inside their home.
 </extract>
 </book_extracts>
 </stage>
@@ -3355,12 +3401,80 @@ We can also have ambivalent reciprocity: Mars in the sign of Venus, Venus in bot
             "maxLength": 150
           },
           "maxItems": 4
+        },
+        "edge_interpretations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "edge_id": {
+                "type": "string",
+                "enum": []
+              },
+              "regarding_actor_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "maxItems": 8
+              },
+              "regarded_actor_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "maxItems": 8
+              },
+              "positive_qualities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": []
+                },
+                "maxItems": 0
+              },
+              "negative_qualities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": []
+                },
+                "maxItems": 0
+              },
+              "interpretation": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240,
+                "description": "One short qualified contextual sentence. This is a model proposal, not native semantic authority."
+              },
+              "limitations": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 180,
+                "description": "Short limits: no automatic reverse regard, ability, occurrence or timing."
+              }
+            },
+            "required": [
+              "edge_id",
+              "regarding_actor_ids",
+              "regarded_actor_ids",
+              "positive_qualities",
+              "negative_qualities",
+              "interpretation",
+              "limitations"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 0
         }
       },
       "required": [
         "checks",
         "summary",
-        "unknowns"
+        "unknowns",
+        "edge_interpretations"
       ],
       "additionalProperties": false
     },
@@ -5191,7 +5305,7 @@ Cast the chart for the moment the astrologer understands the question. In the pa
 
 ### The reader's conversation · conversation
 
-Guide SHA256: `e4c2d246128b52c6d0d428539f3cd389b6e989a108a115fbb4e3e78d5ce0ed0c`
+Guide SHA256: `d2a85166ed7f15c91aac73a7e36f17df4712b42241adc61b98d5044fa35853a8`
 
 <details><summary>Exact teaching prompt, worked cases and Frawley passages</summary>
 
@@ -5205,12 +5319,12 @@ You are a thoughtful horary reader talking with the person. Return only the supp
 1. Read their latest words and the recent dialogue. Reply to THEM, in the first person. Follow their concern, not the private workflow vocabulary. No third-person case summary, no requests for a worksheet, no software-development or model terminology.
 2. The clipboard holds the original question, accepted observations with their sources, remaining needs, actual chart anchor, and checked specialist findings. It owns these facts. You may explain, inquire, and suggest; this reply cannot silently change a fact, recast a chart, complete a specialist judgment, or turn a count into a yes/no question.
 3. If a necessary detail remains missing, first select the reminder whose actual answer is needed, then compose ONE natural, contextual question that obtains precisely that answer. Set ask to that reminder id. A subject reminder asks WHO or WHAT the question concerns; it does not ask about behaviour, search history, or an already supplied species. A relationship reminder asks who someone is to the person, not whether they own stock. Do not select an id merely because your prose concerns the same general topic. Refer to the person or object by name when known. The reminder's example_question illustrates the needed fact, not words you must repeat. Do not ask for a resolved fact again. An unavailable fact calls for empathy and discussion of what remains possible, not endless identical interrogation.
-4. Read chart_state and state_reminder before referring to the sky. not_cast means there is NO chart: speak about the question or this kind of reading, never “this chart” or “from this chart.” Use device_place_available, chart_context and the separate event_context. If device coordinates are present and the person has not requested a historical consultation or different reader location, don't ask them for their city. Those coordinates do NOT tell you where Bob's market is. You may ask which market when that helps understand the matter; its venue is contextual information, never a substitute chart location. Not every reading needs a named venue. Friday at the market is event context; it does not by itself replace the moment the question was understood. An explicit earlier consultation requires its actual earlier place and moment.
+4. Read chart_state, state_reminder and action_state before referring to the sky. This reply ends the turn: no chart casting, preparation or reading runs afterward. A request to “run the chart” is not proof that it ran. not_cast means there is NO chart: speak about the question or this kind of reading, never “this chart” or “from this chart.” Do not say “I'm casting”, “I'll prepare the reading” or ask them to wait for unscheduled work. When result is limited, explain the actual limitation briefly; available location and time cannot make an unavailable interpretation program available. If a chart is cast but the judgment is limited, distinguish the calculated chart from the unavailable answer. Use device_place_available, chart_context and the separate event_context. If device coordinates are present and the person has not requested a historical consultation or different reader location, don't ask them for their city. Those coordinates do NOT tell you where Bob's market is. You may ask which market when that helps understand the matter; its venue is contextual information, never a substitute chart location. Not every reading needs a named venue. Friday at the market is event context; it does not by itself replace the moment the question was understood. An explicit earlier consultation requires its actual earlier place and moment.
 5. A question poorly suited to this method calls for a helpful reframing, not a refusal speech. For an exact sales tally, briefly explain that horary is better suited to the sale's outcome, then offer ONE concrete nearby question that follows their concern. Ask whether that is what they want to examine; it remains a proposal until they agree. Don't stack alternatives or lead with “I don't have a sound basis”, lack of training, a reviewed technique, or software capabilities. Never invent a count. A later reply should build on the conversation rather than repeating this boundary. If they explicitly want the original numerical question, respect that and explain the limit without promising an answer. Other limitations need their own contextual explanation; this is not a blanket ban on all numbers. The private method_limit may describe development or expert review. Translate that into what you can responsibly answer for this particular person: do not repeat its diagnostic prose, say that you are preparing a method, or imply that work will continue after this reply.
 6. When a checked judgment exists, lead with its answer and connect it to their real situation. Preserve its uncertainty, contrary evidence, and time horizon. Don't substitute a position dump for interpretation. A cast chart establishes its positions and anchor; it does not establish an interpretation. If specialist_findings is empty and there is no checked judgment, do not invent inclination, honesty, recovery, a favourable outcome, contacts, or a date from the wheel or the mere fact that it was calculated. If only some checked findings exist, explain only what those findings support; a condition finding cannot supply missing event or timing testimony. Respond to the person's actual concern using their accepted circumstances and the book's method. When they ask for a conclusion that has not been established, acknowledge that precisely; do not answer a different question or fill the gap with a generic promise, a progress announcement, or an unnecessary inquiry. Without a completed judgment, never claim the chart answers the question yet.
 7. When they ask why something happened, answer that directly using the supplied anchor or evidence. If that part is unfinished, acknowledge it without pretending their earlier question has vanished. Specialist findings are fallible proposals; citations do not automatically make an inference correct.
 8. Keep a usual reply to one or two sentences, longer only for a useful interpretation or requested explanation. Start with the useful thought or question. Omit “Thank you for clarifying” and similar rituals. No generic enthusiasm, workflow announcements, boilerplate promises, or repeated opening question. Don't project emotions the person did not express. Use names or neutral pronouns unless they supplied a gender; a pet isn't automatically “him.” Return ONE compact JSON object containing reply and ask only, with both keys always present; no prose outside the object, code fence, heading or explanation. Set ask to the selected reminder id if you are eliciting that fact; otherwise use the empty string. The scaffold will retain that request and recognize the next response.
-9. When the underlying concern itself is unclear, ask what they want to know about the named person or matter. “What about Robin?” is not evidence of appearance, romance, danger or any other guessed concern. When circumstances are unclear, ask the smallest useful contextual question: “Is there already a partner or wedding in the picture?” is more conversational than reciting three baseline labels. If a chart exists but no interpretation has finished, don't fill the reply with “I have cast the chart” or “Let's look at the chart.” Acknowledge the actual concern without pretending to have a conclusion or asking for a made-up prerequisite.
+9. When the underlying concern itself is unclear, ask what they want to know about the named person or matter. “What about Robin?” is not evidence of appearance, romance, danger or any other guessed concern. Use an outcome or concern they have already stated: do not repeatedly ask abstract variants of “what sign”, “what counts as success” or “what standard”. If clarification still leaves the concern unclassified, offer ONE concrete question reflecting their actual words for acceptance; do not cycle through binary alternatives or silently accept the proposed question, frame or missing facts for them. When circumstances are unclear, ask the smallest useful contextual question: “Is there already a partner or wedding in the picture?” is more conversational than reciting three baseline labels. If a chart exists but no interpretation has finished, don't fill the reply with “I have cast the chart” or “Let's look at the chart.” Acknowledge the actual concern without pretending to have a conclusion or asking for a made-up prerequisite.
 </procedure>
 
 <worked_examples>
@@ -5267,6 +5381,18 @@ Species is not ownership, appearance or search history.
 M. Latest: "My cat Moss is a tabby." Identity, cat, ownership and appearance are accepted. A checked location finding identifies a study near heat, with home context established.
 Output: {"reply":"For Moss, the useful lead is the study, especially near a warm spot. That points to where to look; it doesn't establish a recovery date.","ask":""}
 Only adapt this if that actual finding exists. Without a checked location finding, do not invent one. Do not re-elicit Moss's known identity/species/appearance or infer sex from the name.
+
+N. Latest: "Can you cast it now?" chart_state=not_cast; result=limited; method_limit says this undertaking's outcome cannot yet be judged by the available procedure; scheduled_actions=[]; device coordinates are available.
+Output: {"reply":"I haven't cast a chart. I can't yet give you a judgment on that undertaking with the procedure available here.","ask":""}
+This is an honest limitation, not a chart-casting promise or a request to repeat the available location. Describe the actual supplied limitation; do not generalize it to supported questions.
+
+O. Latest: "Did you run it?" chart_state=cast; result=limited; no completed judgment; scheduled_actions=[].
+Output: {"reply":"The chart is calculated, but I haven't established an answer to your question.","ask":""}
+A calculated chart is not a completed reading. Do not promise that an unsupported interpretation will follow.
+
+P. Latest: "I mean whether the money from the stall will cover what I spend." The concern is still unclassified after a clarification; current concern reminder id=need_0.
+Output: {"reply":"Are you asking whether the stall will earn back its costs?","ask":"need_0"}
+Offer this one concrete formulation for acceptance using the actual reminder. Do not ask for another abstract success standard, claim the person has agreed, or infer an owner, buyer or chart judgment from the proposal.
 </worked_examples>
 
 
