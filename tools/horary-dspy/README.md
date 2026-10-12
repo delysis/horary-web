@@ -15,6 +15,22 @@ status/answer/analysis/evidence/unresolved, never rubric prose or provenance.
 Author/reviewer primary context and compact student inputs have separate hashes.
 This phase performs no student inference or application promotion.
 
+`--teacher codex optimize-gold-readings --gold-campaign /author/campaign
+--approval-gate /source-approved-first-three.json --watch --output /fresh/compile`
+uses those actual answers with the existing stock LabeledFewShot and GEPA path.
+It waits for each family's twenty approvals, keeps the original 12/4/4 split,
+and selects two TRAIN worked examples. Exact ordinary provider token counts
+include both demonstrations and the 8192-token output allowance before generation.
+The independent judge receives full primary context, an actual reference answer,
+and criteria in distinct fields; development/test references never become demos
+or reflection inputs. Stock Evaluate separately measures the authored no-demo,
+labeled, and selected programs. The sequential 42-family pass carries cumulative
+physical counts and one adaptive Google limiter, bounded to 64 student and 80
+Codex calls per family with 24 soft GEPA metric calls. Missing/failed families
+remain recorded, uncertain keys are not retried, and other independent families
+continue. Reading-component results do not establish a first-message extraction
+journey or install a prompt into the application.
+
 `evaluate-reception --prepare-only` renders the actual short Predict requests for
 four original Contact training probes without calling a model. The reusable
 function accepts an `AcceptedReceptionRole`-shaped actor clipboard and one exact

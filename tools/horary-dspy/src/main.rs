@@ -36,6 +36,21 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Stock labeled demonstrations and GEPA using actual reviewed family answers.
+    OptimizeGoldReadings {
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        gold_campaign: PathBuf,
+        #[arg(long)]
+        approval_gate: PathBuf,
+        #[arg(long, default_value = "all")]
+        method: String,
+        #[arg(long)]
+        watch: bool,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Author and independently review all 42 original twenty-case reading banks.
     GenerateGoldReadings {
         #[arg(long, default_value = "examples")]
@@ -339,6 +354,32 @@ async fn main() -> Result<()> {
     }
     let optimize_reception = matches!(&args.command, Command::OptimizeReception { .. });
     match args.command {
+        Command::OptimizeGoldReadings {
+            examples,
+            gold_campaign,
+            approval_gate,
+            method,
+            watch,
+            output,
+        } => {
+            ensure!(
+                matches!(args.teacher, Teacher::Codex),
+                "Actual-answer comparisons use the approved independent saved-login Codex reviewer"
+            );
+            let result = gold::optimize_families(
+                &examples,
+                Arc::new(book::Book::open(&args.book)?),
+                &gold_campaign,
+                &approval_gate,
+                &method,
+                google::client(&args.credential_file)?,
+                &args.codex,
+                &output,
+                watch,
+            )
+            .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Command::GenerateGoldReadings {
             examples,
             prepare_only,
@@ -1483,6 +1524,26 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod cli_tests {
     use super::*;
+
+    #[test]
+    fn actual_answer_consumer_cli_is_hosted_and_carries_explicit_source_gate() {
+        let parsed = Args::try_parse_from([
+            "horary-dspy",
+            "--teacher",
+            "codex",
+            "optimize-gold-readings",
+            "--gold-campaign",
+            "synthetic-campaign",
+            "--approval-gate",
+            "synthetic-gate",
+            "--watch",
+            "--output",
+            "synthetic-output",
+        ])
+        .unwrap();
+        assert!(!allows_local_student(&parsed.command));
+        assert!(matches!(parsed.command,Command::OptimizeGoldReadings{method,..} if method=="all"));
+    }
 
     #[test]
     fn gold_authoring_cli_keeps_teacher_only_preparation_and_execution_separate() {

@@ -8,7 +8,7 @@ use crate::{
     signatures,
 };
 use anyhow::{Context, Result, ensure};
-use dsrust::{BootstrapFewShot, Evaluate, Example, GEPA, Module, Predict};
+use dsrust::{BootstrapFewShot, Evaluate, Example, GEPA, LabeledFewShot, Module, Predict};
 use dsrust::{
     Feedback,
     example::Prediction,
@@ -474,6 +474,16 @@ impl Graded {
             );
         }
         let dimensions = functions::dimensions(&self.function)?;
+        if example.get("__reference_answer").is_some()
+            && dimensions.iter().any(|dimension| {
+                text(&review, dimension).is_ok_and(|decision| decision == "unobserved")
+            })
+        {
+            self.record(false,&json!({"case_id":example.get("case_id"),"function":self.function,"inputs":input.rendered(),"prediction":fields(&prediction),"review":fields(&review),"applicable_semantic_grade":"unobserved","score":null}))?;
+            anyhow::bail!(
+                "Independent actual-answer review leaves applicable meaning unobserved; no semantic score inferred"
+            );
+        }
         if self.function == "reception" {
             ensure!(
                 text(&review, "contextual_meaning")? != "unobserved",
@@ -1186,7 +1196,7 @@ pub async fn compile_fixtures(
     options: CompileOptions,
 ) -> Result<Value> {
     compile_fixtures_inner(
-        fixtures, method, function, book, models, directory, options, None, false, None,
+        fixtures, method, function, book, models, directory, options, None, false, None, None,
     )
     .await
 }
@@ -1218,6 +1228,7 @@ pub async fn compile_reader_fixtures(
         options,
         Some(baseline),
         false,
+        None,
         None,
     )
     .await
@@ -1251,6 +1262,7 @@ pub async fn compile_direct_reader_fixtures(
         Some(baseline),
         true,
         None,
+        None,
     )
     .await
 }
@@ -1283,6 +1295,41 @@ pub async fn compile_direct_reader_from_bootstrap(
         Some(baseline),
         true,
         Some(bootstrap),
+        None,
+    )
+    .await
+}
+
+/// Standard labeled demonstrations followed by the same stock GEPA compiler.
+/// Labels are actual reviewed TRAIN answers, not criteria or evaluation gold.
+#[allow(clippy::too_many_arguments)]
+pub async fn compile_direct_reader_from_gold(
+    fixtures: &[Fixture],
+    method: &str,
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    directory: &Path,
+    options: CompileOptions,
+    baseline: &str,
+    labeled_training: &[Example],
+    labeled_demos: usize,
+) -> Result<Value> {
+    ensure!(
+        options.bootstrap_demos == 0 && labeled_demos > 0,
+        "Use the reviewed labels without repurchasing a bootstrap"
+    );
+    compile_fixtures_inner(
+        fixtures,
+        method,
+        "reading",
+        book,
+        models,
+        directory,
+        options,
+        Some(baseline),
+        true,
+        None,
+        Some((labeled_training, labeled_demos)),
     )
     .await
 }
@@ -1414,6 +1461,7 @@ async fn compile_fixtures_inner(
     reader_baseline: Option<&str>,
     direct_family_reader: bool,
     bootstrap_program: Option<&Path>,
+    labeled_training: Option<(&[Example], usize)>,
 ) -> Result<Value> {
     ensure!(
         options.max_metrics > 0,
@@ -1421,11 +1469,16 @@ async fn compile_fixtures_inner(
     );
     fs::create_dir_all(directory)?;
     if direct_family_reader {
+        let source = catalogue::family_reader_source(&book, method)?;
+        let reference_source = if labeled_training.is_some() {
+            catalogue::reference_reader_source(&book, method)?
+        } else {
+            source.clone()
+        };
         ensure!(
             function == "reading" && reader_baseline.is_some(),
             "Direct reader requires its declared reading baseline"
         );
-        let source = catalogue::family_reader_source(&book, method)?;
         ensure!(
             fixtures.iter().all(|fixture| {
                 fixture.example.get("source_text").and_then(Value::as_str) == Some(&source)
@@ -1433,7 +1486,7 @@ async fn compile_fixtures_inner(
                         .example
                         .get("__review_source")
                         .and_then(Value::as_str)
-                        == Some(&source)
+                        == Some(&reference_source)
             }),
             "Direct family reader requires the complete book-defined source union"
         );
@@ -1473,6 +1526,18 @@ async fn compile_fixtures_inner(
     if direct_family_reader {
         program.oracle =
             Oracle::Single(plain(signatures::reading(method)?, models.student.clone()));
+    }
+    if labeled_training.is_some() {
+        ensure!(
+            direct_family_reader && bootstrap_program.is_none() && options.bootstrap_demos == 0,
+            "Reviewed labels require one direct reader and no bootstrap replay"
+        );
+        for predictor in program.judge.named_predictors() {
+            predictor.config.max_tokens = Some(8192);
+        }
+        for predictor in program.named_predictors() {
+            predictor.config.max_tokens = Some(8192);
+        }
     }
     let optimizable_predictors = if let Some(baseline) = reader_baseline {
         program.judge.signature.instructions.push_str(" Return ONLY the requested output fields score, passed, classification, extraction, reading, answer_quality and feedback, in their requested field markers, beginning with score. Never copy the input, prediction, rubric or source_text fields. Keep feedback specific and concise, with observed quotations and printed source references.");
@@ -1525,6 +1590,47 @@ async fn compile_fixtures_inner(
         crate::queue::write_json_atomic(
             &directory.join("bootstrap-import.json"),
             &json!({"path":path,"compiled_sha256":crate::google::digest(fs::read(path)?),"dataset_sha256":dataset_digest,"replay_teacher":false,"optimizer_state_imported":false}),
+        )?;
+    }
+    if let Some((labels, count)) = labeled_training {
+        ensure!(
+            labels.iter().all(
+                |label| train
+                    .iter()
+                    .any(|example| example.inputs().is_ok_and(|input| label
+                        .inputs()
+                        .is_ok_and(|labeled_input| input.rendered() == labeled_input.rendered())))
+            ),
+            "Labeled demonstrations must come only from this original TRAIN pool"
+        );
+        program.save(&directory.join("authored-program.json"))?;
+        let authored = Evaluate::new(
+            development.clone(),
+            |input| program.forward(input),
+            Graded::metric,
+        )
+        .run()
+        .await;
+        crate::queue::write_json_atomic(
+            &directory.join("authored-development.json"),
+            &evaluation_receipt(&authored),
+        )?;
+        program.save_observations(&directory.join("authored-observations.json"))?;
+        ensure!(
+            authored.failure_count() == 0,
+            "Authored no-demo control has unobserved execution/review errors"
+        );
+        LabeledFewShot::new(count).compile(&mut program, labels);
+        program.save(&directory.join("labeled-full.json"))?;
+        for predictor in program.named_predictors() {
+            for demo in predictor.demos {
+                *demo = crate::demo::compact(demo)?;
+            }
+        }
+        program.save(&directory.join("labeled.json"))?;
+        crate::queue::write_json_atomic(
+            &directory.join("labeled-source.json"),
+            &json!({"optimizer":"upstream LabeledFewShot", "demos":count,"labeled_training_cases":labels.len(),"source_text_omitted_only_in_demos":true,"rubrics_are_not_outputs":true,"student_generation_output_tokens":8192,"review_output_tokens":8192,"reference_answer_separate_from_rubric":true}),
         )?;
     }
     program.save(&directory.join("baseline-program.json"))?;
@@ -1637,6 +1743,16 @@ async fn compile_fixtures_inner(
         .all(|observation| observation["review_summary_consistent"] == true);
     let result = json!({"method":method,"function":function,"teacher":models.teacher_id,"student":models.student_id,"bootstrap_demos":demos,"optimizable_predictors":optimizable_predictors,"before_development":before.score,"after_development":if observed{Some(after.score)}else{None},"held_out":if observed{Some(held.score)}else{None},"gepa_best_index":outcome.best_idx,"gepa_metric_calls":outcome.total_num_evals,"gepa_iterations":outcome.iterations,"component_only":true,"declared_inputs":if function=="reading"{"Independent accepted consultation and native chart; no acquisition claimed"}else{"Actual function inputs only"},"execution_observed":observed,"independent_review_consistent":review_consistent,"component_pass":observed && review_consistent && after.results.iter().chain(&held.results).all(|row|row.prediction.as_ref().is_ok_and(|p|p.get("__passed")==Some(&json!(true)))),"application_promoted":false,"source_correct_reading_qualified":false});
     let mut result = result;
+    if labeled_training.is_some() {
+        let authored: Value =
+            serde_json::from_slice(&fs::read(directory.join("authored-development.json"))?)?;
+        result["authored_development"] = authored["score"].clone();
+        result["labeled_development"] = json!(before.score);
+        result["worked_answers_separate_from_rubric"] = json!(true);
+        result["comparison"] = json!(
+            "Authored zero-shot, then LabeledFewShot baseline, then LabeledFewShot plus GEPA; unchanged development/test and primary inputs"
+        );
+    }
     result["program_kind"] = json!(if direct_family_reader {
         "direct_family_reading"
     } else {
@@ -2753,6 +2869,90 @@ mod component_tests {
                 }
             })
             .collect()
+    }
+
+    #[tokio::test]
+    async fn reviewed_labels_measure_authored_labeled_and_selected_without_teacher_repurchase() {
+        let book = Arc::new(Book::fixture());
+        let mut fixtures = direct_contact_fixtures(&book);
+        let primary = catalogue::reference_reader_source(&book, "contact").unwrap();
+        for fixture in &mut fixtures {
+            fixture.example.set("__review_source", json!(&primary));
+            fixture.example.set(
+                "__reference_answer",
+                json!("Synthetic reference ANSWER separate from PRIVATE GOLD criteria"),
+            );
+        }
+        let worked = crate::gold::WorkedAnswer {
+            status: "method_limit".into(),
+            answer: "Synthetic actual TRAIN worked answer".into(),
+            analysis: "e1 supplied calculation limit".into(),
+            evidence: "e1".into(),
+            unresolved: "Unknown synthetic calculation".into(),
+        };
+        let label = worked.labeled_example(&fixtures[0].example).unwrap();
+        let student=Arc::new(DummyLM::new((0..20).map(|_|dsrust::example!{status:"method_limit",answer:"Synthetic received answer",analysis:"e1 actual boundary",evidence:"e1",unresolved:"Unknown computation"})));
+        let teacher =
+            Arc::new(DummyLM::new((0..20).map(|_| {
+                review("unobserved", "unobserved", "pass", "pass", true)
+            })));
+        let models = crate::runner::Models {
+            student: student.clone(),
+            teacher: teacher.clone(),
+            student_id: "Synthetic offline".into(),
+            teacher_id: "Synthetic offline".into(),
+        };
+        let out = tempfile::tempdir().unwrap();
+        let result = compile_direct_reader_from_gold(
+            &fixtures,
+            "contact",
+            book.clone(),
+            &models,
+            out.path(),
+            CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+            &crate::reading::direct_reader_baseline("contact").unwrap(),
+            &[label],
+            1,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["authored_development"], 1.);
+        assert_eq!(result["labeled_development"], 1.);
+        assert!(out.path().join("authored-development.json").exists());
+        let first = format!("{:?}", student.asked()[0]);
+        assert!(!first.contains("Synthetic actual TRAIN worked answer"));
+        let labeled = format!("{:?}", student.asked()[1]);
+        assert!(labeled.contains("Synthetic actual TRAIN worked answer"));
+        assert!(!format!("{:?}", student.asked()).contains("PRIVATE GOLD"));
+        assert!(format!("{:?}", teacher.asked()).contains("reference_answer"));
+        assert_eq!(student.asked().len(), 5);
+        assert_eq!(teacher.asked().len(), 5);
+        let mut wrong = worked.labeled_example(&fixtures[1].example).unwrap();
+        wrong.set("question", json!("Synthetic development label"));
+        let before = student.asked().len();
+        let other = tempfile::tempdir().unwrap();
+        assert!(
+            compile_direct_reader_from_gold(
+                &fixtures,
+                "contact",
+                book,
+                &models,
+                other.path(),
+                CompileOptions {
+                    max_metrics: 1,
+                    bootstrap_demos: 0
+                },
+                &crate::reading::direct_reader_baseline("contact").unwrap(),
+                &[wrong],
+                1
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(student.asked().len(), before);
     }
 
     #[tokio::test]
