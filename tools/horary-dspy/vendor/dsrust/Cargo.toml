@@ -19,7 +19,7 @@ name = "dsrust"
 path = "src/lib.rs"
 
 [workspace]
-members = ["derive", "bridge", "tpe", "pyrng", "gepa"]
+members = ["derive", "tpe", "pyrng", "gepa"]
 default-members = [".", "derive", "tpe", "pyrng", "gepa"]
 
 [dependencies]

@@ -3,7 +3,10 @@
   "upstream_revision": "f24adde08c1d8850e4d7079d019643bb40f905cb",
   "snapshot_revision": "09d17e07e18e9db2d12e33e2a4a29ca639da65de",
   "licenses": ["LICENSE-MIT", "LICENSE-APACHE"],
-  "snapshot_paths": ["Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT", "src", "derive", "bridge", "gepa", "pyrng", "tpe"],
+  "snapshot_paths": ["Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT", "src", "derive", "gepa", "pyrng", "tpe"],
   "upstream_changes": ["src/lm/openai/mod.rs: configurable nonstreaming timeout preserving the original 20-second default", "src/predict.rs: typed ObservedOutputFailure retains the received response at final adapter rejection, with three focused tests; provider/parser behavior and optimizer algorithms unchanged"],
-  "snapshot_method": "git archive of the exact committed revision; no original Git metadata, login, credentials, build output or Python runtime included"
+  "snapshot_method": "git archive of the listed paths at the exact committed revision; no original Git metadata, login, credentials, build output or Python runtime included",
+  "excluded_upstream_paths": ["bridge"],
+  "subset_changes": ["Cargo.toml: remove the unused Python bridge from workspace membership; the Rust optimizers and providers remain unchanged"],
+  "subset_boundary": "No Python source or bridge runtime is included or invoked. The upstream Rust python_json adapter and Rust CPython-compatible random-number implementation remain because they are port semantics, not a Python runtime."
 }

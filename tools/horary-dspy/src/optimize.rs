@@ -1117,6 +1117,118 @@ pub async fn compile_fixtures(
     Ok(result)
 }
 
+/// A fixed, paired development comparison. This executes the port's Evaluate
+/// only: no bootstrap, reflection, selection, held-out reuse or deployment.
+pub async fn compare_classification(
+    fixtures: &[Fixture],
+    candidate_instructions: &str,
+    models: &crate::runner::Models,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(
+        !fixtures.is_empty() && fixtures.iter().all(|f| f.split == "development"),
+        "A fixed comparison requires original development fixtures only"
+    );
+    ensure!(
+        !candidate_instructions.trim().is_empty(),
+        "Candidate instruction is empty"
+    );
+    let examples = fixtures
+        .iter()
+        .map(|f| f.example.clone())
+        .collect::<Vec<_>>();
+    let mut baseline = Graded::new(
+        "all",
+        "classification",
+        &examples,
+        models.student.clone(),
+        models.teacher.clone(),
+        None,
+    )?
+    .with_stream(directory.join("baseline-observations.jsonl"))?;
+    let mut candidate = Graded::new(
+        "all",
+        "classification",
+        &examples,
+        models.student.clone(),
+        models.teacher.clone(),
+        None,
+    )?
+    .with_stream(directory.join("candidate-observations.jsonl"))?;
+    match &mut candidate.oracle {
+        Oracle::Single(predictor) => {
+            // Only the instruction changes. Declarations, inputs, output
+            // types, native guards and independent criterion remain fixed.
+            predictor.signature.instructions = candidate_instructions.into();
+        }
+        Oracle::Reading(_) => unreachable!("Classification is a single Predict"),
+    }
+    baseline.save(&directory.join("baseline-program.json"))?;
+    candidate.save(&directory.join("candidate-program.json"))?;
+    let before = Evaluate::new(
+        examples.clone(),
+        |input| baseline.forward(input),
+        Graded::metric,
+    )
+    .run()
+    .await;
+    crate::queue::write_json_atomic(&directory.join("before.json"), &evaluation_receipt(&before))?;
+    baseline.save_observations(&directory.join("baseline-observations.json"))?;
+    ensure!(
+        before.failure_count() == 0,
+        "Baseline execution/review error withholds the paired comparison"
+    );
+    let after = Evaluate::new(examples, |input| candidate.forward(input), Graded::metric)
+        .run()
+        .await;
+    crate::queue::write_json_atomic(&directory.join("after.json"), &evaluation_receipt(&after))?;
+    candidate.save_observations(&directory.join("candidate-observations.json"))?;
+    let observed = after.failure_count() == 0;
+    let review_consistent =
+        [&baseline, &candidate]
+            .into_iter()
+            .try_fold(true, |all, program| {
+                let observations = program
+                    .observations
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Observation lock poisoned"))?;
+                Ok::<_, anyhow::Error>(
+                    all && observations
+                        .iter()
+                        .all(|o| o["review_summary_consistent"] == true),
+                )
+            })?;
+    let passed = |evaluation: &dsrust::Evaluation| {
+        evaluation
+            .results
+            .iter()
+            .filter(|r| {
+                r.prediction
+                    .as_ref()
+                    .is_ok_and(|p| p.get("__passed") == Some(&json!(true)))
+            })
+            .count()
+    };
+    let result = json!({
+        "function":"classification", "comparison":"fixed original development pool",
+        "cases":fixtures.len(), "teacher":models.teacher_id, "student":models.student_id,
+        "baseline_score":before.score, "candidate_score":if observed {Some(after.score)} else {None},
+        "baseline_passed":passed(&before), "candidate_passed":passed(&after),
+        "execution_observed":observed, "independent_review_consistent":review_consistent,
+        "strict_component_gain":observed && review_consistent && after.score > before.score,
+        "candidate_all_passed":observed && review_consistent && passed(&after) == fixtures.len(),
+        "candidate_instructions_sha256":crate::google::digest(candidate_instructions),
+        "dataset_sha256":fixtures_digest(fixtures)?, "reflection_calls":0,
+        "application_promoted":false, "source_correct_reading_qualified":false
+    });
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    ensure!(
+        observed,
+        "Candidate execution/review error remains unqualified"
+    );
+    Ok(result)
+}
+
 #[cfg(test)]
 mod component_tests {
     use super::*;
@@ -1137,6 +1249,99 @@ mod component_tests {
     }
     fn classification_reply() -> Example {
         dsrust::example! {method:"movable_deal",facet:"event",branch:"pure_completion",principal:"querent",clarification:""}
+    }
+    #[tokio::test]
+    async fn fixed_comparison_changes_instruction_only_and_never_reflects_on_development() {
+        let oracle = Arc::new(DummyLM::new([
+            dsrust::example! {method:"movable_deal",facet:"timing",branch:"pure_completion",principal:"querent",clarification:""},
+            classification_reply(),
+        ]));
+        let judge = Arc::new(DummyLM::new([
+            review("fail", "unobserved", "unobserved", "unobserved", false),
+            review("pass", "unobserved", "unobserved", "unobserved", true),
+        ]));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: judge.clone(),
+            student_id: "synthetic-student".into(),
+            teacher_id: "synthetic-independent-criterion".into(),
+        };
+        let fixtures = [Fixture {
+            split: "development".into(),
+            example: classification_input(),
+        }];
+        let directory = tempfile::tempdir().unwrap();
+        let result = compare_classification(
+            &fixtures,
+            "FIXED SOURCE-REVIEWED INSTRUCTION",
+            &models,
+            directory.path(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["baseline_passed"], 0);
+        assert_eq!(result["candidate_passed"], 1);
+        assert_eq!(result["strict_component_gain"], true);
+        assert_eq!(result["reflection_calls"], 0);
+        assert_eq!(judge.asked().len(), 2);
+        let requests = oracle.asked();
+        assert_eq!(requests.len(), 2);
+        assert!(
+            !requests[0]
+                .system
+                .contains("FIXED SOURCE-REVIEWED INSTRUCTION")
+        );
+        assert!(
+            requests[1]
+                .system
+                .contains("FIXED SOURCE-REVIEWED INSTRUCTION")
+        );
+        assert_eq!(requests[0].last_message(), requests[1].last_message());
+        assert!(requests.iter().all(|r| r.config.max_tokens == Some(512)
+            && !r.system.contains("PRIVATE GOLD")
+            && !r.last_message().contains("PRIVATE GOLD")));
+        let baseline: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("baseline-program.json")).unwrap(),
+        )
+        .unwrap();
+        let candidate: Value = serde_json::from_slice(
+            &fs::read(directory.path().join("candidate-program.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            baseline["classification"]["signature"]["fields"],
+            candidate["classification"]["signature"]["fields"]
+        );
+        assert_eq!(candidate["classification"]["demos"], json!([]));
+    }
+    #[tokio::test]
+    async fn fixed_comparison_rejects_relabelled_pools_before_any_model_call() {
+        let oracle = Arc::new(DummyLM::new([]));
+        let judge = Arc::new(DummyLM::new([]));
+        let models = crate::runner::Models {
+            student: oracle.clone(),
+            teacher: judge.clone(),
+            student_id: "synthetic-student".into(),
+            teacher_id: "synthetic-independent-criterion".into(),
+        };
+        let directory = tempfile::tempdir().unwrap();
+        for split in ["train", "test"] {
+            assert!(
+                compare_classification(
+                    &[Fixture {
+                        split: split.into(),
+                        example: classification_input()
+                    }],
+                    "FIXED INSTRUCTION",
+                    &models,
+                    directory.path()
+                )
+                .await
+                .is_err()
+            );
+        }
+        assert!(oracle.asked().is_empty());
+        assert!(judge.asked().is_empty());
     }
     #[tokio::test]
     async fn classification_metric_ignores_absent_other_stages_and_keeps_gold_private() {

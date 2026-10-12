@@ -196,6 +196,17 @@ enum Command {
         #[arg(long, default_value_t = 2)]
         bootstrap_demos: usize,
     },
+    /// Compare an already proposed instruction on one complete development pool.
+    CompareClassification {
+        #[arg(long)]
+        method: String,
+        #[arg(long, default_value = "examples")]
+        examples: PathBuf,
+        #[arg(long)]
+        candidate_instructions: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     Optimize {
         #[arg(long)]
         method: String,
@@ -220,6 +231,7 @@ async fn main() -> Result<()> {
                 Command::Run { .. }
                     | Command::Optimize { .. }
                     | Command::OptimizeClassification { .. }
+                    | Command::CompareClassification { .. }
             ),
             "Local selection applies to run/optimize; sealed hosted queues remain unchanged"
         );
@@ -835,6 +847,76 @@ async fn main() -> Result<()> {
                 },
             )
             .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::CompareClassification {
+            method,
+            examples,
+            candidate_instructions,
+            output,
+        } => {
+            ensure!(
+                runner::methods(&method)?.len() == 1,
+                "Select one complete family development pool"
+            );
+            ensure!(
+                args.student_local_url.is_some(),
+                "This bounded comparison uses the resident local student"
+            );
+            let cases = catalogue::cases(&examples, &method)?
+                .into_iter()
+                .filter(|c| c.split == "development")
+                .collect::<Vec<_>>();
+            let instruction = fs::read_to_string(&candidate_instructions)?;
+            ensure!(
+                !instruction.trim().is_empty(),
+                "Candidate instruction is empty"
+            );
+            fs::create_dir(&output)
+                .context("Use a fresh comparison directory; prior attempts remain intact")?;
+            runner::manifest(
+                &output,
+                &cases,
+                &args.book,
+                serde_json::json!({
+                    "command":"compare-classification", "method":method,
+                    "student":args.student_model, "student_local_url":args.student_local_url,
+                    "teacher":teacher_identity(args.teacher), "candidate_instructions":candidate_instructions,
+                    "candidate_instructions_sha256":google::digest(&instruction),
+                    "student_call_bound":2 * cases.len(), "teacher_physical_call_bound":64,
+                    "reflection_calls":0, "selection":"Fixed baseline and proposed candidate; no search or deployment"
+                }),
+            )?;
+            fs::write(output.join("candidate-instructions.txt"), &instruction)?;
+            let book = book::Book::open(&args.book)?;
+            let fixtures = cases
+                .iter()
+                .map(|case| {
+                    Ok(horary_dspy::functions::Fixture {
+                        split: case.split.clone(),
+                        example: catalogue::example(case, "classification", &book)?,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let http = google::client(&args.credential_file)?;
+            let student = selected_student(
+                args.student_local_url.as_deref(),
+                &args.student_model,
+                http.clone(),
+                output.join("student"),
+                2 * cases.len(),
+                14_000,
+            )?;
+            let teacher =
+                teacher_model(args.teacher, args.codex, http, output.join("teacher"), 64).await?;
+            let models = runner::Models {
+                student,
+                teacher,
+                teacher_id: teacher_identity(args.teacher).into(),
+                student_id: args.student_model,
+            };
+            let result =
+                optimize::compare_classification(&fixtures, &instruction, &models, &output).await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
     }
