@@ -663,6 +663,57 @@ fn relevant_demo_label(
     answer.labeled_example(&inputs)
 }
 
+/// A cited-fact demo is valid only for its original training consultation and
+/// the exact received five-field answer whose independent review was accepted.
+pub(crate) fn labeled_inputs_match_training(
+    label: &Example,
+    fixture: &Example,
+    method: &str,
+) -> Result<bool> {
+    if fixture.get("__concise_student_projection") != Some(&json!(true)) {
+        return Ok(fixture.inputs()?.rendered() == label.inputs()?.rendered());
+    }
+    verify_concise_fixture(fixture, method)?;
+    if label.len() != 9 || label.inputs()?.len() != 4 || label.labels()?.len() != 5 {
+        return Ok(false);
+    }
+    let answer =
+        WorkedAnswer::from_prediction(&Prediction::new(label.clone(), "Received worked label"))?;
+    if fixture.get("__approved_demo_answer") != Some(&serde_json::to_value(&answer)?) {
+        return Ok(false);
+    }
+    let canonical = canonical_review_inputs(fixture)?;
+    let expected = relevant_demo_label(fixture, &canonical, method, &answer)?;
+    Ok(same_named_inputs(&expected.inputs()?, &label.inputs()?))
+}
+
+fn bind_approved_concise_demo(
+    fixtures: &mut [Fixture],
+    labels: &[Example],
+    method: &str,
+) -> Result<()> {
+    ensure!(
+        labels.len() == 1,
+        "The concise phase accepts exactly one received TRAIN answer"
+    );
+    let answer = WorkedAnswer::from_prediction(&Prediction::new(
+        labels[0].clone(),
+        "Source-reviewed concise answer",
+    ))?;
+    let fixture = fixtures
+        .iter_mut()
+        .find(|fixture| fixture.split == "train")
+        .context("No original TRAIN fixture")?;
+    fixture
+        .example
+        .set("__approved_demo_answer", serde_json::to_value(answer)?);
+    ensure!(
+        labeled_inputs_match_training(&labels[0], &fixture.example, method)?,
+        "Received demo does not match its original TRAIN presentation"
+    );
+    Ok(())
+}
+
 async fn concise_label(
     fixtures: &[Fixture],
     method: &str,
@@ -1499,6 +1550,7 @@ pub async fn optimize_families(
                     Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory,80)?.with_budget(teacher_budget.clone()).with_completed_cache_only())
                 } else {teacher.clone()};
                 labels=if let Some(prepared)=student.prepared.filter(|_|*method=="contact") {load_concise_label(&fixtures,&book,method,&prepared.join("contact/concise-demo"))?} else {concise_label(&fixtures,method,&book,demo_teacher,&family.join("concise-demo")).await?};
+                bind_approved_concise_demo(&mut fixtures,&labels,method)?;
             }
             let preflight=count_labeled_inputs(&fixtures,method,&labels,&http,&listing,&family.join("preflight"),&student).await?;
             if student.prepare_only {
@@ -1811,6 +1863,23 @@ mod tests {
                 .unwrap()
                 .is_subset(&catalogue::relevant_chart_ids(chart).unwrap())
         );
+        assert!(
+            !labeled_inputs_match_training(&label[0], &fixtures[0].example, "contact").unwrap()
+        );
+        bind_approved_concise_demo(&mut fixtures, &label, "contact").unwrap();
+        assert!(labeled_inputs_match_training(&label[0], &fixtures[0].example, "contact").unwrap());
+        let mut changed = label[0].clone();
+        changed.set(
+            "analysis",
+            json!("A different answer cannot inherit this approval"),
+        );
+        assert!(!labeled_inputs_match_training(&changed, &fixtures[0].example, "contact").unwrap());
+        let mut changed = label[0].clone();
+        changed.set(
+            "chart_evidence",
+            json!("<facts>\ne1|position|Changed supplied fact\n</facts>"),
+        );
+        assert!(!labeled_inputs_match_training(&changed, &fixtures[0].example, "contact").unwrap());
         let requests = preflight::reader_requests(
             &fixtures,
             &concise_predictor("contact", &label, 1).unwrap(),
@@ -1820,6 +1889,39 @@ mod tests {
         if let Ok(output) = std::env::var("HORARY_CONCISE_WIRES") {
             crate::queue::write_json_atomic(Path::new(&output), &json!({"cases":20,"requests":requests,"teacher_calls":0,"student_calls":0,"inherited_student_calls":3,"inherited_teacher_calls":3,"answer_unchanged":true})).unwrap();
         }
+        // Run the real compiler and native guards with offline stubs. These
+        // deliberate grades check wiring only and establish no semantic result.
+        let student = Arc::new(dsrust::DummyLM::new((0..64).map(|_| dsrust::example! {
+            status:"method_limit",answer:"Offline construction fixture, not an actual reading",
+            analysis:"e1 supplied test fact",evidence:"e1",unresolved:"Offline stub; no model quality claim"
+        })));
+        let judge = Arc::new(dsrust::DummyLM::new((0..64).map(|_| dsrust::example! {
+            score:1.,passed:true,classification:"unobserved",extraction:"unobserved",reading:"pass",answer_quality:"pass",feedback:"Offline wiring stub, not semantic acceptance"
+        })));
+        let models = runner::Models {
+            student: student.clone(),
+            teacher: judge,
+            student_id: "Offline no-network construction".into(),
+            teacher_id: "Offline no-network construction".into(),
+        };
+        let result = optimize::compile_direct_reader_from_gold(
+            &fixtures,
+            "contact",
+            Arc::new(book),
+            &models,
+            &temporary.path().join("compile"),
+            optimize::CompileOptions {
+                max_metrics: 1,
+                bootstrap_demos: 0,
+            },
+            CONCISE_BASELINE,
+            &label,
+            1,
+        )
+        .await
+        .unwrap();
+        assert!(result.get("authored_development").is_some());
+        assert!(!student.asked().is_empty());
     }
 
     #[test]

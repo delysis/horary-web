@@ -1674,13 +1674,9 @@ async fn compile_fixtures_inner(
     }
     if let Some((labels, count)) = labeled_training {
         ensure!(
-            labels.iter().all(
-                |label| train
-                    .iter()
-                    .any(|example| example.inputs().is_ok_and(|input| label
-                        .inputs()
-                        .is_ok_and(|labeled_input| input.rendered() == labeled_input.rendered())))
-            ),
+            labels.iter().all(|label| train.iter().any(|example| {
+                crate::gold::labeled_inputs_match_training(label, example, method).unwrap_or(false)
+            })),
             "Labeled demonstrations must come only from this original TRAIN pool"
         );
         program.save(&directory.join("authored-program.json"))?;
