@@ -43,8 +43,8 @@ local model starts a distinct authored/labeled/selected baseline; no hosted
 answer, semantic score or optimizer state is imported.
 
 `--concise-student --prepare-student-only --method contact` creates a fresh
-student presentation: a short source-grounded procedure, finite native tables
-with every live evidence ID and originally supplied motion, and one actual
+student presentation: a short source-grounded procedure, compact method-relevant
+native facts and originally supplied motion, and one actual
 TRAIN worked answer of at most 250 words. The teacher derives and independently
 reviews that answer using the full canonical chart, approved reference and book;
 the original gold remains intact. Exact token counts cover all twenty original
@@ -55,8 +55,12 @@ same source, input and original caps. The prior unsettled review remains blocked
 
 Every concise student request, including a later GEPA rewrite, must pass an
 exact whole-wire 6000-input-token ceiling before a physical reservation. Output
-allows 2048 tokens. Only saved demonstrations use a cited-evidence subset with
-explicit omission limits; live charts retain all IDs and actor aliases. The
+allows 2048 tokens. Live charts select evidence from declared consultation roles,
+their conditions, directed receptions and relevant ordered events; they do not
+use private expected answers. Both live input and the worked example use compact
+text without provenance metadata. The saved example additionally retains every
+fact cited by its approved answer. Explicit omission limits preserve uncertainty;
+the full original chart and actor aliases remain in the private record. The
 independent judge keeps full canonical inputs and primary source. This is a new
 declared component baseline, with no comparison against the stopped large-input
 runs. Contact is the first supported concise procedure; later families require
