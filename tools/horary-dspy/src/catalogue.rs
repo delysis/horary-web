@@ -452,6 +452,14 @@ pub fn concise_reader_inputs(original: &Example, method: &str) -> Result<Example
 /// The existing calculator is used only to recover its typed native rows. Every
 /// original eID/kind/label/detail must match before presentation can change.
 pub fn concise_reader_chart(original: &Value, consultation: &Value, method: &str) -> Result<Value> {
+    Ok(verified_concise_chart(original, consultation, method)?.0)
+}
+
+fn verified_concise_chart(
+    original: &Value,
+    consultation: &Value,
+    method: &str,
+) -> Result<(Value, Vec<crate::native_evidence::Fact>)> {
     concise_reader_source(method)?;
     let anchor = &original["anchor"];
     let at = chrono::DateTime::parse_from_rfc3339(
@@ -543,7 +551,515 @@ pub fn concise_reader_chart(original: &Value, consultation: &Value, method: &str
             );
         }
     }
-    concise_native_table(original, &raw, &native, &reference, &motion)
+    let table = concise_native_table(original, &raw, &native, &reference, &motion)?;
+    Ok((table, native))
+}
+
+/// A source-scoped Contact presentation. Selection reads only the declared
+/// consultation and verified native facts, never a case label or answer. Full
+/// canonical inputs remain the consumer's private reviewer/journal evidence.
+pub fn relevant_reader_inputs(original: &Example, method: &str) -> Result<Example> {
+    let question = original
+        .get("question")
+        .and_then(Value::as_str)
+        .context("No original question")?;
+    let consultation: Value = serde_json::from_str(
+        original
+            .get("consultation")
+            .and_then(Value::as_str)
+            .context("No canonical consultation")?,
+    )?;
+    let chart: Value = serde_json::from_str(
+        original
+            .get("chart_evidence")
+            .and_then(Value::as_str)
+            .context("No canonical native chart")?,
+    )?;
+    Ok(
+        dsrust::input! {question:question,consultation:relevant_reader_consultation(&consultation)?,
+        chart_evidence:relevant_reader_chart(&chart,&consultation,method,None)?,source_text:concise_reader_source(method)?},
+    )
+}
+
+/// Keep actual situational values, including conflicting accounts and genuine
+/// unknowns. Quotation/provenance and coordinates are private once this Contact
+/// chart has supplied its houses; they are not additional neural input facts.
+pub fn relevant_reader_consultation(consultation: &Value) -> Result<String> {
+    let facts = consultation["facts"]
+        .as_array()
+        .context("No declared fact rows")?;
+    let mut lines = Vec::new();
+    for key in ["method", "facet", "branch"] {
+        if let Some(value) = consultation.get(key).filter(|v| !v.is_null()) {
+            lines.push(format!(
+                "{key}={}",
+                plain_relevant(value.as_str().context("Invalid declared context")?)
+            ));
+        }
+    }
+    for fact in facts {
+        let field = fact["field"]
+            .as_str()
+            .context("Invalid declared fact field")?;
+        let value = fact["value"]
+            .as_str()
+            .context("Invalid declared fact value")?;
+        if field != "reader_place" {
+            lines.push(format!(
+                "{}={}",
+                plain_relevant(field),
+                plain_relevant(value)
+            ));
+        }
+    }
+    if let Some(device) = consultation.get("device") {
+        for key in ["observed_at", "time_zone"] {
+            if let Some(value) = device[key].as_str() {
+                lines.push(format!("device_{key}={}", plain_relevant(value)));
+            }
+        }
+    }
+    if let Some(unknowns) = consultation["unknown"].as_array() {
+        for unknown in unknowns {
+            lines.push(format!(
+                "UNKNOWN {}",
+                plain_relevant(unknown.as_str().context("Invalid declared unknown")?)
+            ));
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
+/// Plain finite evidence. Explicit extra IDs are for cited demonstration rows
+/// only; live input construction always passes None. The canonical input is
+/// verified before either form is selected and never rewritten.
+pub fn relevant_reader_chart(
+    original: &Value,
+    consultation: &Value,
+    method: &str,
+    extra_demo_ids: Option<&BTreeSet<String>>,
+) -> Result<String> {
+    ensure!(
+        method == "contact",
+        "No reviewed relevant procedure for {method}"
+    );
+    let (table, native) = verified_concise_chart(original, consultation, method)?;
+    let selected = relevant_contact_ids(&table, &native, extra_demo_ids)?;
+    let mut text = format!(
+        "Chart UTC {}\n",
+        plain_relevant(
+            original["anchor"]["utc"]
+                .as_str()
+                .context("No chart instant")?
+        )
+    );
+    for role in table["role_reference"]["roles"]
+        .as_array()
+        .context("No native role references")?
+    {
+        let house = role[3]
+            .as_u64()
+            .map_or_else(|| "—".into(), |h| format!("H{h}"));
+        let planet = role[4].as_str().unwrap_or("?");
+        text.push_str(&format!(
+            "{}({}) = {house}/{}{}\n",
+            plain_relevant(role[0].as_str().context("Invalid role ID")?),
+            plain_relevant(role[1].as_str().unwrap_or("?")),
+            planet,
+            if role[5] == true { " optional" } else { "" }
+        ));
+    }
+    let moon = &table["role_reference"]["moon"];
+    text.push_str(&format!(
+        "Moon contextual={}; house claims={}{}\n",
+        moon["available_as_contextual_reference"]
+            .as_bool()
+            .map_or("?", |v| if v { "yes" } else { "no" }),
+        relevant_role_names(&moon["house_claims"]),
+        if moon["conditional_house_claims_if_optional_role_used"]
+            .as_array()
+            .is_some_and(|r| !r.is_empty())
+        {
+            format!(
+                "; optional claims={}",
+                moon["conditional_house_claims_if_optional_role_used"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        } else {
+            String::new()
+        }
+    ));
+    for unknown in table["role_reference"]["unknowns"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        text.push_str(&format!(
+            "UNKNOWN {}\n",
+            plain_relevant(unknown.as_str().context("Invalid role unknown")?)
+        ));
+    }
+    text.push_str("<facts>\n");
+    for fact in native
+        .iter()
+        .filter(|f| selected.contains(&f.id) && f.kind != "event")
+    {
+        let notation =
+            if let Some(edge) = fact.reception.as_ref().filter(|_| fact.kind == "reception") {
+                let qualities = |polarity| {
+                    edge.qualities
+                        .iter()
+                        .filter(|q| q.polarity == polarity)
+                        .map(|q| q.dignity.native_name())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                };
+                format!(
+                    "{}→{} +[{}] -[{}]",
+                    edge.guest_planet,
+                    edge.host_planet,
+                    qualities(crate::native_evidence::ReceptionPolarity::Positive),
+                    qualities(crate::native_evidence::ReceptionPolarity::Negative)
+                )
+            } else {
+                fact.detail.clone()
+            };
+        text.push_str(&format!(
+            "{}|{}|{}\n",
+            fact.id,
+            fact.kind,
+            plain_relevant(&notation)
+        ));
+    }
+    let mut events: Vec<_> = native
+        .iter()
+        .filter(|f| selected.contains(&f.id) && f.kind == "event")
+        .collect();
+    events.sort_by(|a, b| {
+        a.event
+            .as_ref()
+            .unwrap()
+            .astronomical_hours
+            .total_cmp(&b.event.as_ref().unwrap().astronomical_hours)
+    });
+    for fact in events {
+        let row = table["events"]["rows"]
+            .as_array()
+            .context("No native events")?
+            .iter()
+            .find(|row| row[0] == fact.id)
+            .context("No selected typed event row")?;
+        let signs = match row[4].as_bool() {
+            Some(true) => "currentSigns",
+            Some(false) => "afterIngress",
+            None => "ingress?",
+        };
+        let gap = row[6].as_str().map_or_else(
+            || row[6]["native_detail"].as_str().unwrap_or("?").to_owned(),
+            str::to_owned,
+        );
+        text.push_str(&format!(
+            "{}|event|{}~{} {} t≈{}astro-h {signs} gap={}; {}\n",
+            fact.id,
+            row[1].as_str().context("No event endpoint")?,
+            row[2].as_str().context("No event endpoint")?,
+            row[3].as_str().context("No aspect")?,
+            relevant_number(&row[5]),
+            plain_relevant(&gap),
+            relevant_motion(&row[7])?
+        ));
+    }
+    text.push_str("</facts>\nLegend: H assigns a role, not the body's occupied house. → is regard, preserving every +/− quality; ~ endpoints are storage order, not the applicant or caller. Events are in computed astronomical order; fine prevention order remains approximate. Motion endpoints/travel use hourly-bracket interpolation, rounded to 3 decimals (error ≤0.0005 in stated units); rounded zero is not stationarity. Astronomical hours are not earthly time. Only relevant source-selected facts are shown; omitted evidence or uncomputed techniques are unknown, not proof of absence.\n");
+    ensure!(
+        relevant_chart_ids(&text)? == selected,
+        "Relevant text lost its native ID domain"
+    );
+    Ok(text)
+}
+
+/// Exact provided-ID domain: no IDs are scraped from model prose or legends.
+pub fn relevant_chart_ids(text: &str) -> Result<BTreeSet<String>> {
+    let mut ids = BTreeSet::new();
+    let mut open = false;
+    let mut seen = false;
+    let mut closed = false;
+    for line in text.lines() {
+        match line {
+            "<facts>" => {
+                ensure!(!seen, "Duplicate facts block");
+                open = true;
+                seen = true;
+            }
+            "</facts>" => {
+                ensure!(open, "Unmatched facts closing marker");
+                open = false;
+                closed = true;
+            }
+            _ if open => {
+                let mut columns = line.splitn(3, '|');
+                let id = columns.next().context("Missing fact ID")?;
+                let number = id
+                    .strip_prefix('e')
+                    .filter(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()))
+                    .context("Malformed native fact ID")?;
+                let number: u64 = number.parse().context("Malformed native fact number")?;
+                ensure!(format!("e{number}") == id, "Noncanonical native fact ID");
+                ensure!(
+                    matches!(
+                        columns.next(),
+                        Some(
+                            "position"
+                                | "house"
+                                | "condition"
+                                | "reception"
+                                | "event"
+                                | "moon"
+                                | "boundary"
+                        )
+                    ),
+                    "Unknown native fact kind"
+                );
+                ensure!(
+                    columns.next().is_some_and(|c| !c.trim().is_empty()),
+                    "Missing native fact notation"
+                );
+                ensure!(ids.insert(id.to_owned()), "Duplicate native fact ID");
+            }
+            _ => {}
+        }
+    }
+    ensure!(
+        seen && closed && !open && !ids.is_empty(),
+        "Missing or incomplete finite native facts block"
+    );
+    Ok(ids)
+}
+
+fn relevant_contact_ids(
+    table: &Value,
+    native: &[crate::native_evidence::Fact],
+    extra_demo_ids: Option<&BTreeSet<String>>,
+) -> Result<BTreeSet<String>> {
+    let roles = table["role_reference"]["roles"]
+        .as_array()
+        .context("No role rows")?;
+    let mut recipients = BTreeSet::new();
+    let mut targets = BTreeSet::new();
+    let mut planets = BTreeSet::from(["Moon".to_owned()]);
+    let mut ids = BTreeSet::new();
+    for row in roles {
+        if let Some(planet) = row[4].as_str() {
+            planets.insert(planet.to_owned());
+            match row[0].as_str() {
+                Some("principal.person" | "principal.moon") => {
+                    recipients.insert(planet.to_owned());
+                }
+                Some("target.person" | "target.message") => {
+                    targets.insert(planet.to_owned());
+                }
+                _ => {}
+            }
+        }
+        if let Some(id) = row[8].as_str() {
+            ids.insert(id.to_owned());
+        }
+    }
+    let mut events: Vec<_> = native
+        .iter()
+        .filter(|f| f.kind == "event" && f.event.is_some() && f.planets.len() == 2)
+        .collect();
+    events.sort_by(|a, b| {
+        a.event
+            .as_ref()
+            .unwrap()
+            .astronomical_hours
+            .total_cmp(&b.event.as_ref().unwrap().astronomical_hours)
+    });
+    let lunar: Vec<_> = events
+        .iter()
+        .copied()
+        .filter(|f| f.planets.iter().any(|p| p == "Moon"))
+        .take(2)
+        .collect();
+    let mut pairs = BTreeSet::new();
+    let direct: Vec<_> = events
+        .iter()
+        .copied()
+        .filter(|f| {
+            !f.planets.iter().any(|p| p == "Moon")
+                && ((recipients.contains(&f.planets[0]) && targets.contains(&f.planets[1]))
+                    || (recipients.contains(&f.planets[1]) && targets.contains(&f.planets[0])))
+        })
+        .filter(|f| {
+            let mut pair = f.planets.clone();
+            pair.sort();
+            pairs.insert(pair)
+        })
+        .collect();
+    let mut horizons = BTreeMap::<String, f64>::new();
+    for event in lunar.iter().chain(&direct) {
+        ids.insert(event.id.clone());
+        let hours = event.event.as_ref().unwrap().astronomical_hours;
+        for planet in event.planets.iter().filter(|p| p.as_str() != "Moon") {
+            horizons
+                .entry(planet.clone())
+                .and_modify(|t| *t = t.max(hours))
+                .or_insert(hours);
+        }
+    }
+    for planet in recipients
+        .iter()
+        .chain(&targets)
+        .filter(|p| p.as_str() != "Moon")
+    {
+        if !horizons.contains_key(planet)
+            && let Some(second) = events
+                .iter()
+                .copied()
+                .filter(|f| !f.planets.iter().any(|p| p == "Moon") && f.planets.contains(planet))
+                .take(2)
+                .last()
+        {
+            horizons.insert(
+                planet.clone(),
+                second.event.as_ref().unwrap().astronomical_hours,
+            );
+        }
+    }
+    for event in events
+        .iter()
+        .filter(|f| !f.planets.iter().any(|p| p == "Moon"))
+    {
+        if event.planets.iter().any(|p| {
+            horizons
+                .get(p)
+                .is_some_and(|until| event.event.as_ref().unwrap().astronomical_hours <= *until)
+        }) {
+            ids.insert(event.id.clone());
+        }
+    }
+    if let Some(extra) = extra_demo_ids {
+        for id in extra {
+            ensure!(
+                native.iter().any(|f| f.id == *id),
+                "Foreign demonstration fact {id}"
+            );
+            ids.insert(id.clone());
+        }
+    }
+    let occasion_pairs: Vec<_> = events
+        .iter()
+        .filter(|f| ids.contains(&f.id))
+        .map(|f| &f.planets)
+        .collect();
+    let mut bodies = planets.clone();
+    for event in events.iter().filter(|f| ids.contains(&f.id)) {
+        bodies.extend(event.planets.iter().cloned());
+    }
+    // Only actual retained occasions make an otherwise unrelated planet's
+    // position/capacity useful for prevention/translation/collection review.
+    for fact in native {
+        match fact.kind.as_str() {
+            "position" | "condition" if fact.planets.iter().any(|p| bodies.contains(p)) => {
+                ids.insert(fact.id.clone());
+            }
+            "moon" | "boundary" => {
+                ids.insert(fact.id.clone());
+            }
+            "reception"
+                if fact.planets.len() == 2
+                    && (fact.planets.iter().all(|p| planets.contains(p))
+                        || occasion_pairs
+                            .iter()
+                            .any(|pair| pair.iter().all(|p| fact.planets.contains(p)))) =>
+            {
+                ids.insert(fact.id.clone());
+            }
+            _ => {}
+        }
+    }
+    Ok(ids)
+}
+
+fn plain_relevant(value: &str) -> String {
+    value.replace(['\n', '\r', '|'], " ")
+}
+
+fn relevant_role_names(roles: &Value) -> String {
+    roles
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r["role_id"].as_str())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn relevant_number(value: &Value) -> String {
+    value.as_f64().map_or_else(
+        || "?".into(),
+        |n| {
+            let rounded = format!("{n:.3}");
+            let trimmed = rounded.trim_end_matches('0').trim_end_matches('.');
+            if trimmed == "-0" {
+                "0".into()
+            } else {
+                trimmed.into()
+            }
+        },
+    )
+}
+
+fn relevant_motion(motion: &Value) -> Result<String> {
+    if motion.is_null() {
+        return Ok("motion=? (not supplied)".into());
+    }
+    let bodies = motion[3].as_array().context("No supplied body motion")?;
+    let opposite = bodies.len() == 2
+        && bodies[0][3]
+            .as_f64()
+            .zip(bodies[1][3].as_f64())
+            .is_some_and(|(a, b)| a.signum() != b.signum());
+    let mut text = format!(
+        "≈bracket {}..{}h intra={}",
+        relevant_number(&motion[1][0]),
+        relevant_number(&motion[1][1]),
+        motion[2]
+            .as_bool()
+            .map_or("?", |v| if v { "resolved" } else { "?" })
+    );
+    for body in bodies {
+        let name = body[0].as_str().context("No supplied body name")?;
+        text.push_str(&format!(
+            "; {name} L={}..{}° Δ={}° rev={} zeroMean={}",
+            relevant_number(&body[1]),
+            relevant_number(&body[2]),
+            relevant_number(&body[3]),
+            body[7],
+            body[8]
+        ));
+        if body[7] == true
+            || body[3]
+                .as_f64()
+                .zip(body[4].as_f64())
+                .is_some_and(|(signed, path)| (signed.abs() - path).abs() > 0.0005)
+        {
+            text.push_str(&format!(" path={}°", relevant_number(&body[4])));
+        }
+        if opposite || body[7] == true || body[8] == true {
+            text.push_str(&format!(
+                " v={}..{}°/day",
+                relevant_number(&body[5]),
+                relevant_number(&body[6])
+            ));
+        }
+    }
+    Ok(text)
 }
 
 fn concise_native_table(
@@ -866,6 +1382,211 @@ pub fn coverage_card(method: &str) -> Result<Value> {
 #[cfg(test)]
 mod concise_projection_tests {
     use super::*;
+
+    #[test]
+    fn relevant_contact_keeps_actual_roles_mixed_edges_and_sparse_unknowns_without_metadata() {
+        let (input, _, native) = declared(Some("mother"));
+        let relevant = relevant_reader_inputs(&input, "contact").unwrap();
+        assert_eq!(relevant.get("question"), input.get("question"));
+        let text = relevant.get("chart_evidence").unwrap().as_str().unwrap();
+        let ids = relevant_chart_ids(text).unwrap();
+        assert!(ids.len() < native.len());
+        assert!(text.contains("target.person(alma) = H10/Mars"));
+        assert!(text.contains("e47|reception|Mars→Saturn +[termRuler,faceRuler] -[detriment]"));
+        assert!(text.contains("e57|reception|Saturn→Mars +[domicile] -[]"));
+        assert!(text.contains("afterIngress"));
+        assert!(text.contains("intra=?"));
+        assert!(text.contains("omitted evidence or uncomputed techniques are unknown"));
+        for field in [
+            "source_identity",
+            "source_fields",
+            "input_scope",
+            "alias_authority",
+            "body_motion_columns",
+            "\"quote\"",
+            "PRIVATE ANSWER",
+        ] {
+            assert!(!text.contains(field));
+        }
+        let mut chart: Value =
+            serde_json::from_str(input.get("chart_evidence").unwrap().as_str().unwrap()).unwrap();
+        chart.as_object_mut().unwrap().remove("role_reference");
+        let consultation: Value =
+            serde_json::from_str(input.get("consultation").unwrap().as_str().unwrap()).unwrap();
+        let sparse = relevant_reader_chart(&chart, &consultation, "contact", None).unwrap();
+        assert!(sparse.contains("motion=? (not supplied)"));
+        assert!(!sparse.contains("Δ="));
+    }
+
+    #[test]
+    fn relevant_contact_retains_shared_aliases_moon_priority_and_unknown_target() {
+        let (input, _, _) = declared(Some("friend"));
+        let relevant = relevant_reader_inputs(&input, "contact").unwrap();
+        let text = relevant.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(text.contains("principal.person(querent) = H1/Saturn"));
+        assert!(text.contains("target.message(alma) = H1/Saturn optional"));
+        let (input, _, _) = declared(Some("partner"));
+        let relevant = relevant_reader_inputs(&input, "contact").unwrap();
+        let text = relevant.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(text.contains("target.person(alma) = H7/Moon"));
+        assert!(text.contains("Moon contextual=no; house claims=target.person"));
+        assert!(!text.contains("principal.moon("));
+        let (input, _, _) = declared(None);
+        let relevant = relevant_reader_inputs(&input, "contact").unwrap();
+        let text = relevant.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(text.contains("target.person(alma) = —/?"));
+        assert!(text.contains("UNKNOWN The target's operative relationship is absent"));
+        assert!(!text.contains("target.person(alma) = H7"));
+    }
+
+    #[test]
+    fn relevant_contact_preserves_ordered_incoming_outgoing_prevention_without_lunar_chasing() {
+        let event = |id: &str, a: &str, b: &str, hours: f64| crate::native_evidence::Fact {
+            id: id.into(),
+            kind: "event".into(),
+            label: format!("{a} · {b}"),
+            detail: "synthetic actual candidate".into(),
+            planets: vec![a.into(), b.into()],
+            condition_facet: None,
+            reception: None,
+            event: Some(crate::native_evidence::EventCandidate {
+                within_current_signs: Some(false),
+                astronomical_hours: hours,
+                perfection_motion: None,
+            }),
+        };
+        let native = vec![
+            event("e1", "Moon", "Venus", 1.),
+            event("e2", "Mars", "Moon", 2.),
+            event("e3", "Moon", "Saturn", 3.),
+            event("e4", "Venus", "Saturn", 4.),
+            event("e5", "Mars", "Venus", 5.),
+            event("e6", "Saturn", "Mars", 6.),
+            event("e7", "Saturn", "Mars", 20.),
+            event("e8", "Mercury", "Sun", 2.5),
+        ];
+        let table = json!({"role_reference":{"roles":[
+            ["principal.person","querent","Q",1,"Saturn",false,null,null,null,[],[]],
+            ["target.person","iris","I",10,"Mars",false,null,null,null,[],[]]]}});
+        let ids = relevant_contact_ids(&table, &native, None).unwrap();
+        assert_eq!(
+            ids,
+            BTreeSet::from(["e1", "e2", "e4", "e5", "e6"].map(str::to_owned))
+        );
+        // Both incoming and outgoing endpoint orders are retained. The third
+        // Moon occasion and distant repeat do not become a long success chain.
+        assert!(!ids.contains("e3") && !ids.contains("e7") && !ids.contains("e8"));
+    }
+
+    #[test]
+    fn relevant_demo_only_citations_extend_a_verified_domain_and_parser_is_strict() {
+        let (input, chart, _) = declared(Some("mother"));
+        let consultation: Value =
+            serde_json::from_str(input.get("consultation").unwrap().as_str().unwrap()).unwrap();
+        let live = relevant_reader_chart(&chart, &consultation, "contact", None).unwrap();
+        let extras = BTreeSet::from(["e67", "e68", "e69", "e70"].map(str::to_owned));
+        let demo = relevant_reader_chart(&chart, &consultation, "contact", Some(&extras)).unwrap();
+        let live_ids = relevant_chart_ids(&live).unwrap();
+        let demo_ids = relevant_chart_ids(&demo).unwrap();
+        assert!(live_ids.is_subset(&demo_ids) && extras.is_subset(&demo_ids));
+        assert!(
+            relevant_reader_chart(
+                &chart,
+                &consultation,
+                "contact",
+                Some(&BTreeSet::from(["e999".into()]))
+            )
+            .is_err()
+        );
+        assert_eq!(
+            live,
+            relevant_reader_chart(&chart, &consultation, "contact", None).unwrap()
+        );
+        assert_eq!(
+            relevant_chart_ids("Mention e999 outside.\n<facts>\ne1|boundary|limits\n</facts>\n")
+                .unwrap(),
+            BTreeSet::from(["e1".into()])
+        );
+        for invalid in [
+            "e1|boundary|No block",
+            "<facts>\ne1|boundary|missing close",
+            "<facts>\ne01|boundary|noncanonical\n</facts>",
+            "<facts>\ne1|boundary|first\ne1|event|duplicate\n</facts>",
+            "<facts>\ne1|unknown_kind|foreign\n</facts>",
+            "<facts>\ne1|boundary|\n</facts>",
+            "<facts>\ne1|boundary|a\n</facts>\n<facts>\ne2|boundary|b\n</facts>",
+        ] {
+            assert!(relevant_chart_ids(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn relevant_consultation_preserves_values_unknowns_and_clock_without_provenance() {
+        let value = json!({"method":"contact","facet":"event","facts":[
+            {"field":"event_place","value":"Fairfax market","quote":"PRIVATE QUOTE"},
+            {"field":"horizon","value":"Friday, 2026-10-09","quote":"Friday"},
+            {"field":"reader_place","value":"PRIVATE COORDINATES","quote":"here"}],
+            "unknown":["people.alma.capacity"],"source_identity":"PRIVATE HASH",
+            "device":{"observed_at":"2026-10-08T18:33:00Z","time_zone":"America/New_York",
+                "place":{"name":"Springfield","latitude":38.657,"longitude":-77.249}}});
+        let saved = value.clone();
+        let text = relevant_reader_consultation(&value).unwrap();
+        assert_eq!(value, saved);
+        for needed in [
+            "event_place=Fairfax market",
+            "horizon=Friday, 2026-10-09",
+            "UNKNOWN people.alma.capacity",
+            "device_observed_at=2026-10-08T18:33:00Z",
+            "device_time_zone=America/New_York",
+        ] {
+            assert!(text.contains(needed));
+        }
+        for private in [
+            "PRIVATE",
+            "38.657",
+            "-77.249",
+            "quote",
+            "source_identity",
+            "{",
+        ] {
+            assert!(!text.contains(private));
+        }
+    }
+
+    #[test]
+    #[ignore = "Reads an explicitly supplied original TRAIN input; no model calls"]
+    fn relevant_actual_training_input_readonly_receipt() {
+        let path = std::env::var("HORARY_RELEVANT_TRAIN_INPUT").expect("Original TRAIN input path");
+        let bytes = fs::read(&path).unwrap();
+        let fields: Vec<(String, Value)> = serde_json::from_slice(&bytes).unwrap();
+        let original = Example::new(fields).with_inputs([
+            "question",
+            "consultation",
+            "chart_evidence",
+            "source_text",
+        ]);
+        let projected = relevant_reader_inputs(&original, "contact").unwrap();
+        let output = std::env::var("HORARY_RELEVANT_OUTPUT").expect("Unique new output path");
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&output)
+            .unwrap();
+        use std::io::Write;
+        file.write_all(
+            serde_json::to_string_pretty(&projected.rendered())
+                .unwrap()
+                .as_bytes(),
+        )
+        .unwrap();
+        println!(
+            "{}",
+            json!({"input_path":path,"original_sha256":crate::google::digest(&bytes),
+            "output_path":output,"provided_fact_ids":relevant_chart_ids(projected.get("chart_evidence").unwrap().as_str().unwrap()).unwrap(),
+            "chart_bytes":projected.get("chart_evidence").unwrap().as_str().unwrap().len(),"model_calls":0,
+            "tokens":"unmeasured: count the complete rendered request"})
+        );
+    }
 
     fn declared(relationship: Option<&str>) -> (Example, Value, Vec<crate::native_evidence::Fact>) {
         // TRAIN Contact001's published synthetic instant. No Case.expected or
