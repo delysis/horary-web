@@ -29,27 +29,8 @@ const CONCISE_SUBSET: &str = "Demonstration evidence subset: all output citation
 /// of supplying an example with unsupported evidence.
 pub fn compact(demonstration: &Example) -> Result<Example> {
     demonstration.inputs()?;
-    let ids = Regex::new(r"\be[0-9]+\b")?;
-    let ranges = Regex::new(r"\be([0-9]+)\s*(?:–|—|-)\s*e([0-9]+)\b")?;
+    let cited = cited_ids(demonstration)?;
     let moon = Regex::new(r"\bMoon\b")?;
-    let mut cited = BTreeSet::new();
-    for field in ["evidence", "analysis", "answer", "unresolved"] {
-        if let Some(value) = demonstration.get(field) {
-            let text = value
-                .as_str()
-                .with_context(|| format!("Demonstration {field} must be text"))?;
-            cited.extend(ids.find_iter(text).map(|found| found.as_str().to_owned()));
-            for range in ranges.captures_iter(text) {
-                let first: usize = range[1].parse()?;
-                let last: usize = range[2].parse()?;
-                ensure!(
-                    first <= last && last - first <= 4096,
-                    "Invalid demonstration evidence range"
-                );
-                cited.extend((first..=last).map(|id| format!("e{id}")));
-            }
-        }
-    }
     ensure!(
         cited.is_empty() || demonstration.get("chart_evidence").is_some(),
         "Demonstration cites native evidence without an actual chart"
@@ -73,6 +54,30 @@ pub fn compact(demonstration: &Example) -> Result<Example> {
     Ok(Example::new(fields).with_inputs(inputs))
 }
 
+pub(crate) fn cited_ids(demonstration: &Example) -> Result<BTreeSet<String>> {
+    let ids = Regex::new(r"\be[0-9]+\b")?;
+    let ranges = Regex::new(r"\be([0-9]+)\s*(?:–|—|-)\s*e([0-9]+)\b")?;
+    let mut cited = BTreeSet::new();
+    for field in ["evidence", "analysis", "answer", "unresolved"] {
+        if let Some(value) = demonstration.get(field) {
+            let text = value
+                .as_str()
+                .with_context(|| format!("Demonstration {field} must be text"))?;
+            cited.extend(ids.find_iter(text).map(|found| found.as_str().to_owned()));
+            for range in ranges.captures_iter(text) {
+                let first: usize = range[1].parse()?;
+                let last: usize = range[2].parse()?;
+                ensure!(
+                    first <= last && last - first <= 4096,
+                    "Invalid demonstration evidence range"
+                );
+                cited.extend((first..=last).map(|id| format!("e{id}")));
+            }
+        }
+    }
+    Ok(cited)
+}
+
 fn valid_id(id: &str) -> bool {
     id.strip_prefix('e')
         .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
@@ -85,6 +90,14 @@ fn foundational(kind: &str, label: &str, detail: &str, moon: &Regex) -> bool {
 }
 
 fn project(value: &Value, cited: &BTreeSet<String>, moon: &Regex) -> Result<Value> {
+    if let Some(text) = value.as_str().filter(|text| text.contains("<facts>")) {
+        let actual = crate::catalogue::relevant_chart_ids(text)?;
+        ensure!(
+            cited.is_subset(&actual),
+            "Worked demonstration cites an absent supplied native row"
+        );
+        return Ok(value.clone());
+    }
     let encoded = value.is_string();
     let mut chart = if let Some(text) = value.as_str() {
         serde_json::from_str(text).context("Demonstration chart_evidence is not JSON")?

@@ -586,7 +586,7 @@ fn canonical_review_inputs(example: &Example) -> Result<Example> {
 
 pub(crate) fn verify_concise_fixture(example: &Example, method: &str) -> Result<()> {
     let canonical = canonical_review_inputs(example)?;
-    let projected = catalogue::concise_reader_inputs(&canonical, method)?;
+    let projected = catalogue::relevant_reader_inputs(&canonical, method)?;
     ensure!(
         same_named_inputs(&projected, &example.inputs()?),
         "Concise reader input does not match its canonical native/source witness"
@@ -604,7 +604,7 @@ fn same_named_inputs(first: &Example, second: &Example) -> bool {
 fn concise_fixtures(fixtures: &mut [Fixture], method: &str) -> Result<()> {
     for fixture in fixtures {
         let original = fixture.example.inputs()?;
-        let projected = catalogue::concise_reader_inputs(&original, method)?;
+        let projected = catalogue::relevant_reader_inputs(&original, method)?;
         fixture
             .example
             .set("__review_inputs", json!(original.rendered()));
@@ -628,6 +628,39 @@ fn concise_predictor(method: &str, labels: &[Example], count: usize) -> Result<P
         ..Default::default()
     });
     Ok(predictor)
+}
+
+fn relevant_demo_label(
+    fixture: &Example,
+    canonical: &Example,
+    method: &str,
+    answer: &WorkedAnswer,
+) -> Result<Example> {
+    let mut inputs = fixture.inputs()?;
+    let labeled = answer.labeled_example(&inputs)?;
+    let cited = crate::demo::cited_ids(&labeled)?;
+    let chart: Value = serde_json::from_str(
+        canonical
+            .get("chart_evidence")
+            .and_then(Value::as_str)
+            .context("No canonical demo chart")?,
+    )?;
+    let consultation: Value = serde_json::from_str(
+        canonical
+            .get("consultation")
+            .and_then(Value::as_str)
+            .context("No canonical demo consultation")?,
+    )?;
+    inputs.set(
+        "chart_evidence",
+        json!(catalogue::relevant_reader_chart(
+            &chart,
+            &consultation,
+            method,
+            Some(&cited)
+        )?),
+    );
+    answer.labeled_example(&inputs)
 }
 
 async fn concise_label(
@@ -697,7 +730,7 @@ async fn concise_label(
         review_pass(&review)?,
         "Concise actual worked demo failed independent source/answer review"
     );
-    let label = answer.labeled_example(&fixture.example.inputs()?)?;
+    let label = relevant_demo_label(&fixture.example, &canonical, method, &answer)?;
     crate::queue::write_json_atomic(
         &directory.join("label.json"),
         &json!(label.fields().collect::<Vec<_>>()),
@@ -709,7 +742,7 @@ async fn concise_label(
     )?;
     crate::queue::write_json_atomic(
         &directory.join("source.json"),
-        &json!({"case_id":fixture.example.get("case_id"),"split":"train","fixture_digest":optimize::fixtures_digest(fixtures)?,"book_sha256":crate::book::OCR_SHA256,"teacher_source_sha256":google::digest(&source),"canonical_input_sha256":optimize::input_key(&canonical)?,"projected_input_sha256":optimize::input_key(&fixture.example.inputs()?)?,"demonstration_input_sha256":optimize::input_key(&displayed_demo.inputs()?)?,"reference_answer_sha256":google::digest(serde_json::to_vec(&reference)?),"answer_sha256":google::digest(fs::read(directory.join("answer.json"))?),"review_sha256":google::digest(fs::read(directory.join("review.json"))?),"label_sha256":google::digest(fs::read(directory.join("label.json"))?),"demonstration_sha256":google::digest(fs::read(directory.join("demonstration.json"))?),"reading":"pass","answer_quality":"pass","max_output_words":250,"full_reference_preserved":true,"live_chart_evidence_filtered":false,"demo_evidence_subset_declared":true,"rubrics_are_not_demonstrations":true}),
+        &json!({"case_id":fixture.example.get("case_id"),"split":"train","fixture_digest":optimize::fixtures_digest(fixtures)?,"book_sha256":crate::book::OCR_SHA256,"teacher_source_sha256":google::digest(&source),"canonical_input_sha256":optimize::input_key(&canonical)?,"projected_input_sha256":optimize::input_key(&fixture.example.inputs()?)?,"demonstration_input_sha256":optimize::input_key(&displayed_demo.inputs()?)?,"reference_answer_sha256":google::digest(serde_json::to_vec(&reference)?),"answer_sha256":google::digest(fs::read(directory.join("answer.json"))?),"review_sha256":google::digest(fs::read(directory.join("review.json"))?),"label_sha256":google::digest(fs::read(directory.join("label.json"))?),"demonstration_sha256":google::digest(fs::read(directory.join("demonstration.json"))?),"reading":"pass","answer_quality":"pass","max_output_words":250,"full_reference_preserved":true,"live_chart_evidence_filtered":true,"student_selection":"source_question_type_and_declared_roles","full_canonical_chart_private":true,"demo_evidence_subset_declared":true,"rubrics_are_not_demonstrations":true}),
     )?;
     Ok(vec![label])
 }
@@ -776,7 +809,7 @@ fn load_concise_label(
             && review["answer_quality"] == "pass",
         "Prepared demo review did not pass"
     );
-    let label = answer.labeled_example(&fixture.example.inputs()?)?;
+    let label = relevant_demo_label(&fixture.example, &canonical, method, &answer)?;
     ensure!(
         json!(label.fields().collect::<Vec<_>>())
             == serde_json::from_slice::<Value>(&fs::read(directory.join("label.json"))?)?,
@@ -956,9 +989,26 @@ fn prepared_consumption(
     let completed = operations
         .as_array()
         .context("No completed preparation teacher carriers")?;
+    let inherited_keys = ancestry["completed_teacher_operations"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|operation| operation["source"].as_str())
+        .filter_map(|source| Path::new(source).file_name())
+        .collect::<std::collections::BTreeSet<_>>();
+    let reused = completed
+        .iter()
+        .filter(|operation| {
+            operation["source"]
+                .as_str()
+                .and_then(|source| Path::new(source).file_name())
+                .is_some_and(|key| inherited_keys.contains(key))
+        })
+        .count();
     ensure!(
         teacher
-            == ancestry["teacher_physical_calls"].as_u64().unwrap_or(0) as usize + completed.len(),
+            == ancestry["teacher_physical_calls"].as_u64().unwrap_or(0) as usize + completed.len()
+                - reused,
         "Prepared teacher deductions differ from actual completed operations"
     );
     for operation in completed {
@@ -997,6 +1047,117 @@ fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize
     };
     let bytes = fs::read(path)?;
     let closure: Value = serde_json::from_slice(&bytes)?;
+    if closure["cumulative_student_calls"] == 3 && closure["cumulative_teacher_calls"] == 3 {
+        ensure!(
+            concise
+                && closure["exact_pids_absent"] == true
+                && closure["fresh_student_calls"] == 0
+                && closure["fresh_teacher_calls"] == 2
+                && closure["inherited_student_calls"] == 3
+                && closure["inherited_teacher_calls"] == 1
+                && closure["new_unsettled_teacher_operations"] == 0
+                && closure["old_unknown_key_not_replayed"] == true
+                && closure["canonical_gold_unchanged"] == true
+                && closure["concise_demo_source_approved"] == true
+                && closure["all_one_demo_wires_withheld"] == true,
+            "Only the closed received worked-answer preparation can supply this reuse"
+        );
+        let root = Path::new(
+            closure["campaign"]
+                .as_str()
+                .context("No preparation campaign")?,
+        );
+        verify_retained_seals(root, &closure)?;
+        let plan: Value = serde_json::from_slice(&fs::read(root.join("run/plan.json"))?)?;
+        ensure!(
+            plan["concise_student"] == true
+                && plan["prepare_student_only"] == true
+                && plan["method_order"] == json!(["contact"])
+                && plan["book_sha256"] == crate::book::OCR_SHA256
+                && plan["per_family_physical_student_cap"] == 64
+                && plan["per_family_physical_teacher_cap"] == 80,
+            "Received preparation scope/bounds differ"
+        );
+        let predecessor = Path::new(
+            plan["prior_consumer"]["path"]
+                .as_str()
+                .context("No prior consumer receipt")?,
+        );
+        ensure!(
+            plan["prior_consumer"]["sha256"] == google::digest(fs::read(predecessor)?),
+            "Worked-answer preparation ancestry drift"
+        );
+        let (student, teacher, previous) = inherited_consumer_calls(Some(predecessor), true)?;
+        ensure!(
+            student == 3 && teacher == 1,
+            "Earlier cumulative deductions differ"
+        );
+        let operations = completed_teacher_seals(
+            &root.join("run/teacher/contact"),
+            previous["unsettled_teacher_key"].as_str(),
+        )?;
+        for operation in operations
+            .as_array()
+            .context("No received teacher operations")?
+        {
+            let source = Path::new(
+                operation["source"]
+                    .as_str()
+                    .context("No received teacher source")?,
+            );
+            let relative = source
+                .strip_prefix(root)
+                .context("Teacher carrier lies outside closed preparation")?;
+            for (file, sha) in operation["sealed_files"]
+                .as_object()
+                .context("No received teacher seals")?
+            {
+                let key = relative.join(file).to_string_lossy().into_owned();
+                ensure!(
+                    closure["sealed_files"][&key] == *sha,
+                    "Received teacher file was not sealed by its closure: {key}"
+                );
+            }
+        }
+        let keys = operations
+            .as_array()
+            .context("No received teacher carriers")?
+            .iter()
+            .map(|operation| {
+                Path::new(
+                    operation["source"]
+                        .as_str()
+                        .context("No received carrier path")?,
+                )
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+                .context("No received key")
+            })
+            .collect::<Result<std::collections::BTreeSet<_>>>()?;
+        let expected = closure["completed_teacher_operations"]
+            .as_array()
+            .context("No closed received keys")?
+            .iter()
+            .map(|key| {
+                key.as_str()
+                    .map(str::to_owned)
+                    .context("Invalid received key")
+            })
+            .collect::<Result<std::collections::BTreeSet<_>>>()?;
+        ensure!(
+            keys.len() == 2 && keys == expected,
+            "Received teacher key set differs"
+        );
+        return Ok((
+            3,
+            3,
+            json!({"path":path,"sha256":google::digest(bytes),"student_physical_calls":3,"teacher_physical_calls":3,
+            "outputs_and_scores_imported":false,"completed_teacher_operations":operations,"completed_cache_only_demo":true,
+            "codex_executable_sha256":plan["codex_executable_sha256"],"author_plan_sha256":plan["author_plan_sha256"],
+            "unsettled_teacher_guard":previous["unsettled_teacher_guard"],"unsettled_teacher_key":previous["unsettled_teacher_key"]}),
+        ));
+    }
     let stopped_local = closure["student_physical_calls_cumulative"] == 3;
     if stopped_local {
         ensure!(
@@ -1033,22 +1194,7 @@ fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize
             .as_str()
             .context("No stopped campaign")?,
     );
-    for (name, digest) in closure["sealed_files"]
-        .as_object()
-        .context("No stopped carrier seals")?
-    {
-        let relative = Path::new(name);
-        ensure!(
-            relative
-                .components()
-                .all(|part| matches!(part, std::path::Component::Normal(_))),
-            "Unsafe stopped carrier path"
-        );
-        ensure!(
-            digest == &json!(google::digest(fs::read(root.join(relative))?)),
-            "Stopped carrier drift: {name}"
-        );
-    }
+    verify_retained_seals(root, &closure)?;
     if stopped_local {
         let key = closure["reviewer_key"]
             .as_str()
@@ -1088,6 +1234,26 @@ fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize
         0,
         json!({"path":path,"sha256":google::digest(bytes),"student_physical_calls":2,"teacher_physical_calls":0,"outputs_and_scores_imported":false}),
     ))
+}
+
+fn verify_retained_seals(root: &Path, receipt: &Value) -> Result<()> {
+    for (name, digest) in receipt["sealed_files"]
+        .as_object()
+        .context("No retained carrier seals")?
+    {
+        let relative = Path::new(name);
+        ensure!(
+            relative
+                .components()
+                .all(|part| matches!(part, std::path::Component::Normal(_))),
+            "Unsafe retained carrier path"
+        );
+        ensure!(
+            digest == &json!(google::digest(fs::read(root.join(relative))?)),
+            "Retained carrier drift: {name}"
+        );
+    }
+    Ok(())
 }
 
 fn first_family_gate(campaign: &Path, gate: &Path) -> Result<()> {
@@ -1179,6 +1345,13 @@ pub async fn optimize_families(
     );
     fs::create_dir(directory)?;
     let author_plan = fs::read(campaign.join("prepared/plan.json"))?;
+    if ancestry["completed_cache_only_demo"] == true {
+        ensure!(
+            ancestry["codex_executable_sha256"] == google::digest(fs::read(codex_path)?)
+                && ancestry["author_plan_sha256"] == google::digest(&author_plan),
+            "Completed worked-example executable/author identity differs; no repurchase"
+        );
+    }
     let prepared_receipt = if let Some(prepared) = student.prepared {
         let (prior_student, prior_teacher, receipt) = prepared_consumption(
             prepared,
@@ -1314,12 +1487,20 @@ pub async fn optimize_families(
                     codex::import_completed(Path::new(operation["source"].as_str().context("No prepared paid operation path")?),&teacher_directory)?;
                 }
             }
-            let teacher:Arc<dyn DynChatModel>=Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory,80)?.with_budget(teacher_budget.clone()));
+            if *method=="contact" && student.prepared.is_none() && ancestry["completed_cache_only_demo"] == true {
+                for operation in ancestry["completed_teacher_operations"].as_array().context("No completed worked-example operations")? {
+                    codex::import_completed(Path::new(operation["source"].as_str().context("No received worked-example path")?),&teacher_directory)?;
+                }
+            }
+            let teacher:Arc<dyn DynChatModel>=Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory.clone(),80)?.with_budget(teacher_budget.clone()));
             if student.concise {
                 concise_fixtures(&mut fixtures,method)?;
                 let initial=count_labeled_inputs(&fixtures,method,&[],&http,&listing,&family.join("authored-preflight"),&student).await?;
                 ensure!(initial["counts"].as_array().is_some_and(|rows|rows.len()==20),"Concise current-case preflight must cover all twenty original cases");
-                labels=if let Some(prepared)=student.prepared.filter(|_|*method=="contact") {load_concise_label(&fixtures,&book,method,&prepared.join("contact/concise-demo"))?} else {concise_label(&fixtures,method,&book,teacher.clone(),&family.join("concise-demo")).await?};
+                let demo_teacher:Arc<dyn DynChatModel>=if *method=="contact" && ancestry["completed_cache_only_demo"] == true {
+                    Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory,80)?.with_budget(teacher_budget.clone()).with_completed_cache_only())
+                } else {teacher.clone()};
+                labels=if let Some(prepared)=student.prepared.filter(|_|*method=="contact") {load_concise_label(&fixtures,&book,method,&prepared.join("contact/concise-demo"))?} else {concise_label(&fixtures,method,&book,demo_teacher,&family.join("concise-demo")).await?};
             }
             let preflight=count_labeled_inputs(&fixtures,method,&labels,&http,&listing,&family.join("preflight"),&student).await?;
             if student.prepare_only {
@@ -1552,16 +1733,13 @@ mod tests {
         concise_fixtures(&mut fixtures, "contact").unwrap();
         for fixture in &fixtures {
             verify_concise_fixture(&fixture.example, "contact").unwrap();
-            let chart: Value = serde_json::from_str(
-                fixture
-                    .example
-                    .get("chart_evidence")
-                    .unwrap()
-                    .as_str()
-                    .unwrap(),
-            )
-            .unwrap();
-            assert!(!optimize::native_evidence_ids(&chart).unwrap().is_empty());
+            let chart = fixture
+                .example
+                .get("chart_evidence")
+                .unwrap()
+                .as_str()
+                .unwrap();
+            assert!(!catalogue::relevant_chart_ids(chart).unwrap().is_empty());
         }
         let requests =
             preflight::reader_requests(&fixtures, &concise_predictor("contact", &[], 0).unwrap())
@@ -1573,6 +1751,77 @@ mod tests {
         println!(
             "All twenty original Contact inputs projected, native-validated and rendered without provider calls"
         );
+    }
+
+    #[tokio::test]
+    #[ignore = "Requires retained private book/reference/cache artifacts; no providers"]
+    async fn actual_completed_worked_answer_replays_under_new_presentation_without_paid_calls() {
+        let book = Book::open(Path::new(&std::env::var("HORARY_BOOK").unwrap())).unwrap();
+        let examples = std::path::PathBuf::from(std::env::var("HORARY_EXAMPLES").unwrap());
+        let campaign = std::path::PathBuf::from(std::env::var("HORARY_GOLD_CAMPAIGN").unwrap());
+        let retained =
+            std::path::PathBuf::from(std::env::var("HORARY_RETAINED_PREPARATION").unwrap());
+        let (student, teacher_calls, receipt) =
+            inherited_consumer_calls(Some(&retained.join("closure.json")), true).unwrap();
+        assert_eq!((student, teacher_calls), (3, 3));
+        let codex_path = std::path::PathBuf::from("/opt/homebrew/bin/codex");
+        assert_eq!(
+            receipt["codex_executable_sha256"],
+            google::digest(fs::read(&codex_path).unwrap())
+        );
+        let temporary = tempfile::tempdir().unwrap();
+        let cache = temporary.path().join("teacher");
+        for operation in receipt["completed_teacher_operations"].as_array().unwrap() {
+            codex::import_completed(Path::new(operation["source"].as_str().unwrap()), &cache)
+                .unwrap();
+        }
+        let budget = google::CallBudget::seeded(80, 3).unwrap();
+        let teacher: Arc<dyn DynChatModel> = Arc::new(
+            codex::Codex::new(codex_path, cache, 80)
+                .unwrap()
+                .with_budget(budget.clone())
+                .with_completed_cache_only(),
+        );
+        let (mut fixtures, _) = reviewed_family(&examples, &book, &campaign, "contact").unwrap();
+        concise_fixtures(&mut fixtures, "contact").unwrap();
+        let label = concise_label(
+            &fixtures,
+            "contact",
+            &book,
+            teacher,
+            &temporary.path().join("demo"),
+        )
+        .await
+        .unwrap();
+        let expected: WorkedAnswer = serde_json::from_slice(
+            &fs::read(retained.join("run/contact/concise-demo/answer.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            WorkedAnswer::from_prediction(&Prediction::new(
+                label[0].clone(),
+                "Reused received answer"
+            ))
+            .unwrap(),
+            expected
+        );
+        assert_eq!(budget.spent(), 3);
+        let displayed = crate::demo::compact(&label[0]).unwrap();
+        let chart = displayed.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            crate::demo::cited_ids(&displayed)
+                .unwrap()
+                .is_subset(&catalogue::relevant_chart_ids(chart).unwrap())
+        );
+        let requests = preflight::reader_requests(
+            &fixtures,
+            &concise_predictor("contact", &label, 1).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(requests.len(), 20);
+        if let Ok(output) = std::env::var("HORARY_CONCISE_WIRES") {
+            crate::queue::write_json_atomic(Path::new(&output), &json!({"cases":20,"requests":requests,"teacher_calls":0,"student_calls":0,"inherited_student_calls":3,"inherited_teacher_calls":3,"answer_unchanged":true})).unwrap();
+        }
     }
 
     #[test]

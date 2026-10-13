@@ -22,6 +22,7 @@ pub struct Codex {
     shared_budget: Option<std::sync::Arc<crate::google::CallBudget>>,
     failed: AtomicBool,
     serial: Mutex<()>,
+    completed_cache_only: bool,
 }
 pub fn arguments(answer: &std::path::Path) -> Vec<String> {
     let mut args = vec![
@@ -157,11 +158,17 @@ impl Codex {
             shared_budget: None,
             failed: AtomicBool::new(false),
             serial: Mutex::new(()),
+            completed_cache_only: false,
         })
     }
     /// The teacher pool charges only fresh subprocess submissions, not cache hits.
     pub fn with_budget(mut self, budget: std::sync::Arc<crate::google::CallBudget>) -> Self {
         self.shared_budget = Some(budget);
+        self
+    }
+    /// Reuse exact completed teaching after a presentation change.
+    pub fn with_completed_cache_only(mut self) -> Self {
+        self.completed_cache_only = true;
         self
     }
     fn identity(&self, request: &LmRequest) -> Result<(String, String)> {
@@ -201,6 +208,10 @@ impl Codex {
         if let Some(response) = self.cached_response(request)? {
             return Ok(response);
         }
+        ensure!(
+            !self.completed_cache_only,
+            "Expected completed teacher cache is absent; no replacement submission"
+        );
         ensure!(
             !directory.exists(),
             "A prior Codex operation is failed or unsettled; preserve it without resubmission"
@@ -331,7 +342,8 @@ mod tests {
         let budget = crate::google::CallBudget::new(0);
         let model = Codex::new(executable, dir.path().join("cache"), 0)
             .unwrap()
-            .with_budget(budget.clone());
+            .with_budget(budget.clone())
+            .with_completed_cache_only();
         let request = LmRequest::new(
             "gepa-reflection",
             vec![dsrust::lm::api::LmMessage::user(vec![
@@ -366,6 +378,31 @@ mod tests {
             ])],
         );
         assert!(model.cached_response(&changed).unwrap().is_none());
+    }
+    #[tokio::test]
+    async fn completed_cache_only_miss_never_reserves_or_starts_a_teacher() {
+        let dir = tempfile::tempdir().unwrap();
+        let executable = dir.path().join("public-snapshot");
+        fs::write(&executable, b"Synthetic identity, not executable").unwrap();
+        let cache = dir.path().join("cache");
+        let budget = crate::google::CallBudget::seeded(80, 3).unwrap();
+        let model = Codex::new(executable, cache.clone(), 80)
+            .unwrap()
+            .with_budget(budget.clone())
+            .with_completed_cache_only();
+        let request = LmRequest::new(
+            "saved-worked-answer",
+            vec![dsrust::lm::api::LmMessage::user(vec![
+                dsrust::lm::api::LmPart::text("Different exact request"),
+            ])],
+        );
+        let error = model
+            .forward(&reqwest::Client::new(), &request)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("no replacement submission"));
+        assert_eq!(budget.spent(), 3);
+        assert_eq!(fs::read_dir(cache).unwrap().count(), 0);
     }
     #[test]
     fn uses_login_without_output_schema_or_model_override() {

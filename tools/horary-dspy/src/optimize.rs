@@ -185,13 +185,15 @@ pub(crate) fn native_evidence_ids(chart: &Value) -> Result<std::collections::BTr
 /// Validate reading output against the exact supplied native chart only.
 pub fn reading_native_failures(input: &Example, prediction: &Prediction) -> Result<Vec<String>> {
     let mut errors = Vec::new();
-    let chart: Value = serde_json::from_str(
-        input
-            .get("chart_evidence")
-            .and_then(Value::as_str)
-            .context("No actual chart")?,
-    )?;
-    let ids = native_evidence_ids(&chart)?;
+    let supplied = input
+        .get("chart_evidence")
+        .and_then(Value::as_str)
+        .context("No actual chart")?;
+    let ids = if supplied.contains("<facts>") {
+        catalogue::relevant_chart_ids(supplied)?
+    } else {
+        native_evidence_ids(&serde_json::from_str(supplied)?)?
+    };
     let pattern = regex::Regex::new(r"\be[0-9]+\b")?;
     for field in ["answer", "analysis", "evidence", "unresolved"] {
         for found in pattern.find_iter(text(prediction, field)?) {
