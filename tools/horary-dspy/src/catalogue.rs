@@ -211,6 +211,462 @@ fn component_contact_role_reference(
     ))
 }
 
+fn component_family_role_reference(
+    consultation: &Value,
+    native: &[crate::native_evidence::Fact],
+    method: &str,
+) -> Result<Value> {
+    ensure!(
+        matches!(method, "new_job" | "movable_deal"),
+        "Unsupported role family"
+    );
+    if let Some(declared) = consultation.get("method") {
+        ensure!(
+            declared.as_str() == Some(method),
+            "Declared reader method differs"
+        );
+    }
+    let mut fields: BTreeMap<&str, Vec<&Value>> = BTreeMap::new();
+    let mut unknowns = Vec::new();
+    let mut valid = consultation["facts"].is_array();
+    for fact in consultation["facts"].as_array().into_iter().flatten() {
+        if let (Some(field), Some(_), Some(_)) = (
+            fact["field"].as_str(),
+            fact["value"].as_str(),
+            fact["quote"].as_str(),
+        ) {
+            fields.entry(field).or_default().push(fact);
+        } else {
+            valid = false;
+            unknowns.push("A declared fact row is malformed.".to_owned());
+        }
+    }
+    if !valid {
+        unknowns.push("The declared fact projection is unavailable or malformed.".into());
+    }
+    let unavailable: BTreeSet<_> = consultation["unknown"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    let value = |field: &str| {
+        (!unavailable.contains(field))
+            .then(|| fields.get(field))
+            .flatten()
+            .filter(|rows| rows.len() == 1)
+            .and_then(|rows| rows[0]["value"].as_str())
+            .filter(|value| !value.is_empty())
+    };
+    for (field, rows) in &fields {
+        if rows.len() != 1 || unavailable.contains(field) {
+            unknowns.push(format!("{field} is conflicting or unresolved."));
+        }
+    }
+    let principal = match value("principal_mode") {
+        Some("relay") => value("principal_id"),
+        Some("self" | "concerning_other") => Some("querent"),
+        None if valid
+            && !fields.contains_key("principal_mode")
+            && !unavailable.contains("principal_mode") =>
+        {
+            Some("querent")
+        }
+        _ => None,
+    };
+    if principal.is_none() {
+        unknowns.push(
+            "The effective principal is unresolved; no first-house actor is invented.".into(),
+        );
+    }
+    let person_house = |id: &str| {
+        principal?;
+        if id == "querent" || Some(id) == principal {
+            return Some(1);
+        }
+        let relationship = format!("people.{id}.relationship");
+        let capacity = format!("people.{id}.capacity");
+        if [&relationship, &capacity].into_iter().any(|field| {
+            (fields.contains_key(field.as_str()) || unavailable.contains(field.as_str()))
+                && value(field).is_none()
+        }) {
+            return None;
+        }
+        match (value(&relationship), value(&capacity)) {
+            (Some(left), Some(right)) if left != right => None,
+            (Some(relationship), _) | (_, Some(relationship)) => {
+                crate::native_evidence::relationship_house(relationship)
+            }
+            _ => None,
+        }
+    };
+    let label = |id: &str| {
+        value(&format!("people.{id}.label"))
+            .or_else(|| value(&format!("people.{id}.name")))
+            .unwrap_or(id)
+            .to_owned()
+    };
+    let person_sources = |id: Option<&str>| {
+        let mut sources = Vec::new();
+        if let Some(id) = id {
+            for suffix in ["relationship", "capacity", "label", "name"] {
+                let field = format!("people.{id}.{suffix}");
+                if fields.contains_key(field.as_str()) {
+                    sources.push(field);
+                }
+            }
+            if id == "querent" || Some(id) == principal {
+                sources.extend(
+                    ["principal_mode", "principal_id"]
+                        .into_iter()
+                        .filter(|field| fields.contains_key(field))
+                        .map(str::to_owned),
+                );
+            }
+        }
+        sources
+    };
+    let facet = match consultation.get("facet").filter(|v| !v.is_null()) {
+        Some(facet) if !unavailable.contains("facet") => {
+            let facet = facet.as_str().context("Declared facet is not a string")?;
+            ensure!(
+                method_facets(method)?.iter().any(|f| f == facet),
+                "Declared facet differs from native method contract"
+            );
+            Some(facet)
+        }
+        _ => None,
+    };
+    let mut rows = Vec::new();
+    let mut add = |id: &str,
+                   actor: Option<&str>,
+                   house: Option<u8>,
+                   optional: bool,
+                   authority: &str,
+                   name: String,
+                   sources: Vec<String>| {
+        let cusps: Vec<_> = native
+            .iter()
+            .filter(|f| f.kind == "house" && house.is_some_and(|h| f.label == format!("House {h}")))
+            .collect();
+        let cusp = (cusps.len() == 1).then(|| cusps[0]);
+        let ruler = cusp.and_then(|f| (f.planets.len() == 1).then(|| f.planets[0].as_str()));
+        if ruler.is_none() && !optional {
+            unknowns.push(format!(
+                "{id}: its declared actor capacity or unique native cusp/ruler is unavailable."
+            ));
+        }
+        let positions: Vec<_> = native
+            .iter()
+            .filter(|f| {
+                f.kind == "position" && ruler.is_some_and(|p| f.planets.iter().any(|v| v == p))
+            })
+            .map(|f| f.id.as_str())
+            .collect();
+        let sources: Vec<_> = sources
+            .into_iter()
+            .filter(|field| {
+                fields.contains_key(field.as_str()) || (field == "facet" && facet.is_some())
+            })
+            .collect();
+        rows.push(json!({"role_id":id,"actor_id":actor,"label":name,
+            "significator_house":house,"ruler_planet":ruler,"optional":optional,
+            "authority":authority,"selected_id":null,"cusp_fact_id":cusp.map(|f|&f.id),
+            "position_fact_ids":positions,"source_fields":sources}));
+    };
+    add(
+        "principal.person",
+        principal,
+        principal.map(|_| 1),
+        false,
+        "calculated_reference",
+        principal
+            .map(label)
+            .unwrap_or_else(|| "Unresolved principal".into()),
+        person_sources(principal),
+    );
+    if method == "new_job" {
+        let worker = value("subject.owner_id");
+        let worker_house = worker.and_then(person_house);
+        let job_house = worker_house.map(|h| {
+            if h == 10 {
+                crate::native_evidence::turn(h, 10)
+            } else {
+                10
+            }
+        });
+        let mut sources = person_sources(worker);
+        sources.push("subject.owner_id".into());
+        add(
+            "worker.person",
+            worker,
+            worker_house,
+            false,
+            "calculated_reference",
+            worker
+                .map(label)
+                .unwrap_or_else(|| "Unresolved applicant".into()),
+            sources.clone(),
+        );
+        add(
+            "subject.primary",
+            None,
+            job_house,
+            false,
+            "calculated_external_job_reference",
+            value("subject.name").unwrap_or("External job").into(),
+            sources.clone(),
+        );
+        add(
+            "worker.pocket",
+            worker,
+            worker_house.map(|h| crate::native_evidence::turn(h, 2)),
+            true,
+            "conditional_applicant_bank_reference_not_acquisition",
+            "The applicant's own money".into(),
+            sources.clone(),
+        );
+        add(
+            "job.wages",
+            None,
+            job_house.map(|h| crate::native_evidence::turn(h, 2)),
+            true,
+            "conditional_wages_reference_not_acquisition",
+            "The job's wages".into(),
+            sources,
+        );
+    } else {
+        let capacity = value("deal_capacity");
+        ensure!(
+            capacity.is_none_or(|value| matches!(value, "buy" | "sell" | "rent")),
+            "Declared deal capacity differs from native input contract"
+        );
+        let actor_field = if fields.contains_key("deal_actor") || unavailable.contains("deal_actor")
+        {
+            "deal_actor"
+        } else {
+            "seller"
+        };
+        // A known legacy seller is the contracting actor only in a sale. It
+        // never supplies title ownership or the recipient of proceeds.
+        let actor = value("deal_actor").or_else(|| {
+            (capacity == Some("sell")
+                && !fields.contains_key("deal_actor")
+                && !unavailable.contains("deal_actor"))
+            .then(|| value("seller"))
+            .flatten()
+        });
+        let actor_house = actor.and_then(person_house);
+        let mut actor_sources = person_sources(actor);
+        actor_sources.extend(
+            [actor_field, "deal_capacity"]
+                .into_iter()
+                .map(str::to_owned),
+        );
+        add(
+            "deal.actor",
+            actor,
+            actor_house,
+            false,
+            "calculated_reference",
+            actor
+                .map(label)
+                .unwrap_or_else(|| "Unresolved deal actor".into()),
+            actor_sources,
+        );
+        let same_actor = |id: &str| {
+            actor.is_some_and(|actor| {
+                actor == id
+                    || (principal.is_some()
+                        && [actor, id]
+                            .into_iter()
+                            .all(|id| id == "querent" || Some(id) == principal))
+            })
+        };
+        let explicit_party =
+            fields.contains_key("deal_party") || unavailable.contains("deal_party");
+        let seller_party = (capacity == Some("buy") && !explicit_party)
+            .then(|| value("seller"))
+            .flatten()
+            .filter(|id| !same_actor(id));
+        let party = value("deal_party")
+            .or(seller_party)
+            .filter(|id| !same_actor(id));
+        let anonymous = party.is_none()
+            && !explicit_party
+            && seller_party.is_none()
+            && !fields.contains_key("seller")
+            && !unavailable.contains("seller");
+        // In a sell, seller may be the actor rather than the other party.
+        let anonymous = anonymous
+            || (party.is_none()
+                && !explicit_party
+                && capacity == Some("sell")
+                && !unavailable.contains("seller"));
+        let counterparty_house = party.and_then(person_house).or_else(|| {
+            anonymous
+                .then(|| actor_house.map(|h| crate::native_evidence::turn(h, 7)))
+                .flatten()
+        });
+        let mut party_sources = person_sources(party);
+        party_sources.push(
+            if seller_party.is_some() {
+                "seller"
+            } else {
+                "deal_party"
+            }
+            .into(),
+        );
+        party_sources.extend(
+            [actor_field, "deal_capacity"]
+                .into_iter()
+                .map(str::to_owned),
+        );
+        add(
+            "deal.counterparty",
+            party,
+            counterparty_house,
+            false,
+            "calculated_reference",
+            party
+                .map(label)
+                .unwrap_or_else(|| "The other contracting party".into()),
+            party_sources.clone(),
+        );
+        let completion = matches!(facet, Some("event" | "timing"));
+        if !completion {
+            let owner = match capacity {
+                Some("buy" | "rent") => actor,
+                Some("sell") => value("subject.owner_id"),
+                _ => None,
+            };
+            let mut sources = person_sources(owner);
+            sources.push(
+                if matches!(capacity, Some("buy" | "rent")) {
+                    "deal_actor"
+                } else {
+                    "subject.owner_id"
+                }
+                .into(),
+            );
+            sources.push("facet".into());
+            sources.push("deal_capacity".into());
+            add(
+                "subject.primary",
+                owner,
+                owner
+                    .and_then(person_house)
+                    .map(|h| crate::native_evidence::turn(h, 2)),
+                facet.is_none(),
+                if facet.is_none() {
+                    "conditional_object_reference_unselected_facet"
+                } else {
+                    "calculated_object_reference"
+                },
+                value("subject.name").unwrap_or("The movable object").into(),
+                sources,
+            );
+            if facet.is_none() || facet == Some("profit") {
+                let beneficiary = value("deal_beneficiary");
+                let mut beneficiary_sources = person_sources(beneficiary);
+                beneficiary_sources.push("deal_beneficiary".into());
+                beneficiary_sources.push("facet".into());
+                let sale = capacity == Some("sell");
+                let authority = if facet.is_none() {
+                    "conditional_sale_profit_reference_unselected_facet"
+                } else {
+                    "calculated_sale_profit_reference"
+                };
+                add(
+                    "deal.incoming_money",
+                    party,
+                    sale.then(|| counterparty_house.map(|h| crate::native_evidence::turn(h, 2)))
+                        .flatten(),
+                    facet.is_none(),
+                    authority,
+                    "The buyers' money".into(),
+                    party_sources,
+                );
+                add(
+                    "deal.pocket",
+                    beneficiary,
+                    sale.then(|| {
+                        beneficiary
+                            .and_then(person_house)
+                            .map(|h| crate::native_evidence::turn(h, 2))
+                    })
+                    .flatten(),
+                    facet.is_none(),
+                    authority,
+                    "The beneficiary's pocket".into(),
+                    beneficiary_sources,
+                );
+            }
+        }
+    }
+    if method == "movable_deal" && facet.is_none() {
+        unknowns.push("No facet is declared: object and sale-profit rows are conditional references, not selected roles or additional required inputs.".into());
+    }
+    let mut aliases: Vec<_> = rows.iter().filter(|r|r["ruler_planet"].is_string()).map(|r|
+        json!({"role_id":r["role_id"],"actor_id":r["actor_id"],"label":r["label"],
+            "significator_house":r["significator_house"],"planet":r["ruler_planet"],"optional":r["optional"]})).collect();
+    let moon_claims: Vec<_> = aliases
+        .iter()
+        .filter(|r| r["planet"] == "Moon" && r["optional"] == false)
+        .cloned()
+        .collect();
+    let conditional_moon_claims: Vec<_> = aliases
+        .iter()
+        .filter(|r| r["planet"] == "Moon" && r["optional"] == true)
+        .map(|r| r["role_id"].clone())
+        .collect();
+    let moon_available = principal.is_some()
+        && moon_claims.is_empty()
+        && rows
+            .iter()
+            .filter(|r| r["optional"] == false)
+            .all(|r| r["ruler_planet"].is_string())
+        && (method != "new_job" || value("subject.owner_id") == principal);
+    if moon_available {
+        aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
+            "label":if method == "new_job" {"The principal as worker"} else {"The principal's contextual Moon"},
+            "significator_house":null,"planet":"Moon","optional":true}));
+    }
+    let matching = |planet: &str| {
+        aliases
+            .iter()
+            .filter(|r| r["planet"] == planet)
+            .collect::<Vec<_>>()
+    };
+    let receptions: Vec<_> = native
+        .iter()
+        .filter_map(|f| {
+            let edge = f.reception.as_ref().filter(|_| f.kind == "reception")?;
+            let guest = matching(&edge.guest_planet);
+            let host = matching(&edge.host_planet);
+            (!guest.is_empty() && !host.is_empty()).then(|| {
+                json!({"fact_id":f.id,
+            "guest_planet":edge.guest_planet,"guest_roles":guest,
+            "host_planet":edge.host_planet,"host_roles":host,"qualities":edge.qualities})
+            })
+        })
+        .collect();
+    let events: Vec<_> = native.iter().filter_map(|f| {
+        let event = f.event.as_ref().filter(|_|f.kind == "event" && f.planets.len() == 2)?;
+        f.planets.iter().any(|p|!matching(p).is_empty()).then(||json!({"fact_id":f.id,
+            "endpoints":f.planets.iter().map(|p|json!({"planet":p,"roles":matching(p)})).collect::<Vec<_>>(),"candidate":event}))
+    }).collect();
+    Ok(
+        json!({"version":"family-role-reference-1","source_identity":crate::google::digest(serde_json::to_vec(consultation)?),
+        "source_scope":"declared_component_consultation_not_an_extraction_journey",
+        "principal_basis":if principal.is_none(){"unresolved"}else if fields.contains_key("principal_mode"){"accepted_principal_mode"}else{"default_querent_no_relay_asserted"},
+        "role_rows":rows,"alias_authority":"calculated_role_references",
+        "aliases":aliases,"moon":{"available_as_contextual_reference":moon_available,"house_claims":moon_claims,
+            "conditional_house_claims_if_optional_role_used":conditional_moon_claims},
+        "directed_reception":receptions,"event_endpoints":events,"unknowns":unknowns}),
+    )
+}
+
 /// Component examples have declared inputs. The reading component receives
 /// an independently authored canonical consultation, not a claimed model journey.
 pub fn example(case: &Case, task: &str, book: &Book) -> Result<Example> {
@@ -399,14 +855,15 @@ pub fn compact_native_facts(facts: &[crate::native_evidence::Fact]) -> String {
     text
 }
 
-/// A source-reviewed Contact procedure, not a replacement for the full primary
+/// Source-reviewed short procedures, not a replacement for the full primary
 /// source retained by reference authors and independent reviewers.
 pub fn concise_reader_source(method: &str) -> Result<&'static str> {
-    ensure!(
-        method == "contact",
-        "No reviewed concise procedure for {method}"
-    );
-    Ok(CONCISE_CONTACT_PROCEDURE)
+    match method {
+        "contact" => Ok(CONCISE_CONTACT_PROCEDURE),
+        "new_job" => Ok(CONCISE_NEW_JOB_PROCEDURE),
+        "movable_deal" => Ok(CONCISE_MOVABLE_DEAL_PROCEDURE),
+        _ => anyhow::bail!("No reviewed concise procedure for {method}"),
+    }
 }
 
 const CONCISE_CONTACT_PROCEDURE: &str = "CONTACT PROCEDURE — Frawley printed pp. 19–32, 44, 57, 65, 71–77, 84–97, 127–136, 165–166.
@@ -421,6 +878,34 @@ Use actual candidate order and each body's motion, not endpoint 1 or an assumed 
 After-ingress candidates require a meaningful change of circumstance/reception; do not carry current reception unchanged. Frawley limits this to roughly three or four degrees into the next sign. For an explicitly bounded question, the relevant planet's present-sign end can mark the stated timeframe (p. 136). Astronomical search hours are never automatically civil timing. To time an established event, use the applying body's travel to moving perfection, then contextual or calibrated units. Missing candidates or uncomputed techniques remain unknown, not proof of absence.
 
 Return only status, answer, analysis, evidence, unresolved. Give the direct useful judgment first, then concise material reasons with native eIDs and source pages. Retain substantial contrary evidence and calculation limits; do not invent an exact date, motive or future event.
+";
+
+const CONCISE_NEW_JOB_PROCEDURE: &str = "NEW JOB PROCEDURE — Frawley printed pp. 19–32, 44, 57, 65–77, 84–97, 127–136, 222–224.
+Answer the actual new-job question and preserve its applicant, vacancy, application/no-offer context and deadline. A reported application or intermediary is not an offer. Use only declared role references; assigned houses differ from bodies' occupied houses. A genuine relayed principal takes first; someone merely asked about retains their own relationship house. The applicant is their actual ruler. For the principal's own application, Lord 1 and the available Moon show the applicant, with Moon as worker, not romantic feelings. A main house ruler has first claim on Moon. Do not transfer the principal's Moon to another worker. The external job is radical tenth, except a tenth-house applicant's job uses their turned tenth. Their existing career/boss is a different question. Wages are the job's second; an aspect to wages does not establish acquisition.
+
+Separate capability, inclination and occasion. Attribute every condition/motion to its actual planet: direct applicant/retrograde job does not make the applicant retrograde. Weigh supplied essential condition, occupied-house capacity, solar condition and actual motion. Weakness can obstruct hiring but does not independently report qualifications, solvency or job requirements. Retrograde needs relevant return context, not an automatic positive label.
+
+Reception A→B means A regards B. Preserve all positive AND negative qualities. Domicile/exaltation are major, triplicity moderate, term/face minor. Applicant→job indicates interest; applicant→their own money can indicate financial need. In an ordinary job even minor job→applicant reception matters, but does not erase detriment/fall or supply an offer. Exaltation describes overrating. Do not invent reciprocal interest or a vacancy from reception alone.
+
+Acquisition needs the applicant and job joining, or supported translation/collection. Trine can ease acquisition; opposition can mean acquisition with regret. Lord 1 in tenth mainly shows wanting the job; Lord 10 inside first is stronger than merely on its cusp. Tenth-house fortunes, nodes or strong planets need not decide acquisition; use them only if supplied. Do not substitute wages, an unrelated planet or two applicant significators touching. The Sun substitutes only for a royal appointment. Consider actual next occasions and source-supported rivals/intermediaries; an incidental contact is not automatically prohibition or an invented hiring step. Usually the next aspect, or next two for translation, suffices. A void Moon is contrary to the required change but can be outweighed.
+
+After-ingress candidates need changed circumstances/reception; do not carry old reception forward or chase a long chain. Use the applying body's travel to moving perfection for contextual timing, not astronomical hours. The relevant present-sign end can mark an explicit bounded timeframe (p. 136); otherwise do not invent an immediate or near-term offer. Missing computations remain unknown.
+
+Return only status, answer, analysis, evidence, unresolved. Give a useful direct, proportionate judgment, cite native eIDs/source pages, and retain substantial contrary testimony and material limits.
+";
+
+const CONCISE_MOVABLE_DEAL_PROCEDURE: &str = "MOVABLE DEAL PROCEDURE — Frawley printed pp. 19–32, 44, 57, 65–77, 84–97, 127–136, 156–161, 167–172, 177.
+Preserve the actual action and concern: agreement, object quality or sale profit. WILL with a deadline is occurrence within that bound, not automatically WHEN. Actor, title owner, seller/agent, other contracting party and financial beneficiary are distinct; use their declared identities and operative capacities. A genuine relay principal takes first. Assigned houses differ from occupied houses; retain coincident aliases. Conditional role rows are references only for the corresponding question, not required additional facts. Never use a missing recipient as an owner/seller default.
+
+For whether the deal completes, judge the actual parties joining: first/seventh ordinarily; a named relative uses their own house. Do not substitute goods touching a buyer or demand unused title/asset/price data. Weigh willingness and ability alongside an applying connection, supported translation/collection and actual prevention. Negative reception matters; lack of reception is not automatically refusal. A non-property opposition can complete with regret. An incidental prior contact is not automatically prohibition or an invented agent; an intermediary needs a supported connecting role. Do not apply the special property opposition exception to a movable sale.
+
+For SHOULD I buy this object, the object is the buyer's potential second-house possession, not the seller's ruler or an assertion of legal title. Judge supplied present condition and material upcoming changes. Debility can describe the object appropriately; exaltation can overrate it. Current quality does not require a future completion aspect. Seller trustworthiness is a separate concern, not the object's feelings. Keep a sell-side owner's goods distinct from their agent and the buyer.
+
+For sale profit, identify whose pocket receives proceeds. Incoming money is the actual other party's second; the beneficiary's pocket is their second. Amount/quality is assessed from the money's condition; arrival needs a supported connection to its recipient or pocket, with an available contextual Moon only for the principal. Good goods or the seller's dignity alone does not establish profit. Distinguish a good amount from whether it arrives. Shared rulers keep both roles rather than silently merging them.
+
+Reception A→B means A regards B. Retain all positive AND negative qualities: domicile/exaltation major, triplicity moderate, term/face minor. Weigh role-bound condition, house capacity, solar state and motion; do not infer reciprocity or private motives. Event endpoints are storage order, not the applying body. After ingress requires relevant changed circumstances/reception, usually only about three or four degrees into the next sign. Use actual travel to moving perfection and justified contextual units; astronomical hours are not civil timing. A relevant present-sign end can mark an explicit timeframe (p. 136). Missing techniques remain unknown, not absence. No general exact inventory-sale count is supplied; do not silently reframe a count question.
+
+Return only status, answer, analysis, evidence, unresolved. Give the useful decision first with material native eIDs/source pages, contrary testimony and honest limits.
 ";
 
 /// Present an existing declared component input with the same finite native
@@ -487,7 +972,13 @@ fn verified_concise_chart(
             && original["search_limitations"] == raw["calculationNote"],
         "Declared native boundaries differ"
     );
-    let reference = component_contact_role_reference(consultation, &native)?;
+    let reference = match method {
+        "contact" => component_contact_role_reference(consultation, &native)?,
+        "new_job" | "movable_deal" => {
+            component_family_role_reference(consultation, &native, method)?
+        }
+        _ => unreachable!("The concise procedure admits only implemented families"),
+    };
     let supplied = original.get("role_reference");
     let mut motion = BTreeMap::new();
     if let Some(supplied) = supplied {
@@ -582,7 +1073,7 @@ pub fn relevant_reader_inputs(original: &Example, method: &str) -> Result<Exampl
 }
 
 /// Keep actual situational values, including conflicting accounts and genuine
-/// unknowns. Quotation/provenance and coordinates are private once this Contact
+/// unknowns. Quotation/provenance and coordinates are private once this native
 /// chart has supplied its houses; they are not additional neural input facts.
 pub fn relevant_reader_consultation(consultation: &Value) -> Result<String> {
     let facts = consultation["facts"]
@@ -639,12 +1130,15 @@ pub fn relevant_reader_chart(
     method: &str,
     extra_demo_ids: Option<&BTreeSet<String>>,
 ) -> Result<String> {
-    ensure!(
-        method == "contact",
-        "No reviewed relevant procedure for {method}"
-    );
+    concise_reader_source(method)?;
     let (table, native) = verified_concise_chart(original, consultation, method)?;
-    let selected = relevant_contact_ids(&table, &native, extra_demo_ids)?;
+    let selected = match method {
+        "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
+        "new_job" | "movable_deal" => {
+            relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
+        }
+        _ => unreachable!("The source procedure admits only implemented families"),
+    };
     let mut text = format!(
         "Chart UTC {}\n",
         plain_relevant(
@@ -840,6 +1334,153 @@ pub fn relevant_chart_ids(text: &str) -> Result<BTreeSet<String>> {
     Ok(ids)
 }
 
+fn relevant_family_ids(
+    table: &Value,
+    native: &[crate::native_evidence::Fact],
+    consultation: &Value,
+    method: &str,
+    extra_demo_ids: Option<&BTreeSet<String>>,
+) -> Result<BTreeSet<String>> {
+    let roles = table["role_reference"]["roles"]
+        .as_array()
+        .context("No family role rows")?;
+    let role = |id: &str| roles.iter().find(|r| r[0] == id);
+    let planet = |id: &str| role(id).and_then(|r| r[4].as_str());
+    let actor = |id: &str| role(id).and_then(|r| r[1].as_str());
+    let principal = actor("principal.person");
+    let is_principal =
+        |id: &str| principal.is_some() && actor(id).is_some() && actor(id) == principal;
+    let mut recipients = BTreeSet::new();
+    let mut targets = BTreeSet::new();
+    let mut planets = BTreeSet::from(["Moon".to_owned()]);
+    let mut ids = BTreeSet::new();
+    let mut conditional_pairs = None;
+    for row in roles {
+        // The speaker's anchor does not make them the applicant, contractor or
+        // beneficiary. Keep its house binding without unrelated condition rows.
+        if row[0] != "principal.person"
+            && let Some(planet) = row[4].as_str()
+        {
+            planets.insert(planet.to_owned());
+        }
+        if let Some(id) = row[8].as_str() {
+            ids.insert(id.to_owned());
+        }
+    }
+    let mut recipient = |id: &str| {
+        if let Some(p) = planet(id) {
+            recipients.insert(p.to_owned());
+        }
+    };
+    let mut target = |id: &str| {
+        if let Some(p) = planet(id) {
+            targets.insert(p.to_owned());
+        }
+    };
+    match method {
+        "new_job" => {
+            recipient("worker.person");
+            if is_principal("worker.person") {
+                recipient("principal.moon");
+            }
+            target("subject.primary");
+            // Pocket and wages remain conditional condition/reception
+            // references. A wages connection is not job acquisition.
+        }
+        "movable_deal" => match consultation["facet"].as_str().filter(|_| {
+            !consultation["unknown"]
+                .as_array()
+                .is_some_and(|rows| rows.iter().any(|row| row == "facet"))
+        }) {
+            Some("situation") => {
+                // The object's present state is sufficient for quality. Its
+                // first nearby occasions are supplied as possible changes,
+                // not a requirement for completing a purchase.
+                recipient("subject.primary");
+            }
+            Some("profit") => {
+                recipient("deal.pocket");
+                if is_principal("deal.pocket") {
+                    recipient("principal.person");
+                    recipient("principal.moon");
+                } else if actor("deal.pocket") == actor("deal.actor")
+                    && actor("deal.pocket").is_some()
+                {
+                    recipient("deal.actor");
+                }
+                target("deal.incoming_money");
+            }
+            facet => {
+                recipient("deal.actor");
+                if is_principal("deal.actor") {
+                    recipient("principal.moon");
+                }
+                target("deal.counterparty");
+                if facet.is_none() {
+                    // An undeclared scope exposes conditional alternatives,
+                    // never an expected facet or additional required fact.
+                    recipient("deal.pocket");
+                    target("deal.incoming_money");
+                    if is_principal("deal.pocket") {
+                        recipient("principal.person");
+                        recipient("principal.moon");
+                    }
+                    let mut pairs = BTreeSet::new();
+                    for (a, b) in [
+                        ("deal.actor", "deal.counterparty"),
+                        ("deal.pocket", "deal.incoming_money"),
+                    ] {
+                        if let (Some(a), Some(b)) = (planet(a), planet(b)) {
+                            let mut pair = vec![a.to_owned(), b.to_owned()];
+                            pair.sort();
+                            pairs.insert(pair);
+                        }
+                    }
+                    if is_principal("deal.actor")
+                        && let (Some(a), Some(b)) =
+                            (planet("principal.moon"), planet("deal.counterparty"))
+                    {
+                        let mut pair = vec![a.to_owned(), b.to_owned()];
+                        pair.sort();
+                        pairs.insert(pair);
+                    }
+                    let receivers = if is_principal("deal.pocket") {
+                        vec!["principal.person", "principal.moon"]
+                    } else if actor("deal.pocket").is_some()
+                        && actor("deal.pocket") == actor("deal.actor")
+                    {
+                        vec!["deal.actor"]
+                    } else {
+                        Vec::new()
+                    };
+                    for receiver in receivers {
+                        if let (Some(a), Some(b)) =
+                            (planet(receiver), planet("deal.incoming_money"))
+                        {
+                            let mut pair = vec![a.to_owned(), b.to_owned()];
+                            pair.sort();
+                            pairs.insert(pair);
+                        }
+                    }
+                    conditional_pairs = Some(pairs);
+                }
+            }
+        },
+        _ => anyhow::bail!("Unsupported relevant role family"),
+    }
+    planets.extend(recipients.iter().cloned());
+    planets.extend(targets.iter().cloned());
+    relevant_bound_ids(
+        native,
+        ids,
+        planets,
+        recipients,
+        targets,
+        conditional_pairs,
+        extra_demo_ids,
+    )
+}
+
 fn relevant_contact_ids(
     table: &Value,
     native: &[crate::native_evidence::Fact],
@@ -869,6 +1510,28 @@ fn relevant_contact_ids(
             ids.insert(id.to_owned());
         }
     }
+    relevant_bound_ids(
+        native,
+        ids,
+        planets,
+        recipients,
+        targets,
+        None,
+        extra_demo_ids,
+    )
+}
+
+// The shared selection keeps one source-bounded occasion sequence. It does
+// not choose a verdict, applicant, or causal meaning for an incidental contact.
+fn relevant_bound_ids(
+    native: &[crate::native_evidence::Fact],
+    mut ids: BTreeSet<String>,
+    planets: BTreeSet<String>,
+    recipients: BTreeSet<String>,
+    targets: BTreeSet<String>,
+    conditional_pairs: Option<BTreeSet<Vec<String>>>,
+    extra_demo_ids: Option<&BTreeSet<String>>,
+) -> Result<BTreeSet<String>> {
     let mut events: Vec<_> = native
         .iter()
         .filter(|f| f.kind == "event" && f.event.is_some() && f.planets.len() == 2)
@@ -891,9 +1554,15 @@ fn relevant_contact_ids(
         .iter()
         .copied()
         .filter(|f| {
-            !f.planets.iter().any(|p| p == "Moon")
-                && ((recipients.contains(&f.planets[0]) && targets.contains(&f.planets[1]))
-                    || (recipients.contains(&f.planets[1]) && targets.contains(&f.planets[0])))
+            let supported_pair = if let Some(allowed) = &conditional_pairs {
+                let mut pair = f.planets.clone();
+                pair.sort();
+                allowed.contains(&pair)
+            } else {
+                (recipients.contains(&f.planets[0]) && targets.contains(&f.planets[1]))
+                    || (recipients.contains(&f.planets[1]) && targets.contains(&f.planets[0]))
+            };
+            !f.planets.iter().any(|p| p == "Moon") && supported_pair
         })
         .filter(|f| {
             let mut pair = f.planets.clone();
@@ -1405,6 +2074,563 @@ pub fn coverage_card(method: &str) -> Result<Value> {
 mod concise_projection_tests {
     use super::*;
 
+    fn relevant_family_input(
+        method: &str,
+        consultation: Value,
+    ) -> (Example, Vec<crate::native_evidence::Fact>) {
+        let (mut input, mut chart, native) = declared(None);
+        chart.as_object_mut().unwrap().remove("role_reference");
+        input.set(
+            "question",
+            json!("The unchanged synthetic family question."),
+        );
+        input.set(
+            "consultation",
+            json!(serde_json::to_string(&consultation).unwrap()),
+        );
+        input.set(
+            "chart_evidence",
+            json!(serde_json::to_string(&chart).unwrap()),
+        );
+        let relevant = relevant_reader_inputs(&input, method).unwrap();
+        assert_eq!(relevant.get("question"), input.get("question"));
+        (relevant, native)
+    }
+
+    #[test]
+    fn relevant_ready_families_preserve_declared_context_and_sparse_conditional_references() {
+        for (method, consultation) in [
+            (
+                "new_job",
+                json!({"method":"new_job","facts":[fact("subject.owner_id","querent"),fact("job_context","applied, no offer; a recruiter introduced me")],"unknown":[]}),
+            ),
+            (
+                "movable_deal",
+                json!({"method":"movable_deal","facts":[fact("deal_capacity","sell"),fact("deal_actor","agent"),fact("people.agent.relationship","employee"),fact("subject.owner_id","querent"),fact("deal_beneficiary","querent")],"unknown":[]}),
+            ),
+        ] {
+            let (input, native) = relevant_family_input(method, consultation);
+            let text = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(relevant_chart_ids(text).unwrap().len() < native.len());
+            assert!(text.contains("motion=? (not supplied)"));
+            assert!(!text.contains("Δ="));
+            assert!(text.contains("Astronomical hours are not earthly time"));
+            assert!(text.contains("omitted evidence or uncomputed techniques are unknown"));
+            for metadata in [
+                "source_identity",
+                "source_fields",
+                "input_scope",
+                "alias_authority",
+                "expected",
+            ] {
+                assert!(!text.contains(metadata));
+            }
+            if method == "new_job" {
+                assert!(
+                    input
+                        .get("consultation")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .contains("job_context=applied, no offer; a recruiter introduced me")
+                );
+                assert!(text.contains("worker.person(querent) = H1/Saturn"));
+                assert!(text.contains("subject.primary(?) = H10/Mars"));
+                for id in ["worker.pocket", "job.wages"] {
+                    assert!(
+                        text.lines()
+                            .any(|line| line.starts_with(id) && line.ends_with(" optional"))
+                    );
+                }
+            } else {
+                assert!(text.contains("deal.actor(agent) = H6/Mercury"));
+                assert!(text.contains("deal.counterparty(?) = H12/Jupiter"));
+                assert!(text.contains("subject.primary(querent) = H2/Saturn optional"));
+                assert!(text.contains("deal.pocket(querent) = H2/Saturn optional"));
+                assert!(text.contains("No facet is declared"));
+            }
+        }
+    }
+
+    #[test]
+    fn relevant_new_job_uses_external_tenth_and_never_transfers_worker_moon() {
+        for (relationship, house, job_house) in [("child", 5, 10), ("mother", 10, 7)] {
+            let (input, _) = relevant_family_input(
+                "new_job",
+                json!({"facts":[fact("subject.owner_id","iris"),fact("people.iris.relationship",relationship)],"unknown":[]}),
+            );
+            let text = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(text.contains(&format!("worker.person(iris) = H{house}/")));
+            assert!(text.contains(&format!("subject.primary(?) = H{job_house}/")));
+            assert!(text.contains("Moon contextual=no"));
+            assert!(!text.contains("principal.moon("));
+        }
+        let (input, _) = relevant_family_input(
+            "new_job",
+            json!({"facts":[fact("principal_mode","relay"),fact("principal_id","iris"),fact("subject.owner_id","iris")],"unknown":[]}),
+        );
+        let text = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(text.contains("worker.person(iris) = H1/Saturn"));
+        assert!(text.contains("principal.moon(iris) = —/Moon optional"));
+        let (input, _) = relevant_family_input(
+            "new_job",
+            json!({"facts":[fact("subject.owner_id","iris")],"unknown":["people.iris.relationship"]}),
+        );
+        let text = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(text.contains("worker.person(iris) = —/?"));
+        assert!(text.contains("subject.primary(?) = —/?"));
+        assert!(!text.contains("worker.person(iris) = H7"));
+    }
+
+    #[test]
+    fn relevant_family_occasions_follow_actual_scope_without_money_as_acquisition() {
+        let event = |id: &str, a: &str, b: &str, hours: f64| crate::native_evidence::Fact {
+            id: id.into(),
+            kind: "event".into(),
+            label: format!("{a} · {b}"),
+            detail: "actual synthetic candidate".into(),
+            planets: vec![a.into(), b.into()],
+            condition_facet: None,
+            reception: None,
+            event: Some(crate::native_evidence::EventCandidate {
+                within_current_signs: Some(false),
+                astronomical_hours: hours,
+                perfection_motion: None,
+            }),
+        };
+        let native = vec![
+            event("e1", "Moon", "Sun", 1.),
+            event("e2", "Moon", "Mercury", 2.),
+            event("e3", "Saturn", "Jupiter", 3.),
+            event("e4", "Saturn", "Mars", 6.),
+            event("e5", "Saturn", "Jupiter", 9.),
+            event("e6", "Mars", "Venus", 10.),
+            event("e7", "Jupiter", "Mercury", 4.),
+            event("e8", "Jupiter", "Venus", 5.),
+            event("e9", "Saturn", "Venus", 11.),
+            event("e10", "Venus", "Mercury", 7.),
+        ];
+        let row = |id: &str, actor: &str, planet: &str, optional: bool| {
+            json!([id, actor, id, 1, planet, optional, null, null, null, [], []])
+        };
+        let job = json!({"role_reference":{"roles":[row("principal.person","querent","Saturn",false),row("worker.person","querent","Saturn",false),row("subject.primary","","Mars",false),row("worker.pocket","querent","Mercury",true),row("job.wages","","Jupiter",true),row("principal.moon","querent","Moon",true)]}});
+        let ids = relevant_family_ids(&job, &native, &json!({}), "new_job", None).unwrap();
+        assert_eq!(
+            ids,
+            BTreeSet::from(["e1", "e2", "e3", "e4"].map(str::to_owned))
+        );
+        // The earlier wages occasion remains possible prevention context. It
+        // does not extend acquisition to the later wages or unrelated chain.
+        let deal = json!({"role_reference":{"roles":[row("principal.person","querent","Saturn",false),row("deal.actor","agent","Saturn",false),row("deal.counterparty","buyer","Mars",false),row("subject.primary","owner","Jupiter",false),row("deal.incoming_money","buyer","Venus",false),row("deal.pocket","maya","Mercury",false)]}});
+        let quality = relevant_family_ids(
+            &deal,
+            &native,
+            &json!({"facet":"situation"}),
+            "movable_deal",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            quality,
+            BTreeSet::from(["e1", "e2", "e3", "e7"].map(str::to_owned))
+        );
+        let profit = relevant_family_ids(
+            &deal,
+            &native,
+            &json!({"facet":"profit"}),
+            "movable_deal",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            profit,
+            BTreeSet::from(["e1", "e2", "e7", "e8", "e10"].map(str::to_owned))
+        );
+        let unresolved = relevant_family_ids(
+            &deal,
+            &native,
+            &json!({"facet":"profit","unknown":["facet"]}),
+            "movable_deal",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            unresolved,
+            relevant_family_ids(&deal, &native, &json!({}), "movable_deal", None).unwrap()
+        );
+        assert!(!unresolved.contains("e9")); // Seller is not the distinct recipient.
+    }
+
+    #[test]
+    fn relevant_family_cusp_position_identity_and_supplied_motion_stay_exact() {
+        for method in ["new_job", "movable_deal"] {
+            let (_, mut chart, native) = declared(None);
+            let consultation = if method == "new_job" {
+                json!({"method":method,"facts":[fact("subject.owner_id","querent")],"unknown":[]})
+            } else {
+                json!({"method":method,"facet":"profit","facts":[fact("deal_capacity","sell"),fact("deal_actor","querent"),fact("subject.owner_id","querent"),fact("deal_beneficiary","querent")],"unknown":[]})
+            };
+            chart["role_reference"] =
+                component_family_role_reference(&consultation, &native, method).unwrap();
+            let text = relevant_reader_chart(&chart, &consultation, method, None).unwrap();
+            assert!(text.contains("Saturn at 10.464° Aries, house 3"));
+            assert!(text.contains("principal.person(querent) = H1/Saturn"));
+            assert!(text.contains("Δ="));
+            for role in chart["role_reference"]["role_rows"].as_array().unwrap() {
+                assert!(role["selected_id"].is_null());
+                if let Some(id) = role["cusp_fact_id"].as_str() {
+                    let fact = native.iter().find(|f| f.id == id).unwrap();
+                    assert_eq!(fact.label, format!("House {}", role["significator_house"]));
+                    assert_eq!(role["ruler_planet"], fact.planets[0]);
+                }
+            }
+            chart["role_reference"]["source_identity"] = json!("foreign");
+            assert!(relevant_reader_chart(&chart, &consultation, method, None).is_err());
+        }
+    }
+
+    fn fact(field: &str, value: &str) -> Value {
+        json!({"field":field,"value":value,"quote":value})
+    }
+
+    fn family_input(
+        method: &str,
+        consultation: Value,
+    ) -> (Example, Vec<crate::native_evidence::Fact>) {
+        let (mut input, mut chart, native) = declared(None);
+        chart.as_object_mut().unwrap().remove("role_reference");
+        input.set(
+            "question",
+            json!("A synthetic complete family question; no rubric selects its role."),
+        );
+        input.set(
+            "consultation",
+            json!(serde_json::to_string(&consultation).unwrap()),
+        );
+        input.set(
+            "chart_evidence",
+            json!(serde_json::to_string(&chart).unwrap()),
+        );
+        let projected = concise_reader_inputs(&input, method).unwrap();
+        assert_eq!(projected.get("consultation"), input.get("consultation"));
+        assert_eq!(projected.get("question"), input.get("question"));
+        assert!(projected.get("expected").is_none());
+        (projected, native)
+    }
+
+    fn family_row<'a>(reference: &'a Value, id: &str) -> &'a Value {
+        reference["role_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["role_id"] == id)
+            .unwrap()
+    }
+
+    #[test]
+    fn concise_family_procedures_are_short_and_cover_the_declared_source_branches() {
+        let job = concise_reader_source("new_job").unwrap();
+        let deal = concise_reader_source("movable_deal").unwrap();
+        for procedure in [job, deal] {
+            assert!(procedure.split_whitespace().count() < 800);
+            assert!(procedure.contains("127–136"));
+            assert!(procedure.contains("status, answer, analysis, evidence, unresolved"));
+            assert!(procedure.contains("positive AND negative"));
+        }
+        for witness in [
+            "222–224",
+            "tenth-house applicant",
+            "not romantic feelings",
+            "an aspect to wages does not establish acquisition",
+            "Tenth-house fortunes, nodes",
+        ] {
+            assert!(job.contains(witness), "{witness}");
+        }
+        for witness in [
+            "156–161",
+            "167–172",
+            "177",
+            "whether the deal completes",
+            "SHOULD I buy",
+            "sale profit",
+            "exact inventory-sale count",
+        ] {
+            assert!(deal.contains(witness), "{witness}");
+        }
+    }
+
+    #[test]
+    fn concise_new_job_uses_the_actual_worker_external_job_exception_and_relay() {
+        let (_, _, native) = declared(None);
+        for (relationship, worker_house, job_house) in
+            [("child", 5, 10), ("mother", 10, 7), ("partner", 7, 10)]
+        {
+            let consultation = json!({"facts":[fact("subject.owner_id","iris"),fact("people.iris.relationship",relationship)],"unknown":[]});
+            let view = component_family_role_reference(&consultation, &native, "new_job").unwrap();
+            assert_eq!(family_row(&view, "worker.person")["actor_id"], "iris");
+            assert_eq!(
+                family_row(&view, "worker.person")["significator_house"],
+                worker_house
+            );
+            assert_eq!(
+                family_row(&view, "subject.primary")["significator_house"],
+                job_house
+            );
+            assert_eq!(
+                family_row(&view, "job.wages")["significator_house"],
+                crate::native_evidence::turn(job_house, 2)
+            );
+            assert_eq!(view["moon"]["available_as_contextual_reference"], false);
+        }
+        let relay = json!({"facts":[fact("principal_mode","relay"),fact("principal_id","iris"),fact("subject.owner_id","iris"),fact("people.iris.relationship","child")],"unknown":[]});
+        let view = component_family_role_reference(&relay, &native, "new_job").unwrap();
+        assert_eq!(family_row(&view, "worker.person")["significator_house"], 1);
+        assert_eq!(
+            family_row(&view, "subject.primary")["significator_house"],
+            10
+        );
+        assert_eq!(view["moon"]["available_as_contextual_reference"], true);
+        assert!(
+            view["aliases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["role_id"] == "principal.moon" && row["actor_id"] == "iris")
+        );
+    }
+
+    #[test]
+    fn concise_new_job_unknown_and_moon_claims_do_not_invent_an_applicant() {
+        let (_, _, mut native) = declared(None);
+        let unknown = json!({"facts":[fact("subject.owner_id","iris")],"unknown":[]});
+        let view = component_family_role_reference(&unknown, &native, "new_job").unwrap();
+        for id in ["worker.person", "subject.primary"] {
+            assert!(family_row(&view, id)["significator_house"].is_null());
+            assert!(family_row(&view, id)["ruler_planet"].is_null());
+        }
+        assert_eq!(view["moon"]["available_as_contextual_reference"], false);
+        let house10 = native
+            .iter_mut()
+            .find(|f| f.kind == "house" && f.label == "House 10")
+            .unwrap();
+        house10.planets = vec!["Moon".into()];
+        let own = json!({"facts":[fact("subject.owner_id","querent")],"unknown":[]});
+        let view = component_family_role_reference(&own, &native, "new_job").unwrap();
+        assert_eq!(family_row(&view, "subject.primary")["ruler_planet"], "Moon");
+        assert_eq!(view["moon"]["available_as_contextual_reference"], false);
+        assert!(
+            view["moon"]["house_claims"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|row| row["role_id"] == "subject.primary")
+        );
+    }
+
+    #[test]
+    fn concise_deal_preserves_named_parties_prospective_object_and_independent_profit_pocket() {
+        let (_, _, native) = declared(None);
+        let buy = json!({"facet":"situation","facts":[fact("deal_capacity","buy"),fact("deal_actor","querent"),fact("seller","nora"),fact("people.nora.relationship","friend"),fact("subject.owner_id","nora")],"unknown":[]});
+        let view = component_family_role_reference(&buy, &native, "movable_deal").unwrap();
+        assert_eq!(family_row(&view, "deal.counterparty")["actor_id"], "nora");
+        assert_eq!(
+            family_row(&view, "deal.counterparty")["significator_house"],
+            11
+        );
+        assert_eq!(family_row(&view, "subject.primary")["actor_id"], "querent");
+        assert_eq!(
+            family_row(&view, "subject.primary")["significator_house"],
+            2
+        );
+        assert!(
+            !view["role_rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|r| r["role_id"] == "deal.pocket")
+        );
+        let sale = json!({"facet":"profit","facts":[fact("deal_capacity","sell"),fact("deal_actor","agent"),fact("people.agent.relationship","employee"),fact("subject.owner_id","querent"),fact("deal_beneficiary","querent")],"unknown":[]});
+        let view = component_family_role_reference(&sale, &native, "movable_deal").unwrap();
+        assert_eq!(family_row(&view, "deal.actor")["significator_house"], 6);
+        assert_eq!(
+            family_row(&view, "deal.counterparty")["significator_house"],
+            12
+        );
+        assert_eq!(
+            family_row(&view, "deal.incoming_money")["significator_house"],
+            1
+        );
+        for id in ["subject.primary", "deal.pocket"] {
+            assert_eq!(family_row(&view, id)["actor_id"], "querent");
+            assert_eq!(family_row(&view, id)["significator_house"], 2);
+        }
+        let ruler = family_row(&view, "deal.pocket")["ruler_planet"]
+            .as_str()
+            .unwrap();
+        let ids: Vec<_> = view["aliases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["planet"] == ruler)
+            .map(|r| r["role_id"].as_str().unwrap())
+            .collect();
+        assert!(ids.contains(&"subject.primary") && ids.contains(&"deal.pocket"));
+        assert!(
+            family_row(&view, "deal.pocket")["source_fields"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("deal_beneficiary"))
+        );
+    }
+
+    #[test]
+    fn concise_deal_keeps_unselected_roles_conditional_and_unresolved_parties_unknown() {
+        let (_, _, native) = declared(None);
+        let facts = vec![
+            fact("deal_capacity", "sell"),
+            fact("deal_actor", "querent"),
+            fact("subject.owner_id", "querent"),
+        ];
+        let undecided = json!({"facts":facts,"unknown":[]});
+        let view = component_family_role_reference(&undecided, &native, "movable_deal").unwrap();
+        for id in ["subject.primary", "deal.incoming_money", "deal.pocket"] {
+            assert_eq!(family_row(&view, id)["optional"], true);
+            assert!(
+                family_row(&view, id)["authority"]
+                    .as_str()
+                    .unwrap()
+                    .contains("unselected_facet")
+            );
+        }
+        assert!(family_row(&view, "deal.pocket")["actor_id"].is_null());
+        assert!(family_row(&view, "deal.pocket")["ruler_planet"].is_null());
+        let mut completion = undecided.clone();
+        completion["facet"] = json!("event");
+        let view = component_family_role_reference(&completion, &native, "movable_deal").unwrap();
+        assert!(
+            view["role_rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|r| !matches!(
+                    r["role_id"].as_str(),
+                    Some("subject.primary" | "deal.incoming_money" | "deal.pocket")
+                ))
+        );
+        let conflicting = json!({"facts":[fact("deal_capacity","buy"),fact("deal_actor","querent"),fact("deal_party","iris"),fact("deal_party","nora"),fact("seller","nora"),fact("people.nora.relationship","friend")],"unknown":[]});
+        let view = component_family_role_reference(&conflicting, &native, "movable_deal").unwrap();
+        assert!(family_row(&view, "deal.counterparty")["actor_id"].is_null());
+        assert!(family_row(&view, "deal.counterparty")["ruler_planet"].is_null());
+        let actor_conflict = json!({"facts":[fact("deal_capacity","sell"),fact("deal_actor","iris"),fact("deal_actor","nora"),fact("seller","querent")],"unknown":[]});
+        let view =
+            component_family_role_reference(&actor_conflict, &native, "movable_deal").unwrap();
+        assert!(family_row(&view, "deal.actor")["actor_id"].is_null());
+        assert!(
+            component_family_role_reference(
+                &json!({"method":"contact","facts":[]}),
+                &native,
+                "new_job"
+            )
+            .is_err()
+        );
+        assert!(
+            component_family_role_reference(
+                &json!({"facet":"timing","facts":[]}),
+                &native,
+                "movable_deal"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn concise_ready_families_keep_the_same_all_id_tables_without_filling_sparse_motion() {
+        for (method, consultation) in [
+            (
+                "new_job",
+                json!({"facts":[fact("subject.owner_id","querent"),fact("job_context","applied, no offer, a recruiter introduced me")],"unknown":[]}),
+            ),
+            (
+                "movable_deal",
+                json!({"facts":[fact("deal_capacity","sell"),fact("deal_actor","querent"),fact("subject.owner_id","querent"),fact("deal_beneficiary","querent")],"unknown":[]}),
+            ),
+        ] {
+            let (projected, native) = family_input(method, consultation);
+            let chart: Value =
+                serde_json::from_str(projected.get("chart_evidence").unwrap().as_str().unwrap())
+                    .unwrap();
+            let mut ids = BTreeSet::new();
+            for table in ["facts", "receptions", "events"] {
+                for row in chart[table]["rows"].as_array().unwrap() {
+                    assert!(ids.insert(row[0].as_str().unwrap()));
+                }
+            }
+            assert_eq!(ids, native.iter().map(|f| f.id.as_str()).collect());
+            assert_eq!(
+                chart["events"]["columns"],
+                json!([
+                    "id",
+                    "endpoint1",
+                    "endpoint2",
+                    "aspect",
+                    "within_current_signs",
+                    "astronomical_hours",
+                    "native_current_angular_gap_or_detail",
+                    "motion"
+                ])
+            );
+            for row in chart["events"]["rows"].as_array().unwrap() {
+                let fact = native.iter().find(|f| row[0] == f.id).unwrap();
+                assert_eq!(row[1], fact.planets[0]);
+                assert_eq!(row[2], fact.planets[1]);
+                assert_eq!(
+                    row[4],
+                    json!(fact.event.as_ref().unwrap().within_current_signs)
+                );
+                assert!(row[7].is_null());
+            }
+            for row in chart["receptions"]["rows"].as_array().unwrap() {
+                let edge = native
+                    .iter()
+                    .find(|f| row[0] == f.id)
+                    .unwrap()
+                    .reception
+                    .as_ref()
+                    .unwrap();
+                assert_eq!(row[1], edge.guest_planet);
+                assert_eq!(row[2], edge.host_planet);
+                for (column, polarity) in [
+                    (3, crate::native_evidence::ReceptionPolarity::Positive),
+                    (4, crate::native_evidence::ReceptionPolarity::Negative),
+                ] {
+                    assert_eq!(
+                        row[column],
+                        json!(
+                            edge.qualities
+                                .iter()
+                                .filter(|q| q.polarity == polarity)
+                                .map(|q| q.dignity.native_name())
+                                .collect::<Vec<_>>()
+                        )
+                    );
+                }
+            }
+            let role_columns = chart["role_reference"]["role_columns"].as_array().unwrap();
+            assert_eq!(role_columns.len(), 11);
+            for row in chart["role_reference"]["roles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|r| r[3].is_number())
+            {
+                let cusp = native.iter().find(|f| f.id == row[8]).unwrap();
+                assert_eq!(cusp.label, format!("House {}", row[3]));
+                assert_eq!(row[4], cusp.planets[0]);
+                assert!(row[7].is_null()); // A calculated reference is not an accepted selection.
+            }
+        }
+    }
+
     #[test]
     fn relevant_contact_keeps_actual_roles_mixed_edges_and_sparse_unknowns_without_metadata() {
         let (input, _, native) = declared(Some("mother"));
@@ -1587,7 +2813,15 @@ mod concise_projection_tests {
             "chart_evidence",
             "source_text",
         ]);
-        let projected = relevant_reader_inputs(&original, "contact").unwrap();
+        let method = std::env::var("HORARY_RELEVANT_METHOD").unwrap_or_else(|_| "contact".into());
+        let projected = relevant_reader_inputs(&original, &method).unwrap();
+        if let Ok(expected) = std::env::var("HORARY_RELEVANT_EXPECTED_OUTPUT") {
+            let previous: Value = serde_json::from_slice(&fs::read(expected).unwrap()).unwrap();
+            assert_eq!(
+                serde_json::to_value(projected.rendered()).unwrap(),
+                previous
+            );
+        }
         let output = std::env::var("HORARY_RELEVANT_OUTPUT").expect("Unique new output path");
         let mut file = fs::OpenOptions::new()
             .create_new(true)
@@ -1751,7 +2985,7 @@ mod concise_projection_tests {
         changed = original.clone();
         changed["anchor"]["longitude"] = json!(181.);
         assert!(concise_reader_chart(&changed, &consultation, "contact").is_err());
-        assert!(concise_reader_source("new_job").is_err());
+        assert!(concise_reader_source("money").is_err());
     }
 
     #[test]
