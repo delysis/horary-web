@@ -217,7 +217,10 @@ fn component_family_role_reference(
     method: &str,
 ) -> Result<Value> {
     ensure!(
-        matches!(method, "new_job" | "movable_deal"),
+        matches!(
+            method,
+            "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
+        ),
         "Unsupported role family"
     );
     if let Some(declared) = consultation.get("method") {
@@ -435,6 +438,174 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if method == "relationship" {
+        // No neural branch or name-to-ID guess. A desired partner is seventh;
+        // other declared persons remain conditional references for questions
+        // about that person's feelings or another person's relationship.
+        add(
+            "target.partner",
+            None,
+            principal.map(|_| 7),
+            true,
+            "conditional_principal_partner_reference_for_actual_romantic_inquiry",
+            value("subject.name").unwrap_or("Partner").into(),
+            vec!["subject.name".into()],
+        );
+        for field in fields
+            .keys()
+            .filter(|field| field.starts_with("people.") && field.ends_with(".relationship"))
+        {
+            let id = &field[7..field.len() - 13];
+            if Some(id) != principal && id != "querent" {
+                let house = person_house(id);
+                add(
+                    &format!("declared.{id}"),
+                    Some(id),
+                    house,
+                    true,
+                    "conditional_declared_person_not_a_selected_romantic_role",
+                    label(id),
+                    person_sources(Some(id)),
+                );
+                add(
+                    &format!("declared.{id}.partner"),
+                    None,
+                    house.map(|h| crate::native_evidence::turn(h, 7)),
+                    true,
+                    "conditional_partner_of_declared_person",
+                    format!("{id}'s partner if that is the actual inquiry"),
+                    person_sources(Some(id)),
+                );
+            }
+        }
+        // Natural Sun/Venus require declared applicable roles; do not infer
+        // them from names, voices, or an author's private expected answer.
+    } else if method == "money" {
+        let recipient = value("subject.owner_id");
+        let recipient_house = recipient.and_then(person_house);
+        add(
+            "money.recipient",
+            recipient,
+            recipient_house,
+            false,
+            "calculated_reference",
+            recipient
+                .map(label)
+                .unwrap_or_else(|| "Unresolved recipient".into()),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "money.pocket",
+            recipient,
+            recipient_house.map(|h| crate::native_evidence::turn(h, 2)),
+            false,
+            "calculated_reference",
+            "Recipient's pocket".into(),
+            vec!["subject.owner_id".into()],
+        );
+        let source = value("money_source");
+        let sender = value("sender");
+        let source_house = match source {
+            Some("government") => Some(10),
+            Some("job") => recipient_house.map(|h| crate::native_evidence::turn(h, 10)),
+            Some("customer" | "partner") => {
+                recipient_house.map(|h| crate::native_evidence::turn(h, 7))
+            }
+            Some("relative") => sender.and_then(person_house),
+            _ => None,
+        };
+        add(
+            "money.source",
+            sender,
+            source_house,
+            false,
+            "calculated_declared_source_reference",
+            source.unwrap_or("Unresolved money source").into(),
+            vec!["money_source".into(), "sender".into()],
+        );
+        add(
+            "money.incoming",
+            sender,
+            source_house.map(|h| crate::native_evidence::turn(h, 2)),
+            false,
+            "calculated_reference",
+            "Source's money, not merely the source person".into(),
+            vec!["money_source".into(), "sender".into()],
+        );
+    } else if matches!(method, "property" | "rental") {
+        let actor = value("deal_actor");
+        let actor_house = actor.and_then(person_house);
+        let party = value("deal_party");
+        // A free-prose party remains unbound. The generic opposing-party row
+        // is explicitly conditional, not a claim that the named party is H7.
+        add(
+            "deal.actor",
+            actor,
+            actor_house,
+            false,
+            "calculated_reference",
+            actor
+                .map(label)
+                .unwrap_or_else(|| "Unresolved contracting actor".into()),
+            vec!["deal_actor".into()],
+        );
+        add(
+            "deal.counterparty",
+            party,
+            party.and_then(person_house).or_else(|| {
+                party
+                    .is_none()
+                    .then(|| actor_house.map(|h| crate::native_evidence::turn(h, 7)))
+                    .flatten()
+            }),
+            false,
+            "calculated_reference",
+            party
+                .map(label)
+                .unwrap_or_else(|| "Other contracting party".into()),
+            vec!["deal_party".into(), "deal_actor".into()],
+        );
+        if party.is_some_and(|id| person_house(id).is_none()) {
+            add(
+                "deal.generic_opponent",
+                None,
+                actor_house.map(|h| crate::native_evidence::turn(h, 7)),
+                true,
+                "conditional_generic_party_only_if_actual_words_establish_unrelated_party",
+                "Generic opposing party if applicable".into(),
+                vec!["deal_actor".into()],
+            );
+        }
+        for (id, offset, name) in [
+            ("subject.primary", 4, "Property"),
+            ("property.price", 10, "Property price"),
+            ("property.profit", 5, "Profit from property"),
+            ("property.neighbours", 6, "Property's neighbours"),
+        ] {
+            add(
+                id,
+                None,
+                actor_house.map(|h| crate::native_evidence::turn(h, offset)),
+                id != "subject.primary",
+                "conditional_property_reference_use_only_for_actual_concern",
+                name.into(),
+                vec!["deal_actor".into()],
+            );
+        }
+        let beneficiary = value("deal_beneficiary");
+        if beneficiary.is_some() {
+            add(
+                "deal.pocket",
+                beneficiary,
+                beneficiary
+                    .and_then(person_house)
+                    .map(|h| crate::native_evidence::turn(h, 2)),
+                true,
+                "conditional_financial_beneficiary_not_title_owner",
+                "Beneficiary's pocket".into(),
+                vec!["deal_beneficiary".into()],
+            );
+        }
     } else {
         let capacity = value("deal_capacity");
         ensure!(
@@ -626,7 +797,7 @@ fn component_family_role_reference(
             .iter()
             .filter(|r| r["optional"] == false)
             .all(|r| r["ruler_planet"].is_string())
-        && (method != "new_job" || value("subject.owner_id") == principal);
+        && (!matches!(method, "new_job" | "money") || value("subject.owner_id") == principal);
     if moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
             "label":if method == "new_job" {"The principal as worker"} else {"The principal's contextual Moon"},
@@ -862,6 +1033,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "contact" => Ok(CONCISE_CONTACT_PROCEDURE),
         "new_job" => Ok(CONCISE_NEW_JOB_PROCEDURE),
         "movable_deal" => Ok(CONCISE_MOVABLE_DEAL_PROCEDURE),
+        "relationship" => Ok(CONCISE_RELATIONSHIP_PROCEDURE),
+        "money" => Ok(CONCISE_MONEY_PROCEDURE),
+        "property" => Ok(CONCISE_PROPERTY_PROCEDURE),
+        "rental" => Ok(CONCISE_RENTAL_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -906,6 +1081,62 @@ For sale profit, identify whose pocket receives proceeds. Incoming money is the 
 Reception A→B means A regards B. Retain all positive AND negative qualities: domicile/exaltation major, triplicity moderate, term/face minor. Weigh role-bound condition, house capacity, solar state and motion; do not infer reciprocity or private motives. Event endpoints are storage order, not the applying body. After ingress requires relevant changed circumstances/reception, usually only about three or four degrees into the next sign. Use actual travel to moving perfection and justified contextual units; astronomical hours are not civil timing. A relevant present-sign end can mark an explicit timeframe (p. 136). Missing techniques remain unknown, not absence. No general exact inventory-sale count is supplied; do not silently reframe a count question.
 
 Return only status, answer, analysis, evidence, unresolved. Give the useful decision first with material native eIDs/source pages, contrary testimony and honest limits.
+";
+
+const CONCISE_RELATIONSHIP_PROCEDURE: &str = "RELATIONSHIP PROCEDURE — Frawley printed pp. 19–32, 44–83, 84–101, 120–123, 127–140, 191–201.
+Preserve the actual person, question and baseline: hopes, arranged wedding and existing relationship have different defaults. The principal is first with available Moon; the partner specifically asked about is seventh, including an unnamed future partner or a friend considered as partner. A question specifically about a neighbour's feelings can use third. Declared-person rows are conditional alternatives, not extra lovers. A concerning-other inquiry does not turn that person into a relay principal. Turn an actual other person's partner from that person's house. Assigned houses differ from occupied houses; preserve shared rulers and house priority over Moon.
+
+Only explicitly applicable man/woman roles permit Sun/Venus as natural cosignificators; house rulers have first claim, with no substitute Mars, arbitrary allocation between same-sex partners, or inference from names. Lord 1/7 concerns the person; Moon the principal's feelings; applicable Sun/Venus attraction. If these roles are unavailable, state that this testimony is unavailable without inventing it.
+
+Reception A→B is A's regard for B, never B's response. Preserve positive AND negative qualities: domicile/exaltation major, triplicity moderate, term/face minor. Exaltation can exaggerate and change. Different significators can disagree; neither minor reception nor an easy aspect proves love. Current feelings need no new event aspect. Weigh role-bound condition, solar state, occupied-house capacity and motion contextually; vulnerability from loving the other is not a mechanical refusal.
+
+Formation requires relevant reception and an occasion between actual significators; a cusp or Part of Marriage contact is not a substitute. Use native order, supported translation/collection and prevention; do not invent rivals. Commitment timing is not a booked ceremony date. Meeting place uses contextual who-goes-to-whom and the receiving significator's occupied house, not the applying planet's identity. Description uses main partner ruler; partner wealth is their second, work their tenth. Such ancillary roles require their own native evidence.
+
+Existing arrangements/relationships continue unless actual ending testimony/action outweighs that default. A square describes difficulty reaching the event, not necessarily later unhappiness; opposition can bring regret. Judge durability through receptions and supplied Part of Marriage/dispositor, not an invented calculation. For 'ever', age/circumstances materially change the default; fertility, relevant placements and Sun/Moon testimony can matter. Only after occurrence is supported consider the source's broader timing latitude; do not leap several signs, stations or solar conjunctions.
+
+Reception alone does not establish an affair. Close conjunction still needs contextual identity and discretion; no unprompted sexuality allegation. Event hours are astronomical, not civil dates; missing techniques remain unknown. Return status, answer, analysis, evidence, unresolved: useful judgment first, material eIDs/pages, contrary testimony and limits.
+";
+
+const CONCISE_MONEY_PROCEDURE: &str = "MONEY PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 156–163.
+First distinguish amount/quality, arrival, timing, repayment, gift/grant, legacy and one's existing investments. Preserve payer, recipient, beneficiary, owed entitlement versus discretionary favour, and actual principal. A genuine relay principal takes first; concerning another person does not. Assigned houses differ from occupied houses; retain shared roles. Unknown sender capacity remains unknown.
+
+Money belongs to its actual source until received. Employee wages are second from the job, normally eleventh; a client's money is second from seventh, eighth, even for a corporate client. Do not treat a freelancer as an employee. A relative's repayment/gift or specific legacy uses that person's actual house and turned second, not automatically eighth. Spouse/business partner money is eighth. Government is tenth and its money eleventh. For another recipient turn their client/job/pocket roles as actually appropriate; do not turn the government away from its actual authority merely because the recipient is related. The recipient's second is their pocket. A donor's person and their money are distinct.
+
+For amount/quality, judge the money ruler's essential and accidental condition and supplied benefits/afflictions to its house; no arrival aspect is universally required. For arrival, require a supported connection from money to recipient, their available contextual Moon or pocket. An aspect between debtor and recipient alone may show agreement, not payment. Money strong in its own pocket may remain there. Weigh actual application, supported translation/collection, and material impediments; don't invent intervening claimants. Identify a real claimant by a supplied role, not merely an unassigned planet.
+
+Reception A→B means A regards B. Preserve all positive AND negative qualities, with domicile/exaltation major, triplicity moderate, term/face minor. For an owed government entitlement, personal favour is not obligatory; discretionary awards require relevant awarding-body inclination, negative reception being adverse. A legacy also concerns donor attitude and competing claims. Do not conflate good amount, willingness and delivery.
+
+Owned stocks/savings remain one's second-house money; evaluate present/future condition and relevant sign change for an actual switch. Specific commodity rulers/Parts require supplied calculations. Gambling and lotteries have their distinct source recipes; do not import recreational fifth indiscriminately. Astronomical hours are not civil timing. Establish arrival before timing with actual applying travel and contextual units; a relevant present-sign end can bound an explicit timeframe. Missing calculations remain unknown, not proof of nonpayment.
+
+Return only status, answer, analysis, evidence, unresolved. Answer the actual financial question directly, with material eIDs/pages, substantial contrary evidence and honest calculation limits; no invented sum, deadline or private motive.
+";
+
+const CONCISE_PROPERTY_PROCEDURE: &str = "PROPERTY PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 167–171.
+Distinguish deal completion, condition/price/fit and investment profit. Preserve actual contracting actor, title owner, other party and beneficiary; agents are not automatically parties or owners. Genuine relay takes first; concerning a relative preserves that person's actual house. Ordinary parties are first/seventh; a specifically related party uses its appropriate house. A free-prose unknown actor remains unbound, not an invented identity. Conditional role rows are references, not compulsory extra facts. Turn another actual actor's context explicitly; do not confuse assigned houses with bodies' occupied houses.
+
+Completion chiefly needs the contracting parties joining, supported translation/collection or equivalent sound testimony. Property or price touching the seller is minor and cannot replace the deal. Judge willingness, capacity and actual intervening events: buyer's afflicted money can prevent completion, a supported other buyer can intervene, and an actual translating/collecting planet can represent an agent. Do not require an agent biography or call every prior aspect prohibition. Unlike the ordinary regret rule, opposition can complete a property sale without implying regret. Negative reception matters; no reception is not automatically refusal. Being on a cusp can signify leverage; being inside can signify being controlled.
+
+Property is fourth; price tenth. Their supplied condition compares value and cost, relative to actual purpose. Domicile suggests soundness; exaltation can mask cosmetic exaggeration; debility indicates contextual defects, whereas a peregrine mobile home can fit its nature. Elemental associations suggest checks, not independently known defects: air roof/windows, water plumbing/damp, fire heating/walls, earth foundations. Consider supplied afflictions/occupants of fourth. A fixed price may resist bargaining; near its sign end change can become possible. Do not invent future dignity or market movement when uncomputed.
+
+Property profit is second from fourth, fifth, distinct from home quality and the beneficiary's pocket. Property neighbours are third from fourth, sixth, only where relevant. Preserve all positive AND negative directed receptions: A→B means A regards B; an inanimate role is contextual fit, not literal feeling. A buyer's exaltation of the property can overvalue it.
+
+Quality/available investment does not require a new completion aspect. Working premises use the separate business-property recipe: tenth profit and fourth outcome, not ordinary tenth price. Rental opposition concerns an ongoing regrettable relation, unlike outright sale. Use the applying body's actual travel and justified contextual units for supported timing; astronomical hours are not civil dates, and omitted/uncomputed testimony remains unknown.
+
+Return only status, answer, analysis, evidence, unresolved: direct useful judgment, material eIDs/pages, contrary testimony and limits, without an invented transaction or price.
+";
+
+const CONCISE_RENTAL_PROCEDURE: &str = "RENTAL PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 167–171.
+Preserve whether the actor lets out or takes a dwelling, actual title ownership, opposing party, financial beneficiary and existing/proposed tenancy. Do not conflate tenant, landlord, agent and owner. Genuine relay takes first; concerning another person retains their actual relationship house. Modern landlord/tenant agreement is a deal between first/seventh, not an automatic sixth-house servant relation. A specifically related party uses its actual house. Unknown canonical party remains unknown; conditional generic opposing-party rows do not assert its identity. Assigned houses differ from occupied houses; retain shared ruler aliases and unavailable Moon claims.
+
+For agreement completion, use the actual parties joining, supported translation/collection and relevant impediments. Property touching a party or price touching a seller is minor, not a substitute for agreement. Judge willingness and capacity alongside occasion. Negative reception matters; absent reception alone need not refuse the deal. Unlike outright property sale, opposition promises regret in the continuing tenant/landlord relationship. Do not invent an intermediary or label every earlier contact prohibition.
+
+For taking an available dwelling, compare fourth-house property condition, tenth-house price and actual needs; no future agreement aspect is required merely to judge condition or suitability. Exaltation may exaggerate quality or price; debility suggests contextual defects rather than independently verified damage. Property profit is fifth, second from fourth; preserve whose pocket benefits. Property neighbours are sixth, third from fourth, when material. Existing tenancy merit is not forced into a new-contract acquisition test.
+
+For 'should I let to these people?', judge actual tenant condition/trustworthiness and whether their ruler harms property or its profit. A debilitated benefic may look better than its condition warrants. Do not make all unknown tenants evil or assign them sixth. For sell versus let, seventh's cardinal/fixed sign can favour sale, double-bodied letting; weigh harm/benefit and property/price changes. A future improvement can support letting temporarily then selling only if actually supplied, not invented.
+
+A place to work on/in uses the business-property recipe, not ordinary residential price/profit allocation: tenth prospective profit, fourth outcome; the premises are assumed available, so no obligatory first/seventh acquisition aspect. Keep this conditional if actual use is undeclared.
+
+Reception A→B is A's regard for B; preserve every positive AND negative quality and distinguish inclination, capacity and occurrence. Use actual event/motion order and sound prevention reasoning. Astronomical hours are not calendar timing. A relevant sign end may bound an explicit timeframe; unknown calculations are not absent events. Return status, answer, analysis, evidence, unresolved: useful judgment first with eIDs/pages, contrary evidence and honest limits.
 ";
 
 /// Present an existing declared component input with the same finite native
@@ -974,7 +1205,7 @@ fn verified_concise_chart(
     );
     let reference = match method {
         "contact" => component_contact_role_reference(consultation, &native)?,
-        "new_job" | "movable_deal" => {
+        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental" => {
             component_family_role_reference(consultation, &native, method)?
         }
         _ => unreachable!("The concise procedure admits only implemented families"),
@@ -1134,7 +1365,7 @@ pub fn relevant_reader_chart(
     let (table, native) = verified_concise_chart(original, consultation, method)?;
     let selected = match method {
         "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
-        "new_job" | "movable_deal" => {
+        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -1471,7 +1702,64 @@ fn relevant_family_ids(
                 }
             }
         },
+        "relationship" => {
+            recipient("principal.person");
+            recipient("principal.moon");
+            target("target.partner");
+            for row in roles.iter().filter(|row| {
+                row[0]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("declared."))
+            }) {
+                if let Some(p) = row[4].as_str() {
+                    targets.insert(p.into());
+                }
+            }
+        }
+        "money" => {
+            recipient("money.recipient");
+            recipient("money.pocket");
+            if is_principal("money.recipient") {
+                recipient("principal.moon");
+            }
+            target("money.incoming");
+        }
+        "property" | "rental" => {
+            recipient("deal.actor");
+            if is_principal("deal.actor") {
+                recipient("principal.moon");
+            }
+            for id in [
+                "deal.counterparty",
+                "deal.generic_opponent",
+                "subject.primary",
+                "property.price",
+                "property.profit",
+                "property.neighbours",
+            ] {
+                target(id);
+            }
+        }
         _ => anyhow::bail!("Unsupported relevant role family"),
+    }
+    // These bodies have explicit family-specific ancillary relevance even
+    // without an assigned person alias. This does not assign natural roles.
+    if method == "relationship" {
+        planets.extend(["Sun", "Venus", "Saturn"].map(str::to_owned));
+    }
+    if matches!(method, "property" | "rental" | "money") {
+        let relevant_houses: BTreeSet<_> = roles.iter().filter_map(|r| r[3].as_u64()).collect();
+        for fact in native.iter().filter(|f| f.kind == "position") {
+            // Match only the verified calculator display grammar, never user
+            // prose or a private expected role. Occupants can afflict/benefit
+            // the actual property or money house independently of its ruler.
+            if relevant_houses
+                .iter()
+                .any(|h| fact.detail.contains(&format!("house {h},")))
+            {
+                planets.extend(fact.planets.iter().cloned());
+            }
+        }
     }
     planets.extend(recipients.iter().cloned());
     planets.extend(targets.iter().cloned());
@@ -2163,6 +2451,112 @@ mod concise_projection_tests {
         let relevant = relevant_reader_inputs(&input, method).unwrap();
         assert_eq!(relevant.get("question"), input.get("question"));
         (relevant, native)
+    }
+
+    #[test]
+    fn compact_additional_family_actual_twenty_inputs_keep_native_domains() {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for method in ["relationship", "money", "property", "rental"] {
+            let contexts =
+                fs::read_to_string(base.join("review/contexts").join(format!("{method}.jsonl")))
+                    .unwrap();
+            let bank: Vec<Value> =
+                fs::read_to_string(base.join("examples").join(format!("{method}.jsonl")))
+                    .unwrap()
+                    .lines()
+                    .map(|l| serde_json::from_str(l).unwrap())
+                    .collect();
+            let mut max_bytes = 0;
+            let mut unresolved = Vec::new();
+            let mut count = 0;
+            for line in contexts.lines() {
+                let context: Value = serde_json::from_str(line).unwrap();
+                let original_question =
+                    bank.iter().find(|c| c["id"] == context["case_id"]).unwrap()["question"]
+                        .clone();
+                let input = dsrust::input! {question:original_question.clone(),consultation:serde_json::to_string(&context["consultation"]).unwrap(),chart_evidence:serde_json::to_string(&context["chart_evidence"]).unwrap()};
+                let compact = relevant_reader_inputs(&input, method)
+                    .unwrap_or_else(|e| panic!("{}: {e:#}", context["case_id"]));
+                assert_eq!(compact.get("question"), Some(&original_question));
+                let chart = compact.get("chart_evidence").unwrap().as_str().unwrap();
+                let ids = relevant_chart_ids(chart).unwrap();
+                assert!(!ids.is_empty());
+                let canonical = context["chart_evidence"]["facts"].as_str().unwrap();
+                assert!(
+                    ids.iter()
+                        .all(|id| canonical.lines().any(|l| l.starts_with(&format!("{id}\t"))))
+                );
+                assert!(!chart.contains("source_identity") && !chart.contains("expected"));
+                if chart.contains("UNKNOWN") {
+                    unresolved.push(context["case_id"].as_str().unwrap().to_owned());
+                }
+                max_bytes = max_bytes.max(chart.len());
+                count += 1;
+            }
+            assert_eq!(count, 20);
+            assert!(
+                concise_reader_source(method)
+                    .unwrap()
+                    .split_whitespace()
+                    .count()
+                    <= 450
+            );
+            eprintln!(
+                "{method}: {count} native-verified original contexts; max chart {max_bytes} bytes; unresolved {unresolved:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_money_source_role_is_distinct_from_arrival_recipient() {
+        for (source, recipient, relationship, source_house, money_house) in [
+            ("job", "querent", "", 10, 11),
+            ("customer", "querent", "", 7, 8),
+            ("job", "child", "child", 2, 3),
+            ("government", "child", "child", 10, 11),
+        ] {
+            let (input, _) = relevant_family_input(
+                "money",
+                json!({"facts":[fact("subject.owner_id",recipient),fact("money_source",source),fact("people.child.relationship",relationship)],"unknown":[]}),
+            );
+            let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(chart.contains(&format!("money.source(?) = H{source_house}/")));
+            assert!(chart.contains(&format!("money.incoming(?) = H{money_house}/")));
+            assert_eq!(
+                chart.contains("principal.moon("),
+                recipient == "querent" && !chart.contains("Moon contextual=no")
+            );
+        }
+        let (input, _) = relevant_family_input(
+            "money",
+            json!({"facts":[fact("subject.owner_id","querent"),fact("money_source","relative"),fact("sender","ivy")],"unknown":["people.ivy.relationship"]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("money.source(ivy) = —/?"));
+        assert!(chart.contains("money.incoming(ivy) = —/?"));
+        assert!(!chart.contains("money.incoming(ivy) = H8/"));
+    }
+
+    #[test]
+    fn compact_property_party_and_relationship_roles_remain_conditional() {
+        let (input, _) = relevant_family_input(
+            "property",
+            json!({"facts":[fact("deal_actor","querent"),fact("deal_party","unrelated buyer")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("deal.counterparty(unrelated buyer) = —/?"));
+        assert!(chart.contains("deal.generic_opponent(?) = H7/"));
+        assert!(chart.contains("subject.primary(?) = H4/"));
+        assert!(chart.contains("property.price(?) = H10/"));
+        assert!(chart.contains("property.profit(?) = H5/"));
+        let (input, _) = relevant_family_input(
+            "relationship",
+            json!({"facts":[fact("subject.name","Noor"),fact("people.noor.relationship","neighbor")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("target.partner(?) = H7/"));
+        assert!(chart.contains("declared.noor(noor) = H3/"));
+        assert!(!chart.contains("natural.sun") && !chart.contains("natural.venus"));
     }
 
     #[test]
@@ -3053,7 +3447,7 @@ mod concise_projection_tests {
         changed = original.clone();
         changed["anchor"]["longitude"] = json!(181.);
         assert!(concise_reader_chart(&changed, &consultation, "contact").is_err());
-        assert!(concise_reader_source("money").is_err());
+        assert!(concise_reader_source("unclassified").is_err());
     }
 
     #[test]
