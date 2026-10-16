@@ -3952,7 +3952,17 @@ fn relevant_bound_ids(
     // position/capacity useful for prevention/translation/collection review.
     for fact in native {
         match fact.kind.as_str() {
-            "position" | "condition" if fact.planets.iter().any(|p| bodies.contains(p)) => {
+            "position"
+                if fact
+                    .planets
+                    .iter()
+                    .any(|p| bodies.contains(p) || (p == "Sun" && bodies.contains("Moon"))) =>
+            {
+                // Moon light/phase needs both luminaries' positions. This
+                // supplies a calculation witness, not another actor role.
+                ids.insert(fact.id.clone());
+            }
+            "condition" if fact.planets.iter().any(|p| bodies.contains(p)) => {
                 ids.insert(fact.id.clone());
             }
             "moon" | "boundary" => {
@@ -5785,6 +5795,37 @@ mod concise_projection_tests {
         assert!(text.contains("target.person(alma) = —/?"));
         assert!(text.contains("UNKNOWN The target's operative relationship is absent"));
         assert!(!text.contains("target.person(alma) = H7"));
+    }
+
+    #[test]
+    fn relevant_moon_phase_retains_sun_position_without_assigning_a_solar_role() {
+        let fact = |id: &str, kind: &str, planet: &str| crate::native_evidence::Fact {
+            id: id.into(),
+            kind: kind.into(),
+            label: planet.into(),
+            detail: "native value".into(),
+            planets: vec![planet.into()],
+            condition_facet: None,
+            reception: None,
+            event: None,
+        };
+        let native = vec![
+            fact("e0", "position", "Sun"),
+            fact("e1", "position", "Moon"),
+            fact("e2", "condition", "Sun"),
+            fact("e3", "position", "Mercury"),
+        ];
+        let ids = relevant_bound_ids(
+            &native,
+            BTreeSet::new(),
+            BTreeSet::from(["Moon".into()]),
+            BTreeSet::new(),
+            BTreeSet::new(),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(ids, BTreeSet::from(["e0".into(), "e1".into()]));
     }
 
     #[test]
