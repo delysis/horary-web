@@ -1,8 +1,8 @@
 # Questions and worked answers for Eileen's review
 
-This snapshot contains all **840 full questions** and **441 saved worked answers**. **399 answers are missing**, explicitly marked in each family document. There are twenty questions for each of forty-two types.
+This snapshot contains all **840 full questions** and **469 saved worked answers**. **371 answers are missing**, explicitly marked in each family document. There are twenty questions for each of forty-two types.
 
-The answers were generated using salient Frawley excerpts and passed the saved independent model review. They still need expert review; this does not establish that the application can produce them. The author run stopped with a disk-full error. No missing answer has been filled with a rubric or fabricated completion.
+The answers were generated using salient Frawley excerpts and passed the saved independent model review. They still need expert review; this does not establish that the application can produce them. The continuation reuses every approved answer from the earlier disk-full run and is authoring the remaining cases. No missing answer has been filled with a rubric or fabricated completion.
 
 ## Start here
 
@@ -15,7 +15,7 @@ The answers were generated using salient Frawley excerpts and passed the saved i
 | [choice](choice.md) | 20 | 20 |
 | [contact](contact.md) | 20 | 20 |
 | [contest](contest.md) | 20 | 20 |
-| [court_case](court_case.md) | 20 | 2 |
+| [court_case](court_case.md) | 20 | 20 |
 | [custody](custody.md) | 20 | 0 |
 | [dream](dream.md) | 20 | 0 |
 | [education](education.md) | 20 | 0 |
@@ -26,7 +26,7 @@ The answers were generated using salient Frawley excerpts and passed the saved i
 | [hiring](hiring.md) | 20 | 20 |
 | [information](information.md) | 20 | 0 |
 | [investment](investment.md) | 20 | 20 |
-| [job_offer](job_offer.md) | 20 | 19 |
+| [job_offer](job_offer.md) | 20 | 20 |
 | [knowledge](knowledge.md) | 20 | 0 |
 | [lost_animal](lost_animal.md) | 20 | 20 |
 | [lost_object](lost_object.md) | 20 | 20 |
@@ -46,7 +46,7 @@ The answers were generated using salient Frawley excerpts and passed the saved i
 | [tax](tax.md) | 20 | 0 |
 | [trust](trust.md) | 20 | 0 |
 | [undertaking](undertaking.md) | 20 | 0 |
-| [vehicle](vehicle.md) | 20 | 0 |
+| [vehicle](vehicle.md) | 20 | 9 |
 | [visit](visit.md) | 20 | 20 |
 | [weather](weather.md) | 20 | 0 |
 | [work_person](work_person.md) | 20 | 20 |
@@ -62,4 +62,4 @@ The answers were generated using salient Frawley excerpts and passed the saved i
 
 ## Last compact Contact optimization
 
-The hosted Contact run received 11 successful Gemma replies across 13 physical attempts and made 12 fresh Codex teacher calls. Its first GEPA rewrite exceeded the 6,000-token student-input ceiling and was not evaluated. No final after/held comparison completed, and no reading prompt was promoted. Successful process exit did not mean optimization succeeded.
+The rewrite limit is repaired: the teacher now targets a short instruction and every complete rendered request must fit 6,000 input tokens before evaluation. The completed Contact continuation evaluated two changed instructions, but selected the unchanged baseline. Development mean remained 0.5075, held mean was 0.625, and neither four-case pool had a full source-correct pass. No reading prompt was promoted. A separate controlled comparison is preparing explicit native sign-entry depth notation to address observed timing errors; these author answers are not student successes.

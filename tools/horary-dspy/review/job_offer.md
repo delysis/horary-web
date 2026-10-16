@@ -198,7 +198,38 @@ My daughter Asha has a firm nursing offer at Cedar. This is my own question abou
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+I would lean against Cedar being a good offer for Asha, particularly with pay her priority. The pay has a little positive testimony, but its ability to deliver benefit looks weak, and the job itself has substantial difficulties. This is a qualified judgment of the offer’s quality—not a prediction that she will lose the offer or go unpaid.
+
+### Reasoning
+
+This is your question about your daughter, not a question relayed on her behalf. Asha therefore takes the fifth: Taurus on its cusp gives Venus. You remain Saturn, Lord 1; the Moon remains your cosignificator and is not transferred to Asha.
+
+Because the offer is firm and the enquiry concerns its quality for her, I use her turned tenth, radical second: Aquarius gives Saturn. Her wages are her turned eleventh, radical third: Pisces gives Jupiter. Her own money is her second, radical sixth: Gemini gives Mercury. The radical tenth would be appropriate for an external job she was competing to obtain. Saturn’s overlap with your significator needs no substitute here: your participation is not needed to judge her job’s quality. Nursing’s natural lunar association does not replace these house rulers.
+
+The job’s Saturn is in fall, retrograde and within approximately five degrees of opposition to the Sun. Its radical third-house placement gives neutral capacity, not angular strength. No return-to-an-old-job circumstance excuses its retrogradation. Together these indicate an unsatisfactory job with substantial constraints; they do not identify a particular staffing or management problem.
+
+Asha’s Venus is in detriment and retrograde, although angular in the radical tenth and clear of the Sun. Angularity gives capacity without cancelling her difficult condition. Its placement in her turned sixth can descriptively fit nursing and illness-related work, but that does not by itself explain away detriment or retrogradation.
+
+Pay deserves the greatest weight. Jupiter has minor dignity by term and is direct and clear of the Sun, so the pay is not wholly without merit. But its radical eighth-house placement gives weak capacity. This favours “limited financial benefit” over either “excellent pay” or a definite prediction of nonpayment.
+
+The receptions are unequal. Venus has a minor interest in Jupiter: Asha’s attention to wages is present, though not strongly expressed. Jupiter has no corresponding dignity of Venus. Jupiter strongly rejects Saturn, the job, by detriment; Saturn shows no corresponding reception toward Jupiter. Saturn’s reception toward Venus combines minor term interest with much stronger detriment: the job’s relationship to Asha is predominantly adverse. Mercury, her bank balance, has only minor interest in Jupiter, while Jupiter gives Mercury no reciprocal support. There is no strong mutual reception connecting wages with her finances.
+
+This is a quality question, so no new applying aspect is required. The Moon’s calculated void of course does not negate an existing offer, and it describes your side of the consultation rather than Asha’s emotions. The early Venus–Mars square candidate does not establish either acceptance or a specific workplace incident. No event has been established that requires timing.
+
+### Evidence
+
+- Roles: e7–e9, e11–e12, e16; Frawley printed pp. 25–27, 30–32, 138, 224, 226–227.
+- Job condition: e6, e38–e41; printed pp. 50, 54–61, 226–227.
+- Asha’s condition: e3, e28–e31; printed pp. 20, 45–46, 54–57.
+- Pay and finances: e2, e5, e25–e27, e35–e37; printed pp. 24, 49, 56, 223, 227.
+- Directed receptions: e43, e47, e50, e57, e62, with positions e2, e3, e5, e6 for absent reciprocal dignities; printed pp. 71–77.
+- Quality versus event, Moon and timing: e68, e77–e78; printed pp. 32, 65, 127–131, 226–227.
+
+### Unresolved
+
+The chart does not establish an actual salary, payment delay, or specific workplace problem. Daily speeds and precise stations are unavailable; the approximate seven-day calculations do not certify fine event order, antiscia or fixed-star contacts. These limit precision without preventing the provisional quality judgment.
 
 ### Rubric (separate from the worked answer)
 

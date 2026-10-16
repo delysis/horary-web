@@ -1,9 +1,9 @@
 {
   "questions": 840,
   "families": 42,
-  "approved_saved_answers": 441,
-  "missing_answers": 399,
-  "author_campaign": "gold-readings-r1-codex-e346907",
+  "approved_saved_answers": 469,
+  "missing_answers": 371,
+  "author_campaign": "gold-readings-continuation-r2-02e3965",
   "snapshot_date": "2026-10-15",
   "book_excerpts_included": false,
   "rubrics_are_answers": false,
@@ -106,26 +106,9 @@
     {
       "method": "court_case",
       "questions": 20,
-      "approved_saved_answers": 2,
+      "approved_saved_answers": 20,
       "missing_answers": [
-        "court_case-03",
-        "court_case-04",
-        "court_case-05",
-        "court_case-06",
-        "court_case-07",
-        "court_case-08",
-        "court_case-09",
-        "court_case-10",
-        "court_case-11",
-        "court_case-12",
-        "court_case-13",
-        "court_case-14",
-        "court_case-15",
-        "court_case-16",
-        "court_case-17",
-        "court_case-18",
-        "court_case-19",
-        "court_case-20"
+
       ]
     },
     {
@@ -344,9 +327,9 @@
     {
       "method": "job_offer",
       "questions": 20,
-      "approved_saved_answers": 19,
+      "approved_saved_answers": 20,
       "missing_answers": [
-        "dspy-job_offer-first-003"
+
       ]
     },
     {
@@ -656,17 +639,8 @@
     {
       "method": "vehicle",
       "questions": 20,
-      "approved_saved_answers": 0,
+      "approved_saved_answers": 9,
       "missing_answers": [
-        "vehicle-01",
-        "vehicle-02",
-        "vehicle-03",
-        "vehicle-04",
-        "vehicle-05",
-        "vehicle-06",
-        "vehicle-07",
-        "vehicle-08",
-        "vehicle-09",
         "vehicle-10",
         "vehicle-11",
         "vehicle-12",
