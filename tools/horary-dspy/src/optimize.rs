@@ -232,6 +232,19 @@ pub struct Graded {
     stream: Option<PathBuf>,
     failed: Arc<AtomicBool>,
 }
+fn semantic_review_inputs(function: &str, example: &Example, supplied: &Example) -> Value {
+    if function == "reading" && example.get("__concise_student_projection") == Some(&json!(true)) {
+        // The full reference remains separate. It cannot turn chart facts
+        // removed by the compact projection into evidence the student saw.
+        json!(supplied.rendered())
+    } else {
+        example
+            .get("__review_inputs")
+            .cloned()
+            .unwrap_or_else(|| json!(supplied.rendered()))
+    }
+}
+
 impl Graded {
     pub fn new(
         method: &str,
@@ -500,7 +513,7 @@ impl Graded {
             errors.extend(reading_native_failures(&input, &prediction)?);
         }
         let mut review_input = dsrust::input! {
-            inputs:serde_json::to_string(&example.get("__review_inputs").cloned().unwrap_or_else(||json!(input.rendered())))?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
+            inputs:serde_json::to_string(&semantic_review_inputs(&self.function, example, &input))?,prediction:serde_json::to_string(&fields(&prediction))?,rubric:serde_json::to_string(example.get("expected").context("No independently authored rubric")?)?,source_text:source
         };
         if self.function != "reception" {
             review_input.set("function", json!(self.function));
@@ -2987,6 +3000,31 @@ mod component_tests {
                 }
             })
             .collect()
+    }
+
+    #[test]
+    fn compact_reading_review_sees_received_inputs_not_hidden_canonical_chart() {
+        let supplied =
+            dsrust::input! { question:"actual question",chart_evidence:"e1 supplied position" };
+        let mut original = supplied.clone();
+        original.set("__concise_student_projection", json!(true));
+        original.set(
+            "__review_inputs",
+            json!([["chart_evidence", "e999 hidden canonical event"]]),
+        );
+        assert_eq!(
+            semantic_review_inputs("reading", &original, &supplied),
+            json!(supplied.rendered())
+        );
+        assert_eq!(
+            semantic_review_inputs("extraction", &original, &supplied),
+            original.get("__review_inputs").unwrap().clone()
+        );
+        original.set("__concise_student_projection", json!(false));
+        assert_eq!(
+            semantic_review_inputs("reading", &original, &supplied),
+            original.get("__review_inputs").unwrap().clone()
+        );
     }
 
     #[tokio::test]
