@@ -1,0 +1,593 @@
+[
+  {
+    "id": "invariant-job-new-named-worker",
+    "method": "new_job",
+    "mode": "missing",
+    "words": "Will Owen obtain the records archivist post he applied for? The employer has not offered Owen the position.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "owen"
+        }
+      ],
+      "ready": false,
+      "owner": "owen",
+      "relationships": {
+        "owen": "unknown"
+      },
+      "subject_kind": "job"
+    },
+    "source_pages": "222–223",
+    "rationale": "A named affected worker is not the speaker; unknown personal capacity must preserve the identified worker and exact typed relationship need.",
+    "follow_up": "Owen is my brother; I am asking my own question about his application.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "owen",
+      "relationships": {
+        "owen": "sibling"
+      },
+      "subject_kind": "job",
+      "allowed_methods": [
+        "new_job"
+      ]
+    }
+  },
+  {
+    "id": "invariant-job-held-named-worker",
+    "method": "existing_job",
+    "mode": "missing",
+    "words": "Will Nia retain the bus-driving position she already holds through the depot reorganisation?",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "nia"
+        }
+      ],
+      "ready": false,
+      "owner": "nia",
+      "relationships": {
+        "nia": "unknown"
+      },
+      "subject_kind": "job"
+    },
+    "source_pages": "224–226",
+    "rationale": "A named affected worker is not the speaker; unknown personal capacity must preserve the identified worker and exact typed relationship need.",
+    "follow_up": "Nia is my wife, and this is my concern about her current employment.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "nia",
+      "relationships": {
+        "nia": "partner"
+      },
+      "subject_kind": "job",
+      "allowed_methods": [
+        "existing_job"
+      ]
+    }
+  },
+  {
+    "id": "invariant-job-return-named-worker",
+    "method": "return_to_job",
+    "mode": "missing",
+    "words": "Will Emilio regain the electrician position he left at Harbor Works? He has asked that employer to take him back into the same role.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "emilio"
+        }
+      ],
+      "ready": false,
+      "owner": "emilio",
+      "relationships": {
+        "emilio": "unknown"
+      },
+      "subject_kind": "job"
+    },
+    "source_pages": "225–226",
+    "rationale": "A named affected worker is not the speaker; unknown personal capacity must preserve the identified worker and exact typed relationship need.",
+    "follow_up": "Emilio is my son. This is my own question about his return.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "emilio",
+      "relationships": {
+        "emilio": "child"
+      },
+      "subject_kind": "job",
+      "allowed_methods": [
+        "return_to_job"
+      ]
+    }
+  },
+  {
+    "id": "invariant-job-offer-named-worker",
+    "method": "job_offer",
+    "mode": "missing",
+    "words": "Will the position formally offered to Piper pay Piper well enough? The offer is available now.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "piper"
+        }
+      ],
+      "ready": false,
+      "owner": "piper",
+      "relationships": {
+        "piper": "unknown"
+      },
+      "subject_kind": "job"
+    },
+    "source_pages": "224–226",
+    "rationale": "A named affected worker is not the speaker; unknown personal capacity must preserve the identified worker and exact typed relationship need.",
+    "follow_up": "Piper is my daughter; I am concerned about the pay in her offered job.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "piper",
+      "relationships": {
+        "piper": "child"
+      },
+      "subject_kind": "job",
+      "allowed_methods": [
+        "job_offer"
+      ]
+    }
+  },
+  {
+    "id": "invariant-job-speaker-seeks-anothers-former-role",
+    "method": "new_job",
+    "mode": "implicit",
+    "words": "Will I get Lucia's former archivist position? Lucia left it, I applied for the vacancy, and I have not received an offer. I am asking about my application, not Lucia's career.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "subject_kind": "job"
+    },
+    "source_pages": "222–223",
+    "rationale": "An incidental named former worker does not become the affected applicant; this counters a blanket name-means-other-worker shortcut."
+  },
+  {
+    "id": "invariant-parcel-known-retailer",
+    "method": "parcel",
+    "mode": "explicit",
+    "words": "The seller Aster Books has posted the atlas I ordered, but I have not received it. Will it arrive this Friday? I have not stated who has title to it.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "Aster Books"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "",
+      "relationships": {
+        "Aster Books": "other_party"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "atlas"
+    },
+    "source_pages": "165–166",
+    "rationale": "Sender must be a registered seller, not free text. Ordering alone does not establish title; sender third (seller seventh -> ninth) governs pending arrival. ExpertReview remains."
+  },
+  {
+    "id": "invariant-parcel-paid-receiver-title-still-seller-third",
+    "method": "parcel",
+    "mode": "explicit",
+    "words": "I already own the paid-for atlas, and Aster Books is the seller who has sent it to me. I have not received the package yet. Will it arrive?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "Aster Books"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "relationships": {
+        "Aster Books": "other_party"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "atlas"
+    },
+    "source_pages": "165–166",
+    "rationale": "Explicit ownership may remain a fact while the pending-arrival ruler is still sender third. Title is not a replacement for sender role. No title inquiry is needed."
+  },
+  {
+    "id": "invariant-parcel-relative-source-before-receipt",
+    "method": "parcel",
+    "mode": "implicit",
+    "words": "My sister Rosa posted the dictionary she owns to me yesterday. It is still in transit. When will it reach me?",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "rosa"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "rosa",
+      "relationships": {
+        "rosa": "sibling"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "dictionary"
+    },
+    "source_pages": "165–166",
+    "rationale": "Source speaker capacity sibling gives sender house3, pending letter/parcel third-from3=5. Neither sender second nor receiver second should select pending arrival."
+  },
+  {
+    "id": "invariant-parcel-adviser-is-not-sender",
+    "method": "parcel",
+    "mode": "explicit",
+    "words": "My brother Ciro recommended Pine Tools, but Ciro has not sent me anything. Pine Tools is the seller that still owns the drill and has shipped it to me. Will the parcel arrive?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "Pine Tools"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "Pine Tools",
+      "relationships": {
+        "Pine Tools": "other_party"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "drill"
+    },
+    "source_pages": "165–166",
+    "rationale": "Named relative and negated sending clause are distractors; register and select the actual seller sender."
+  },
+  {
+    "id": "invariant-parcel-carrier-is-not-origin-sender",
+    "method": "parcel",
+    "mode": "explicit",
+    "words": "My friend Kira owns the dictionary and has mailed it to me. Maple Delivery is only the carrier. Will the dictionary arrive?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "kira"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "kira",
+      "relationships": {
+        "kira": "friend"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "dictionary"
+    },
+    "source_pages": "165–166",
+    "rationale": "Carrier is not automatically the source sender; friend is house11, pending parcel third-from11=1. Retain actual source actor even when a named transport company appears."
+  },
+  {
+    "id": "invariant-deal-profit-still-sale",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "Will my neighbour Nora make a profit when she sells the antique cabinet she owns? Nora is the seller negotiating with an unnamed buyer. I am asking my own question about this sale.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "nora"
+        },
+        {
+          "field": "principal_mode",
+          "contains": "self"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "nora",
+      "relationships": {
+        "nora": "neighbor"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "cabinet"
+    },
+    "source_pages": "156–161, 167–172",
+    "rationale": "Profit is the answer facet; sell remains the operation. Nora house3 makes unnamed buyer seventh-from3=9. Treating capacity as profit wrongly anchors buyer on the speaker."
+  },
+  {
+    "id": "invariant-deal-buyer-quality-potential-possession",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "Is the guitar I am considering buying for myself good? My brother Leo currently owns it and is the seller. I would be the buyer; it is available to me.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        },
+        {
+          "field": "seller",
+          "contains": "leo"
+        },
+        {
+          "field": "deal_party",
+          "contains": "leo"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "relationships": {
+        "leo": "sibling"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "guitar"
+    },
+    "source_pages": "172",
+    "rationale": "The book gives the desired movable the prospective buyer’s second as potential possession, despite current title. Seller remains a separate identified relative."
+  },
+  {
+    "id": "invariant-property-held-condition-without-deal",
+    "method": "property",
+    "mode": "explicit",
+    "words": "What is the condition of the cottage I own? I am keeping it; I am not buying, selling or letting it.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "hold"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "subject_kind": "property",
+      "subject_name_contains": "cottage"
+    },
+    "source_pages": "168–170",
+    "rationale": "Existing-condition testimony is separate from deal completion. Canonical hold avoids inventing an acquisition and unnamed other party; property still has its condition/price roles."
+  },
+  {
+    "id": "invariant-rental-profit-remains-letting",
+    "method": "rental",
+    "mode": "implicit",
+    "words": "I own the apartment. Would letting it to a new tenant be profitable for me? I am the landlord, not selling the property.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "subject_kind": "property",
+      "subject_name_contains": "apartment"
+    },
+    "source_pages": "170",
+    "rationale": "Letting is a rental operation even with a profit goal; explicit not-selling must not become sell."
+  },
+  {
+    "id": "invariant-sale-agent-distinct-from-contract-party",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "Will the sale of my own telescope complete? My friend Ugo is only handling it as my agent, selling on my behalf; the telescope belongs to me.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "relationships": {
+        "ugo": "friend"
+      },
+      "subject_kind": "movable",
+      "subject_name_contains": "telescope"
+    },
+    "source_pages": "168, 172",
+    "rationale": "Source-book agency boundary: the actual deal parties perfect the sale; an intermediary is optional translation/collection testimony. This normative readiness=false requires an explicit reviewed contract-party/agent distinction or review boundary; current runtime incorrectly treats any Seller as party. Do not rewrite current 145 gold to disguise this."
+  },
+  {
+    "id": "invariant-investment-explicit-owned-clause",
+    "method": "investment",
+    "mode": "explicit",
+    "words": "Will the units I own in Morrow Fund increase in value? These units are my own holding.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "subject_name_contains": "Morrow"
+    },
+    "source_pages": "157",
+    "rationale": "A long extracted name equal to the affirmative I-own quote still establishes speaker holding. The narrow source guard repair must not reject it as a bare name."
+  },
+  {
+    "id": "invariant-investment-reported-first-person",
+    "method": "investment",
+    "mode": "implicit",
+    "words": "My friend Lin said, 'The units I own in Morrow Fund are doing well.' Those units belong to Lin. Will Lin's holding gain value? I am asking my own question about Lin's investment.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "lin",
+      "relationships": {
+        "lin": "friend"
+      },
+      "subject_name_contains": "Morrow"
+    },
+    "source_pages": "157",
+    "rationale": "Quoted I belongs to Lin, not device speaker. Named affected owner/capacity must survive despite embedded first person."
+  },
+  {
+    "id": "invariant-investment-negated-ownership-needs-holder",
+    "method": "investment",
+    "mode": "missing",
+    "words": "Will the units in Morrow Fund increase in value? They are not units I own, and I have not told you who holds them.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "owner": "",
+      "subject_name_contains": "Morrow"
+    },
+    "source_pages": "157",
+    "rationale": "Trimming not from a source quote cannot affirm the speaker as owner. Identify the holder genuinely before handing off.",
+    "follow_up": "The units belong to my friend Marta. This is my question about her holding.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "marta",
+      "relationships": {
+        "marta": "friend"
+      },
+      "subject_name_contains": "Morrow",
+      "allowed_methods": [
+        "investment"
+      ]
+    }
+  },
+  {
+    "id": "invariant-visit-hired-plumber",
+    "method": "visit",
+    "mode": "explicit",
+    "words": "The plumber Leif I booked to repair my own kitchen confirmed he will arrive at my house this afternoon. When will Leif arrive?",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "leif"
+        },
+        {
+          "field": "expected",
+          "contains": "yes"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "leif",
+      "relationships": {
+        "leif": "employee"
+      },
+      "subject_kind": "person"
+    },
+    "source_pages": "166",
+    "rationale": "A professional hired plumber arriving to serve the speaker takes sixth in this capacity, even for a one-time job; no question about permanent employment is required."
+  },
+  {
+    "id": "invariant-visit-one-time-electrician",
+    "method": "visit",
+    "mode": "explicit",
+    "words": "I hired the electrician Orla for a single repair at my house. Orla confirmed the visit for this afternoon. When will Orla get here?",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "orla"
+        },
+        {
+          "field": "expected",
+          "contains": "yes"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "orla",
+      "relationships": {
+        "orla": "employee"
+      },
+      "subject_kind": "person"
+    },
+    "source_pages": "166",
+    "rationale": "Single paid service does not require regular employment before the source-backed service-provider sixth-house role is available."
+  },
+  {
+    "id": "invariant-visit-profession-does-not-overrule-friend",
+    "method": "visit",
+    "mode": "explicit",
+    "words": "My friend Zuri is a plumber by profession, but this is a social visit for coffee, not a plumbing job and I have not hired Zuri to work for me. Zuri confirmed the visit for this afternoon. When will my friend get here?",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "zuri"
+        },
+        {
+          "field": "expected",
+          "contains": "yes"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "zuri",
+      "relationships": {
+        "zuri": "friend"
+      },
+      "subject_kind": "person"
+    },
+    "source_pages": "166",
+    "rationale": "Profession alone must not overwrite the operative friend role in an explicitly social visit; guards must preserve negation and actual capacity."
+  }
+]

@@ -1,0 +1,1848 @@
+# relationship: full questions and worked answers
+
+Generated reference answers for expert review; rubrics remain separate from answers. Original splits are retained. These are reading-component examples, not observed first-message application journeys.
+
+## dspy-relationship-first-001 (train)
+
+### Question
+
+I have been dating Iris for six months, without a commitment. Will Iris and I become a committed couple?
+
+### Worked answer
+
+**Status:** answer
+
+My provisional judgment is that your dating relationship is unlikely to become a committed partnership as things stand. The chart shows strong emotional investment on your side, but much weaker and conflicted interest from Iris, with no convincing immediate occasion for commitment. This is not a definitive “never”: the supplied calculations cannot establish that.
+
+### Reasoning
+
+Sagittarius on the Ascendant makes Jupiter your main significator; Gemini on the seventh cusp makes Mercury Iris’s. The Moon also represents your emotions: its rulership of the eighth does not displace that role here. Your genders are not supplied, so Sun and Venus cannot securely be assigned as personal natural significators from names alone. No turning is required.
+
+Jupiter has modest essential dignity by term. Although physically just before the ninth cusp, it counts in the ninth under the same-sign five-degree rule; its capacity is neutral. Mercury is peregrine in the eleventh, also with neutral capacity. Both are direct and clear of solar affliction. Neither has overwhelming ability to bring about the change, but neither is incapacitated. Peregrine describes a lack of settled direction here, not proof of bad character. Daily speeds and stations are unverified.
+
+The decisive reception is asymmetric. Your Moon occupies Mercury’s sign and exaltation, showing affection and idealisation of Iris. Mercury, however, has only minor interest in Jupiter by term and is in the Moon’s fall: Iris’s attitude toward your emotional investment is substantially adverse. Jupiter in Leo has no reception toward Mercury, while the Moon is in Jupiter’s detriment, suggesting that your emotional attachment and your considered position are not comfortably aligned.
+
+Mercury’s strongest positive regard is directed toward Mars, by sign, triplicity and face. Mars is not an identified person; its rulership of the fourth and fifth allows several contextual meanings. This does not establish a rival or an affair. Likewise, Mercury’s adverse reception toward Venus cannot be assigned to a particular personal facet without a justified role.
+
+The requested outcome is a new commitment, not merely continuation of six months of dating. The default is therefore continued noncommitment unless sufficient testimony changes it. The Moon is void before leaving Virgo, supporting present stagnation. No immediate Jupiter–Mercury perfection or valid translation connecting them is established.
+
+There is contrary testimony: the later applying Sun–Moon conjunction is a general marriage indicator in this chapter. Here, however, it occurs after ingress and after lunar contacts with Mars and Saturn. It is not an immediate, unobstructed connection between your assigned significators. The still later Moon–Mercury conjunction requires following the Moon through multiple contacts and another sign change; it cannot responsibly be selected as a promised commitment. These candidates do not outweigh the weak reciprocity and immediate stagnation.
+
+Because commitment has not been established, no timing is justified.
+
+### Evidence
+
+Roles: e7, e13–e14; Frawley printed pp. 30–32, 191–193. Condition and house placement: e1–e2, e5, e21–e26, e34–e37; pp. 17, 49–51, 54–60. Directed receptions: e47–e54, with e5 and the dignity table for Jupiter’s lack of reception toward Mercury; pp. 71–77, 193–195. Mars’s possible roles: e10–e11, e48; pp. 33, 195–196. Default and commitment: pp. 84, 140, 196. Event sequence and contrary testimony: e65–e67, e70–e72, e77; pp. 65, 90–97, 198. Calculation and timing limits: e78; pp. 127–133.
+
+### Unresolved
+
+The parties’ genders remain unspecified, limiting natural-significator assignments. Mars’s contextual identity is unconfirmed. Exact perfections, intervening stations and antiscia are not certified by the approximate seven-day calculation. These limits prevent a definitive long-term exclusion or a commitment date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Iris",
+      "quote": "Iris"
+    },
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "without a commitment"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Distinguish desired new commitment from an already established committed relationship."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-002 (train)
+
+### Question
+
+Theo is my fiancé. Our wedding is booked for 14 November 2026. Will the wedding go ahead?
+
+### Worked answer
+
+**Status:** answer
+
+On balance, I would expect your wedding to Theo to go ahead as booked, although the chart suggests emotional strain. The arrangements already exist, and the supplied evidence does not establish enough disruption to overturn them. This is a qualified judgment: the calculations do not independently confirm 14 November.
+
+### Reasoning
+
+This is an agreed, booked wedding. Under Frawley’s default, existing arrangements proceed unless substantial contrary testimony shows disruption; a fresh joining aspect is not required to establish an agreement already made.
+
+Sagittarius on the first cusp gives you Jupiter; Gemini on the seventh gives Theo Mercury. The Moon remains your emotional cosignificator: ruling the eighth does not displace that role. No turning or shared-ruler substitution is needed. Booking a wedding does not establish the arranged or dynastic circumstances required for the tenth-house marriage procedure.
+
+Your gender is unspecified, so both natural-significator assignments are conditional. If you are a woman and Theo a man, the chapter would additionally assign Venus to you and the Sun to Theo. In a same-sex relationship it prohibits that allocation. I therefore base the judgment on Jupiter, Moon and Mercury, without treating the Sun’s condition, its receptions with Jupiter, or the Sun–Jupiter sextile as established testimony between you and Theo.
+
+Jupiter has minor essential support through its own term. Being 3.40° before the ninth cusp in the same sign, it belongs to the ninth for judgment and has neutral capacity, rather than eighth-house weakness. Mercury is peregrine in the eleventh, also with neutral capacity. Both are direct and clear of solar affliction. These conditions are imperfect but do not demonstrate inability to marry. No supplied circumstance makes their essential conditions merely descriptive.
+
+The principal receptions show unequal investment. Your Moon is in Mercury’s sign, exaltation and face: strong affection and idealisation of Theo. Mercury has only term-level regard for your Jupiter and is in the Moon’s fall: limited positive regard alongside a pronounced negative attitude toward your emotional side. The Moon’s placement in Jupiter’s detriment suggests conflict between your feelings and your considered position. These reservations matter, but emotional dissatisfaction alone does not establish cancellation.
+
+The Moon is peregrine, has neutral ninth-house capacity and is presently clear of the Sun’s beams, but is waning toward conjunction. Its lack of another major contact before leaving Virgo supports little changing in the existing arrangements, rather than automatically denying the wedding. The first listed subsequent contacts are a sextile to Mars and opposition to Saturn, both after ingress. They warrant caution, especially given Saturn’s poor condition, but their contextual roles and an effective prevention of the wedding are not established. They do not justify inventing another person or a specific cancellation mechanism.
+
+Frawley calls an applying Sun–Moon conjunction marriage testimony regardless of personal assignments. Nevertheless, the listed conjunction follows those earlier contacts and a sign change; it is not an immediate, independently sufficient promise. Likewise, the later Sun–Jupiter sextile could be interpersonal support only if the conditional Sun assignment were established, and remains an approximate candidate. Neither is needed to sustain the booked-wedding default.
+
+The resulting judgment is that the wedding probably proceeds despite strain. No fresh date is derived: the astronomical hours and present angular separations are not symbolic event timing, and the supplied evidence does not independently check the booked date.
+
+### Evidence
+
+Roles and conditional natural significators: e7, e13–e14; Frawley printed pp. 30–32, 191–193. Tenth-house distinction: printed p. 23.
+
+Condition and capacity: e1–e2, e5, e21–e26, e34–e37; printed pp. 17, 44–51, 54–61.
+
+Principal directed receptions: e47, e49, e51–e52; printed pp. 71–77, 193–195. Conditional Sun testimony excluded from the firm interpersonal judgment: e0, e19–e20, e44, e58, e76; printed pp. 191–192.
+
+Established-arrangement default: consultation’s booked wedding; printed pp. 99, 140, 199.
+
+Moon and ordered candidates: e0–e1, e31–e41, e65–e67, e77–e78; printed pp. 64–66, 90–97, 198. Limits on identifying additional people: printed pp. 33, 196.
+
+Timing and named-date verification: e76, e78 and supplied search limitations; printed pp. 127–133, 135–136.
+
+### Unresolved
+
+Your unspecified gender leaves both the Sun’s and Venus’s possible personal assignments unresolved. The seven-day approximate search does not certify exact perfection, intervening stations, fine event order, fixed stars or antiscia. The contextual significance of the first post-ingress lunar contacts is unestablished. No planetary positions for 14 November are supplied, so an independent check of that date remains unavailable.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Theo",
+      "quote": "Theo"
+    },
+    {
+      "field": "baseline",
+      "value": "arranged_wedding",
+      "quote": "Our wedding is booked"
+    },
+    {
+      "field": "event_time",
+      "value": "2026-11-14",
+      "quote": "14 November 2026"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Use the arranged-event default; do not demand a fresh acquisition aspect."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-003 (train)
+
+### Question
+
+My girlfriend Mina and I are both women. We have been together two years. How does she feel about me now?
+
+### Worked answer
+
+**Status:** answer
+
+On this reading, Mina has some affection for you, but her feelings look strained: a modest positive regard for you is outweighed by a stronger negative response to the emotional side of your connection. Your emotional attachment appears much stronger than hers. This does not, by itself, show that she intends to leave your established relationship.
+
+### Reasoning
+
+Sagittarius on your Ascendant makes Jupiter your main significator; the Moon describes your emotions. Gemini on the seventh cusp makes Mercury Mina’s significator. The Moon’s rulership of the eighth does not displace its role as your cosignificator here. Because you are both women, neither Venus nor the Sun can be assigned as a sex-based cosignificator. No turning or replacement ruler is needed.
+
+Mercury is in Jupiter’s term: Mina has a small but real positive regard for you. However, Mercury is also in the Moon’s fall, showing a much stronger aversion or unhappy reaction toward your emotional expression or connection. These testimonies describe different facets and should not be flattened into either complete indifference or wholehearted love. Fall can exaggerate the negative perception; it does not establish that your emotions are objectively objectionable.
+
+Your Moon is in Mercury’s domicile, exaltation and face: emotionally, you are strongly attached to Mina and may idealise her. That is your regard for her, not evidence that she reciprocates it. The Moon’s placement in Jupiter’s detriment also suggests discomfort between your emotional attachment and your own position.
+
+Mercury is peregrine, direct, clear of the Sun and in the neutral-capacity eleventh house. This suggests limited grounding, rather than incapacity or a moral judgment about Mina. Jupiter has minor dignity by term but is weak in the eighth, consistent with vulnerability or concern. Your Moon is peregrine, clear of the Sun and in the neutral-capacity ninth; its position relative to the Sun shows waning light. None of these conditions reverses the principal reception testimony.
+
+Mercury’s strong regard for Mars indicates another substantial focus, but Mars’s identity is not established. Mercury’s negative reception toward Venus cannot be read as rejection of you as a woman, because Venus has not been assigned to you. Nor does Mercury’s proximity to Venus justify inventing an affair.
+
+This is a question about present feelings, so reception supplies the answer without an applying aspect. The calculated void Moon provides secondary testimony of little immediate movement, not an absence of feelings. An ongoing two-year relationship remains the baseline; strained reception alone does not establish separation. No event timing is warranted.
+
+### Evidence
+
+- e7, e13, e1, e14: Jupiter for you, Mercury for Mina, Moon for your emotions; Frawley printed pp. 30–32, 191–193.
+- e46, e48: Mina’s minor positive regard for Jupiter alongside major negative reception toward the Moon; printed pp. 71–76, 193–194.
+- e50–e51: your Moon’s negative reception toward Jupiter and strong, partly idealising attachment to Mercury; printed pp. 73–76, 193–194.
+- e1–e2, e5, e21–e26, e34–e36: relevant essential dignity, physical houses, motion and solar condition; printed pp. 49–51, 54–60. e0–e1 support waning lunar light; printed pp. 64–65.
+- e47, e49, e2–e3: unassigned Mars/Venus testimony requires restraint; printed pp. 33, 192, 195–196, 199–200.
+- e76–e77: approximate void-of-course testimony and calculation limits; printed p. 65. Present-state judgment and the ongoing relationship default: printed pp. 71, 84, 199.
+
+### Unresolved
+
+The specific circumstances behind Mina’s negative emotional reception, and what Mars represents as her stronger focus, remain unidentified. Approximate positions and sampled contacts do not certify fine event order, intervening stations or antiscia; they do not support a precise future event or date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Mina",
+      "quote": "Mina"
+    },
+    {
+      "field": "people.mina.relationship",
+      "value": "partner",
+      "quote": "My girlfriend Mina"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "together two years"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Interpret directed reception while avoiding invented male/female natural co-significators."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-004 (train)
+
+### Question
+
+I am 72, single, and asking about a future partner I have not met. Will I ever marry?
+
+### Worked answer
+
+**Status:** answer
+
+I would cautiously lean against a future marriage, but the chart has a meaningful positive indication: the Moon beholds Venus, which Frawley specifically counts in favour of marriage. The evidence is therefore mixed. Venus’s difficult condition, your significators’ barren signs and the lack of an established marriage-producing connection leave me short of a confident Yes. This is a provisional judgment, not certainty that you will never marry.
+
+### Reasoning
+
+This is a lifetime enquiry about an unmet partner. Frawley’s age-sensitive default calls for stronger affirmative testimony for an older querent; his example of age 80 is guidance, not a rigid cutoff that automatically decides your question at 72.
+
+Sagittarius on the first cusp gives you Jupiter; Gemini on the seventh gives the prospective partner Mercury. The Moon remains your emotional cosignificator: ruling the eighth does not give it the partner’s role. No turning or shared-ruler substitution is required. Unspecified genders prevent assigning Sun and Venus to particular people, but do not prevent using the chapter’s sex-independent marriage testimonies.
+
+Jupiter has minor essential dignity by term, yet limited capacity in the eighth. Its placement can describe anxiety without implying bad character or physical incapacity. Mercury is peregrine in the neutral eleventh; the Moon is peregrine in the neutral ninth, waning and currently void of course. Jupiter and Mercury are direct, and all three are clear of the Sun. Daily speeds and stations are unobserved.
+
+The receptions show strong emotional investment without equivalent support from the partner’s significator. The Moon regards Mercury by domicile, exaltation and face; Mercury regards Jupiter only by term and regards the Moon negatively by fall. Jupiter has no reception toward Mercury at its supplied position. The Moon’s negative reception toward Jupiter suggests internal tension. These are indications within a question about an unknown partner, not established feelings of an identifiable person.
+
+Crucially, the Moon in Virgo DOES behold Venus in Scorpio: their signs form a sextile. Beholding does not require a close or perfecting aspect. This is an explicit positive testimony under the lifetime recipe, regardless of your gender, and the void Moon does not cancel it.
+
+Its support nevertheless needs qualification. Venus is in detriment and retrograde, with neutral house capacity and clear of the Sun. There is no supplied return or reconciliation context to explain away retrogradation. The Moon’s reception toward Venus is mixed—warmth by triplicity, outweighed in strength by aversion through fall—and Venus regards the Moon negatively by fall. These conditions qualify the promise of the contact; they do not make the beholding disappear or establish an unhappy future marriage.
+
+Against marriage, Jupiter is in barren Leo and the Moon in barren Virgo; neither principal occupies the other’s first house. Mercury’s fertile Scorpio offers some counterweight, though it is not the querent-significator fertility testimony specified on p. 197. The major negatives of debilitated Saturn on either relationship cusp and a combust Lord 7 are absent. Absence of those afflictions is reassuring but is not itself strong affirmative evidence.
+
+The approximate sequence begins with the Moon contacting Mars and then Saturn after leaving Virgo. The later Sun–Moon conjunction merits attention because p. 198 calls an applying luminary conjunction excellent marriage testimony. Here it is a conditional candidate well inside the next sign, following earlier contacts, rather than an established current conjunction promise. Those contacts cannot automatically be declared permanent obstacles in a lifetime question, but neither can they be skipped to manufacture a Yes. The later Moon–Mercury candidate requires still further progression, including passage through the Sun conjunction. The Sun–Jupiter sextile could matter under an appropriate natural-role assignment, which is unavailable.
+
+Including Moon–Venus beholding makes the negative conclusion appreciably less secure. Nevertheless, its qualified support does not sufficiently overcome the contrary indications under this older, single querent’s default. No event is established securely enough to time; the lifetime timing concessions apply after reaching a Yes.
+
+### Evidence
+
+- Roles: e7, e13–e14; printed pp. 30–32, 191–193.
+- Principal condition and capacity: e0–e2, e5, e21–e26, e34–e36; printed pp. 44–54, 56–61, 64–65.
+- Directed principal receptions: e46, e48, e50–e51; Jupiter’s lack of Mercury reception follows e5 and the table on printed p. 47; interpretation on pp. 71–77.
+- Corrected Moon–Venus beholding: e1, e3; printed p. 98 defines beholding by signs, and p. 197 expressly counts it for marriage regardless of sex.
+- Qualifications to that positive: e3, e27–e30, e53, e63; printed pp. 50, 52–57, 74–77.
+- Lifetime balance and default: e1–e7, e13, e26, e37–e40; printed pp. 42, 140, 197–198.
+- Event sequence and calculation limits: e64–e66, e71, e75–e77; printed pp. 65, 90–97, 198. Timing requirements: printed pp. 127–133.
+
+### Unresolved
+
+The genders needed for assigning personal Sun/Venus roles are unspecified. Exact moving perfections, daily speeds, intervening stations, antiscia and fine event order are not certified. The seven-day approximate search cannot establish lifelong absence of a connection. No marriage date is established; the source also acknowledges a general limitation in distinguishing marriage from commitment without marriage (printed p. 196).
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "a future partner I have not met"
+    },
+    {
+      "field": "horizon",
+      "value": "ever",
+      "quote": "ever"
+    },
+    {
+      "field": "context",
+      "value": "querent aged 72",
+      "quote": "I am 72"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Treat age and lifetime scope as material context; do not extrapolate a short forecast automatically."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-005 (train)
+
+### Question
+
+Ari and I are engaged. Our ceremony is booked for this Friday; I am worried about cancellation. Will it go through on Friday?
+
+### Worked answer
+
+**Status:** answer
+
+I would judge that your wedding is more likely to go ahead on Friday, October 9, than be cancelled. The ceremony is already arranged, and the supplied chart does not establish a disruption strong enough to overturn that expectation. It does show emotional strain, so this is a qualified yes about the ceremony, not a promise that everything feels settled.
+
+### Reasoning
+
+Sagittarius on the Ascendant makes Jupiter your principal significator; Gemini on the seventh cusp makes Mercury Ari’s. The Moon additionally represents your emotions. There is no shared-ruler collision: Mercury’s additional rulership of the ninth does not displace its role as Ari. Neither person’s sex is supplied, so I do not allocate the Sun or Venus as personal sexual cosignificators.
+
+Jupiter has minor essential dignity by term, but occupies the weak eighth house. In this context that placement aptly describes your anxiety about cancellation; it does not itself predict cancellation. Mercury is peregrine in the eleventh, with neutral house capacity. Both are direct and clear of combustion. These conditions show limited strength rather than a decisive incapacity to proceed; peregrine Mercury is not grounds for a moral accusation.
+
+The receptions are unequal. Your Moon in Virgo strongly values Ari’s Mercury by domicile and exaltation, with additional face reception. Ari’s Mercury has only minor regard for your Jupiter by term, while occupying the Moon’s fall: this is materially contrary testimony about Ari’s response to your emotional side. The Moon also occupies Jupiter’s detriment, suggesting discomfort or conflict within your own experience. These are stresses, not proof that someone will cancel. Mercury’s strong interest in Mars cannot responsibly be turned into an invented rival or motive.
+
+The decisive procedural point is the existing engagement and booking. This is not a new proposal requiring a fresh applying aspect to establish agreement. Frawley’s default is that an arranged wedding proceeds unless substantial disruptive testimony intervenes. No separating agreement aspect is supplied, so I do not claim one.
+
+The Moon is void of course within the supplied calculation. Here “nothing happens” can mean no change to the established arrangements; it need not mean no wedding. Its peregrine condition and waning, near-new phase add weakness, but do not independently overturn the default.
+
+The first listed lunar contacts are to Mars and then Saturn, both after ingress. They do not establish cancellation within the present circumstances. The later Sun–Moon conjunction is potentially encouraging in the abstract, but follows those contacts and a sign change; it is not a sound independent promise of Friday’s ceremony. I do not pursue the later contact chain to manufacture an outcome.
+
+Friday is the already specified date, not a date derived from astronomical contact hours. The judgment supports the booked schedule provisionally; it supplies no exact ceremony timing.
+
+### Evidence
+
+Roles: e7, e13, e15; Frawley printed pp. 30–32, 191–193.
+
+Condition and capacity: e1, e2, e5, e21–e26, e34–e36; printed pp. 22, 49–51, 54–60. The Moon’s waning phase follows from e0–e1; printed pp. 64–65.
+
+Directed receptions: e46–e48, e50–e51; printed pp. 71–77, 193–195. Unidentified influences must not become invented characters: printed pp. 33, 196.
+
+Arranged-wedding default and continuation of established arrangements: printed pp. 99, 140, 199. Void Moon: e76; printed pp. 65–66. Ordered candidates: e64–e66; printed pp. 90–97, 198. Timing limits: e77; printed pp. 127–133, 136.
+
+### Unresolved
+
+The approximate seven-day calculation does not certify fine event order, intervening stations or antiscia. No exact Friday transit comparison or moving-perfection travel is supplied. These limit confidence and precise timing, without preventing the provisional judgment from the established-wedding default.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Ari",
+      "quote": "Ari"
+    },
+    {
+      "field": "baseline",
+      "value": "arranged_wedding",
+      "quote": "ceremony is booked"
+    },
+    {
+      "field": "event_time",
+      "value": "2026-10-09",
+      "quote": "Friday"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Resolve the ceremony from history and Friday from the reader-understood Thursday moment."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-006 (train)
+
+### Question
+
+Nadia has been my partner for three years. We have felt distant lately. Does she care for me romantically?
+
+### Worked answer
+
+**Status:** answer
+
+The chart suggests Nadia has some regard for you, but does not show strong, reciprocated romantic warmth at present. Her small positive interest is outweighed by testimony of emotional aversion or difficulty responding to your feelings. This fits the distance you describe; it does not, by itself, mean your three-year relationship will end.
+
+### Reasoning
+
+Sagittarius on the first cusp gives you Jupiter; Gemini on the seventh gives Nadia Mercury. The Moon additionally represents your emotions. Its rulership of the eighth does not displace that role here. Nadia’s role is seventh-house partner, although Mercury physically occupies the eleventh: she is not reassigned as a friend.
+
+The decisive reception is Mercury toward Jupiter: Nadia has a minor positive regard for you by term. This is some interest, but considerably less than the love or infatuation signified by domicile or exaltation. Mercury is also in the Moon’s fall, a much stronger negative directed toward your emotional significator. Read together, these show limited regard alongside substantial emotional rejection or discomfort, rather than complete indifference or uncomplicated romantic affection.
+
+Your Moon, conversely, occupies Mercury’s domicile and exaltation: your emotional attachment to Nadia is strong and potentially idealising. This does not establish reciprocity. The Moon is also in Jupiter’s detriment, suggesting strain between your emotional attachment and your own position or judgment.
+
+Mercury is peregrine, direct, clear of the Sun and in a house of neutral capacity. There is no major supplied accidental affliction that would justify explaining the negative reception simply as an inability to express otherwise strong love. Jupiter has only minor essential dignity by term and is weak in the eighth, consistent with vulnerability and anguish over the issue. The Moon is peregrine, clear of solar affliction and in the ninth, which has neutral capacity. From the supplied Sun–Moon positions it is waning, with relatively little light.
+
+Your sex is unspecified, so I do not make an unconditional Sun/Venus allocation. If this is a man–woman relationship and Venus additionally signifies Nadia, Venus repeats the same pattern: minor regard for Jupiter and major negative reception toward the Moon. Its detriment and retrogradation add strain; no declared reunion supplies a clear “return” exception. If this is a woman–woman relationship, the chapter does not assign these natural significators between you. The principal judgment therefore rests on Mercury, Jupiter and the Moon.
+
+This is a question about present feelings within an existing relationship. Reception can answer it without an applying aspect. The supplied void Moon supports stagnation, not absence of affection by itself. Neither its later contacts nor the later Sun–Moon conjunction establishes reconciliation, marriage or separation. No event timing is warranted.
+
+### Evidence
+
+e7, e13, e1–e2, e5: cusp-derived roles and physical placements; Frawley printed pp. 30–32, 191–193.
+
+e46, e48, e50–e51: Nadia’s minor regard, negative reception toward your emotions, and your stronger attachment; printed pp. 71–76, 193–195.
+
+e21–e26, e34–e36, e0–e1: essential condition, house capacity, solar condition and lunar light; printed pp. 49–51, 56–60, 64–65.
+
+e27–e30, e61, e63: conditional Venus testimony; printed pp. 57, 191–192.
+
+e76, e64–e75, e77: sampled void Moon and limited event evidence; printed pp. 65, 84, 97. Existing relationships and their continuation are judged contextually, principally through reception: printed pp. 198–199.
+
+### Unresolved
+
+Your sex is not supplied, limiting natural-significator assignments but not the main reception judgment. Mercury’s strong reception toward Mars (e47) has no established situational meaning; it does not identify another lover. Exact speeds, stations and antiscia are unverified, and the approximate seven-day event search cannot establish precise future developments.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Nadia",
+      "quote": "Nadia"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "my partner for three years"
+    },
+    {
+      "field": "people.nadia.relationship",
+      "value": "partner",
+      "quote": "Nadia has been my partner"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Resolve the pronoun and existing relationship; do not restart courtship intake."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-007 (train)
+
+### Question
+
+I have been on my own since my last relationship ended. I do not have someone specific in mind, but I would like my next lasting relationship. Where are we likely to meet, if a meeting is shown?
+
+### Worked answer
+
+**Status:** method_limit
+
+A meeting is not securely established by the supplied evidence, so I cannot reliably say where you will meet your next lasting partner. Mercury’s placement among friends is suggestive, but it is not enough to predict “through friends.” This does not mean that you will remain alone; the calculations do not establish that broader conclusion.
+
+### Reasoning
+
+Sagittarius on the Ascendant makes Jupiter your main significator; the Moon represents your emotions. Gemini on the seventh cusp makes Mercury the prospective partner, even though no particular person is known. Mercury also rules the ninth, but its physical placement is in the eleventh: these are distinct roles and locations. There is no principal-ruler collision. Your and the prospective partner’s genders are unspecified, so assigning the Sun or Venus as personal cosignificators would introduce an unsupported assumption.
+
+Jupiter has modest essential support through its own term, but its eighth-house placement limits its capacity to act. Mercury is peregrine, with neutral eleventh-house capacity: comparatively more able to act than Jupiter, without strong essential dignity. Neither is combust, and both are direct. The Moon is peregrine, of neutral ninth-house capacity, clear of the Sun but waning with little light. Actual speeds and stations are not certified.
+
+The receptions are unequal. Mercury has minor interest in Jupiter by term, but is in the Moon’s fall: this is contrary testimony concerning your emotional needs. Your Moon strongly values and idealises Mercury by sign and exaltation, with additional face reception. This does not establish reciprocal attachment. The Moon’s detriment reception toward Jupiter also shows tension between your emotional and personal significators. These testimonies do not securely support the lasting relationship requested.
+
+No direct Jupiter–Mercury perfection is supplied. The Moon is void of course within Virgo. Its first listed subsequent contact is with Mars after ingress, followed by Saturn and then the Sun. The much later Moon–Mercury conjunction requires further sign changes and intervening contacts; it cannot be selected as the promised meeting. The Sun–Moon conjunction is supportive general relationship testimony under the chapter, but its position later in this sequence does not establish this particular meeting. Nor can the Sun–Jupiter candidate be treated as a partner contact without a justified Sun assignment.
+
+For location, Frawley first determines who goes to whom from accidental strength, then uses the house occupied by the receiving person’s aspected significator. Mercury is stronger by house than Jupiter, so simply reading Mercury’s eleventh house as “through friends” skips that procedure. Without an established contact and its participating significators, neither friends nor the Moon’s ninth-house settings can be selected reliably. No event timing or lastingness prediction follows.
+
+### Evidence
+
+Roles: e7, e13, e15, e2; printed pp. 30–32, 191–193.
+Condition and capacity: e1–e2, e5, e21–e26, e34–e36; printed pp. 49–51, 56–61, 64–65.
+Directed receptions: e47, e49, e51–e52; printed pp. 71–77, 194–195.
+Event sequence and limits: e65–e77, e78; printed pp. 84–86, 90–97, 196, 198.
+Meeting-location procedure: printed pp. 196–197. Lastingness requires its own assessment: printed pp. 198–199. Timing requires an established event: printed pp. 127–133.
+
+### Unresolved
+
+Natural-significator assignments remain undetermined because genders were not supplied. Exact relevant perfection, moving-perfection travel, intervening stations and antiscia are unverified. The approximate seven-day search cannot establish either a future meeting or its long-term absence. The Part of Marriage and its dispositor, relevant to lastingness, are not supplied.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "location",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "future lasting relationship",
+      "quote": "next lasting relationship"
+    },
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "I do not have someone specific in mind"
+    },
+    {
+      "field": "context",
+      "value": "meeting setting for a not-yet-known future romantic partner, conditional on an actual meeting",
+      "quote": "Where are we likely to meet, if a meeting is shown?"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Establish any meeting/relationship testimony before describing a venue. The unnamed prospective partner remains the seventh-house role, not an invented specific person.",
+    "Determine who goes to whom from relative accidental strength and context, not which planet applies. Preserve the source's staying-put exceptions for a person close to their own cusp in its sign and for querent planets in first.",
+    "Once A-going-to-B is established, use the house occupied by B's aspected significator for the meeting setting, with broad contextual examples such as work, friends or ninth-house activities; do not promise a street address."
+  ],
+  "must_not": [
+    "Do not make the applying planet automatically the traveller, turn angularity into compulsory travel despite the own-cusp exception, prescribe a venue before any meeting is established, or confuse the future meeting location with the reader's device anchor."
+  ],
+  "source_pages": [
+    137,
+    138,
+    191,
+    192,
+    193,
+    194,
+    196,
+    197
+  ]
+}
+```
+
+## dspy-relationship-first-008 (train)
+
+### Question
+
+My husband Jules and I have argued since our move. I want to understand our marriage, not predict an affair. What is happening between us?
+
+### Worked answer
+
+**Status:** answer
+
+The chart suggests that you remain strongly emotionally attached to Jules, but that your feelings are meeting frustration rather than comparable warmth. He shows some regard for you, alongside a much stronger negative response to your emotional needs. This looks like an existing marriage under strain, with the arguments repeating rather than resolving.
+
+The home situation is a plausible focus of that strain given your move, though the chart does not establish the specific disagreement. It does not justify turning your question into a prediction of an affair or an inevitable separation.
+
+### Reasoning
+
+Sagittarius on the Ascendant gives you Jupiter; Gemini on the seventh cusp gives Jules Mercury. Your emotional cosignificator is the Moon. Mercury also rules the ninth, but Jules retains Mercury as Lord 7: its physical placement in the eleventh does not make him an eleventh-house person. There is no principal-ruler collision. Your gender is not supplied, so I do not assume the woman/man allocation of Venus to you and the Sun to Jules; Frawley excludes that allocation for same-sex couples.
+
+Jupiter has only minor dignity by term and occupies the weak eighth house. This can describe anxiety and reduced room to act; no declared financial issue warrants treating that placement as a financial diagnosis or invoking the contextual strength exception. Mercury is peregrine, with neutral eleventh-house capacity. Both are direct and clear of the Sun. These conditions suggest limited resources for handling the conflict, not bad character. Speeds and stations are not established.
+
+The decisive reception is unequal: your Moon in Virgo loves and exalts Mercury, showing strong attachment to Jules, potentially with expectations he cannot meet. Mercury in Scorpio is in the Moon’s fall, indicating aversion or frustration toward your emotional side. Nevertheless, Mercury’s reception of Jupiter by term shows a little personal regard: his attitude is not uniformly negative. Jupiter has no listed dignity or debility of Mercury, so your considered attitude is less engaged than your heart. The Moon in Jupiter’s detriment reinforces conflict between your emotional attachment and your own considered position.
+
+Mercury strongly values Mars by domicile, triplicity and face. Mars rules the fourth because its cusp is Aries, making the home a contextually plausible concern after the move. But the fourth is also Jules’s turned tenth, and Mars has other rulerships: the chart cannot specify his motive from that reception alone. Mars is peregrine and weak in the eighth. Saturn, fallen and retrograde, is counted in the fourth through the same-sign cusp rule and adds difficult testimony around home; it need not represent another person.
+
+The Moon is peregrine, has neutral ninth-house capacity, is clear of the Sun and is waning from the supplied positions. Its calculated void of course supports stagnation. This is a state question about an established marriage: an applying aspect is unnecessary to describe it, and the default is continuation unless someone acts to end it. The later lunar contacts require sign changes and do not establish reconciliation or separation. No event or timing is asserted.
+
+### Evidence
+
+Roles: e7, e13, e1–e2; Frawley printed pp. 30–32, 191–193.
+Capacity and condition: e5, e21–e26, e35–e37; pp. 44–56, 64–65.
+Directed attitudes: e48, e50, e52–e53, with the supplied positions and dignity table; pp. 71–77, 193–195.
+Home interpretation: e10, e14, e17–e18, e49, e32–e34, e38–e42; pp. 17, 19, 27, 56–61.
+Stagnation and established-marriage default: e78; pp. 65, 82, 140, 198–199.
+Limits on later contacts and timing: e66–e79; pp. 90–97, 127–133.
+
+### Unresolved
+
+Your gender is unspecified, limiting natural Sun/Venus assignments. The specific dispute behind the home-related testimony is unconfirmed. The Part of Marriage and its dispositor are not supplied, limiting assessment of the marriage as a separate bond. Approximate positions and seven-day hourly brackets do not certify fine event order, stations, antiscia or fixed-star contacts.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Jules",
+      "quote": "Jules"
+    },
+    {
+      "field": "people.jules.relationship",
+      "value": "partner",
+      "quote": "My husband Jules"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "My husband Jules"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Interpret the present marriage without inventing a third person or infidelity."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-009 (train)
+
+### Question
+
+I am 34 and single, with no particular partner in mind. I want a committed romantic relationship, not the date of a ceremony already booked. When might I enter such a relationship?
+
+### Worked answer
+
+**Status:** method_limit
+
+The supplied chart suggests a period of waiting rather than a committed relationship forming soon. Your wish for partnership is strongly shown, but the immediate evidence does not establish a relationship that I can responsibly date.
+
+This is a provisional “not yet,” not a judgment that you will remain single. The calculations supplied are insufficient to give a reliable longer-term timeframe.
+
+### Reasoning
+
+Sagittarius on the Ascendant gives you Jupiter; Gemini on the seventh cusp gives the prospective partner Mercury. The Moon also signifies your emotions. Its rulership of the eighth does not displace that role here. These are distinct significators, so no shared-ruler substitution or house turning is needed. Your gender and the prospective partner’s gender are unspecified; consequently, the Sun and Venus cannot securely be assigned as natural male/female significators.
+
+Jupiter has only minor essential dignity by term and occupies the weak eighth house. This can describe anxiety or vulnerability concerning the enquiry, rather than defective character. Mercury is peregrine, with neutral capacity in the eleventh: its position just before that cusp counts as eleventh-house placement. Both are direct and clear of combustion. The Moon is peregrine, in the ninth with neutral capacity, and clear of combustion. Its position behind the Sun shows waning light. Actual speeds and station checks are not supplied.
+
+The receptions are markedly unequal. Your Moon, in Mercury’s domicile and exaltation, strongly values and idealises partnership. Mercury has only minor interest in Jupiter by term, while being in the Moon’s fall: this does not show matching emotional investment. Jupiter has no reception toward Mercury in its present degree. The Moon’s placement in Jupiter’s detriment adds a division between your emotional longing and your main significator. Because no particular person is identified, these are indications about the prospective relationship pattern, not factual claims about an existing individual’s feelings.
+
+The immediate occasion is missing. The Moon makes no major aspect before leaving Virgo. Its next candidates are a sextile to Mars, then opposition to Saturn, then conjunction with the Sun. Mars is peregrine and weak; Saturn is fallen, retrograde and afflicted by solar opposition despite angular capacity. Neither is an identified partner or intermediary, so these contacts do not establish a relationship.
+
+The Sun–Moon conjunction is favourable marriage testimony in the chapter, regardless of assignments. However, here it follows earlier contacts and occurs well beyond the opening degrees of the Moon’s next sign. It is insufficient to override the immediate stagnation. The later Moon–Mercury conjunction requires passing through Libra into Scorpio and several intervening contacts; it cannot be promoted into a straightforward promise of commitment.
+
+The Sun–Jupiter sextile is another potential route only if the Sun legitimately signifies the prospective partner. That assignment is unresolved, and the Sun is fallen despite being angular. It therefore supplies no unconditional event or date.
+
+At 34, the absence of an immediate connection does not justify a lifelong negative. But a hoped-for relationship is not already proceeding toward commitment, so its occurrence must be established before timing it. Neither current angular gaps nor astronomical hours supply that timing.
+
+### Evidence
+
+Roles: e7, e13–e14; Frawley printed pp. 30–32, 191–193.
+Condition and placement: e0–e2, e5, e19–e27, e36–e38; pp. 17, 49–51, 54–60, 64–65.
+Directed receptions: e49, e51, e53–e54; pp. 71–77, 193–195.
+Ordered occasions and contrary testimony: e33–e43, e67–e79; pp. 84–97, 196, 198.
+Default and timing limits: e80; pp. 127–133, 140, 197–198.
+
+### Unresolved
+
+The genders needed for this chapter’s natural-significator assignments are unspecified. The seven-day approximate event search does not certify exact perfections, moving-perfection travel, stations, fine event order or antiscia. It cannot establish a longer-term absence of relationships. A reliable commitment date remains unresolved.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "timing",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "future committed romantic relationship",
+      "quote": "committed romantic relationship"
+    },
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "single, with no particular partner in mind"
+    },
+    {
+      "field": "context",
+      "value": "34-year-old asking when the next committed relationship may form, not timing an arranged wedding",
+      "quote": "I am 34 and single, with no particular partner in mind."
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Treat this as a genuine When query, first establishing whether the next significant relationship is supported. Use the prospective partner role without inventing an already known person.",
+    "For formation/timing, consider suitable directed receptions and an actual relevant planetary aspect; application to seventh cusp or the Part of Marriage is not a replacement for this branch's event testimony.",
+    "Time supported formation or commitment contextually from actual moving perfection distance and the applying planet, with realistic units and stated native search limits. Do not confuse a commitment decision with a booked ceremony date.",
+    "If formation is not established, distinguish readiness/strength changes and appropriate reassessment from an invented unconditional date or a lifetime claim."
+  ],
+  "must_not": [
+    "Do not skip Will merely because the user asked When, promise a soul mate or exact future identity, infer gender from a name or voice, invent a date from a cusp aspect, or turn the finite astronomical search into a lifetime absence proof."
+  ],
+  "source_pages": [
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    137,
+    138,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197
+  ]
+}
+```
+
+## dspy-relationship-first-010 (train)
+
+### Question
+
+Rowan is my husband of eight years. How does he feel about me now?
+
+### Worked answer
+
+**Status:** answer
+
+The chart suggests Rowan’s feelings are mixed: some regard for you remains, but his response to your emotional needs looks strongly strained. It does not show uncomplicated warmth, nor does this establish that he intends to leave your eight-year marriage.
+
+If yours is a woman/man relationship, the supplementary attraction testimony suggests strong physical attraction alongside a much less welcoming personal attitude. Your gender is unstated, so that entire supplementary interpretation remains conditional.
+
+### Reasoning
+
+Sagittarius on the Ascendant gives you Jupiter; Gemini on the seventh cusp gives Rowan Mercury (e7, e13). The Moon signifies your emotions, with no competing primary claim. No turned houses or substitute rulers are needed. Having a husband does not establish your gender: both the Sun as Rowan’s natural male significator and Venus as your natural female significator are conditional on this being a woman/man relationship. Frawley excludes both assignments in same-sex relationships.
+
+The established testimony is Mercury’s attitude toward Jupiter and the Moon. Mercury in Jupiter’s term shows a little regard for you as a person (e49). Mercury in the Moon’s fall shows a much stronger negative response toward your emotional facet (e51). Fall can exaggerate the negative perception; it does not establish that your feelings are objectively objectionable. The minor positive does not cancel the major negative.
+
+Your feelings are separate: the Moon in Mercury’s domicile, exaltation and face shows strong emotional attachment and idealisation of Rowan (e54). This does not demonstrate reciprocity.
+
+Condition qualifies expression. Mercury is peregrine, direct and clear of the Sun, with neutral capacity in the eleventh house after the cusp allowance (e2, e25–e28). This suggests an unsettled condition, not powerlessness. Jupiter has modest dignity by term but weak eighth-house capacity; no supplied circumstance establishes an exception (e5, e37–e39). The Moon is peregrine, direct, clear and of neutral capacity in the ninth (e1, e22–e24). These conditions concern the present situation, not anyone’s overall moral worth.
+
+Only if yours is a woman/man relationship does the supplementary Sun/Venus analysis apply: Mercury in Venus’s detriment suggests rejection or irritation toward your female facet (e52), while the Sun in Venus’s domicile suggests strong physical attraction (e63). The Sun’s minor regard for Jupiter adds a little positive testimony (e60); Jupiter’s domicile and triplicity reception toward the Sun describes your appreciation of Rowan’s masculine facet, not his feelings toward you (e46). Under that same conditional assignment, his Sun is in fall but angular in the tenth, combining compromised condition with capacity to act; your Venus is in detriment, retrograde and clear of the Sun, with neutral eleventh-house capacity. No reunion circumstance supplies a favourable explanation for its retrogradation.
+
+This is a present-feelings question within an existing marriage. Reception supplies the judgment; an applying aspect is unnecessary. The sampled void Moon suggests stagnation but does not erase the reception evidence (e79). The existing marriage remains the default unless someone acts to end it; these feelings alone do not establish separation. Mercury’s interest in Mars (e50), and—only under the conditional Sun assignment—the Sun’s interest in Saturn (e62), do not identify other people or prove an affair. No future event or date is established.
+
+### Evidence
+
+Roles: e7, e13; Frawley printed pp. 30–32, 191–193. The exclusion of both sex-based natural significators in same-sex relationships is explicit on printed p. 192.
+
+Established directed feelings: e49, e51, e54; printed pp. 71–76, 193–195. Entirely conditional Sun/Venus interpretation: e46, e52, e60, e63; printed pp. 192–195.
+
+Condition and capacity: e1–e2, e5, e22–e28, e37–e39; conditional supplementary conditions e0, e3, e19–e21, e29–e33; printed pp. 17, 44–57, 60–61.
+
+Present-state procedure: printed pp. 71, 82, 84, 194. Existing-marriage default: printed p. 199. Sampled void Moon: e79; printed pp. 65–66.
+
+Unassigned influences: e50 and conditionally e62; printed pp. 33, 196, 199. Calculation boundary: e80.
+
+### Unresolved
+
+Your gender is unstated, so both natural Sun/Venus assignments and every relationship interpretation dependent on them remain conditional. The concrete meanings of Mars and Saturn are unidentified. Positions and event brackets are approximate; fine event order, intervening stations, antiscia and fixed-star contacts are uncertified. These limits do not prevent the present-feelings judgment, but no precise future development is established.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Rowan",
+      "quote": "Rowan"
+    },
+    {
+      "field": "people.rowan.relationship",
+      "value": "partner",
+      "quote": "my husband"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "eight years"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Evaluate current directed feelings rather than inventing a new partner or event."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-011 (train)
+
+### Question
+
+My former girlfriend Cora and I separated last winter. Neither of us is dating someone else. Will she return to our relationship?
+
+### Worked answer
+
+**Status:** answer
+
+I would judge that Cora is unlikely to return to the relationship as things stand. Your emotional attachment looks much stronger than her willingness to reconcile. There is some limited interest from her, but no sufficiently supported reunion in the supplied evidence. This is a provisional judgment, not a claim that reconciliation can never happen.
+
+### Reasoning
+
+Sagittarius on the first cusp makes Jupiter your main significator; Gemini on the seventh makes Mercury Cora’s. An ex-partner remains seventh-house. The Moon signifies your emotions, with no ruler collision. These roles differ from physical placement: Jupiter occupies the eighth, Mercury the eleventh after the same-sign five-degree cusp adjustment, and the Moon the ninth. Your gender is unspecified, so I do not automatically assign you the Sun or allocate Venus as an exclusive natural significator.
+
+Jupiter has only minor essential dignity by term and weak eighth-house capacity. This can describe distress over the relationship, without implying poor character. Mercury is peregrine, direct, clear of the Sun and of neutral house capacity: Cora is not shown strongly supported, but neither is she powerless. The Moon is also peregrine, of neutral capacity and clear of combustion; its position behind the Sun shows waning light.
+
+The decisive receptions are unequal. Your Moon occupies Mercury’s domicile and exaltation: strong emotional attachment, with idealisation. Mercury occupies Jupiter’s term, showing some modest regard for you, but also the Moon’s fall, showing a substantial negative attitude toward your emotional facet. Jupiter has no reception toward Mercury in the supplied positions; the Moon also occupies Jupiter’s detriment. This suggests internal discomfort rather than unified desire across your significators. It does not cancel your declared wish for reunion.
+
+Because you have separated, renewed partnership requires an occasion and sufficient willingness; continued separation is the default. The Moon is void of course before leaving Virgo. Its first listed contact is with Mars after ingress, followed by Saturn, rather than an immediate connection with Cora. No direct Jupiter–Mercury perfection or convincing immediate translation or collection is established.
+
+The later Moon–Mercury conjunction cannot simply be selected from the event list: it follows multiple contacts and two lunar sign changes. Likewise, the later Sun–Moon conjunction, although generally favourable testimony for marriage in this method, does not override that sequence or establish this reconciliation.
+
+If the natural male/female allocation applies, Venus retrograde would be favourable descriptive testimony for Cora returning; retrogradation would not be a debility here. But Venus’s detriment, merely minor regard for Jupiter and negative reception toward the Moon still qualify that support. Its next listed square is to Mars, not your established significators. Mars’s identity is unobserved; this does not justify inventing another partner.
+
+No reunion is established strongly enough to time.
+
+### Evidence
+
+Roles and houses: e1, e5, e7, e13, e28; printed pp. 17, 21, 30–32, 191–193.
+
+Condition and capacity: e22–e28, e36–e38; printed pp. 49–51, 54–56, 64–65. Conditional Venus testimony: e3, e29–e32, e63–e65; printed pp. 57, 191–195.
+
+Directed feelings: e48, e50, e52–e55; supplied positions e2, e5; printed pp. 71–77, 193–195.
+
+Occasion, sequence and default: e66–e74, e78; printed pp. 84, 90–97, 140, 196, 198. Timing withheld under printed pp. 127–133.
+
+Calculation limits: e79 and search_limitations.
+
+### Unresolved
+
+The querent’s gender is unspecified, limiting the natural Sun/Venus allocation, but not the principal Jupiter–Mercury judgment. Mars’s contextual role is unknown. The approximate seven-day calculation does not certify exact perfections, intervening stations, antiscia or fixed-star contacts. It therefore cannot establish permanent absence of reconciliation or support an exact date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Cora",
+      "quote": "Cora"
+    },
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "separated last winter"
+    },
+    {
+      "field": "context",
+      "value": "former relationship, desired reconciliation",
+      "quote": "return to our relationship"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Resolve the pronoun and reconciliation scope; prior partnership is not an ongoing-marriage default."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-012 (train)
+
+### Question
+
+I am relaying my friend Vera’s own question: my husband Alex and I are married, and neither of us has decided to separate. Will Alex leave our marriage?
+
+### Worked answer
+
+**Status:** answer
+
+Vera, my provisional judgment is that Alex is unlikely to leave your marriage under the present circumstances. There is significant dissatisfaction, but insufficient evidence that he will act to end it. Continuation does not promise happiness, and this is not a prediction that he will never leave.
+
+### Reasoning
+
+Your friend relays your own question, so you receive the first house, not the eleventh. Sagittarius on its cusp gives you Jupiter; the Moon signifies your emotions. Gemini on the seventh cusp gives Alex Mercury. These roles do not collide. Your gender is not supplied, so I cannot unconditionally assign Venus to you and the Sun to Alex: Frawley excludes that allocation in same-sex relationships. The core judgment therefore rests on Jupiter, Moon and Mercury.
+
+Jupiter has minor essential dignity by term but weak capacity in the eighth house; this placement also fits anxiety about the marriage. The Moon is peregrine with neutral ninth-house capacity. Mercury is peregrine but angular in the tenth, giving Alex capacity to act despite an unsettled essential condition. All three are direct and clear of solar affliction. These conditions concern the situation, not either person's moral character; exact speeds and stations are unverified.
+
+The receptions show unequal attachment. Mercury in Jupiter's term indicates minor regard from Alex toward you, while Mercury in the Moon's fall indicates substantial dissatisfaction with your emotional facet. Conversely, your Moon occupies Mercury's domicile and exaltation, showing strong attachment and idealisation of Alex. The Moon in Jupiter's detriment also suggests tension between your feelings and your own personal judgment. Your affection cannot be treated as evidence of reciprocal affection.
+
+Mercury's strong reception toward Mars is material contrary testimony: Mars can signify divorce, so separation may have significance for Alex. However, Mars could have another role, and its identity is unresolved; its being peregrine and weak in the eighth does not itself establish an effective separation. Neither dissatisfaction nor interest in an uncertain significator proves action.
+
+Because you remain married and neither has decided to separate, continuation is the default. Mercury at 9.826° Scorpio is not near sign exit and is not shown leaving your first house. The calculated void Moon supports little immediate change, without deciding the question automatically. Its little, decreasing light also reduces its capacity.
+
+The first listed lunar candidate is a sextile to Mars after ingress, followed by opposition to Saturn. These require changed circumstances and cannot simply be accepted as departure events. The later Sun–Moon conjunction must not be detached from that sequence or treated as a fresh marriage promise. The Venus–Mars square likewise does not establish Alex leaving.
+
+If the applicable man/woman configuration is confirmed, Venus could additionally signify you and the Sun Alex. Then the Sun's domicile reception toward Venus and minor reception toward Jupiter would provide counterbalancing attraction and regard; Mercury's negative reception toward Venus would show another dissatisfied facet. Venus's detriment and retrogradation would describe difficulty, not automatically reconciliation, and its square to Mars could raise a separation theme involving your facet. Those interpretations remain conditional and do not support the unconditional verdict. Mercury's proximity to Venus alone does not justify inventing an affair while Venus's role is unsettled.
+
+No departure is sufficiently established to time.
+
+### Evidence
+
+Roles and conditional natural significators: e7, e13; Frawley printed pp. 30–32, 138, 191–193.
+Condition, capacity and emotional description: e1, e2, e5, e21–e26, e34–e36; printed pp. 22, 44–56, 57–61.
+Directed receptions: e46–e48, e50–e51; printed pp. 71–77, 193–195. Mars qualification: e4, e31–e33, e47; printed pp. 33, 193, 195–196.
+Continuation and Moon: e0–e2, e76; printed pp. 64–65, 140, 199.
+Conditional Sun/Venus reading: e0, e3, e19–e20, e27–e30, e49, e57, e60, e62, e67; printed pp. 57, 191–195.
+Event order and timing limits: e64–e77; printed pp. 90–97, 127–133, 198–199.
+
+### Unresolved
+
+Vera's gender is unspecified, leaving the Sun/Venus partner allocation conditional. The Part of Marriage and its dispositor are unavailable, and Mars's specific role remains uncertain. Exact speeds, stations, antiscia and fine contact order are not certified. The approximate seven-day search cannot establish permanent nondeparture or support a separation date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "relay",
+      "quote": "relaying my friend Vera’s own question"
+    },
+    {
+      "field": "principal_id",
+      "value": "vera",
+      "quote": "Vera"
+    },
+    {
+      "field": "subject.name",
+      "value": "Alex",
+      "quote": "Alex"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "are married"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Treat Vera as the principal, and evaluate actual disruption of an existing marriage."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-013 (development)
+
+### Question
+
+Noor is my next-door neighbour, not my partner. I have a crush on Noor. Does Noor have romantic feelings for me?
+
+### Worked answer
+
+**Status:** answer
+
+On this chart, I would judge no: Noor does not appear to return your romantic feelings. The strongest relevant testimony indicates an unfavourable attitude toward you, rather than attraction. This is a qualified reading of Noor’s present feelings, not a claim that their feelings can never change.
+
+### Reasoning
+
+Your question concerns your neighbour’s feelings, not whether a partnership will begin. Frawley explicitly assigns this enquiry to the 3rd house. Its Pisces cusp makes Jupiter Noor’s significator; your Capricorn Ascendant makes Saturn yours. The Moon remains your emotional cosignificator: its rulership of the 7th does not give it to Noor when the relevant quesited house is the 3rd. No turning or shared-ruler substitution is needed. Neither person’s gender is supplied, so Sun and Venus cannot reliably be assigned as their natural significators.
+
+The decisive direction is Jupiter → Saturn. Jupiter in Leo occupies Saturn’s detriment: within this method, that describes Noor’s unfavourable regard for you. Jupiter has no reception toward your Moon at its supplied position. Thus neither of your established significators receives testimony of romantic affection from Noor. Jupiter’s strong regard for the Sun cannot be called attraction to you, because the Sun has no established personal role here.
+
+Jupiter has minor essential dignity by term, but occupies the physically weak radical 8th house; it is direct and clear of the Sun. Its role as ruler of your neighbour is distinct from that physical placement. Weak capacity does not itself mean lack of feeling: the negative reception supplies that judgment.
+
+Saturn is in fall, retrograde and near opposition to the Sun, suggesting difficulty or vulnerability for you in this matter, not a character judgment. There is no declared reunion that would explain retrogradation favourably. Saturn’s physical placement in the 3rd aptly fits your focus on your neighbour, while its house capacity is neutral.
+
+Your Moon is peregrine, in the neutral 9th, clear of the Sun and waning toward new Moon. Its negative reception toward Jupiter does not neatly match your stated crush. I retain your declared feelings rather than infer that you secretly dislike Noor; this mismatch reduces confidence in the descriptive fit.
+
+This is a state question, so an applying aspect is not required. The calculated void Moon gives secondary support to little immediate development, but does not establish Noor’s feelings. The later, after-ingress Moon–Jupiter candidate neither overturns the present receptions nor establishes a relationship. No event or timing prediction is warranted.
+
+### Evidence
+
+Roles: e7, e9, e13; Frawley printed pp. 19, 30–32, 191–193.
+
+Directed feelings: e5, e42–e43, e50; dignity/reception table p. 72 and interpretation pp. 71–76, 194. Jupiter’s lack of reception toward the Moon follows from its supplied Leo position and that table.
+
+Condition and descriptive fit: e1, e5–e6, e21–e23, e34–e40; printed pp. 46, 49–50, 54–61, 64–65.
+
+State versus event and limits: e64–e68, e76–e77; printed pp. 84, 91, 97, 194.
+
+### Unresolved
+
+Natural Sun/Venus assignments remain unavailable because genders are unspecified. The Moon’s reception does not clearly describe the declared crush. Positions and contact searches are approximate; exact motion, intervening stations and antiscia are uncertified. These limits qualify the present-feelings judgment but do not require an event calculation to answer it.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Noor",
+      "quote": "Noor"
+    },
+    {
+      "field": "people.noor.relationship",
+      "value": "neighbor",
+      "quote": "my next-door neighbour"
+    },
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "not my partner"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Use the specific neighbour’s operative house instead of automatically making a known neighbour a generic partner."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-014 (development)
+
+### Question
+
+Elena is my wife. We have been married fifteen years; neither of us has decided to separate. Will our marriage last?
+
+### Worked answer
+
+**Status:** answer
+
+On balance, your marriage looks more likely to continue than to end, but with substantial strain. Fifteen years together and neither of you deciding to separate make continuation the starting point; the chart does not establish a decisive departure. That is a qualified judgment about its present course, not a promise that it will last for life or become happier without change.
+
+### Reasoning
+
+Capricorn on the Ascendant makes Saturn your main significator; Cancer on the seventh cusp makes the Moon Elena’s. The Moon therefore belongs to her, not additionally to your emotions. Venus supplements Elena as woman. Your gender is not supplied, so I do not automatically assign you the Sun as man. No turning is needed; Saturn’s physical third-house placement and the Moon’s ninth-house placement do not change their relationship roles.
+
+Saturn is in fall, retrograde and within the severe affliction region opposite the Sun. This describes difficulty in your position, not bad character. Neither separation nor a reunion is declared, so there is no established returning-home exception that automatically makes retrogradation favourable. Saturn’s third house gives neutral capacity. Elena’s Moon is peregrine, clear of combustion and also neutral by house: unsettled rather than strongly supported. Venus is in detriment and retrograde but angular, showing a troubled facet with capacity to act. Angularity does not make its condition happy.
+
+The directed receptions are mixed. Elena’s Moon has a minor regard for your Saturn by term; Saturn has no listed reception toward her Moon. Saturn’s minor interest in Venus by term is outweighed by its major negative reception by detriment: your attitude toward her feminine or intimate facet appears conflicted and predominantly adverse. Her Moon’s triplicity and fall reception toward her own Venus similarly describes internal ambivalence, not hatred of you. The Moon’s strong valuation of Mercury is not reciprocated: Mercury is in the Moon’s fall. Mercury’s identity is unestablished, so this cannot responsibly become a story about another lover.
+
+This is an existing marriage, so another joining aspect is unnecessary to sustain it. The Moon is currently void of course, supporting little immediate change. Its approaching entry into Libra would, by the supplied dignity table, introduce strong regard for Saturn through exaltation and daytime triplicity: a possible improvement in Elena’s orientation toward you.
+
+There is contrary evidence: the subsequent Moon–Saturn opposition candidate could suggest conflict. However, the Moon first contacts Mars after changing sign; the opposition occurs farther into the next sign than the ordinary three-to-four-degree allowance. Neither is an established separation event. Venus’s nearer square to Mars warrants attention, but Mars cannot simply be declared divorce or another person without establishing its role. I would not use the later Sun–Moon conjunction to manufacture a fresh marriage promise.
+
+Continuation therefore remains the stronger provisional judgment, with unhappy conditions clearly distinguished from an actual decision to leave. No separation or reconciliation event is securely established to time.
+
+### Evidence
+
+Roles: e7, e13, e0–e6; printed pp. 30–32, 191–193.
+
+Condition and capacity: e19–e30, e38–e41; printed pp. 45–56, 57–61.
+
+Directed receptions: e49–e57, e64; printed pp. 71–77, 193–195. Prospective Libra reception follows the supplied table, printed p. 72; changes in attitude are discussed on pp. 80–82.
+
+Continuation default and distinction between strain and departure: e77; printed pp. 65–66, 140, 198–199. Conditional contact order: e65–e68; printed pp. 90–97. Limits on timing: e78; printed pp. 127–133.
+
+### Unresolved
+
+The Part of Marriage and its dispositor are not supplied, limiting the assessment of marital happiness and permanence. Your gender is unspecified, leaving the Sun’s natural relationship role unresolved. Mercury’s concrete relevance is unknown. Approximate seven-day contact brackets do not certify exact perfection, intervening stations or antiscia, and cannot establish lifelong durability or an exact date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Elena",
+      "quote": "Elena"
+    },
+    {
+      "field": "people.elena.relationship",
+      "value": "partner",
+      "quote": "Elena is my wife"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "married fifteen years"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Apply the continuity default to an established marriage; an absent new aspect does not itself dissolve it."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-015 (development)
+
+### Question
+
+Ravi and I have been married for nine years. We argue about money but wish to stay together. Would we be happy continuing together?
+
+### Worked answer
+
+**Status:** answer
+
+Continuing together could be worthwhile, but the chart suggests a strained marriage rather than an easy, happy one as things stand. Your wish to stay together is meaningful; it does not by itself resolve the unhappiness around money. There is some regard between you and potential for improvement, so I would not read this as an inevitable separation or an unqualified promise of happiness.
+
+### Reasoning
+
+This is a question about happiness within an existing nine-year marriage, not whether a relationship will begin. Continuing is the default; a new applying aspect is not required.
+
+Capricorn on the first cusp makes Saturn your principal significator. Cancer on the seventh makes the Moon Ravi’s. The Moon therefore belongs to Ravi and cannot also represent your emotions. Saturn physically occupies the third house; the Moon counts in the ninth because it is within approximately one degree before that cusp in the same sign. Neither placement is strongly empowering or severely weakening. The parties’ genders are not explicitly supplied, so I do not assign Sun and Venus as their sexual cosignificators.
+
+Saturn in fall describes your troubled condition in this marriage, not bad character. Its retrogradation is not automatically helpful: this is an ongoing marriage, with no stated separation from which to return. Its proximity to opposition with the Sun adds substantial affliction. Ravi’s Moon is peregrine, suggesting a lack of settled direction rather than essential strength. It is free of combustion but waning toward the Sun. Daily speeds and stations are not established.
+
+Ravi’s Moon occupies Saturn’s term: some regard for you, but modest rather than passionate testimony. Saturn has no reception toward the Moon at its supplied position. That does not erase your declared commitment, but the principal significators do not show strong mutual affection supporting present happiness.
+
+Money has a concrete chart role. Aquarius on your second cusp makes Saturn signify your finances as well as you; Leo on Ravi’s second, the radical eighth, makes the Sun signify Ravi’s finances. Saturn exalts the Sun and also receives it by triplicity and face; the Sun reciprocates those receptions toward Saturn. This shows substantial involvement between you and the financial matter, not proof of reciprocal romantic love. Both planets are in fall, reinforcing that this involvement is troubled. It does not establish particular debts, blame or financial motives.
+
+The void Moon supports continuation without much immediate change, not happiness. Its next sign, Libra, would exalt Saturn, offering a possible improvement in Ravi’s regard, derived from the supplied dignity table. That potential is qualified: the first listed subsequent contact is with Mars, followed by opposition to Saturn. These after-ingress candidates do not establish either reconciliation or separation, and should not be pursued through the later chain to manufacture an outcome. No event is sufficiently established to time.
+
+### Evidence
+
+Roles and houses: e7–e8, e13–e15, e24; printed pp. 17, 22, 30–32, 191–193.
+
+Condition: e0–e1, e6, e19–e24, e39–e42; printed pp. 44–46, 50–51, 56–61, 64–65.
+
+Directed receptions and financial interpretation: e54, e57, e61; supplied positions e1 and e6 and dignity table, printed pp. 47, 71–77. Relationship happiness and continuation: printed pp. 194, 198–199; default, p. 140.
+
+Moon and conditional event order: e66–e68, e78–e79; printed pp. 65, 90–97. Timing restraint: printed pp. 127–133.
+
+### Unresolved
+
+The Part of Marriage and its dispositor are not supplied, limiting the specific assessment of marital happiness and durability prescribed on p. 198. Genders remain unspecified, limiting natural cosignificators. Exact speeds, stations, antiscia and precise event order are uncertified; the approximate seven-day calculation cannot establish a long-term outcome or calendar date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Ravi",
+      "quote": "Ravi"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "married for nine years"
+    },
+    {
+      "field": "people.ravi.relationship",
+      "value": "partner",
+      "quote": "Ravi and I have been married"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Interpret marriage quality and directed reception without requiring a new formation aspect."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-016 (development)
+
+### Question
+
+Owen is my boyfriend of four years. I suspect an affair but have no evidence. Is there somebody else?
+
+### Worked answer
+
+**Status:** answer
+
+I would not judge that Owen is having an affair from this chart. It shows a strong interest in something other than you, but does not establish that this is another person or a sexual relationship. There are also indications of attachment to you. This is an unconfirmed suspicion, not proof of either infidelity or faithfulness.
+
+### Reasoning
+
+Capricorn on the Ascendant gives you Saturn; Cancer on the seventh cusp gives Owen the Moon. The Moon belongs to Owen here, so it cannot also represent your emotions. Its placement is the ninth house under the same-sign five-degree cusp rule, not its seventh-house role. Your gender is unspecified, so assigning Venus to you, and using the Sun/Venus pair as separate sexual significators, remains conditional.
+
+Owen’s Moon is peregrine, with neutral house capacity, direct and clear of the Sun. Peregrine describes a lack of settled direction; it does not establish dishonesty. Your Saturn is in fall, retrograde and within the severe solar-opposition region. These describe difficulty on your side, not evidence against Owen. No stated circumstance supplies a benign “return” explanation for Saturn’s retrogradation. Daily speeds and stations are not established.
+
+The strongest potentially suspicious testimony is Moon → Mercury: Owen strongly values and idealises whatever Mercury represents, by domicile and exaltation, with additional face reception. Mercury’s reverse reception is negative by the Moon’s fall, so this is not reciprocal affection. Mercury rules the radical sixth and ninth—Owen’s turned twelfth and third—and has no identified personal role. Neither these rulerships nor its physical tenth-house placement warrants inventing a lover.
+
+Moon → Saturn gives Owen a minor interest in you by term. If the opposite-sex natural-significator scheme applies, Sun → Saturn adds substantial positive regard by exaltation, triplicity and face, reciprocated by Saturn → Sun. Moon → Venus is mixed: warmth by triplicity outweighed by aversion through fall. Sun → Venus is positive by domicile. These differing facets would describe ambivalence, not a simple withdrawal of all affection.
+
+The affair-specific test is decisive: neither Owen’s Moon nor, if applicable, his Sun is closely conjunct an otherwise unidentified planet. Mercury and Venus are close together, but neither is Owen’s primary significator. Their conjunction cannot establish his affair. Strong reception alone is explicitly insufficient.
+
+This asks about an existing state, so a future applying aspect is not a universal prerequisite. Nevertheless, the distant Moon–Mercury conjunction candidate cannot serve as evidence of a present affair: it follows sign changes and several earlier contacts. The Moon is currently void within the supplied calculation; that suggests little immediate development, not certified innocence. No event is established for timing, and astronomical hours are not a prediction date.
+
+### Evidence
+
+e7, e13, e1, e24: Saturn/Moon roles and Moon’s ninth-house placement; Frawley printed pp. 17, 30–32, 191–193.
+
+e21–e24, e38–e41: essential condition, capacity, solar affliction and retrogradation; pp. 50–51, 54–61.
+
+e49, e52–e54: Owen’s directed interests, nonreciprocity and mixed reception; pp. 71–76, 194–195. e56, e60–e61: conditional natural-significator attachment.
+
+e0–e3: no close bodily conjunction involving Owen’s significators; pp. 195–196, 199–200 distinguish conjunction evidence from mere interest.
+
+e65–e72, e77–e78: ordered conditional candidates, void Moon and calculation limits; pp. 65, 84, 91, 97, 133.
+
+### Unresolved
+
+Mercury’s concrete significance and your gender are unspecified. Antiscia are not certified, so hidden conjunction testimony remains unobserved. Approximate positions and hourly sampling do not establish exact perfection, daily speeds or intervening stations. These limits prevent a definitive exclusion of an affair.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "truth",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Owen",
+      "quote": "Owen"
+    },
+    {
+      "field": "people.owen.relationship",
+      "value": "partner",
+      "quote": "my boyfriend"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "four years"
+    },
+    {
+      "field": "claim",
+      "value": "suspected affair",
+      "quote": "I suspect an affair but have no evidence"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Keep the allegation distinct from established facts; reception alone cannot identify a rival or prove infidelity."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact.",
+    "Do not turn a suspicion into a sourced affair."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-017 (test)
+
+### Question
+
+I am single and do not have a particular person in mind. I mean a new romantic relationship. Will I find a relationship before Christmas?
+
+### Worked answer
+
+**Status:** answer
+
+I would judge a new relationship before Christmas unlikely. The chart’s strongest indications favour little immediate progress, and the possible connection appears only after a change of circumstances, with difficulties attached. This is a provisional judgment about your Christmas deadline, not a claim that you will remain single indefinitely.
+
+### Reasoning
+
+Capricorn on the Ascendant makes Saturn your significator; Cancer on the seventh cusp makes the Moon the prospective partner’s significator, even though nobody is currently identified. The Moon therefore cannot also represent your emotions. These role houses are distinct from their placements: Saturn occupies the third house and the Moon the eighth. Your gender and the prospective partner’s gender are not supplied, so I cannot allocate the Sun and Venus as sex-specific cosignificators.
+
+Saturn is in fall, retrograde and close to opposition with the Sun: substantial difficulties in condition and ability. The third house gives neutral capacity rather than ordinary cadent weakness. Since you explicitly mean a new relationship, retrogradation has no established favourable explanation as reconciliation. This describes your position in this enquiry, not your worth or character. The Moon is peregrine, weak by eighth-house placement and clear of combustion. From its position behind the Sun, it is waning toward the new Moon. No supplied circumstance warrants dismissing these weaknesses as merely descriptive.
+
+The Moon regards Saturn by term: some interest, but slight. Saturn in Aries has no reception toward the Moon under the supplied dignity table. Thus the principal significators do not show strong reciprocal motivation. The Moon’s strong regard for Mercury, alongside Mercury’s negative reception toward the Moon, cannot establish another lover or an intermediary without supporting context. Likewise, Saturn’s strong regard for Mars does not identify Mars as a prospective partner.
+
+The default is continued singleness unless a relationship develops. The Moon makes no major contact before leaving Virgo, supporting stagnation. Its first listed contact after ingress is a sextile to Mars, followed by opposition to Saturn. That principal connection is therefore neither immediate nor unobstructed. The opposition must occur well beyond the first three or four degrees of Libra, outside the ordinary allowance for after-ingress perfection. Even if admitted, opposition would raise concerns about regret or separation. Mars’s earlier contact is a possible intervention, but its identity and whether it prevents anything are unestablished.
+
+The subsequent Sun–Moon conjunction is favourable general marriage testimony in the source. However, it follows the earlier contacts and ingress; it is insufficient to override the weak condition, limited present reception and void Moon in this bounded enquiry. The broader allowances for an established “Will I ever?” judgment do not apply automatically.
+
+No event is sufficiently established to time. The listed angular gaps are not moving-perfection travel, and astronomical hours cannot be converted into a promised calendar date.
+
+### Evidence
+
+- e7, e13, e1, e6: principal rulers, Moon collision and physical placements; printed pp. 30–32, 191–193.
+- e21–e23, e37–e40, e0–e1: essential condition, house capacity, retrogradation, solar opposition and lunar light; printed pp. 45–51, 56–57, 61, 64–65.
+- e52, e51, e48, e54, e6 and the dignity table: directed attitudes without assumed reciprocity or invented identities; printed pp. 47, 71–77, 196.
+- e76, e64–e66: void Moon and ordered after-ingress candidates; printed pp. 65, 88–96, 97, 198.
+- e77: approximation and finite calculation coverage. Judgment and timing principles: printed pp. 127–133, 136, 140, 196–198.
+
+### Unresolved
+
+Sex-specific natural significators cannot be assigned from the supplied circumstances. Exact moving perfections, intervening stations, antiscia and fine event order are uncertified. The seven-day astronomical search does not itself establish absence of a relationship through Christmas; these limitations qualify the negative judgment and preclude reliable timing.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "I am single"
+    },
+    {
+      "field": "horizon",
+      "value": "2026-12-25",
+      "quote": "before Christmas"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Treat an unnamed prospective partner as legitimate, and retain the stated time window."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-018 (test)
+
+### Question
+
+I am 29, single, and asking about marriage to a future partner, not somebody I know. Will I ever marry?
+
+### Worked answer
+
+**Status:** answer
+
+On this reading, yes: eventual marriage is more likely than lifelong singleness. At 29, the chart’s difficulties do not outweigh the method’s favourable starting assumption for an “ever” question. It suggests delay or limited readiness now, rather than a permanent denial. It does not establish when you will marry.
+
+### Reasoning
+
+This is a lifetime-prospect question about an unknown future spouse, not an imminent wedding or a particular relationship. Frawley’s “Will I ever?” procedure therefore applies: at your age, the default favours marriage unless strong contrary testimony overturns it.
+
+Capricorn on the Ascendant gives you Saturn; Cancer on the seventh cusp gives the future spouse the Moon (e7, e13). The Moon cannot also represent your emotions because the spouse has first claim. Saturn physically occupies the third house and the Moon the eighth; these placements do not change their roles. Your gender is unspecified, so Sun and Venus cannot be allocated confidently as personal cosignificators.
+
+The positive testimony independent of gender is the Moon beholding Venus: Virgo and Scorpio are signs in sextile (e1, e3). This is specifically listed as support for eventual marriage, regardless of the querent’s sex. It is sign-based beholding, not a claim of an immediately perfecting sextile. Neither Saturn in Aries nor the Moon in Virgo supplies fertile-sign testimony. Venus in fertile Scorpio would add that testimony if Venus were your natural cosignificator.
+
+There are substantial present difficulties. Saturn is in fall, retrograde and near opposition to the Sun; the third house gives neutral capacity (e6, e37–e40). No declared return or reconciliation explains away its retrogradation. These conditions suggest difficulty acting satisfactorily in this matter, not defective character or inevitable lifelong exclusion. The spouse’s Moon is peregrine, weak in the eighth, and currently void of course, although clear of combustion (e21–e23, e76). This supports little immediate development. Crucially, the chapter’s specified major negatives are not present: Saturn is not on either relationship cusp, and Lord 7 is not combust.
+
+Reception provides modest rather than compelling immediate support. The Moon’s placement in Saturn’s term gives the spouse-significator a minor regard for you (e52); Saturn has no corresponding reception toward the Moon in its present position. The Moon’s warmth toward Venus by triplicity is mixed with the stronger negative of fall (e53), while Venus regards the Moon negatively by fall (e63). Without gender assignments, these cannot be turned into a personal romantic narrative.
+
+The ordered candidates do not establish an imminent marriage: the Moon first changes sign, then contacts Mars, opposes Saturn, and only afterward reaches the Sun-conjunction candidate (e64–e66). The opposition is difficult testimony, not a happy-marriage promise. The Sun–Moon conjunction is favourable marriage symbolism under the lifetime branch, but its approximate, later position in the sequence makes it supporting evidence rather than a certified event. No intermediary identity or future reception is assumed.
+
+Overall, the age-appropriate default and lunar beholding support a qualified yes; the weaknesses and void Moon qualify immediacy. No event has been established securely enough to time.
+
+### Evidence
+
+- e7, e13, e1, e6: roles and Moon collision — printed pp. 30–32, 191–192.
+- e1, e3, e37–e40, e21–e23, e76: lifetime testimonies and contrary conditions — pp. 56–61, 65, 98, 140, 197–198.
+- e52–e53, e63: directed, mixed receptions — pp. 71–77, 193–195.
+- e64–e66, e77: conditional event sequence and calculation limits — pp. 90–97, 198.
+- Timing withheld: moving-perfection distance and contextual units required — pp. 127–133.
+
+### Unresolved
+
+Gender is unspecified, limiting natural-significator allocation but not preventing this lifetime judgment. Exact moving perfections, intervening stations and antiscia are unverified; the supplied seven-day approximate search cannot establish lifetime absence or a wedding date. Frawley also acknowledges that the method cannot invariably distinguish legal marriage from commitment without marriage (printed p. 196).
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "baseline",
+      "value": "hoped_for",
+      "quote": "future partner"
+    },
+    {
+      "field": "horizon",
+      "value": "ever",
+      "quote": "ever"
+    },
+    {
+      "field": "context",
+      "value": "querent aged 29",
+      "quote": "I am 29"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Compare lifetime scope with the older querent case, retaining age rather than treating ever as a fixed short period."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-019 (test)
+
+### Question
+
+This is my own question about my sister Leila, not a message from her. Leila is married and considering separation. Will her marriage continue?
+
+### Worked answer
+
+**Status:** answer
+
+On the supplied chart, I would provisionally judge that Leila’s marriage continues, though with substantial strain. Her spouse appears more invested in her than she is in the spouse. There is some support for renewed engagement, but not enough to promise reconciliation or lasting happiness. A definite separation is not established.
+
+### Reasoning
+
+You are asking your own question about your sister, so Leila takes the radical 3rd house: Aries on its cusp makes Mars her significator. Her spouse takes her turned 7th, the radical 9th: Libra makes Venus the spouse’s significator. Your Capricorn Ascendant gives you Saturn; the Moon remains your emotional cosignificator and is not transferred to Leila. Venus is already claimed by the spouse and cannot also signify Leila as woman. The spouse’s sex is not specified, so I do not automatically assign the Sun as a male cosignificator.
+
+Mars is peregrine, suggesting uncertain direction rather than inherent bad character. Venus is in detriment, showing difficulty within the marriage. Scorpio is neither Leila’s turned Ascendant sign, Aries, nor the other sign of Mars irrelevant to this distinction: specifically, it is Mars’s other domicile. Consequently, the book’s exception for a spouse made vulnerable by occupying the principal’s Ascendant sign does not apply; this is attachment associated with unhappiness.
+
+Both main planets have strong radical house capacity: Mars occupies radical 7, Leila’s turned 5th; Venus occupies radical 10, her turned 8th. Their relationship roles come from cusp rulership, not these placements. Both are clear of solar affliction. Mars is direct; Venus retrograde may describe reconsidering or returning within the existing marriage, but does not prove that interpretation or reconciliation.
+
+The receptions are unequal. Venus in Scorpio strongly regards Mars by domicile and triplicity, with minor face reception: the spouse has substantial attachment to Leila. Mars in Leo has no reception toward Venus: comparable attachment from Leila is not shown. Mars instead strongly regards the Sun, whose concrete significance remains unidentified. Mars’s mixed reception toward your Saturn combines minor regard with major detriment reception; your Saturn strongly regards Mars. These describe a separate sibling dynamic, not the spouses’ mutual feelings.
+
+An established marriage continues by default unless someone acts to end it. The supplied evidence gives no established separating event. Its relevant direct candidate is retrograde Venus applying to square Mars before either changes sign. With Venus’s strong interest in Mars, this supports difficult renewed engagement rather than an automatic breakup; a square does not determine the subsequent quality of a marriage.
+
+The Moon is currently void of course, supporting limited immediate movement, but it represents you rather than Leila. Its later contacts after ingress must not be assembled into a speculative separation or reconciliation sequence. The approximate square is supporting testimony, not certified perfection. No event date is justified.
+
+### Evidence
+
+e9, e15, e7, e13: house assignments and Moon distinction; printed pp. 19, 25–27, 30–32, 138, 191–193.
+e3–e4, e27–e33: planetary condition, placement and retrogradation; printed pp. 45–46, 50–51, 54–57, 195.
+e62, e44–e45, e54: directed receptions, with Mars’s lack of Venus reception derived from its supplied position and the dignity table; printed pp. 47, 71–77, 194–195.
+e67: prospective Venus–Mars square; printed pp. 88, 95–97, 198–199.
+e76, e64–e66, e77: lunar stagnation and calculation limits; printed pp. 65–66, 90–91, 97.
+Existing marriage default: printed pp. 140, 199. Timing restraint: printed pp. 127–133.
+
+### Unresolved
+
+The spouse’s sex and the concrete significance of the Sun and Mercury are unspecified. Venus is close to Mercury, but their association does not establish an affair or identify another person. The Part of Marriage and its dispositor are unavailable for assessing durability and happiness. Exact perfection, intervening stations, antiscia and fine event order are uncertified; the seven-day calculation window cannot establish long-term absence of separation.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "my own question"
+    },
+    {
+      "field": "subject.name",
+      "value": "Leila",
+      "quote": "Leila"
+    },
+    {
+      "field": "people.leila.relationship",
+      "value": "sibling",
+      "quote": "my sister Leila"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "Leila is married"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Retain the actual querent and turn Leila’s spouse correctly; do not convert concern about another person into relay."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+
+## dspy-relationship-first-020 (test)
+
+### Question
+
+Pax and I are already dating. I mean how Pax feels about me now.
+
+### Worked answer
+
+**Status:** answer
+
+The supplied chart suggests Pax has some positive regard for you, but it is modest rather than strongly loving or passionate. That does not mean Pax wants to end your relationship; this reading concerns their feelings now, not a predicted breakup.
+
+### Reasoning
+
+Capricorn on the first cusp makes Saturn your significator; Cancer on the seventh makes the Moon Pax’s. The Moon therefore belongs to Pax and cannot also represent your emotions. These are ordinary partner roles, requiring no turned houses. Neither person’s gender is supplied, so assigning the Sun or Venus as either person’s natural significator would be unjustified.
+
+The decisive reception is Moon → Saturn by term: Pax has a minor positive interest in you. This supports some regard, but not a claim of deep love. Saturn in Aries has no reception toward the Moon; this does not strengthen the indication into mutual affection, although the question is specifically about Pax’s feelings.
+
+Pax’s Moon is peregrine, physically in the eighth house, direct and clear of the Sun. Its limited essential strength and weak house capacity qualify its ability to express its regard; they do not independently mean dislike. Your Saturn is in fall, retrograde and near opposition to the Sun, with neutral third-house capacity. These describe difficulty on your side without establishing Pax’s motives. No return or reconciliation context is supplied to explain away the retrogradation.
+
+The Moon’s much stronger reception toward Mercury shows another substantial focus for Pax, but Mercury’s identity is unresolved. It is not evidence by itself of another lover. Moon → Venus combines warmth by triplicity with a stronger negative by fall; without a justified personal role for Venus, this cannot be attributed to Pax’s feelings toward you.
+
+This is a present-state question within an existing relationship. Reception supplies the answer; an applying aspect is not required. The calculated void Moon does not cancel the existing bond or prove an absence of feeling. The later, after-ingress opposition candidate is not a present reception or sufficient grounds for predicting separation. No event timing is warranted.
+
+### Evidence
+
+- e7, e13: Capricorn/Saturn and Cancer/Moon establish the parties. Frawley printed pp. 30–32, 191–193: cusp rulership, Moon priority and natural-significator assignments.
+- e52: Moon → Saturn by term supplies the modest positive regard. Printed pp. 71–76, 194: reception direction, minor interest and nonautomatic reciprocity.
+- e6 and the dignity table, printed p. 72: Saturn in Aries has no reception toward the Moon.
+- e1, e21–e23: Pax’s Moon is peregrine, eighth-house, direct and solar-clear. e6, e37–e40: Saturn’s fall, neutral capacity, retrogradation and solar opposition affliction. Printed pp. 50–61 distinguish quality, capacity and contextual exceptions.
+- e51, e53: Mercury-directed emphasis and mixed Venus reception. Printed pp. 33, 75, 196, 199–200 caution against invented identities or infidelity inferred from reception.
+- e65, e76–e77: conditional later contact, calculated void Moon and calculation limits. Printed pp. 65, 84, 199 support judging present feelings without requiring a new event; pp. 127–133 govern timing only after establishing one.
+
+### Unresolved
+
+Neither person’s gender is supplied, so natural Sun/Venus roles remain unassigned. Mercury’s concrete significance is unknown, limiting interpretation of Pax’s stronger focus elsewhere. Positions and event brackets are approximate; fine event order, intervening stations, antiscia and fixed-star contacts are not certified. These limits do not prevent the narrower present-feelings judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Pax",
+      "quote": "Pax"
+    },
+    {
+      "field": "baseline",
+      "value": "ongoing",
+      "quote": "Pax and I are already dating"
+    },
+    {
+      "field": "people.pax.relationship",
+      "value": "partner",
+      "quote": "already dating"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Choose the actual principal, operative relationship and default; distinguish directed feelings from event perfection and explain the result naturally.",
+    "Apply the explicit correction to the present partnership without erasing retained context."
+  ],
+  "must_not": [
+    "Do not invent a gender, rival, aspect, age or lifetime certainty from an unspecified fact."
+  ],
+  "source_pages": [
+    137,
+    138,
+    140,
+    191,
+    192,
+    193,
+    194,
+    195,
+    196,
+    197,
+    198,
+    199,
+    200
+  ]
+}
+```
+

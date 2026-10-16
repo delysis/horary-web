@@ -159,8 +159,8 @@ function layoutPlanets(nameAnglePairs: [string, number][], obstacles: Box[] = []
 }
 
 const DARK_THEME = {
-  ringOuter: '#1a1a2e', ringSign: '#16213e', ringHouse: '#0d1b2a', ringInner: '#242424',
-  stroke: 'rgba(255,255,255,0.2)', strokeAngle: 'rgba(255,255,255,0.5)',
+  ringOuter: '#252a2c', ringSign: '#20272c', ringHouse: '#1b242c', ringInner: '#171e25',
+  stroke: 'rgba(193,167,121,0.23)', strokeAngle: 'rgba(193,167,121,0.6)',
   signGlyph: 'rgba(255,255,255,0.6)',
   houseNum: 'rgba(255,255,255,0.45)',
   angleLabel: 'rgba(255,255,255,0.7)',
@@ -171,8 +171,8 @@ const DARK_THEME = {
 }
 
 const LIGHT_THEME = {
-  ringOuter: '#c8cce0', ringSign: '#d8dcee', ringHouse: '#e4e8f4', ringInner: '#f0f0f8',
-  stroke: 'rgba(0,0,0,0.15)', strokeAngle: 'rgba(0,0,0,0.35)',
+  ringOuter: '#ebe3d1', ringSign: '#f1eadb', ringHouse: '#f5efdf', ringInner: '#f7f3e9',
+  stroke: 'rgba(100,83,49,0.22)', strokeAngle: 'rgba(100,83,49,0.5)',
   signGlyph: 'rgba(0,0,0,0.65)',
   houseNum: 'rgba(0,0,0,0.45)',
   angleLabel: 'rgba(0,0,0,0.65)',
@@ -184,7 +184,7 @@ const LIGHT_THEME = {
 
 type WheelData = { planets: Record<string, number[]>; cusps: number[]; aspects: any[] }
 
-export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMode?: boolean }) {
+export function ChartWheel({ data, darkMode = true, selectedPlanet = null, onSelectPlanet }: { data: WheelData; darkMode?: boolean; selectedPlanet?: string | null; onSelectPlanet?: (name: string) => void }) {
   const t = darkMode ? DARK_THEME : LIGHT_THEME
   const ascDeg = data.cusps[0] ?? 0
   const houseObstacles: Box[] = data.cusps.map((_, i) => {
@@ -197,7 +197,7 @@ export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMod
   )
 
   return (
-    <svg width={SIZE} height={SIZE} style={{ display: 'block', margin: '0 auto' }}>
+    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} role={onSelectPlanet ? 'group' : 'img'} aria-label="Horary chart wheel; ask about any position" style={{ display: 'block', margin: '0 auto', maxWidth: '100%', height: 'auto' }}>
       {/* Ring fills */}
       <circle cx={CX} cy={CY} r={R_OUTER} fill={t.ringOuter} />
       <circle cx={CX} cy={CY} r={R_SIGN_INNER} fill={t.ringSign} />
@@ -286,7 +286,7 @@ export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMod
         const color = ASPECT_COLORS[asp.aspect?.name?.toLowerCase()] ?? t.aspectFallback
         return (
           <line key={i} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
-            stroke={color} strokeWidth={0.9} opacity={0.65} />
+            stroke={color} strokeWidth={selectedPlanet === asp.point?.name || selectedPlanet === asp.toPoint?.name ? 1.8 : .9} opacity={!selectedPlanet || selectedPlanet === asp.point?.name || selectedPlanet === asp.toPoint?.name ? .7 : .12} />
         )
       })}
 
@@ -297,7 +297,7 @@ export function ChartWheel({ data, darkMode = true }: { data: WheelData; darkMod
         const pl = labelCenter(angle, inset)
         const glyph = PLANET_GLYPHS[name] ?? name.slice(0, 2)
         return (
-          <g key={name}>
+          <g key={name} className={onSelectPlanet ? 'planet-glyph' : undefined} role={onSelectPlanet ? 'link' : undefined} tabIndex={onSelectPlanet ? 0 : undefined} aria-label={onSelectPlanet ? `Follow ${name}, ${formatArcMin(deg)}` : undefined} onClick={() => onSelectPlanet?.(name)} onKeyDown={e => { if (onSelectPlanet && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSelectPlanet(name) } }} opacity={selectedPlanet && selectedPlanet !== name ? .4 : 1}>
             <text x={pg.x} y={pg.y} textAnchor="middle" dominantBaseline="middle"
               fontSize={PLANET_FONT_SIZES[name] ?? 24} fill={t.planetGlyph}>{glyph}</text>
             <text x={pl.x} y={pl.y} textAnchor="middle" dominantBaseline="middle"

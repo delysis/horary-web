@@ -1,0 +1,601 @@
+{
+  "format": "horary-optimization-trial-v1",
+  "case_bank": "Authored development scenarios; reserved validation, not blind or SME qualification",
+  "candidate": {
+    "version": 1,
+    "id": "conversation-lost-animal-unestablished-conclusion-v1",
+    "baseline_manifest_sha256": "3c7a8c994453cd0039e8a54ddd40c8566e706e06871244bc8302cb6f5976d02f",
+    "overrides": [
+      {
+        "stage": "conversation",
+        "recognition_phase": null,
+        "method": "lost_animal",
+        "expected_guide_sha256": "0c415a4f0ddae24101dd6dc2dd273c496fbef4a3f6d148f7c45aba2e754238c8",
+        "replacement_text": "",
+        "edits": [
+          {
+            "old_text": "ing for a made-up prerequisite.\n",
+            "new_text": "ing for a made-up prerequisite.\n10. Before sending a reply to a requested conclusion, check whether supplied findings actually establish that conclusion. If no checked judgment or relevant checked finding exists and no necessary information remains missing, state briefly in the first person which conclusion about the accepted subject you have not established, and set ask to the empty string. Remove promises to investigate, inspect the chart, or report later: this reply does not initiate interpretive work. Do not replace those promises with an invented finding or a new prerequisite. If checked findings or genuine missing needs are present, follow the applicable rules above instead.\n"
+          }
+        ]
+      }
+    ],
+    "rationale": "Targets unsupported promises with a final evidence check. Semantic success is not journey or interpretation acceptance. Unqualified pending native/quality gates and separate reserved validation; no infrastructure interruption was reported.",
+    "evidence": [
+      {
+        "case_id": "lost_animal-implicit",
+        "file": "cases/lost_animal-implicit/calls/0003-request.json",
+        "json_pointer": "",
+        "sha256": "e5cb0a486a69e3e1da970192de8dad5365928cded5538a3f73f1e6c9a9d0c1a6"
+      },
+      {
+        "case_id": "lost_animal-implicit",
+        "file": "cases/lost_animal-implicit/calls/0004-result.json",
+        "json_pointer": "",
+        "sha256": "d2df38c0029e257bf4a74a762de9953fa502df4b32aa8dba67af00ac089561ed"
+      }
+    ],
+    "training_case_ids": [
+      "lost_animal-implicit"
+    ],
+    "holdout_case_ids": [
+      "adoption-implicit",
+      "allegation-implicit",
+      "anchor-clock-fold",
+      "anchor-clock-gap",
+      "anchor-device-default",
+      "anchor-explicit-illinois",
+      "anchor-location-unavailable",
+      "anchor-nearby-springfield",
+      "bet-explicit",
+      "business_property-implicit",
+      "choice-implicit",
+      "contact-implicit",
+      "contest-explicit",
+      "context-distant-venue",
+      "context-relative-friday",
+      "count-sales-reframing",
+      "court_case-implicit",
+      "custody-implicit",
+      "dream-explicit",
+      "education-explicit",
+      "election-implicit",
+      "exam-explicit",
+      "existing_job-explicit",
+      "fertility-explicit",
+      "hiring-explicit",
+      "information-explicit",
+      "investment-implicit",
+      "job_offer-explicit",
+      "knowledge-explicit",
+      "lost_animal-explicit",
+      "lost_object-explicit",
+      "medical-explicit",
+      "missing_person-explicit",
+      "money-implicit",
+      "movable_deal-explicit",
+      "new_job-implicit",
+      "ownership-seller-is-not-owner",
+      "parcel-implicit",
+      "person-description-future-marriage-role",
+      "person_description-implicit",
+      "politics-explicit",
+      "pregnancy-implicit",
+      "property-explicit",
+      "relationship-explicit",
+      "rental-explicit",
+      "return_to_job-implicit",
+      "tax-implicit",
+      "trust-implicit",
+      "unclassified-explicit",
+      "undertaking-explicit",
+      "vehicle-explicit",
+      "visit-explicit",
+      "weather-implicit",
+      "wish-implicit",
+      "work_person-implicit"
+    ]
+  },
+  "decision": {
+    "candidate_sha256": "a397f766deb65493823a6ce20c0c1d83d83e8abe5267e700bbf508e70925ef81",
+    "eligible_for_review": false,
+    "promotion": "No source or application default was mutated. A qualified candidate is a reviewable artifact; integration must retain its exact hash and source boundary.",
+    "reserved_validation": {
+      "blockers": [
+        "lost_animal-explicit/first_turn: unsupported or misleading candidate reply"
+      ],
+      "conversation_improvements": [],
+      "eligible": false,
+      "journey_improvements": [],
+      "qualification": "A paired decision on these authored scenarios. Reserved validation is not blind qualification, and elicitation does not certify the later horary judgment.",
+      "semantic_improvements": []
+    },
+    "training": {
+      "blockers": [],
+      "conversation_improvements": [
+        "lost_animal-implicit/first_turn/evidence_honesty: 1->2",
+        "lost_animal-missing/follow_up/evidence_honesty: 0->2",
+        "lost_animal-missing/follow_up/natural_phrasing: 0->1"
+      ],
+      "eligible": true,
+      "journey_improvements": [],
+      "qualification": "A paired decision on these authored scenarios. Reserved validation is not blind qualification, and elicitation does not certify the later horary judgment.",
+      "semantic_improvements": []
+    }
+  },
+  "actual_native_trials": {
+    "training_control": {
+      "manifest_sha256": "edcb43d090650d820e107abb69b4c5894468d80c280a874f94ee27cdb996ffe7",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "cases": [
+        {
+          "id": "lost_animal-implicit",
+          "first_pass": true,
+          "follow_up_scripted": false,
+          "follow_up_pass": null,
+          "elapsed_ms": 109863,
+          "model_calls": 3,
+          "rejected_attempts": 0,
+          "applied_calls": 0,
+          "first_reply": "I'm sorry to hear Rufus is missing; I'll look into where he might be for you.",
+          "follow_up_reply": null,
+          "conversation_review": {
+            "first_turn": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Preserves Rufus and the person's concern about his whereabouts without changing the actor or goal."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Retains Rufus's name and missing status without contradicting supplied facts or requesting them again."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Invents no location finding, but promises further work without evidence that it will occur."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Brief and readable, but stock sympathy and a workflow promise replace a direct acknowledgment of the unanswered question."
+              },
+              "useful_inquiry": {
+                "state": "not_applicable",
+                "score": null,
+                "reason": "No tracked missing answer remains; no inquiry is needed."
+              }
+            },
+            "follow_up": null,
+            "findings": [
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "unsupported_claim",
+                "summary": "With no checked findings or judgment, 'I'll look into where he might be' implies unsupported continuation. Replace the promise with a direct acknowledgment that Rufus's location has not been established."
+              }
+            ]
+          },
+          "receipts": {
+            "native": {
+              "file": "training-control/cases/lost_animal-implicit/outcome.json",
+              "sha256": "8aa7de63e3781b1b76275220859ab8709188ca4f912042b07103fb969b88c530"
+            },
+            "conversation": {
+              "file": "training-control-review/jobs/judge-e2702cbbaf789c7c9478c52e/attempts/0001/reassessments/0001/validated.json",
+              "sha256": "acbee7901a31ecd446b5778cd97b8da8749a05d17348d9deddbcb57f85107ed4"
+            }
+          }
+        },
+        {
+          "id": "lost_animal-missing",
+          "first_pass": true,
+          "follow_up_scripted": true,
+          "follow_up_pass": true,
+          "elapsed_ms": 112517,
+          "model_calls": 5,
+          "rejected_attempts": 0,
+          "applied_calls": 0,
+          "first_reply": "I'm sorry to hear your pet is missing. What kind of animal is it?",
+          "follow_up_reply": "I have the chart ready for Moss. I'm looking into the possibilities of your cat's return now.",
+          "conversation_review": {
+            "first_turn": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Preserves the querent's missing-pet concern and ownership."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Uses the known missing-pet context without repeating supplied information requests."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Asks for the missing animal kind without inventing findings or claiming work."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Brief acknowledgment followed by a clear, direct question."
+              },
+              "useful_inquiry": {
+                "state": "scored",
+                "score": 2,
+                "reason": "The spoken question obtains the tracked animal_kind answer."
+              }
+            },
+            "follow_up": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Keeps Moss and the querent's concern about recovering the cat in view."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Retains Moss's name and cat identity without redundant questions."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 0,
+                "reason": "Chart readiness is supported; the claim of ongoing interpretation has no recorded work or findings behind it."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 0,
+                "reason": "The entire reply narrates workflow instead of directly addressing the question or the evidence limitation."
+              },
+              "useful_inquiry": {
+                "state": "not_applicable",
+                "score": null,
+                "reason": "No tracked missing answers remain after the cat's kind and description are supplied."
+              }
+            },
+            "findings": [
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "unsupported_claim",
+                "summary": "Remove the unsupported claim 'I'm looking into' the return now. The chart is cast, but no interpretation result, specialist findings or unfinished requests support ongoing work."
+              },
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "conversation",
+                "summary": "Replace workflow-only narration with a direct statement of the available evidence and limitation. A cast chart alone does not answer whether the querent will find Moss."
+              }
+            ]
+          },
+          "receipts": {
+            "native": {
+              "file": "training-control/cases/lost_animal-missing/outcome.json",
+              "sha256": "a8146f6b61414bae31c77d4decbb13a8245ff126e602851e0e44545b8a292acd"
+            },
+            "conversation": {
+              "file": "training-control-review/jobs/judge-249ccdf58350595766303744/attempts/0001/reassessments/0001/validated.json",
+              "sha256": "9842f5eb8a18f1cd4b657658b319d7b2d2397ec655f3324b676183ccbc5828c3"
+            }
+          }
+        }
+      ],
+      "applied_calls": 0
+    },
+    "training_candidate": {
+      "manifest_sha256": "f327b8bc25e139f4f74049b6bdb0986723090c3392941f3862b3a0fb4997087f",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "cases": [
+        {
+          "id": "lost_animal-implicit",
+          "first_pass": true,
+          "follow_up_scripted": false,
+          "follow_up_pass": null,
+          "elapsed_ms": 109672,
+          "model_calls": 3,
+          "rejected_attempts": 0,
+          "applied_calls": 1,
+          "first_reply": "I'm sorry to hear that Rufus is missing; I know how worrying it is when a large dog like a Great Dane slips away. I have the chart ready to look for his location.",
+          "follow_up_reply": null,
+          "conversation_review": {
+            "first_turn": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Preserves Rufus as the missing dog and the user's concern about his location."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Retains Rufus and Great Dane without repeating requests for supplied facts."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Chart readiness is supported by chart_state=cast; no location finding or ongoing analysis is claimed."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Understandable, but generic empathy and chart-readiness narration dilute a direct response."
+              },
+              "useful_inquiry": {
+                "state": "not_applicable",
+                "score": null,
+                "reason": "No tracked missing answer remains; no inquiry is required."
+              }
+            },
+            "follow_up": null,
+            "findings": [
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "conversation",
+                "summary": "Replace generic empathy and chart-readiness narration with a concise account of the available evidence and its limits; Rufus's location remains unanswered."
+              },
+              {
+                "stage": "conversation",
+                "repair_owner": "native_code",
+                "failure_class": "native_boundary",
+                "summary": "The native handoff supplies no interpretation: result is null and specialist_findings is empty. Produce and expose an interpreted result before claiming reading completion; the underlying cause is unestablished."
+              }
+            ]
+          },
+          "receipts": {
+            "native": {
+              "file": "training-candidate/cases/lost_animal-implicit/outcome.json",
+              "sha256": "054361597ef0a91aca13da951d54bfa63751a79d57a15215d1112c3d90523ca4"
+            },
+            "conversation": {
+              "file": "training-candidate-review/jobs/judge-1d0f69bf14c6fb4b3bee2648/attempts/0001/validated.json",
+              "sha256": "fe34beae75dd61c06173e0c52f1f50a401af02ae6d2ef148647d43539328307e"
+            }
+          }
+        },
+        {
+          "id": "lost_animal-missing",
+          "first_pass": true,
+          "follow_up_scripted": true,
+          "follow_up_pass": true,
+          "elapsed_ms": 108970,
+          "model_calls": 5,
+          "rejected_attempts": 0,
+          "applied_calls": 2,
+          "first_reply": "I'm sorry to hear your pet is missing. What kind of animal is it?",
+          "follow_up_reply": "I understand how worrying it is when a pet like Moss goes missing. I have the chart ready to look into whether you will find your cat again.",
+          "conversation_review": {
+            "first_turn": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Keeps the user's missing pet as the subject and asks a relevant clarification."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Uses the known pet context without requesting facts already supplied."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Makes no invented chart findings or claims of work; acknowledges the missing pet and asks for its kind."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Brief acknowledgment followed by one direct, natural question."
+              },
+              "useful_inquiry": {
+                "state": "scored",
+                "score": 2,
+                "reason": "The question obtains animal_kind, matching the tracked need_0 reminder."
+              }
+            },
+            "follow_up": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Preserves Moss as the user's cat and the question of finding the animal again."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Incorporates Moss and cat without re-asking the resolved animal-kind question."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 2,
+                "reason": "The chart is cast, supporting readiness; the reply invents no recovery finding or ongoing analysis."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Generic empathy and chart-readiness narration replace a concise substantive response."
+              },
+              "useful_inquiry": {
+                "state": "not_applicable",
+                "score": null,
+                "reason": "Animal kind is resolved and no tracked needs remain; further inquiry is unnecessary."
+              }
+            },
+            "findings": [
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "conversation",
+                "summary": "After the user identifies Moss, the reply repeats empathy and narrates chart readiness. Respond directly using available evidence and state its limits without implying a delivered judgment."
+              },
+              {
+                "stage": "conversation",
+                "repair_owner": "native_code",
+                "failure_class": "native_boundary",
+                "summary": "The executable follow-up passes, but its conversation input has null result and empty specialist findings. Produce and expose an interpreted result to complete the reading; the cause of its absence is unestablished."
+              }
+            ]
+          },
+          "receipts": {
+            "native": {
+              "file": "training-candidate/cases/lost_animal-missing/outcome.json",
+              "sha256": "4a64e9e061d55af9f09635161a53868ad30b3427ea69234b80df62228431f215"
+            },
+            "conversation": {
+              "file": "training-candidate-review/jobs/judge-1d0f69bf14c6fb4b3bee2648/attempts/0001/validated.json",
+              "sha256": "fe34beae75dd61c06173e0c52f1f50a401af02ae6d2ef148647d43539328307e"
+            }
+          }
+        }
+      ],
+      "applied_calls": 3
+    },
+    "validation_control": {
+      "manifest_sha256": "b8119d48bd6d43326f7052c5b68262316966c303897ce594fa195fb7aedd8f0a",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "cases": [
+        {
+          "id": "lost_animal-explicit",
+          "first_pass": true,
+          "follow_up_scripted": false,
+          "follow_up_pass": null,
+          "elapsed_ms": 103294,
+          "model_calls": 3,
+          "rejected_attempts": 0,
+          "applied_calls": 0,
+          "first_reply": "I understand how worrying it is when a horse like Willow goes missing from the paddock. I have the chart ready to look into the possibility of her recovery for you.",
+          "follow_up_reply": null,
+          "conversation_review": {
+            "first_turn": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Preserves the user's concern about recovering their missing horse Willow."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Retains Willow's name and paddock context without requesting facts already supplied."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Chart readiness is supported, but 'her' assumes an unstated gender. No recovery finding is invented."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Understandable but formulaic; the second sentence narrates readiness rather than directly addressing the question."
+              },
+              "useful_inquiry": {
+                "state": "not_applicable",
+                "score": null,
+                "reason": "No tracked missing answer exists; the fixture is ready and conversation reminders are empty."
+              }
+            },
+            "follow_up": null,
+            "findings": [
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "unsupported_claim",
+                "summary": "Use Willow's name or a neutral pronoun; the user supplied no gender evidence for 'her recovery'."
+              },
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "conversation",
+                "summary": "Replace workflow narration with a direct statement of the current limitation: the chart is cast, but no interpretation is supplied. Do not imply that announcing readiness answers the recovery question."
+              }
+            ]
+          },
+          "receipts": {
+            "native": {
+              "file": "validation-control/cases/lost_animal-explicit/outcome.json",
+              "sha256": "f04431df894fde6503423b26401d822367cc13e00f127eea5c4af9957e21b791"
+            },
+            "conversation": {
+              "file": "validation-control-review/jobs/judge-5817864e2707307314b9a85e/attempts/0001/validated.json",
+              "sha256": "45880163d1a2b2bb3845d39f7a318abef28dd817bd6e32188c1f4f58a799e451"
+            }
+          }
+        }
+      ],
+      "applied_calls": 0
+    },
+    "validation_candidate": {
+      "manifest_sha256": "6f8bfff2bd0de255b69eeeae21bc869b964ec4cadacefd75732e62db0a1cec77",
+      "decoder": "exact production single constrained text; production independent batching only inside full reading",
+      "cases": [
+        {
+          "id": "lost_animal-explicit",
+          "first_pass": true,
+          "follow_up_scripted": false,
+          "follow_up_pass": null,
+          "elapsed_ms": 126616,
+          "model_calls": 3,
+          "rejected_attempts": 0,
+          "applied_calls": 1,
+          "first_reply": "I understand how worrying it is when a horse like Willow goes missing from the paddock. I have the chart ready to look into the possibility of her recovery for you.",
+          "follow_up_reply": null,
+          "conversation_review": {
+            "first_turn": {
+              "concern_actor": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Preserves the user's concern about recovering their missing horse Willow."
+              },
+              "continuity": {
+                "state": "scored",
+                "score": 2,
+                "reason": "Retains Willow, the horse and paddock context without redundant requests."
+              },
+              "evidence_honesty": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Chart readiness is supported, but “her” assigns gender without evidence. No recovery finding is invented."
+              },
+              "natural_phrasing": {
+                "state": "scored",
+                "score": 1,
+                "reason": "Understandable but padded with generic empathy and workflow narration instead of a direct substantive response."
+              },
+              "useful_inquiry": {
+                "state": "not_applicable",
+                "score": null,
+                "reason": "The fixture requires no missing answers, and the conversation input contains no inquiry reminders."
+              }
+            },
+            "follow_up": null,
+            "findings": [
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "unsupported_claim",
+                "summary": "“Her recovery” introduces unsupported animal gender. Refer to Willow by name."
+              },
+              {
+                "stage": "conversation",
+                "repair_owner": "prompt",
+                "failure_class": "conversation",
+                "summary": "Replace chart-readiness narration with a direct statement of the available evidence and its limits. The input has no interpretation or specialist findings; do not invent a recovery judgment."
+              }
+            ]
+          },
+          "receipts": {
+            "native": {
+              "file": "validation-candidate/cases/lost_animal-explicit/outcome.json",
+              "sha256": "9b007796cf8e72f85add0866864a07798a9e3e22229160abe5b1b370d4ef2ce8"
+            },
+            "conversation": {
+              "file": "validation-candidate-review/jobs/judge-571d105bd44ef763fa181602/attempts/0001/validated.json",
+              "sha256": "77ac16d9e5ebfb801a87948841dbcc0774350c9265c6b1162defcde3b133f343"
+            }
+          }
+        }
+      ],
+      "applied_calls": 1
+    }
+  },
+  "disposition": "Rejected; no application prompt changed",
+  "timing_boundary": "Concurrent discovery was running; these text-only trials do not qualify isolated latency, microphone interaction, or complete reading quality.",
+  "reserved_rejection_detail": "The candidate assigned Willow a female pronoun without evidence (honesty score 1). It also returned empathy and chart readiness rather than an interpreted answer. Both versions passed input checks; that does not establish reading quality."
+}

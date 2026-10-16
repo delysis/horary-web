@@ -1,0 +1,212 @@
+{
+  "source": {
+    "name": "Swiss Ephemeris via pyswisseph",
+    "url": "https://www.astro.com/swisseph/",
+    "retrievedAt": "2026-06-30",
+    "version": "2.10.03",
+    "houseSystem": "Regiomontanus",
+    "notes": "Reference ASC, MC, Vertex, and house cusps generated with swe.houses_ex(..., b'R') from UTC Julian dates."
+  },
+  "tolerancesArcMinutes": {
+    "angle": 2,
+    "cusp": 2
+  },
+  "cases": [
+    {
+      "id": "london-solstice-2024",
+      "description": "London near the 2024 June solstice.",
+      "input": {
+        "utc": "2024-06-21T12:00:00.000Z",
+        "latitude": 51.5,
+        "longitude": -0.1
+      },
+      "expected": {
+        "asc": 180.0535428,
+        "mc": 90.0696367,
+        "vertex": 0.1262686,
+        "cusps": [
+          180.0535428,
+          202.2163577,
+          230.7656096,
+          270.0696367,
+          309.3607524,
+          337.8953076,
+          0.0535428,
+          22.2163577,
+          50.7656096,
+          90.0696367,
+          129.3607524,
+          157.8953076
+        ]
+      }
+    },
+    {
+      "id": "nyc-dst-spring-2024",
+      "description": "New York instant during the 2024 spring DST transition day.",
+      "input": {
+        "utc": "2024-03-10T07:30:00.000Z",
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "expected": {
+        "asc": 274.7279362,
+        "mc": 209.0069833,
+        "vertex": 134.5773486,
+        "cusps": [
+          274.7279362,
+          310.928127,
+          355.9328159,
+          29.0069833,
+          51.3118345,
+          70.9388291,
+          94.7279362,
+          130.928127,
+          175.9328159,
+          209.0069833,
+          231.3118345,
+          250.9388291
+        ]
+      }
+    },
+    {
+      "id": "nyc-dst-fall-2024",
+      "description": "New York instant during the repeated-hour DST fall transition day.",
+      "input": {
+        "utc": "2024-11-03T06:30:00.000Z",
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "expected": {
+        "asc": 161.387871,
+        "mc": 68.2573697,
+        "vertex": 313.5677153,
+        "cusps": [
+          161.387871,
+          185.3589165,
+          213.2148709,
+          248.2573697,
+          285.4770563,
+          316.3387018,
+          341.387871,
+          5.3589165,
+          33.2148709,
+          68.2573697,
+          105.4770563,
+          136.3387018
+        ]
+      }
+    },
+    {
+      "id": "sydney-summer-2024",
+      "description": "Sydney southern-hemisphere chart.",
+      "input": {
+        "utc": "2024-01-15T03:00:00.000Z",
+        "latitude": -33.8688,
+        "longitude": 151.2093
+      },
+      "expected": {
+        "asc": 33.7709184,
+        "mc": 307.8693133,
+        "vertex": 260.5788765,
+        "cusps": [
+          33.7709184,
+          60.1261192,
+          91.7635761,
+          127.8693133,
+          161.3079012,
+          188.9462513,
+          213.7709184,
+          240.1261192,
+          271.7635761,
+          307.8693133,
+          341.3079012,
+          8.9462513
+        ]
+      }
+    },
+    {
+      "id": "tokyo-equinox-2024",
+      "description": "Tokyo chart near the 2024 September equinox.",
+      "input": {
+        "utc": "2024-09-22T12:00:00.000Z",
+        "latitude": 35.6762,
+        "longitude": 139.6503
+      },
+      "expected": {
+        "asc": 69.9441314,
+        "mc": 319.0671552,
+        "vertex": 214.8144379,
+        "cusps": [
+          69.9441314,
+          96.4364452,
+          117.2353816,
+          139.0671552,
+          169.048443,
+          211.1398462,
+          249.9441314,
+          276.4364452,
+          297.2353816,
+          319.0671552,
+          349.048443,
+          31.1398462
+        ]
+      }
+    },
+    {
+      "id": "reykjavik-winter-2024",
+      "description": "Reykjavik high-latitude winter chart.",
+      "input": {
+        "utc": "2024-12-21T12:00:00.000Z",
+        "latitude": 64.1466,
+        "longitude": -21.9426
+      },
+      "expected": {
+        "asc": 275.2345427,
+        "mc": 250.2305361,
+        "vertex": 160.7930205,
+        "cusps": [
+          275.2345427,
+          37.327491,
+          63.8374937,
+          70.2305361,
+          74.5585335,
+          79.9573261,
+          95.2345427,
+          217.327491,
+          243.8374937,
+          250.2305361,
+          254.5585335,
+          259.9573261
+        ]
+      }
+    },
+    {
+      "id": "london-historical-1899",
+      "description": "Historical pre-1900 UTC date.",
+      "input": {
+        "utc": "1899-12-31T12:00:00.000Z",
+        "latitude": 51.5,
+        "longitude": -0.1
+      },
+      "expected": {
+        "asc": 22.4091613,
+        "mc": 278.8158272,
+        "vertex": 187.7731555,
+        "cusps": [
+          22.4091613,
+          66.7661633,
+          85.7478548,
+          98.8158272,
+          113.4688465,
+          140.7380882,
+          202.4091613,
+          246.7661633,
+          265.7478548,
+          278.8158272,
+          293.4688465,
+          320.7380882
+        ]
+      }
+    }
+  ]
+}

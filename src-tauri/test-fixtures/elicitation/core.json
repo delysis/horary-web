@@ -1,0 +1,1812 @@
+[
+  {
+    "id": "relationship-explicit",
+    "method": "relationship",
+    "mode": "explicit",
+    "words": "Will my partner Alex and I go through with the wedding we have already arranged for October 24, 2026? We are engaged and the venue is booked.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "arranged_wedding"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "relationships": {
+        "alex": "partner"
+      },
+      "owner": "alex"
+    },
+    "source_pages": "140, 191–200",
+    "rationale": "An arranged wedding asks whether an existing arrangement proceeds; it is not the search for an unnamed future partner. The wedding date is event context, not the chart moment."
+  },
+  {
+    "id": "relationship-implicit",
+    "method": "relationship",
+    "mode": "implicit",
+    "words": "My partner Alex and I have been together six years. We still share our home, but lately things have felt distant. How are things between us?",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "ongoing"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "relationships": {
+        "alex": "partner"
+      },
+      "owner": "alex"
+    },
+    "source_pages": "191–200",
+    "rationale": "Infer an ongoing relationship from the stated shared life rather than asking whether the relationship exists. Feelings and situation do not require a formation event."
+  },
+  {
+    "id": "relationship-missing",
+    "method": "relationship",
+    "mode": "missing",
+    "words": "Will I get married within the next year?",
+    "follow_up": "I do not have a partner and no wedding is arranged. I am hoping to meet someone and begin a relationship.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "baseline"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "140, 191–200",
+    "rationale": "The words alone do not distinguish a hoped-for formation from an existing partner or arranged wedding. Clarify that distinction without asking for a future partner's name.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "relationship"
+      ],
+      "owner": "",
+      "relationships": {}
+    }
+  },
+  {
+    "id": "lost_object-explicit",
+    "method": "lost_object",
+    "mode": "explicit",
+    "words": "Where is my own missing wristwatch? It has a gold case, a black face and a narrow leather strap. I last saw it in my bedroom, and I have not raised any suspicion of theft.",
+    "expected": {
+      "facet": "location",
+      "facts": [
+        {
+          "field": "description",
+          "contains": "gold"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "146–153",
+    "rationale": "Own-object ownership and an actual description permit the Lords 2/4 comparison. Do not invent a thief, and retain the last-seen report as context rather than a guaranteed location."
+  },
+  {
+    "id": "lost_object-implicit",
+    "method": "lost_object",
+    "mode": "implicit",
+    "words": "My sister Ava left her wristwatch at my house and now cannot find it. Where is it?",
+    "expected": {
+      "facet": "location",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "ava",
+      "relationships": {
+        "ava": "sibling"
+      }
+    },
+    "source_pages": "147",
+    "rationale": "Resolve 'her' and 'it' from the supplied sister/watch context. Another person's object uses that owner's turned second; the own-object descriptive comparison is not a prerequisite."
+  },
+  {
+    "id": "lost_object-missing",
+    "method": "lost_object",
+    "mode": "missing",
+    "words": "Where is the missing gold ring with the blue stone?",
+    "follow_up": "It is my own ring. It is a thin gold band with a blue stone.",
+    "expected": {
+      "facet": "location",
+      "facts": [
+        {
+          "field": "description",
+          "contains": "blue"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "146–147",
+    "rationale": "A detailed noun phrase does not establish whose ring it is. Ownership determines ordinary versus turned houses; do not silently assign it to the speaker.",
+    "follow_up_expected": {
+      "facet": "location",
+      "facts": [
+        {
+          "field": "description",
+          "contains": "blue"
+        },
+        {
+          "field": "description",
+          "contains": "gold"
+        },
+        {
+          "field": "description",
+          "contains": "blue"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "lost_object"
+      ],
+      "owner": "querent",
+      "relationships": {}
+    }
+  },
+  {
+    "id": "lost_animal-explicit",
+    "method": "lost_animal",
+    "mode": "explicit",
+    "words": "Will I find my own missing horse Willow? Willow escaped from the paddock this morning. I am asking about recovering the horse, not a person or an inanimate object.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "animal_kind",
+          "contains": "large_kind"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "146–153",
+    "rationale": "A horse is a twelfth-house animal by kind. Recovery is the question; escape time is reported context and does not replace the moment of asking."
+  },
+  {
+    "id": "lost_animal-implicit",
+    "method": "lost_animal",
+    "mode": "implicit",
+    "words": "My Great Dane Rufus slipped out of the garden. He is actually bigger than my pony. Where is he?",
+    "expected": {
+      "facet": "location",
+      "facts": [
+        {
+          "field": "animal_kind",
+          "contains": "small_kind"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "147",
+    "rationale": "Infer dog from the breed and resolve 'he' to Rufus. Generic animal kind, not measured body size or the pony comparison, controls sixth versus twelfth."
+  },
+  {
+    "id": "lost_animal-missing",
+    "method": "lost_animal",
+    "mode": "missing",
+    "words": "My pet escaped this morning. Will I find the animal again?",
+    "follow_up": "The pet is my cat Moss, a tabby cat.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "animal_kind"
+        }
+      ],
+      "ready": false,
+      "owner": "querent",
+      "subject_kind": "animal",
+      "forbidden_facts": [
+        "description",
+        "time_occurrence",
+        "question_time",
+        "reader_place"
+      ]
+    },
+    "source_pages": "147",
+    "rationale": "'Pet' does not determine dog/cat versus horse or other kind. The scaffold must keep kind unresolved and let the reader ask, rather than guessing a sixth-house animal. Escape time is search context, not physical appearance; the first turn supplies no description. The identified pet must be retained as an animal owned by the speaker.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "animal_kind",
+          "contains": "small_kind"
+        },
+        {
+          "field": "description",
+          "contains": "tabby"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "allowed_methods": [
+        "lost_animal"
+      ],
+      "relationships": {},
+      "forbidden_facts": [
+        "time_occurrence",
+        "question_time",
+        "reader_place"
+      ],
+      "subject_kind": "small_animal",
+      "subject_name_contains": "Moss"
+    }
+  },
+  {
+    "id": "missing_person-explicit",
+    "method": "missing_person",
+    "mode": "explicit",
+    "words": "Will my adult son Daniel return home? Daniel is my child and has been missing since yesterday. I am asking my own question about his return.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "daniel",
+      "relationships": {
+        "daniel": "child"
+      }
+    },
+    "source_pages": "147",
+    "rationale": "Use the known child's relationship house. A missing person is not a lost movable object or automatically an anonymous seventh-house fugitive."
+  },
+  {
+    "id": "missing_person-implicit",
+    "method": "missing_person",
+    "mode": "implicit",
+    "words": "My employee Ravi was due back from his delivery hours ago. His van has been found but he has not, and I cannot reach him. Where is he?",
+    "expected": {
+      "facet": "location",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "ravi",
+      "relationships": {
+        "ravi": "employee"
+      }
+    },
+    "source_pages": "147–153",
+    "rationale": "Resolve the final pronoun to the missing employee rather than the van. The delivery setting does not turn this into vehicle safety or parcel arrival."
+  },
+  {
+    "id": "missing_person-missing",
+    "method": "missing_person",
+    "mode": "missing",
+    "words": "Sam is missing. Will Sam return safely?",
+    "follow_up": "Sam is my brother. This is my own question about him.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "sam"
+        }
+      ],
+      "ready": false,
+      "owner": "sam",
+      "relationships": {
+        "sam": "unknown"
+      }
+    },
+    "source_pages": "147",
+    "rationale": "The name and missing status identify Sam, but neither establishes the operative relationship. Ask who Sam is to the speaker before assigning a house.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "sam",
+      "relationships": {
+        "sam": "sibling"
+      },
+      "allowed_methods": [
+        "missing_person"
+      ]
+    }
+  },
+  {
+    "id": "movable_deal-explicit",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "Will my friend Bob sell his own collection of books at the fair in Bozeman, Montana on October 9, 2026? Bob owns the books and is the seller. I am asking about whether a sale will happen, not an exact number of books.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "bob"
+        },
+        {
+          "field": "event_place",
+          "contains": "Bozeman"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "bob",
+      "relationships": {
+        "bob": "friend"
+      }
+    },
+    "source_pages": "156–161, 172",
+    "rationale": "Owner, seller and friendship are explicit. Bozeman is the venue; the device near Woodbridge remains the reader place. Preserve completion rather than quantity."
+  },
+  {
+    "id": "movable_deal-implicit",
+    "method": "movable_deal",
+    "mode": "implicit",
+    "words": "My husband Bob owns the fish and will be selling them at the market on Friday. Will he make a profit from those sales?",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "bob"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "bob",
+      "relationships": {
+        "bob": "partner"
+      }
+    },
+    "source_pages": "156–161, 172",
+    "rationale": "Resolve actor and goods pronouns, and retain Friday as an event date. In the frozen Oct 7 environment its calendar resolution is Oct 9, 2026; it must not move the chart to market day."
+  },
+  {
+    "id": "movable_deal-missing",
+    "method": "movable_deal",
+    "mode": "missing",
+    "words": "Will my friend Bob sell the tulips at Friday's market? He is the seller.",
+    "follow_up": "The tulips belong to me, and Bob is selling them on my behalf.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "bob"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "owner": "",
+      "relationships": {
+        "bob": "friend"
+      }
+    },
+    "source_pages": "156–161, 172",
+    "rationale": "Being the seller is not ownership. Keep Bob's role and known friendship, ask only the real ownership gap, and preserve the original event question.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "bob"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "relationships": {
+        "bob": "friend"
+      },
+      "allowed_methods": [
+        "movable_deal"
+      ]
+    }
+  },
+  {
+    "id": "money-explicit",
+    "method": "money",
+    "mode": "explicit",
+    "words": "Will the government pay me the tax refund it already owes me? This is an established tax rebate payable to me, not a discretionary grant.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "money_source",
+          "contains": "government"
+        },
+        {
+          "field": "discretionary",
+          "contains": "owed"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "156–161",
+    "rationale": "An incoming government rebate is a payment-arrival question, not tax assessment. Preserve owed versus discretionary and do not infer an exact amount."
+  },
+  {
+    "id": "money-implicit",
+    "method": "money",
+    "mode": "implicit",
+    "words": "I am on the company's payroll. My salary should have landed yesterday but my account is still empty. Will I receive it this week?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "money_source",
+          "contains": "job"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "156–158",
+    "rationale": "Infer job wages from payroll and salary, and resolve 'it' to payment. This is neither a new-job question nor customer invoice money."
+  },
+  {
+    "id": "money-missing",
+    "method": "money",
+    "mode": "missing",
+    "words": "Will I receive the money I am waiting for?",
+    "follow_up": "It is payment for a completed consultation from a customer who owes me the invoice.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "money_source"
+        }
+      ],
+      "ready": false,
+      "owner": "querent"
+    },
+    "source_pages": "156–158",
+    "rationale": "The recipient is clear, but customer, job, government and relative money have different role assignments. Ask the source rather than defaulting to the second or eighth.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "money_source",
+          "contains": "customer"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "allowed_methods": [
+        "money"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "investment-explicit",
+    "method": "investment",
+    "mode": "explicit",
+    "words": "Will the shares I own in Northstar Ltd increase in value over the next six months? These are my own holdings; I want to know about their value, not whether someone will pay me a debt.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "157",
+    "rationale": "Shares are owned possessions, not automatically other people's money. Value growth has its own scope and does not require payment arrival."
+  },
+  {
+    "id": "investment-implicit",
+    "method": "investment",
+    "mode": "implicit",
+    "words": "My retirement account holds only the Cedar index fund. Would keeping that holding be profitable over the next year?",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "157",
+    "rationale": "Infer the fund as the speaker's owned investment from the account and resolve the holding reference. The money stays a possession despite its investment form."
+  },
+  {
+    "id": "investment-missing",
+    "method": "investment",
+    "mode": "missing",
+    "words": "Will Jordan's shares in Cedar gain value this year? They belong to Jordan.",
+    "follow_up": "Jordan is my daughter, and this is my question about her savings.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "jordan"
+        }
+      ],
+      "ready": false,
+      "owner": "jordan",
+      "relationships": {
+        "jordan": "unknown"
+      }
+    },
+    "source_pages": "137–138, 157",
+    "rationale": "Ownership is explicit but the owner's relation is not. The speaker's device location cannot establish who Jordan is or make the holdings the speaker's second house.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "jordan",
+      "relationships": {
+        "jordan": "child"
+      },
+      "allowed_methods": [
+        "investment"
+      ]
+    }
+  },
+  {
+    "id": "new_job-explicit",
+    "method": "new_job",
+    "mode": "explicit",
+    "words": "Will I get the librarian position I applied for at Cedar Library? I do not work there, no offer has been made, and this is my own application for a new external job.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "222–224",
+    "rationale": "This asks acquisition of an external job; it is not keeping employment, assessing an available offer or receiving wages. The named role is enough without birth details."
+  },
+  {
+    "id": "new_job-implicit",
+    "method": "new_job",
+    "mode": "implicit",
+    "words": "My daughter Maya had her final interview for the museum curator vacancy yesterday. They have not made her an offer yet. Will they choose her?",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "maya",
+      "relationships": {
+        "maya": "child"
+      }
+    },
+    "source_pages": "222–224",
+    "rationale": "Infer new-job acquisition and resolve 'her' to Maya. A third-party external job uses the radical tenth in this recipe, not her current-career turned tenth."
+  },
+  {
+    "id": "new_job-missing",
+    "method": "new_job",
+    "mode": "missing",
+    "words": "Will Sam get the librarian job Sam has applied for? There is no offer yet.",
+    "follow_up": "Sam is my brother. I am asking my own question about his application.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "sam"
+        }
+      ],
+      "ready": false,
+      "owner": "sam",
+      "relationships": {
+        "sam": "unknown"
+      }
+    },
+    "source_pages": "137–138, 222–224",
+    "rationale": "Application and acquisition state are clear; Sam's operative relationship remains unknown. Ask that genuine gap rather than restarting the question or querying the device's city.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "sam",
+      "relationships": {
+        "sam": "sibling"
+      },
+      "allowed_methods": [
+        "new_job"
+      ]
+    }
+  },
+  {
+    "id": "existing_job-explicit",
+    "method": "existing_job",
+    "mode": "explicit",
+    "words": "Will I keep my current job as a librarian at Cedar Library through this year's restructuring? I already hold this job and am worried about losing it.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "224–226",
+    "rationale": "Keeping an existing job has a continuity default; do not demand an acquisition aspect or treat the restructuring announcement as verified chart testimony."
+  },
+  {
+    "id": "existing_job-implicit",
+    "method": "existing_job",
+    "mode": "implicit",
+    "words": "My husband Bob has worked at the mill for ten years. They are making cuts next month. Will he still be on their payroll afterwards?",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "bob",
+      "relationships": {
+        "bob": "partner"
+      }
+    },
+    "source_pages": "224–226",
+    "rationale": "Infer retention of Bob's existing employment from tenure and continuing payroll. 'Payroll' here is employment status, not the arrival of a salary payment."
+  },
+  {
+    "id": "existing_job-missing",
+    "method": "existing_job",
+    "mode": "missing",
+    "words": "Will Casey keep the nursing job Casey already holds at the hospital?",
+    "follow_up": "Casey is my daughter. This is my own concern about her current job.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "casey"
+        }
+      ],
+      "ready": false,
+      "owner": "casey",
+      "relationships": {
+        "casey": "unknown"
+      }
+    },
+    "source_pages": "137–138, 224–226",
+    "rationale": "Job status is known but the person's relationship is not. Preserve the retention question while eliciting the capacity needed for the relevant career house.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "casey",
+      "relationships": {
+        "casey": "child"
+      },
+      "allowed_methods": [
+        "existing_job"
+      ]
+    }
+  },
+  {
+    "id": "return_to_job-explicit",
+    "method": "return_to_job",
+    "mode": "explicit",
+    "words": "Will I return to my old librarian job at Cedar Library? I held that exact position until I resigned last year and have now asked them to take me back.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "225–226",
+    "rationale": "A prior concrete job and a return request distinguish re-entry from generic acquisition or continued employment. Do not discard that old-job context."
+  },
+  {
+    "id": "return_to_job-implicit",
+    "method": "return_to_job",
+    "mode": "implicit",
+    "words": "My brother Sam left the mill in March. He has asked for the same position back, and the manager is considering it. Will he be back at his old bench?",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "sam",
+      "relationships": {
+        "sam": "sibling"
+      }
+    },
+    "source_pages": "225–226",
+    "rationale": "Infer job return from leaving, requesting the same position and the old-bench reference. The manager mention is reported context, not an invented separate decisive actor."
+  },
+  {
+    "id": "return_to_job-missing",
+    "method": "return_to_job",
+    "mode": "missing",
+    "words": "Will Morgan get back the teaching job Morgan left last spring? Morgan has asked the school to rehire them.",
+    "follow_up": "Morgan is my spouse, and I am asking about their old job.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "morgan"
+        }
+      ],
+      "ready": false,
+      "owner": "morgan",
+      "relationships": {
+        "morgan": "unknown"
+      }
+    },
+    "source_pages": "137–138, 225–226",
+    "rationale": "Return is already established; only the relevant person's capacity is missing. Names and pronouns do not supply relationship or gender.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "morgan",
+      "relationships": {
+        "morgan": "partner"
+      },
+      "allowed_methods": [
+        "return_to_job"
+      ]
+    }
+  },
+  {
+    "id": "job_offer-explicit",
+    "method": "job_offer",
+    "mode": "explicit",
+    "words": "Will the librarian job Cedar Library has formally offered me provide the dependable pay and stable hours I need? I can accept it now; those are my priorities.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "priorities",
+          "contains": "pay"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "225–226",
+    "rationale": "An available offer asks about suitability, with pay and hours supplied as priorities. Do not ask whether it will be offered or repeat a priorities question."
+  },
+  {
+    "id": "job_offer-implicit",
+    "method": "job_offer",
+    "mode": "implicit",
+    "words": "Cedar Library sent me the contract and wants my signature by Friday. I care most about having evenings free for my children. Would taking this post suit that?",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "priorities",
+          "contains": "evenings"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "225–226",
+    "rationale": "Infer an available job from the offered contract and resolve 'that' to evenings with children. Friday is an acceptance deadline (Oct 9 in the frozen context), not a chart anchor."
+  },
+  {
+    "id": "job_offer-missing",
+    "method": "job_offer",
+    "mode": "missing",
+    "words": "Will the librarian job already offered to Taylor be a financially good job for Taylor? The offer is available to accept.",
+    "follow_up": "Taylor is my son. I am asking about the pay in his offered job.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "taylor"
+        }
+      ],
+      "ready": false,
+      "owner": "taylor",
+      "relationships": {
+        "taylor": "unknown"
+      }
+    },
+    "source_pages": "137–138, 225–226",
+    "rationale": "Availability and the financial concern are known, so a generic 'what makes it good?' question is unnecessary. Taylor's relation is the real missing input.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "taylor",
+      "relationships": {
+        "taylor": "child"
+      },
+      "allowed_methods": [
+        "job_offer"
+      ]
+    }
+  },
+  {
+    "id": "work_person-explicit",
+    "method": "work_person",
+    "mode": "explicit",
+    "words": "Will I get along with my new boss Priya? Priya is my employer and direct supervisor; I am asking about our work relationship, not whether I will get a job.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "work_capacity",
+          "contains": "boss"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "relationships": {
+        "priya": "employer"
+      },
+      "owner": "priya"
+    },
+    "source_pages": "223–225",
+    "rationale": "A direct question about the boss uses that capacity, and reception addresses the situation. It does not require job acquisition or an applying event."
+  },
+  {
+    "id": "work_person-implicit",
+    "method": "work_person",
+    "mode": "implicit",
+    "words": "My colleague Lee and I have the same grade and neither reports to the other. We are friendly outside work, but I want to know whether we will cooperate well on the hospital shift.",
+    "expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "work_capacity",
+          "contains": "colleague"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "lee"
+    },
+    "source_pages": "224–225",
+    "rationale": "Infer equal work capacity from the reporting relationship. The question's operative colleague role remains seventh even though the people are friendly outside work."
+  },
+  {
+    "id": "work_person-missing",
+    "method": "work_person",
+    "mode": "missing",
+    "words": "Will I get along with Lee at work?",
+    "follow_up": "Lee is my boss and supervises my work.",
+    "expected": {
+      "facet": "situation",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "work_capacity"
+        }
+      ],
+      "ready": false,
+      "relationships": {
+        "lee": "unknown"
+      }
+    },
+    "source_pages": "223–225",
+    "rationale": "Being at work does not tell whether Lee is a boss, equal colleague or subordinate. Ask the operative capacity without assigning friend or employer by habit.",
+    "follow_up_expected": {
+      "facet": "situation",
+      "facts": [
+        {
+          "field": "work_capacity",
+          "contains": "boss"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "relationships": {
+        "lee": "employer"
+      },
+      "allowed_methods": [
+        "work_person"
+      ],
+      "owner": "lee"
+    }
+  },
+  {
+    "id": "property-explicit",
+    "method": "property",
+    "mode": "explicit",
+    "words": "Will I sell the house I own in Woodbridge to an as-yet-unspecified buyer? I am the owner and seller, and I am asking whether the sale will complete.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "167–170",
+    "rationale": "House-sale completion uses the deal parties. An unnamed buyer is a role rather than a fabricated named person; Woodbridge describes the property, not an explicit chart override."
+  },
+  {
+    "id": "property-implicit",
+    "method": "property",
+    "mode": "implicit",
+    "words": "The house with the red door in Springfield is mine. I have put it on the market and my brother Sam wants to buy it. Will we get it over the line?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "deal_party",
+          "contains": "Sam"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "relationships": {
+        "sam": "sibling"
+      }
+    },
+    "source_pages": "167–170",
+    "rationale": "Infer sale completion from the market/buyer context and idiom; the brother remains a known deal party rather than an anonymous seventh. Springfield provisionally means nearby Springfield VA in this device context, subject to contrary evidence."
+  },
+  {
+    "id": "property-missing",
+    "method": "property",
+    "mode": "missing",
+    "words": "Will the sale of the house in Springfield complete?",
+    "follow_up": "It is my own house and I am selling it to an unspecified buyer. Springfield is in Virginia.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "owner": ""
+    },
+    "source_pages": "137–138, 167–170",
+    "rationale": "A nearby city can be geographically inferred without resolving ownership. A sale story does not make the speaker the seller or owner.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "allowed_methods": [
+        "property"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "rental-explicit",
+    "method": "rental",
+    "mode": "explicit",
+    "words": "Will I successfully rent out the apartment I own to a new tenant? I am the owner and prospective landlord, and I am asking about agreeing the tenancy.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "170",
+    "rationale": "A modern tenancy is an agreement between equal parties, not an automatic sixth-house servant relationship. Preserve letting rather than selling."
+  },
+  {
+    "id": "rental-implicit",
+    "method": "rental",
+    "mode": "implicit",
+    "words": "My own apartment is empty. A couple viewed it and wants a twelve-month lease from me. Will we sign?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "170",
+    "rationale": "Infer rental completion from viewing, lease and signature, without turning it into sale or asking who owns the already explicit apartment."
+  },
+  {
+    "id": "rental-missing",
+    "method": "rental",
+    "mode": "missing",
+    "words": "Will the tenancy agreement for that apartment go ahead?",
+    "follow_up": "It is my own apartment and I am letting it to an unspecified tenant.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "owner": ""
+    },
+    "source_pages": "137–138, 170",
+    "rationale": "The lease identifies the kind of deal but not the relevant property owner. Keep that input unresolved rather than inventing a landlord or tenant identity.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "allowed_methods": [
+        "rental"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "business_property-explicit",
+    "method": "business_property",
+    "mode": "explicit",
+    "words": "Will renting this recording studio for my own recording business be profitable for me? I would be the tenant and operator; the studio is available if I choose it.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent"
+    },
+    "source_pages": "170–171",
+    "rationale": "An available place to work in is the specialist business-property recipe, with operator profit distinguished from ordinary home price. Complete inputs do not remove its current expert judgment boundary."
+  },
+  {
+    "id": "business_property-implicit",
+    "method": "business_property",
+    "mode": "implicit",
+    "words": "I would run my own bakery in the shop I am considering buying. It is available to me. Would taking the premises pay its way through my baking business?",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "buy"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent"
+    },
+    "source_pages": "170–171",
+    "rationale": "Infer a property used by the speaker for business and operational profit, rather than passive house resale or generic investment. Potential possession is legitimate; expert interpretation remains unqualified."
+  },
+  {
+    "id": "business_property-missing",
+    "method": "business_property",
+    "mode": "missing",
+    "words": "Would renting the workshop for the repair business be profitable?",
+    "follow_up": "The workshop would be for my own repair business; I would rent it and operate the business there.",
+    "expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "owner": ""
+    },
+    "source_pages": "170–171",
+    "rationale": "The workshop purpose and rental capacity are clear, but the business operator and relevant prospective possession are not. Do not silently make the repair business the speaker’s; retain the specialist judgment boundary.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "rent"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "allowed_methods": [
+        "business_property"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "choice-explicit",
+    "method": "choice",
+    "mode": "explicit",
+    "words": "Should I stay in my current home in Woodbridge or move to the apartment I have selected in Arlington? Those are my two alternatives; I mainly care about whether daily life would improve.",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "current_option",
+          "contains": "Woodbridge"
+        },
+        {
+          "field": "alternatives",
+          "contains": "Arlington"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "201–203",
+    "rationale": "The present situation and concrete change are both supplied. A device position does not itself express a housing choice or priority; specialist comparison still needs expert review."
+  },
+  {
+    "id": "choice-implicit",
+    "method": "choice",
+    "mode": "implicit",
+    "words": "I live in Woodbridge now. The lease for the Arlington apartment is on my desk, and that is the only other place I am considering. Would I be better off signing it or leaving things as they are?",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "current_option",
+          "contains": "Woodbridge"
+        },
+        {
+          "field": "alternatives",
+          "contains": "Arlington"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "201–203",
+    "rationale": "Resolve signing to the concrete move and 'things as they are' to the stated current home. Do not infer current home merely from GPS or mechanically place Lord 1 in the seventh."
+  },
+  {
+    "id": "choice-missing",
+    "method": "choice",
+    "mode": "missing",
+    "words": "I currently live in Woodbridge. Should I leave things as they are or make a change?",
+    "follow_up": "The one change I am considering is moving to the Arlington apartment I have selected.",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "current_option",
+          "contains": "Woodbridge"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "alternatives"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "201–203",
+    "rationale": "The current state is explicit, but a chart cannot compare it with an invented alternative. Elicit the actual change rather than soliciting a vague unlimited list.",
+    "follow_up_expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "current_option",
+          "contains": "Woodbridge"
+        },
+        {
+          "field": "alternatives",
+          "contains": "Arlington"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "choice"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "hiring-explicit",
+    "method": "hiring",
+    "mode": "explicit",
+    "words": "Which assistant should I hire for my shop: Lee, the red-haired candidate with a lively manner, or Morgan, the older candidate with a very solemn manner? Both are available to hire, and these are my only two candidates.",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "candidates",
+          "contains": "Lee"
+        },
+        {
+          "field": "candidates",
+          "contains": "Morgan"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "189–190",
+    "rationale": "Supply a finite shortlist and brief identifying descriptions, as the book requests. Availability is already assumed; no acquisition question should be added. Candidate matching is still an expert boundary."
+  },
+  {
+    "id": "hiring-implicit",
+    "method": "hiring",
+    "mode": "implicit",
+    "words": "I can add one assistant to my shop's payroll. Lee is bright and red-haired; Morgan is older and rather solemn. Both have agreed to start if I choose them. Which one should join my staff?",
+    "expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "candidates",
+          "contains": "Lee"
+        },
+        {
+          "field": "candidates",
+          "contains": "Morgan"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "189–190",
+    "rationale": "Infer hiring rather than the speaker seeking a new job, and preserve both descriptions. The two named candidates are supplied, not an open field of arbitrary planets."
+  },
+  {
+    "id": "hiring-missing",
+    "method": "hiring",
+    "mode": "missing",
+    "words": "Which assistant should I employ in my shop?",
+    "follow_up": "My shortlist is Lee, who is lively and red-haired, and Morgan, who is older and solemn. Both are available.",
+    "expected": {
+      "facet": "choice",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "candidates"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "189–190",
+    "rationale": "The role is clear but the finite candidate set and descriptions are genuinely missing. Do not pretend to select a candidate the user has not identified.",
+    "follow_up_expected": {
+      "facet": "choice",
+      "facts": [
+        {
+          "field": "candidates",
+          "contains": "Lee"
+        },
+        {
+          "field": "candidates",
+          "contains": "Morgan"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "hiring"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "contact-explicit",
+    "method": "contact",
+    "mode": "explicit",
+    "words": "Will my mother Elena phone me this week? I am asking about renewed contact with my mother, not the delivery of a letter or parcel.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "elena",
+      "relationships": {
+        "elena": "mother"
+      }
+    },
+    "source_pages": "165–166",
+    "rationale": "The actual contact with the mother takes her relationship house, rather than treating every phone call as the radical third."
+  },
+  {
+    "id": "contact-implicit",
+    "method": "contact",
+    "mode": "implicit",
+    "words": "My friend Mae and I have not spoken for months. I sent her a message yesterday. Will I hear back from her?",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "mae",
+      "relationships": {
+        "mae": "friend"
+      }
+    },
+    "source_pages": "165–166",
+    "rationale": "Infer contact with Mae from hearing back, and resolve the final pronoun. Sending the message yesterday is context, not the chart's moment or parcel delivery."
+  },
+  {
+    "id": "contact-missing",
+    "method": "contact",
+    "mode": "missing",
+    "words": "Will Lee contact me again?",
+    "follow_up": "Lee is my sister. This is my question about hearing from her.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "lee"
+        }
+      ],
+      "ready": false,
+      "owner": "lee",
+      "relationships": {
+        "lee": "unknown"
+      }
+    },
+    "source_pages": "137–138, 165–166",
+    "rationale": "Contact is clear, but the person's house is not determined by a name. Ask the relationship without replacing the matter with a generic messages question.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "lee",
+      "relationships": {
+        "lee": "sibling"
+      },
+      "allowed_methods": [
+        "contact"
+      ]
+    }
+  },
+  {
+    "id": "parcel-explicit",
+    "method": "parcel",
+    "mode": "explicit",
+    "words": "Will the book I ordered from the seller Cedar Books arrive this week? Cedar Books has sent the parcel, and I have not received it yet. I am asking about the parcel's arrival, not another conversation with the seller.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "Cedar"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "165–166",
+    "rationale": "The book's sender and unreceived state are explicit. Contact with the seller is not delivery of the seller's parcel; this dedicated program still needs expert judgment review."
+  },
+  {
+    "id": "parcel-implicit",
+    "method": "parcel",
+    "mode": "implicit",
+    "words": "My sister Ava posted me a book yesterday. It is still in the post. When will it get here?",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "Ava"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "relationships": {
+        "ava": "sibling"
+      }
+    },
+    "source_pages": "165–166",
+    "rationale": "Resolve both 'it' references to the book and infer the sender from posting. 'Here' is a delivery destination, not an explicit instruction to overwrite the chart anchor."
+  },
+  {
+    "id": "parcel-missing",
+    "method": "parcel",
+    "mode": "missing",
+    "words": "Will the book I am expecting in the post arrive this week?",
+    "follow_up": "The sender is my sister Ava; she posted the book to me yesterday.",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "sender"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "165–166",
+    "rationale": "A parcel is clear but its sending capacity is not. Do not assume every sender is a seventh-house commercial seller.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "sender",
+          "contains": "Ava"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "parcel"
+      ],
+      "relationships": {
+        "ava": "sibling"
+      }
+    }
+  },
+  {
+    "id": "visit-explicit",
+    "method": "visit",
+    "mode": "explicit",
+    "words": "When will the plumber I booked arrive at my house this afternoon? The plumber confirmed the appointment and I am expecting the visit today.",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "plumber"
+        },
+        {
+          "field": "expected",
+          "contains": "yes"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "166, 190",
+    "rationale": "Visitor capacity and the assumption of an expected arrival are supplied. This is not hiring a plumber or friendship; no full street address is required by habit."
+  },
+  {
+    "id": "visit-implicit",
+    "method": "visit",
+    "mode": "implicit",
+    "words": "My friend Pat texted that she is on her way to see me. I have the kettle on. When should I expect her at the door?",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "Pat"
+        },
+        {
+          "field": "expected",
+          "contains": "yes"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "relationships": {
+        "pat": "friend"
+      }
+    },
+    "source_pages": "166",
+    "rationale": "Infer an expected visit from 'on her way' and resolve the arrival pronoun to Pat. Arrival is assumed in the question, unlike a long-lost friend potentially appearing someday."
+  },
+  {
+    "id": "visit-missing",
+    "method": "visit",
+    "mode": "missing",
+    "words": "My friend Pat spoke vaguely about coming to my house, but I cannot tell whether that is an agreed visit. If there is a visit, when will Pat arrive?",
+    "follow_up": "Yes, Pat confirmed a visit for this afternoon and I am expecting her today.",
+    "expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "Pat"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "expected"
+        }
+      ],
+      "ready": false,
+      "relationships": {
+        "pat": "friend"
+      }
+    },
+    "source_pages": "166",
+    "rationale": "The user explicitly cannot establish whether an arrival is agreed or merely contemplated. Clarify that genuine uncertainty instead of promoting a vague invitation to a confirmed expected visitor.",
+    "follow_up_expected": {
+      "facet": "timing",
+      "facts": [
+        {
+          "field": "visitor",
+          "contains": "Pat"
+        },
+        {
+          "field": "expected",
+          "contains": "yes"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "relationships": {
+        "pat": "friend"
+      },
+      "allowed_methods": [
+        "visit"
+      ]
+    }
+  },
+  {
+    "id": "contest-explicit",
+    "method": "contest",
+    "mode": "explicit",
+    "words": "Will the Rovers beat United in their single match on October 9, 2026? I am a Rovers supporter and care about their winning, independently of betting. I am asking about this match, not the whole season.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "competition",
+          "contains": "match"
+        },
+        {
+          "field": "affiliation",
+          "contains": "Rovers"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "203–208",
+    "rationale": "The match scope and real allegiance are explicit. Us/them is not determined by home team or first name, and exact result prediction remains an expert program boundary."
+  },
+  {
+    "id": "contest-implicit",
+    "method": "contest",
+    "mode": "implicit",
+    "words": "I play for the Rovers. We face United on Friday; it is just this one game I care about, and I am not betting. Will we win?",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "competition",
+          "contains": "match"
+        },
+        {
+          "field": "affiliation",
+          "contains": "Rovers"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        }
+      ],
+      "needs": [],
+      "ready": false
+    },
+    "source_pages": "203–208",
+    "rationale": "Infer us/them allegiance from participation and resolve 'we' to Rovers. Friday resolves to Oct 9 in the frozen environment while remaining event context; this is not bet profit."
+  },
+  {
+    "id": "contest-missing",
+    "method": "contest",
+    "mode": "missing",
+    "words": "Will Rovers beat United in their match on Friday?",
+    "follow_up": "I am a lifelong Rovers supporter, and I care about their winning regardless of any bet.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "competition",
+          "contains": "match"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "field",
+          "id": "affiliation"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "203–204",
+    "rationale": "A named two-team contest supplies no automatic allegiance. Neither first-mentioned Rovers nor a guessed home team may become 'us'. Ask whether there is a genuine preference.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "competition",
+          "contains": "match"
+        },
+        {
+          "field": "affiliation",
+          "contains": "Rovers"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "allowed_methods": [
+        "contest"
+      ],
+      "relationships": {}
+    }
+  },
+  {
+    "id": "bet-explicit",
+    "method": "bet",
+    "mode": "explicit",
+    "words": "Will my own proposed bet on the Rovers to win Friday's match make me a profit? I have selected the bet and checked its terms. I am asking about winning money relative to my stake, not which team deserves to win.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent"
+    },
+    "source_pages": "158–159, 203–204",
+    "rationale": "The money question is the bet-profit recipe, not the match us/them program or recreational fifth. Complete elicitation still stops at the unqualified expert judgment boundary."
+  },
+  {
+    "id": "bet-implicit",
+    "method": "bet",
+    "mode": "implicit",
+    "words": "I have picked the horse and checked the odds for my own wager. At the end of the race, am I likely to have more money than I started with?",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent"
+    },
+    "source_pages": "158–159",
+    "rationale": "Infer bet profit from wager and ending with more money, without confusing the racehorse with a lost animal, investment or a team allegiance query."
+  },
+  {
+    "id": "bet-missing",
+    "method": "bet",
+    "mode": "missing",
+    "words": "Will Bob's proposed bet on Friday's match leave Bob with a profit? The stake is his own money.",
+    "follow_up": "Bob is my husband. I am asking my own question about his bet and his money.",
+    "expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [
+        {
+          "kind": "person_relationship",
+          "id": "bob"
+        }
+      ],
+      "ready": false,
+      "owner": "bob",
+      "relationships": {
+        "bob": "unknown"
+      }
+    },
+    "source_pages": "137–138, 158–159",
+    "rationale": "The bet and ownership are supplied, but Bob's relationship is not. Do not silently make the speaker the bettor, or derive kinship from a male name.",
+    "follow_up_expected": {
+      "facet": "profit",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "bob",
+      "relationships": {
+        "bob": "partner"
+      },
+      "allowed_methods": [
+        "bet"
+      ]
+    }
+  }
+]

@@ -1,0 +1,668 @@
+{
+  "questions": 840,
+  "families": 42,
+  "approved_saved_answers": 504,
+  "missing_answers": 336,
+  "author_campaign": "gold-readings-continuation-r2-02e3965",
+  "snapshot_date": "2026-10-15",
+  "book_excerpts_included": false,
+  "rubrics_are_answers": false,
+  "source_correct_application_qualification": false,
+  "families_detail": [
+    {
+      "method": "adoption",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "adoption-01",
+        "adoption-02",
+        "adoption-03",
+        "adoption-04",
+        "adoption-05",
+        "adoption-06",
+        "adoption-07",
+        "adoption-08",
+        "adoption-09",
+        "adoption-10",
+        "adoption-11",
+        "adoption-12",
+        "adoption-13",
+        "adoption-14",
+        "adoption-15",
+        "adoption-16",
+        "adoption-17",
+        "adoption-18",
+        "adoption-19",
+        "adoption-20"
+      ]
+    },
+    {
+      "method": "allegation",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "allegation-01",
+        "allegation-02",
+        "allegation-03",
+        "allegation-04",
+        "allegation-05",
+        "allegation-06",
+        "allegation-07",
+        "allegation-08",
+        "allegation-09",
+        "allegation-10",
+        "allegation-11",
+        "allegation-12",
+        "allegation-13",
+        "allegation-14",
+        "allegation-15",
+        "allegation-16",
+        "allegation-17",
+        "allegation-18",
+        "allegation-19",
+        "allegation-20"
+      ]
+    },
+    {
+      "method": "bet",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "business_property",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "choice",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "contact",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "contest",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "court_case",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "custody",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "custody-01",
+        "custody-02",
+        "custody-03",
+        "custody-04",
+        "custody-05",
+        "custody-06",
+        "custody-07",
+        "custody-08",
+        "custody-09",
+        "custody-10",
+        "custody-11",
+        "custody-12",
+        "custody-13",
+        "custody-14",
+        "custody-15",
+        "custody-16",
+        "custody-17",
+        "custody-18",
+        "custody-19",
+        "custody-20"
+      ]
+    },
+    {
+      "method": "dream",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "dream-01",
+        "dream-02",
+        "dream-03",
+        "dream-04",
+        "dream-05",
+        "dream-06",
+        "dream-07",
+        "dream-08",
+        "dream-09",
+        "dream-10",
+        "dream-11",
+        "dream-12",
+        "dream-13",
+        "dream-14",
+        "dream-15",
+        "dream-16",
+        "dream-17",
+        "dream-18",
+        "dream-19",
+        "dream-20"
+      ]
+    },
+    {
+      "method": "education",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "education-01",
+        "education-02",
+        "education-03",
+        "education-04",
+        "education-05",
+        "education-06",
+        "education-07",
+        "education-08",
+        "education-09",
+        "education-10",
+        "education-11",
+        "education-12",
+        "education-13",
+        "education-14",
+        "education-15",
+        "education-16",
+        "education-17",
+        "education-18",
+        "education-19",
+        "education-20"
+      ]
+    },
+    {
+      "method": "election",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "election-01",
+        "election-02",
+        "election-03",
+        "election-04",
+        "election-05",
+        "election-06",
+        "election-07",
+        "election-08",
+        "election-09",
+        "election-10",
+        "election-11",
+        "election-12",
+        "election-13",
+        "election-14",
+        "election-15",
+        "election-16",
+        "election-17",
+        "election-18",
+        "election-19",
+        "election-20"
+      ]
+    },
+    {
+      "method": "exam",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "exam-01",
+        "exam-02",
+        "exam-03",
+        "exam-04",
+        "exam-05",
+        "exam-06",
+        "exam-07",
+        "exam-08",
+        "exam-09",
+        "exam-10",
+        "exam-11",
+        "exam-12",
+        "exam-13",
+        "exam-14",
+        "exam-15",
+        "exam-16",
+        "exam-17",
+        "exam-18",
+        "exam-19",
+        "exam-20"
+      ]
+    },
+    {
+      "method": "existing_job",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "fertility",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "fertility-01",
+        "fertility-02",
+        "fertility-03",
+        "fertility-04",
+        "fertility-05",
+        "fertility-06",
+        "fertility-07",
+        "fertility-08",
+        "fertility-09",
+        "fertility-10",
+        "fertility-11",
+        "fertility-12",
+        "fertility-13",
+        "fertility-14",
+        "fertility-15",
+        "fertility-16",
+        "fertility-17",
+        "fertility-18",
+        "fertility-19",
+        "fertility-20"
+      ]
+    },
+    {
+      "method": "hiring",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "information",
+      "questions": 20,
+      "approved_saved_answers": 4,
+      "missing_answers": [
+        "information-05",
+        "information-06",
+        "information-07",
+        "information-08",
+        "information-09",
+        "information-10",
+        "information-11",
+        "information-12",
+        "information-13",
+        "information-14",
+        "information-15",
+        "information-16",
+        "information-17",
+        "information-18",
+        "information-19",
+        "information-20"
+      ]
+    },
+    {
+      "method": "investment",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "job_offer",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "knowledge",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "knowledge-01",
+        "knowledge-02",
+        "knowledge-03",
+        "knowledge-04",
+        "knowledge-05",
+        "knowledge-06",
+        "knowledge-07",
+        "knowledge-08",
+        "knowledge-09",
+        "knowledge-10",
+        "knowledge-11",
+        "knowledge-12",
+        "knowledge-13",
+        "knowledge-14",
+        "knowledge-15",
+        "knowledge-16",
+        "knowledge-17",
+        "knowledge-18",
+        "knowledge-19",
+        "knowledge-20"
+      ]
+    },
+    {
+      "method": "lost_animal",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "lost_object",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "medical",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "medical-01",
+        "medical-02",
+        "medical-03",
+        "medical-04",
+        "medical-05",
+        "medical-06",
+        "medical-07",
+        "medical-08",
+        "medical-09",
+        "medical-10",
+        "medical-11",
+        "medical-12",
+        "medical-13",
+        "medical-14",
+        "medical-15",
+        "medical-16",
+        "medical-17",
+        "medical-18",
+        "medical-19",
+        "medical-20"
+      ]
+    },
+    {
+      "method": "missing_person",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "money",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "movable_deal",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "new_job",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "parcel",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "person_description",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "politics",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "politics-01",
+        "politics-02",
+        "politics-03",
+        "politics-04",
+        "politics-05",
+        "politics-06",
+        "politics-07",
+        "politics-08",
+        "politics-09",
+        "politics-10",
+        "politics-11",
+        "politics-12",
+        "politics-13",
+        "politics-14",
+        "politics-15",
+        "politics-16",
+        "politics-17",
+        "politics-18",
+        "politics-19",
+        "politics-20"
+      ]
+    },
+    {
+      "method": "pregnancy",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "pregnancy-01",
+        "pregnancy-02",
+        "pregnancy-03",
+        "pregnancy-04",
+        "pregnancy-05",
+        "pregnancy-06",
+        "pregnancy-07",
+        "pregnancy-08",
+        "pregnancy-09",
+        "pregnancy-10",
+        "pregnancy-11",
+        "pregnancy-12",
+        "pregnancy-13",
+        "pregnancy-14",
+        "pregnancy-15",
+        "pregnancy-16",
+        "pregnancy-17",
+        "pregnancy-18",
+        "pregnancy-19",
+        "pregnancy-20"
+      ]
+    },
+    {
+      "method": "property",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "relationship",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "rental",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "return_to_job",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "tax",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "tax-01",
+        "tax-02",
+        "tax-03",
+        "tax-04",
+        "tax-05",
+        "tax-06",
+        "tax-07",
+        "tax-08",
+        "tax-09",
+        "tax-10",
+        "tax-11",
+        "tax-12",
+        "tax-13",
+        "tax-14",
+        "tax-15",
+        "tax-16",
+        "tax-17",
+        "tax-18",
+        "tax-19",
+        "tax-20"
+      ]
+    },
+    {
+      "method": "trust",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "trust-01",
+        "trust-02",
+        "trust-03",
+        "trust-04",
+        "trust-05",
+        "trust-06",
+        "trust-07",
+        "trust-08",
+        "trust-09",
+        "trust-10",
+        "trust-11",
+        "trust-12",
+        "trust-13",
+        "trust-14",
+        "trust-15",
+        "trust-16",
+        "trust-17",
+        "trust-18",
+        "trust-19",
+        "trust-20"
+      ]
+    },
+    {
+      "method": "undertaking",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "undertaking-01",
+        "undertaking-02",
+        "undertaking-03",
+        "undertaking-04",
+        "undertaking-05",
+        "undertaking-06",
+        "undertaking-07",
+        "undertaking-08",
+        "undertaking-09",
+        "undertaking-10",
+        "undertaking-11",
+        "undertaking-12",
+        "undertaking-13",
+        "undertaking-14",
+        "undertaking-15",
+        "undertaking-16",
+        "undertaking-17",
+        "undertaking-18",
+        "undertaking-19",
+        "undertaking-20"
+      ]
+    },
+    {
+      "method": "vehicle",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "visit",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    },
+    {
+      "method": "weather",
+      "questions": 20,
+      "approved_saved_answers": 0,
+      "missing_answers": [
+        "weather-01",
+        "weather-02",
+        "weather-03",
+        "weather-04",
+        "weather-05",
+        "weather-06",
+        "weather-07",
+        "weather-08",
+        "weather-09",
+        "weather-10",
+        "weather-11",
+        "weather-12",
+        "weather-13",
+        "weather-14",
+        "weather-15",
+        "weather-16",
+        "weather-17",
+        "weather-18",
+        "weather-19",
+        "weather-20"
+      ]
+    },
+    {
+      "method": "work_person",
+      "questions": 20,
+      "approved_saved_answers": 20,
+      "missing_answers": [
+
+      ]
+    }
+  ]
+}

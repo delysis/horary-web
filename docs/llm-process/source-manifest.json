@@ -1,0 +1,1089 @@
+{
+  "purpose": "Source fingerprint; no private app data",
+  "sources": [
+    {
+      "path": ".gitattributes",
+      "sha256": "0e80e3c2b22bf681cecf7e47f7517919059620fb6bd0721bdf6d1ceb691ddac3"
+    },
+    {
+      "path": "crates/horary-ai-core/src/anchor_authority.rs",
+      "sha256": "6dbc504f43b79d687f7059dc7e44a61c5ae094f9138be0096c072bf95c6f178a"
+    },
+    {
+      "path": "crates/horary-ai-core/src/astronomy.rs",
+      "sha256": "5fc3c56469e4a5f905fc37daa5c8891d29d3e11cddc96300edb9720c8bf784af"
+    },
+    {
+      "path": "crates/horary-ai-core/src/book_method.rs",
+      "sha256": "d272bd599d0c7f16b9abe50fbd5975b579041ac4c480b5765c162fa622fd78bd"
+    },
+    {
+      "path": "crates/horary-ai-core/src/chart_input.rs",
+      "sha256": "0d8658277a79f7b4f95687c491fffdf89fbdc980043103623915f1c6ba84c7d1"
+    },
+    {
+      "path": "crates/horary-ai-core/src/ephemeris_coefficients.rs",
+      "sha256": "01951175ae9a886c0ab4087bf5689a7bd32203b3199149a0b62099fa75e4b37c"
+    },
+    {
+      "path": "crates/horary-ai-core/src/events.rs",
+      "sha256": "f5246dd82c08c090d191681ce0c00c158d03a266350f5af0fad9d4a1242fa847"
+    },
+    {
+      "path": "crates/horary-prompt-program/Cargo.lock",
+      "sha256": "adde4b00a1af1a44d7d16160da41c0cb78099008a9fab3b048000ed3c5d0d895"
+    },
+    {
+      "path": "crates/horary-prompt-program/Cargo.toml",
+      "sha256": "90bea72e39cc6a0637c2eaf1157313dccaebde8aba54ddebde63816cd8c97f42"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/comparison.rs",
+      "sha256": "2411fba0e8e4f389e817f86c4d40fb8603ee15b9a9ccf0454201fbd9b00a5924"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/lib.rs",
+      "sha256": "d4872f8cd46610a5a4c434db591a50222e73bf61e9ca8834811171b0fd872189"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/rejection_cycle.rs",
+      "sha256": "b45ba7d0e05132ef5c7f508d5f5493332e10f3e8326f3a9ec9c2cfef97bd49f5"
+    },
+    {
+      "path": "crates/horary-prompt-program/src/response_memo.rs",
+      "sha256": "947b50facca3d4013c27f851185218eb6a4d6c1a2ae25840eafd15cb539cb842"
+    },
+    {
+      "path": "docs/ELICITATION_EVALUATION.md",
+      "sha256": "d4b6cdd48702ebb19255d4cabec7e856fbfe3029818a9205453a3172be858aae"
+    },
+    {
+      "path": "docs/ELICITATION_FINDINGS.md",
+      "sha256": "65ae57f3ad08f6fcbc100ddef582a5f7ac4ea1bb0baf085cbc6ad3bbd47b0acb"
+    },
+    {
+      "path": "docs/LOCAL_READER.md",
+      "sha256": "ccb4cb0eeb6cea13c712469dee176f7ecfe410bc7378ed3added1bbb93e4ae62"
+    },
+    {
+      "path": "docs/PROMPT_OPTIMIZATION.md",
+      "sha256": "fc02f13b7218908ad3a0fce7e1f487c5422204558e593f021a1f63dc313bb0d9"
+    },
+    {
+      "path": "docs/llm-process/adversarial-fixture-provenance.json",
+      "sha256": "ffff225bf64c18c8e71bf97a1018c3e1331dddb68e3f1847aec33f2bb48d5967"
+    },
+    {
+      "path": "docs/llm-process/discovery-145-union.json",
+      "sha256": "0481f520f62cadae91ac736c63546d1a74d1d2c5c796196212f5672941c667dc"
+    },
+    {
+      "path": "docs/llm-process/optimization-trial-1.json",
+      "sha256": "c699d99b7768381ba57d46f6c7e60b61bd31e0d2a78bd321aaea4385d06cd438"
+    },
+    {
+      "path": "docs/llm-process/production-replays.json",
+      "sha256": "d2dbc700ee7fe15b7fa49ae1a01b4b01cb54181020f03d202a61305f0de7d28e"
+    },
+    {
+      "path": "scripts/check-release-assets.mjs",
+      "sha256": "0aaa25739ae823b2a3295ab9273fd549aed93013aedc14e5662c59ec969ce3e6"
+    },
+    {
+      "path": "src-tauri/Cargo.lock",
+      "sha256": "15a732a9287b2a9d589bd2f1c7160bb6a657abc7160e47820c6316ff4af605b9"
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "sha256": "e967ada58af05ded7da4302d1a3a15688787100b6ee35da269f978c3b26fcebd"
+    },
+    {
+      "path": "src-tauri/Info.plist",
+      "sha256": "691595e34600e60f713e107cd8a1276f7783b638af14cb815fa5a718cf616883"
+    },
+    {
+      "path": "src-tauri/build.rs",
+      "sha256": "ccde2e47d40a71f2d4ba254612edf3cf38c90fd7e301ec5133fd3ca23aaf0c4a"
+    },
+    {
+      "path": "src-tauri/model-manifest.json",
+      "sha256": "2076252e63fc75918ef8d86df48ebca1ce2d0f61d352b2918e3927e703b54429"
+    },
+    {
+      "path": "src-tauri/native-llama-runtime.json",
+      "sha256": "b6bfde1d9e3d6cf8949dd3f43e56006016b8bb499525e03200b43cbb67ea0d31"
+    },
+    {
+      "path": "src-tauri/native/location_bridge.m",
+      "sha256": "ae1b75037d0c2ce0004052cbe07eb782e757110941e179e4bae153309a7e2e10"
+    },
+    {
+      "path": "src-tauri/native/location_bridge_test.inc",
+      "sha256": "222f486d9d76c6dd50e954a50bf5e05e69f942f42633913d3adceb35b037c049"
+    },
+    {
+      "path": "src-tauri/native/permissions_bridge.m",
+      "sha256": "f7cbfc3c72e349e9d6018a6b38cec3bc972b71ed8dea4e37cc6937bd93232ae7"
+    },
+    {
+      "path": "src-tauri/src/conversation.rs",
+      "sha256": "2f44cb6990839368e49e750bf8f2145c91eaa35c2c964f1433a3dbbfb91bb184"
+    },
+    {
+      "path": "src-tauri/src/deal_training_bank.rs",
+      "sha256": "7c34f736f34386533e42cb4ab09796714fae3f542fd96021ee870994f2fc9faa"
+    },
+    {
+      "path": "src-tauri/src/elicitation_eval.rs",
+      "sha256": "843e91ebc525d2971738a46072c414c93e0c68a279025202cf802d236a63ceb5"
+    },
+    {
+      "path": "src-tauri/src/first_message_journey_eval.rs",
+      "sha256": "ffad812fc92cf86125d9e2912909576e69cc8330b69185f03d361838f0342e55"
+    },
+    {
+      "path": "src-tauri/src/geocode.rs",
+      "sha256": "48f8b60fd1c767f41f334cb8dfa95a9e22cf1e5d416308cecb43dcbf370ccd2b"
+    },
+    {
+      "path": "src-tauri/src/hf_cache.rs",
+      "sha256": "03ed3fe9879527bad731eb6bf32bd0761cc12a3296f4375132c512e84564671d"
+    },
+    {
+      "path": "src-tauri/src/horary_contract.rs",
+      "sha256": "7032483675db0408db429e7476d5f67111e1b468f16b99e9c20b442ae4c14087"
+    },
+    {
+      "path": "src-tauri/src/horary_conversation.rs",
+      "sha256": "1a2fe693b6c12c963c177147b0092724a37914548d81939246c7b2f19c7312fc"
+    },
+    {
+      "path": "src-tauri/src/horary_executor.rs",
+      "sha256": "5ac50da0b87c5839d69e6aedb419e6346617ef2a0a3397e1ef2ad74a2e3f9f8c"
+    },
+    {
+      "path": "src-tauri/src/horary_lessons.rs",
+      "sha256": "fd184166f0a8383a88193a153abc717d40c4ebb71d8253f83b60c053790c5f22"
+    },
+    {
+      "path": "src-tauri/src/horary_pipeline.rs",
+      "sha256": "5426d1cd3d9f0721169acaa47d821971f88b0ff5051847fd272d1cb23534e51b"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/condition.md",
+      "sha256": "075b0431a59347311cf6548811395a5981e55599b8f47a5f87dd054a937d992c"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/contact_answer.md",
+      "sha256": "d8c5a79aea1f47ad0db013d620b4adc18424a71be806660797c40954bbe0b897"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/contacts.md",
+      "sha256": "003bc46464cec1524ff1d0c28546511a4d0dda8b8bd2848fd7c248d6503975ce"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/conversation.md",
+      "sha256": "df96128bb967f5f9971fefd6bd6999484d5d5d01ee709274103a292cb55317a7"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/core.txt",
+      "sha256": "642152bc063d2c68a3f5b65cac79bc8805d47bfbe99836ae784b6bbb8ba5850a"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/explanation.md",
+      "sha256": "239f12ed08e0e20e81dcbb22497d449ffe12a6f2ab06ecaa1135d148db44ffa3"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/judgment.md",
+      "sha256": "7f85d7c884457ba6c0ff67855b3e94b87f35e2e6010377352e8411b6154def64"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/location.md",
+      "sha256": "7f4f1f919b2ada7630e0bab6012cb323de8ff14a087d940389f04f255fcac497"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/moment.md",
+      "sha256": "4896a8c962a6042e4c8c267a20717eb6520a2c461fb02fa9c6751dccdfe7cc10"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/new_job_contacts.md",
+      "sha256": "83a26e6f4dea0361b56ce92236a225aa58c7b1a28ca6ae33ab7f5d8797e0bbe2"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/new_job_context.md",
+      "sha256": "31241d01280684468945cbc4a5cf4cd835d455de2837d40e6de83587323f1205"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/new_job_judgment.md",
+      "sha256": "61ed4d23480adb26213093bb9efa2d426f23bf5fb7ad7786ae61194c844d7966"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/new_job_reception.md",
+      "sha256": "0b222ff992c81401cbbff74290d6d78b9e5672c79a9594e46115769966e396cb"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/passages.json",
+      "sha256": "2eb7bdbb2da4bc423f2677fe332f929b89178be99e6cdc1c65a8e2dc62fae3e8"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/place.md",
+      "sha256": "e9aca14f097e27a5061494c68490d36605f0c8084d373a22b441c8def9577116"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/reception.md",
+      "sha256": "fb84729a47a09c2b5d55fb3816d6cb03031859c260291df0d64279b59c840e47"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/reception_relationship.md",
+      "sha256": "d83ad92366e198bac9ba3145fd6a89ab032f98d332ff4e7d561556dfbf9acb3f"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/reception_rows.md",
+      "sha256": "9e6138c5f7b3337ba002ff41e8ac1d296afe0b057aa5d927ed376256ce2e3137"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_common.md",
+      "sha256": "b168fc56ae0181d92e56608d74f69ed0201cf702a84e585f2e3037c09361da70"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_lost.md",
+      "sha256": "4a58ec2041bdef8f452e0ab6c73dcda02e7cb0021205219a325c05ac0e0b455c"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_other.md",
+      "sha256": "6ba06167c0c9b5e7fb07a82cdd421d5107fcdfe04fe5204f1be06aab63465168"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/significators_relationship.md",
+      "sha256": "29fe643a7d5cc8f022287a08e55ee303a335d5dd4fe428a569c6385fed9a0bf5"
+    },
+    {
+      "path": "src-tauri/src/horary_prompts/timing.md",
+      "sha256": "bcc4afafb70917ab3c41f561458058ea52cfc46a96490a2bb3c915e31daa6ec4"
+    },
+    {
+      "path": "src-tauri/src/horary_recovery_tests.rs",
+      "sha256": "a7bca2cba7025a081e21e3f59fae28b5a6d85807f80117cc9ef38e9694ccccb7"
+    },
+    {
+      "path": "src-tauri/src/horary_role_options.rs",
+      "sha256": "28200ed21b9daaf3640a192c7fe3c104b052133012ef5bfe69ff0b3955c43306"
+    },
+    {
+      "path": "src-tauri/src/horary_step.rs",
+      "sha256": "9f48f80983eec65370e9a70481a687c8007b2a7949a2f183068ac2cd14e1a02d"
+    },
+    {
+      "path": "src-tauri/src/horary_step_tests.rs",
+      "sha256": "c72ad3f7d0783f58ad40d4063a46dd9af677a2baddf8a96a489711656c867926"
+    },
+    {
+      "path": "src-tauri/src/hosted_gemma_eval.rs",
+      "sha256": "1fb89b5f2589ed0601e04f139cb8bdaabebe4c17e086996183e2c62112c642c7"
+    },
+    {
+      "path": "src-tauri/src/imported_models.rs",
+      "sha256": "7819b89aa4bc7f763c4d44f904ba5edfa1506f0ceb3976a49c2d70a4fb9ff611"
+    },
+    {
+      "path": "src-tauri/src/lib.rs",
+      "sha256": "3efd1255a95476d53bcad0affa35d8b934d0d17437c2c1fc7594465dad338bae"
+    },
+    {
+      "path": "src-tauri/src/llama.rs",
+      "sha256": "381e6c9d64112199494dbf193c1fec5b02f28b0c3d2fbd5fc8c6144ed0d64fad"
+    },
+    {
+      "path": "src-tauri/src/local_dictation.rs",
+      "sha256": "0f889bed5dbfeef4acb7bf12272b54ca664252d7cab86e76215c3c08ccf2a633"
+    },
+    {
+      "path": "src-tauri/src/message_programs.rs",
+      "sha256": "000a4d53112e0dc5a13142fad2ef2bca501d7e0e81ff256f5041623e13ceaa54"
+    },
+    {
+      "path": "src-tauri/src/message_programs/tests/journeys.rs",
+      "sha256": "f3bcb62956581cf177322af7e8e5b77399c77b05f11bd5b8989ccaad6dc809f5"
+    },
+    {
+      "path": "src-tauri/src/microphone_capture.rs",
+      "sha256": "2bbaa9468a1f815c20bc1a660ea4e02068c2a14da86be678759e591e34cc7d48"
+    },
+    {
+      "path": "src-tauri/src/model_manifest.rs",
+      "sha256": "78096924646c9cd1517c6b01978bed9c29b03c7e2bf658aee5f90bcbbc049635"
+    },
+    {
+      "path": "src-tauri/src/native_llama.rs",
+      "sha256": "bffb74731d75cd36276876868d7617eede3f2d0f41e99cf442f69dd4b8dc7f4b"
+    },
+    {
+      "path": "src-tauri/src/native_llama_worker.rs",
+      "sha256": "463e017ff67b84af676431a81340173ceee37a90c040ea4a72591905d4832ccf"
+    },
+    {
+      "path": "src-tauri/src/native_location.rs",
+      "sha256": "c212796958d3c5716c71073aeb7891fd3d9a007c121665a5e1adacef9113520a"
+    },
+    {
+      "path": "src-tauri/src/permissions.rs",
+      "sha256": "715b56580458df972b0d0ce7c17b79e4c552b4f2bfd3efe71406c27d9cb289cb"
+    },
+    {
+      "path": "src-tauri/src/process_overview.md",
+      "sha256": "2bbd2ea826bcb4c3abe584d69a20a81055047103e6ca12798a699b2873edf6ea"
+    },
+    {
+      "path": "src-tauri/src/process_reference.rs",
+      "sha256": "3f1933c4bbd11f3d3769fdd2a15e1934687b5c846509cf3d390b7e847f4953e0"
+    },
+    {
+      "path": "src-tauri/src/reader_runtime.rs",
+      "sha256": "81767d9e1335495dda0d84e1b89b4575b032d44eb6a51693c1267a63db97623e"
+    },
+    {
+      "path": "src-tauri/src/reading_contract_overview.md",
+      "sha256": "59b538c4eb712241836640d895c896f240db37700ad7618d9d783f7aa39e85a4"
+    },
+    {
+      "path": "src-tauri/src/reading_contract_tests.rs",
+      "sha256": "a30bdbfb0e58f28c2a8902444d0f0969e4d7dd43a6d8fb1dfbe4982d3c546cea"
+    },
+    {
+      "path": "src-tauri/src/reading_contracts.rs",
+      "sha256": "a0a3610fac1c01e6809223c747d3ee0280892e3b96d698c41c3ed5d6a296cb85"
+    },
+    {
+      "path": "src-tauri/src/reading_eval.rs",
+      "sha256": "38a92666f8e01617c139037c85caa0cd8374a9fb966cb8469fa37fae22c3c2d8"
+    },
+    {
+      "path": "src-tauri/src/reading_method.rs",
+      "sha256": "ebc538b4d895b7116d3d9c63e2c0bf841097095360940a0a8f7da64966e79d89"
+    },
+    {
+      "path": "src-tauri/src/reading_neural_eval.rs",
+      "sha256": "edd87f1baf5a095907d409164c4e3100519f70af028c77ef48be3ed47c4956a4"
+    },
+    {
+      "path": "src-tauri/src/reading_store.rs",
+      "sha256": "ba1710789b976a71ea15f199d35e2b446593691708c439f5890c4c7659614ec7"
+    },
+    {
+      "path": "src-tauri/src/recognition_programs.rs",
+      "sha256": "c20b6ca539ee372fbc4d5a31a7c3a3aebadb87469398cdbda77dcd2dc758b505"
+    },
+    {
+      "path": "src-tauri/src/response_memo_tests.rs",
+      "sha256": "604ac851d862e6199d6a2bb3972814f948ff0aeb7a6b3c4b8c3dd53d4ce5d1e4"
+    },
+    {
+      "path": "src-tauri/src/review_progress.rs",
+      "sha256": "63f0b037f49d23bbe1153174ca68a98fe37492cbb8ea62bf8f446a1782a25c36"
+    },
+    {
+      "path": "src-tauri/src/selected_stage_eval.rs",
+      "sha256": "584279a070bdb45e4834ed7215370666d4ac3afbeda936ae2a227dfa54c38bba"
+    },
+    {
+      "path": "src-tauri/src/tool_formats.rs",
+      "sha256": "18e4b25e4da3a89b72008f904349833f965f958afd540f888a13c4a038509e06"
+    },
+    {
+      "path": "src-tauri/src/voice.rs",
+      "sha256": "b98148911cb58a0d90f44a75fb0868c833a8a8339868c03faa64e6e1881dbdba"
+    },
+    {
+      "path": "src-tauri/src/wake_listening.rs",
+      "sha256": "09afcc4a41c0636548218e85015b2b2012acf5b29bac4f990b4cf976cba93602"
+    },
+    {
+      "path": "src-tauri/src/worksheet_xml.rs",
+      "sha256": "aa0fa4b31c0e25d7181318e6f73ad86482f256ea5c2e63f2a6175c948b0654ce"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/core.json",
+      "sha256": "1b74a5069aa84fa3bbed1eaf2b12f2ab0e5056003e623c4c0a28f3c6fff4ddc2"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/deal-action-training-20261010.json",
+      "sha256": "e2eb558c27ae8aa8f67c4f406296d3f6b97808689e2812e9afd891be1c2e26b9"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/edge.json",
+      "sha256": "bd3d194122b4b4b8164610758d67378d7ca347037d778dfcf4c0d2a38423f7b0"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/invariant-adversarial.json",
+      "sha256": "1d4c73303cab1018d9b865e852a913b3ee7cf998516ccc2b9d47e18873bad822"
+    },
+    {
+      "path": "src-tauri/test-fixtures/elicitation/specialist.json",
+      "sha256": "2b9478586c01a105c3984134147aa440e7c1eb07f27295e0ea9999fe9ed999b5"
+    },
+    {
+      "path": "src-tauri/test-fixtures/process-reference-chart-provenance.json",
+      "sha256": "ce9d54726cf6f21cf116db0b51bfcd175bb91146e31760cef9954a6fe169caab"
+    },
+    {
+      "path": "src-tauri/test-fixtures/process-reference-chart.json",
+      "sha256": "be73db3e906d9340cf638c1d8dea4a6c4ae1d9c20833454b90de6a21208c0775"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/core-rubrics.json",
+      "sha256": "d1b766082fb7d2f90b7bbbb5021c43b5c3abb01720225daa47cc310ed419a55a"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/deal-action-training-rubrics-20261010.json",
+      "sha256": "4952065bb91ab40ed524355ac6e07a02e3af89da2c37da3555bf27a122ac42ae"
+    },
+    {
+      "path": "src-tauri/test-fixtures/readings/specialist-rubrics.json",
+      "sha256": "5429d3151a1b6bf7bad3bc9edb483f67578811d9585a02cf5d22d0ccd13b860a"
+    },
+    {
+      "path": "src/App.css",
+      "sha256": "cdec81927fddbb3506be625219a7fe85f21acae1276641250fa5e106c7d01c60"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "0534311032c98793435cde8fddbd735608e98832ad7c3080e10825884124008a"
+    },
+    {
+      "path": "src/ReadingDocument.tsx",
+      "sha256": "6ad9f03f3b42457b59eccc874ff72c9754839d76785e70888fbdcb4b2b498316"
+    },
+    {
+      "path": "src/ReadingHistory.tsx",
+      "sha256": "0a88bc75587b858bd3e97a1d2096abc9f4adc22e4dddeda70c7d8de2acb4e437"
+    },
+    {
+      "path": "tools/horary-dspy/Cargo.lock",
+      "sha256": "61ab7ceabf9d4f19bb251c7a85b4c9a7a1f363da3025199c87249c77d607ec15"
+    },
+    {
+      "path": "tools/horary-dspy/Cargo.toml",
+      "sha256": "c2b2800f1123672b4443055016865c094461e63aa68726fdfa209645ee98c034"
+    },
+    {
+      "path": "tools/horary-dspy/README.md",
+      "sha256": "d61fbf09b73ed23df9892bedd1694adf4d88dca8a74320fd6351e8d12d395e5f"
+    },
+    {
+      "path": "tools/horary-dspy/coverage.json",
+      "sha256": "a0338883a87bfaa2c23ef9acacd484c5ceb7c027587b2d5f3939bb5ae7eac79a"
+    },
+    {
+      "path": "tools/horary-dspy/examples/CORE22_README.md",
+      "sha256": "66f0aed1e9fef8a6c37f8c241b4197075587519c9cb9ef64aaed61e116d6ccc9"
+    },
+    {
+      "path": "tools/horary-dspy/examples/adoption.jsonl",
+      "sha256": "a78741bcd0929032e6eeceb81b2c632109d906a81799e020e9a7aa0a9054a7a9"
+    },
+    {
+      "path": "tools/horary-dspy/examples/allegation.jsonl",
+      "sha256": "392caabe5035576eaf7d89ff4b56cd9337ce738f622029f337670a5481ce10d6"
+    },
+    {
+      "path": "tools/horary-dspy/examples/bet.jsonl",
+      "sha256": "a0c585417065d4371c7108bf1e0a395c9077feffb39272cbbf0c0a35ca11653e"
+    },
+    {
+      "path": "tools/horary-dspy/examples/business_property.jsonl",
+      "sha256": "272c2333a0496095d3d20032bf2552a5c673791903512670b19b7441db458782"
+    },
+    {
+      "path": "tools/horary-dspy/examples/choice.jsonl",
+      "sha256": "5260c641b50159378648bec9ab96d5423a7adc3a46605dfbb7934d8d19ccdad5"
+    },
+    {
+      "path": "tools/horary-dspy/examples/contact.jsonl",
+      "sha256": "a68e512528b93dade8a86f7fc7ffa41eb662e63de26aeeb319a34eb001789aba"
+    },
+    {
+      "path": "tools/horary-dspy/examples/contest.jsonl",
+      "sha256": "30228ab68ef01ba5a53a45079d560abf1474ff8245f2b900bddad33f7456e835"
+    },
+    {
+      "path": "tools/horary-dspy/examples/court_case.jsonl",
+      "sha256": "ea100efee916c35ea8b8ed6e8c8b0729722c678d7926c5021f2218c1bf688102"
+    },
+    {
+      "path": "tools/horary-dspy/examples/custody.jsonl",
+      "sha256": "65e957cb9a6a7b8b88709510d14d241ca965410d5e67c10a295bf34993682fc8"
+    },
+    {
+      "path": "tools/horary-dspy/examples/dream.jsonl",
+      "sha256": "8ad7a3a9b9ff847f85cba521a80ab8c86411ea8ce9752b983401c0c5a5c950e7"
+    },
+    {
+      "path": "tools/horary-dspy/examples/education.jsonl",
+      "sha256": "411db306fd994895c9074f4d1f27702ffbce71c035c19348df5f2e606c226416"
+    },
+    {
+      "path": "tools/horary-dspy/examples/election.jsonl",
+      "sha256": "f7e5e92f6a005ef55870e8552ea9514067e74a9bcfdd0e5b917d09dd8fe9fde8"
+    },
+    {
+      "path": "tools/horary-dspy/examples/exam.jsonl",
+      "sha256": "a74489e584691992b53b41aee25b59c29d722cf836b060bf82b4e49fe6c0bd09"
+    },
+    {
+      "path": "tools/horary-dspy/examples/existing_job.jsonl",
+      "sha256": "619f9500b417a80375519bcb424948d83303976467775735eb9c7837888fd0cd"
+    },
+    {
+      "path": "tools/horary-dspy/examples/fertility.jsonl",
+      "sha256": "da2979cc2f0720c51cf5fb518395c32f5d8afd7dd5edb3c92ed656ab8d5c1f5c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/functions/moment.jsonl",
+      "sha256": "ea35897e7c526551dfffda2027650a28bfb40ff1235a403bfe56d26fbfbd7968"
+    },
+    {
+      "path": "tools/horary-dspy/examples/functions/place.jsonl",
+      "sha256": "8a9cb5fc0d263a9562606fc1ab3de131aba2fe8c1d39e14be3a3a3fdc0706ba0"
+    },
+    {
+      "path": "tools/horary-dspy/examples/functions/update.jsonl",
+      "sha256": "c0021854aec43b0c1e8995c3a5af64a1ac31f20dd7773a4fd1365ae3737a40c3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/hiring.jsonl",
+      "sha256": "203ace6b7ad16cbd5423c3e4f88f2eeb073dad8dfb94be926baa2b5c36b2fe60"
+    },
+    {
+      "path": "tools/horary-dspy/examples/information.jsonl",
+      "sha256": "c09c9ed1632b6bcc1ff464bab288065c7a8dea29e8017afb449a9105020203ef"
+    },
+    {
+      "path": "tools/horary-dspy/examples/investment.jsonl",
+      "sha256": "b9bad67e7ad365350e3711895672a38181dcd4140460a51fd0e1f06636afcec3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/job_offer.jsonl",
+      "sha256": "f2212cbfa4b4837cc58be18e59aa760ae0c96836a23ec390e82112d3e7fcd9ba"
+    },
+    {
+      "path": "tools/horary-dspy/examples/knowledge.jsonl",
+      "sha256": "d03fe6b7f0435b49a1ddc1a19144a3edb717665c53255084ce60f3e8b6155eff"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/branch-diversity-review/hiring.jsonl",
+      "sha256": "3e3f907a6bc0b32c2515cba2d58e61f0f0aab84f087485e23bd279af68f4e691"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/branch-diversity-review/lost_object.jsonl",
+      "sha256": "d79d0adf61b5581f3ac8fc96662fdf8e089eed674c0ed5cb34251610113cfc26"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/branch-diversity-review/visit.jsonl",
+      "sha256": "06768641a9ce81f103a27ae16e274144e2bbf928a22558448ab2331f4bfbb1af"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/contact.jsonl",
+      "sha256": "f687a40a98ca3ec40795d223778b638f29294042e20e32a9bcac98be21599477"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/lost_animal.jsonl",
+      "sha256": "853416693df50f629cecae1b670c345f8aae28e6d184afd87e44a5c33c3a41c3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/lost_object.jsonl",
+      "sha256": "0a6d31c2d59cd0b490a794f13243bf238d14b3d57cfa04c2dcf3dbcebdb34c4c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/money.jsonl",
+      "sha256": "cb70b63befd3c4cbda30d5e1fd15066de530227e319418b0f0229eae00f27a9c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/parcel.jsonl",
+      "sha256": "9b7a1b8ff6b9a9ecdf9575b32ef71ecd4af140ef7bb58f8e02915df7905d5659"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/calendar-wording-review/work_person.jsonl",
+      "sha256": "46c3c644f900a9f4c0030ac6226e41f2f442c3aca39fcb581c773f865fa71d5a"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/court_case.jsonl",
+      "sha256": "64598fe4fba5d9b6dc407f1bc6a8297ba7e6fad1714b93714f290348e303fd63"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/facet-choice-review/court_case.jsonl",
+      "sha256": "dddf1c139d5e7b52318e69bb8157c600c769a78ee7e15f9c59935c2a24b67104"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/facet-choice-review/education.jsonl",
+      "sha256": "d73e13c10209ce8ff9ff9d6e7debb1817fa44a72a9e09c6f309acc7c1d55ba9f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/fertility.jsonl",
+      "sha256": "69627e1858f148c4d8e891525ee16099694e40b0fc5aa738359b7a25fed42ede"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/CORE22_README.md",
+      "sha256": "cb871d7f3a7c31037fc80d1d57c956f5578250387c72de9e325335ce48a4ecfa"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/existing_job.jsonl",
+      "sha256": "c33875228034fa80a0c3dbcc462242b0c39f6d3d344042a0d8389c2256981c9c"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/missing_person.jsonl",
+      "sha256": "00f7c37e40122c451032ce3d6b62ccd135f34ecf9190fd7d5b6adc23f8088980"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/relationship.jsonl",
+      "sha256": "5228417222943d79878265e1d0bae5853ac094768afd7492a34f7da82cb52d0b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/rental.jsonl",
+      "sha256": "0aa90e68d982c7733af87e527f69b95ab1e59afc6082fd0cafe72baa628b2888"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-branch-coverage-review-20261011/work_person.jsonl",
+      "sha256": "4439bc3579c45be61b103bbeba32c37dfcf3268ce8f6d6c6ddbf574480bf453e"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-source-review/business_property.jsonl",
+      "sha256": "94aecceb5921bc32af43029a21b58ee512dea8160873b44334db6e11a8c4ad85"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/final-source-review/new_job.jsonl",
+      "sha256": "4c36799f8a75f44c08f0e8f6e1f9531935e8d6864225978905d141074f3df4df"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/information.jsonl",
+      "sha256": "bbd3c52e0d23aeb198ccc1fc2a7fd2b65ecf5f08b5033b5a323ee3fb785e3b5f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/medical.jsonl",
+      "sha256": "d70199f505307b09917865a500cae8c601aafe98e514cc10b947cb1f4ab8d745"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/movable_deal.jsonl",
+      "sha256": "1c847a94554e8c3fff3b5fae659bd5c693c5d84065035d25177e9c7a02b82027"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/new_job.jsonl",
+      "sha256": "98edc0590108db952b03b9b004880936274326c553f53004843bcf7fb7580b93"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/person_description.jsonl",
+      "sha256": "5de35438ac221219cd0dd60ac584fa7271a3bdaf5aed54959b997f18f59693da"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/job_offer.jsonl",
+      "sha256": "6075c2eb4e51d1b1465f1e2de827cad3d988236e54000a98ca4a4dbf4ec21fb3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/lost_object.jsonl",
+      "sha256": "3a2bc5124655a2f52730c3a61721c6592b871b92719e5e1843073d126e656c6e"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/movable_deal.jsonl",
+      "sha256": "4491bfdecb0712722dbdff005e27c1352924cd97e77eb213c40fc1e02554b633"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/new_job.jsonl",
+      "sha256": "2b91c3d8ac64ffd58d4d1847e616701a315c479ad748bc57b9d6670610322349"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/pre-source-coverage-review/work_person.jsonl",
+      "sha256": "4f308252afe00b92243b58f8ddce45a861da2d4db3e1f2ce1719cc980e43f87b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/relationship.jsonl",
+      "sha256": "4a86abc2a7391846c0018560f1692cd4283d6bb3ea33527ede779da273346ae0"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-branch-gap-review/medical.jsonl",
+      "sha256": "228b7dae67fce8e090475b1d386c764eb626a0dc840b25ab3fecd8941232ca01"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-branch-gap-review/pregnancy.jsonl",
+      "sha256": "01d9fb5c6aa29d17e7bf5673998b74dbce20de640877119f125eb63b16d3a529"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-quote-review/lost_animal.jsonl",
+      "sha256": "edf5912bf2b97b3e4d37d500c9be91a716abf25aa6acdc07d0066c89b7153ba3"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-quote-review/movable_deal.jsonl",
+      "sha256": "f9d248f8c7407078a1e0daf0c86181511fc2357c087da16e3b677fbb7b5f5402"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/source-quote-review/new_job.jsonl",
+      "sha256": "3b14279aed4b430572946aef6cdd655e585b1664e2979d262a9680f33bdd0f0b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/trust.jsonl",
+      "sha256": "9cf8e78db6bd2f144a5fd6694072c5b389a30222989946148ce1e4dc14dc676d"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/unclassified.jsonl",
+      "sha256": "d535f31a5318d0b1aefde32d667b540c375a9dc8693e13017825f2ba761b8ed6"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/vehicle.jsonl",
+      "sha256": "ea1da1add707a206612e1a6272e4eeca13c773f52f7331efab0172d5234c1043"
+    },
+    {
+      "path": "tools/horary-dspy/examples/later/wish.jsonl",
+      "sha256": "5fbf14f99b3871a3c5aa36edc0f26417ca391145871ab6c205675ed22a75f8ce"
+    },
+    {
+      "path": "tools/horary-dspy/examples/lost_animal.jsonl",
+      "sha256": "157efea576198cca0711f8a342c6fc8eec1f513968fa6007c9a960e4c1b111df"
+    },
+    {
+      "path": "tools/horary-dspy/examples/lost_object.jsonl",
+      "sha256": "a4a13aa2c4045a709dd9d5b3298fb9d2c664bb9aae58051c587f1ae7cd24d251"
+    },
+    {
+      "path": "tools/horary-dspy/examples/medical.jsonl",
+      "sha256": "03ca32c7c034ba9a87927a12b1d638232657e58456476ca49498e92c5bc98915"
+    },
+    {
+      "path": "tools/horary-dspy/examples/missing_person.jsonl",
+      "sha256": "d98903e540b68278259f2cae4fd9b292ad0efbb929950c40318352175c9119ac"
+    },
+    {
+      "path": "tools/horary-dspy/examples/money.jsonl",
+      "sha256": "216cdfcb99384f405fc1f8b665ab416faf839c8145f42c2ba51f1d91f6bdca62"
+    },
+    {
+      "path": "tools/horary-dspy/examples/movable_deal.jsonl",
+      "sha256": "4853a05ceb84ea6d43510cd7afab40e2a24b0d1cb6a4a41d6a2971a509294a38"
+    },
+    {
+      "path": "tools/horary-dspy/examples/new_job.jsonl",
+      "sha256": "2c41d6009789307475493880f89471fb484bd996435af9dc210bdb71ec7801d8"
+    },
+    {
+      "path": "tools/horary-dspy/examples/parcel.jsonl",
+      "sha256": "5e508954e442cad86b872b9f2757438c7d051399450197204285c8837a8205f6"
+    },
+    {
+      "path": "tools/horary-dspy/examples/person_description.jsonl",
+      "sha256": "a934bc560c526e097783783dcda12a41b1d3c1c4212faa14f93c2179055d7b02"
+    },
+    {
+      "path": "tools/horary-dspy/examples/politics.jsonl",
+      "sha256": "532adaed6edeb85cab9f8defd336922dcb5d4aea632096faa59b9a2429568488"
+    },
+    {
+      "path": "tools/horary-dspy/examples/pregnancy.jsonl",
+      "sha256": "399f720246a19246a84355af6dcf75d56269de146dc219fd407b786a7481d32b"
+    },
+    {
+      "path": "tools/horary-dspy/examples/property.jsonl",
+      "sha256": "e3166a6ccec57f23781a920efc052f50c1f8c606714c3335389c572e3b237637"
+    },
+    {
+      "path": "tools/horary-dspy/examples/relationship.jsonl",
+      "sha256": "bd3596164a7bc2aca8e6250b86db2a7248fea8cc24c0f03c51acb8444d0a9c8a"
+    },
+    {
+      "path": "tools/horary-dspy/examples/rental.jsonl",
+      "sha256": "83c59aafdb425bf4f44f10edc888468f10b47dc49086562516fd789ee9f54b27"
+    },
+    {
+      "path": "tools/horary-dspy/examples/return_to_job.jsonl",
+      "sha256": "8433f80692c0301800e37709131299f1dc72134f2ae24705efd04447ff8cf5b5"
+    },
+    {
+      "path": "tools/horary-dspy/examples/tax.jsonl",
+      "sha256": "30935e56a9674e50b0ab5713381cd1fa1c3147ab74a49cfac8dbd8867b361ff7"
+    },
+    {
+      "path": "tools/horary-dspy/examples/trust.jsonl",
+      "sha256": "24c8ab56467b33ceae703454f559010efed708348034a2126de6a596694a260f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/undertaking.jsonl",
+      "sha256": "cbb6238123954c91326f5e1fc3009f13f1a5f535853b47b514f5720cb15134b7"
+    },
+    {
+      "path": "tools/horary-dspy/examples/vehicle.jsonl",
+      "sha256": "e51a468197201533bfb42858bc54f57da6bbe07c3f1a39409ac7e6346e0ef101"
+    },
+    {
+      "path": "tools/horary-dspy/examples/visit.jsonl",
+      "sha256": "19b104d7a75f6b92eb111d30ebafb395a9f4cc82a31e2db4975e6822a0922107"
+    },
+    {
+      "path": "tools/horary-dspy/examples/weather.jsonl",
+      "sha256": "676d1fe0f3727890c84ac8e06b151b311a1aa210b28140bfae0cda0cce5d602f"
+    },
+    {
+      "path": "tools/horary-dspy/examples/work_person.jsonl",
+      "sha256": "3bb09f4289a40e97d4fe9f33393d24c9054b150525016101a1dde00012720f2d"
+    },
+    {
+      "path": "tools/horary-dspy/src/anchors.rs",
+      "sha256": "9ad4b064fec46f6c2fcfec9a98e1b230cdffe1f38c422fd6ff638b2fea441769"
+    },
+    {
+      "path": "tools/horary-dspy/src/book.rs",
+      "sha256": "b4f8f9640f2219097f67e933b004694ea50a3fd519af29cc1d2c89947e415ab2"
+    },
+    {
+      "path": "tools/horary-dspy/src/catalogue.rs",
+      "sha256": "82c3389d407240f75d7781c8b248ecffddff42657efd733c208105963ede238b"
+    },
+    {
+      "path": "tools/horary-dspy/src/classification_export.rs",
+      "sha256": "bac1ddc9ec4db1a6c50f2f3d20566da6df286bad5acb49f1d33a61c1b29b99f6"
+    },
+    {
+      "path": "tools/horary-dspy/src/codex.rs",
+      "sha256": "9e0c0942f35ff1dd29eeefde348006d44776ad9d3c7d617822e0bec398e64703"
+    },
+    {
+      "path": "tools/horary-dspy/src/continuation.rs",
+      "sha256": "0f479f0bdde244fc87e81fb4371782f6c5bade2afcab6a46c56a04224fff27d6"
+    },
+    {
+      "path": "tools/horary-dspy/src/demo.rs",
+      "sha256": "cc0581b0d9cab1c0999de66b8604f41ef6ad4ac4c65ae391252150f129871a6c"
+    },
+    {
+      "path": "tools/horary-dspy/src/functions.rs",
+      "sha256": "508e0fb9424d2a73a3c574eb849f49ded536a18c395318ba13826a98d2040311"
+    },
+    {
+      "path": "tools/horary-dspy/src/gold.rs",
+      "sha256": "09851dff9560560830cef46b8864ef3519d64be8350c718baf7965073ff672fd"
+    },
+    {
+      "path": "tools/horary-dspy/src/google.rs",
+      "sha256": "dffeccceec6b5a4ea14c39787ff5c2bb766ec31238c931916d1b9d2a7128d54f"
+    },
+    {
+      "path": "tools/horary-dspy/src/journey.rs",
+      "sha256": "df72fceed28831cc109529980dab687f7ecb6c333d991b1db9c21283df3cd46d"
+    },
+    {
+      "path": "tools/horary-dspy/src/journey_tests.rs",
+      "sha256": "157c30fe3d4cf2962bb80befc4eb08c2b6d9f99f2daa7c1cc3c39cca226f6a22"
+    },
+    {
+      "path": "tools/horary-dspy/src/lib.rs",
+      "sha256": "920cfcf6d32e07a6872519f06b8500430092eaaa78d16704a4bc00d2d5ff7c23"
+    },
+    {
+      "path": "tools/horary-dspy/src/local.rs",
+      "sha256": "a7710739128a735247d40efef06260b1db5ce4d55aed24e2f9e16a7ba146535d"
+    },
+    {
+      "path": "tools/horary-dspy/src/main.rs",
+      "sha256": "fed6178b3ef08697e40c7e8461c5b6d00a836fa9ec5e4868e8aad40690622d4a"
+    },
+    {
+      "path": "tools/horary-dspy/src/native_export.rs",
+      "sha256": "a0bff495bcf08deea28fa51c452a06abebb2814daf7121a20af26dc8e1f5cc70"
+    },
+    {
+      "path": "tools/horary-dspy/src/optimize.rs",
+      "sha256": "3167d0ba3bedb82d761ec43c3c921356c5220fd41c609de6b79d609486090b1f"
+    },
+    {
+      "path": "tools/horary-dspy/src/preflight.rs",
+      "sha256": "a57349db4cf2dbd33be1cfab6807462fdc2efef8c7b2fb71ed9fde854fe6d2b8"
+    },
+    {
+      "path": "tools/horary-dspy/src/queue.rs",
+      "sha256": "262155c00e7fb7debe03ee43724ac6df84a9e3f93b495522bdaf734bbf4f7314"
+    },
+    {
+      "path": "tools/horary-dspy/src/reading.rs",
+      "sha256": "b9111de8458183a953afe46d5fc6688c1260363f5100d4bc7aabed11b33f0ffd"
+    },
+    {
+      "path": "tools/horary-dspy/src/reception.rs",
+      "sha256": "05e3dc74e5865dee0de797c398572c9ae2120d178f522aeb785327dbb851de55"
+    },
+    {
+      "path": "tools/horary-dspy/src/rewrite.rs",
+      "sha256": "9d4bcc4d41fb66f7f822b34574a3226cd081660834ce3e0e0e4648144ca4b4c7"
+    },
+    {
+      "path": "tools/horary-dspy/src/runner.rs",
+      "sha256": "7f9dca9e83a1ac48922de0771573eaa9a16117bfaad187572601b685b350b928"
+    },
+    {
+      "path": "tools/horary-dspy/src/signatures.rs",
+      "sha256": "26d94c1b9be81d06ba3e1d6e3e98bfde8738d0a19ea8971f33f1892ce491c17e"
+    },
+    {
+      "path": "tools/horary-dspy/src/teachers.rs",
+      "sha256": "205857c02593ffb3fa435844ab7a246292f44ecdebd632297c5513b0528bdd87"
+    },
+    {
+      "path": "tools/horary-gepa/Cargo.lock",
+      "sha256": "05cba3842cd499c15c8810f3faa0196b24774b34853d17ecd57e982018996649"
+    },
+    {
+      "path": "tools/horary-gepa/Cargo.toml",
+      "sha256": "880aae04d4fd99004c47c422aec0fe426820e70b5b3cc7061c9d83c2ba264cc2"
+    },
+    {
+      "path": "tools/horary-gepa/README.md",
+      "sha256": "277c59fab19202a78069b4e12252fcb4c7336ba79a370944fc69590dff7a7aa1"
+    },
+    {
+      "path": "tools/horary-gepa/src/campaign.rs",
+      "sha256": "0f84888954f1e8d7559c6fefc67ec907f1ffd801b4c61dfff950afe5281a28f7"
+    },
+    {
+      "path": "tools/horary-gepa/src/complete_journey.rs",
+      "sha256": "8e709f6a0c10811526af30d78561bf5700163e5f72a6be640ed3d6d6467c558c"
+    },
+    {
+      "path": "tools/horary-gepa/src/controls.rs",
+      "sha256": "ed44345548a59574a96b4c0c1fff33d8d599b3659ce8169891b2e8b71be6942a"
+    },
+    {
+      "path": "tools/horary-gepa/src/corpus.rs",
+      "sha256": "84b0f140a6b812ada2f7b07ae27c6cdfe4324ba7beda3a3835766418d4263247"
+    },
+    {
+      "path": "tools/horary-gepa/src/curriculum.rs",
+      "sha256": "aa2465274baf66020f766e5a7229bb703a5e6bfd291a42308c26f0eb4864610d"
+    },
+    {
+      "path": "tools/horary-gepa/src/executable.rs",
+      "sha256": "03b96eccfa8fe9ee3d81c4f7497cc70729866634b5b4656c2efeb64e200603ef"
+    },
+    {
+      "path": "tools/horary-gepa/src/fixed.rs",
+      "sha256": "744bc38a0a18a34dcd14e3d78bceda8c408b31f55f82618fe957a7945b0b1ad4"
+    },
+    {
+      "path": "tools/horary-gepa/src/initial_extractor.rs",
+      "sha256": "3e364d09938caf6150f3ba2753a661a61b620e3cc30a0506ba00f89cede185e3"
+    },
+    {
+      "path": "tools/horary-gepa/src/journal.rs",
+      "sha256": "c1c70ef17fed77b6c3badd9e33bcc8f874bd94e14c326e08113243e70272ae61"
+    },
+    {
+      "path": "tools/horary-gepa/src/lib.rs",
+      "sha256": "af07f5d1ddfe863104d68728f121bae50090c2a1c8e4bc932fb29827416685de"
+    },
+    {
+      "path": "tools/horary-gepa/src/main.rs",
+      "sha256": "b746282ffba45225fdaffbe4d5b062753a0dff100d2854997c2e9361e52b265e"
+    },
+    {
+      "path": "tools/horary-gepa/src/memo.rs",
+      "sha256": "2b5aef24ca8dc627dbff24a162e397ccb835c777059030e53d0c1f19b52ba169"
+    },
+    {
+      "path": "tools/horary-gepa/src/metric.rs",
+      "sha256": "ae1deb7ab11e357ac388413d0e130d90e4e30d13bf6f32f9f08cdb08718d3631"
+    },
+    {
+      "path": "tools/horary-gepa/src/native.rs",
+      "sha256": "bf712fcdb9d2a4a3fef10e179fb59f99146cc2eba5f0299e1d9202cab1dff5e5"
+    },
+    {
+      "path": "tools/horary-gepa/src/reading.rs",
+      "sha256": "7fba3498970ca2a0a3897a871e11e79edbc824246c34b06a8f1c2b1c2a758152"
+    },
+    {
+      "path": "tools/horary-gepa/src/recovery.rs",
+      "sha256": "91f25b155ced1634941f2119a444a47f937ae4d04ef228655bff7df124562d4d"
+    },
+    {
+      "path": "tools/horary-gepa/src/review.rs",
+      "sha256": "c6cd766c7e2a160e0771b0700abaacb313bfffb7fd85fd1ee0fd2950ad66f986"
+    },
+    {
+      "path": "tools/horary-gepa/src/selected_stage.rs",
+      "sha256": "aa5a2d55304a3e10c13540f7be239a0f116111fec4a73decf4c40a13388a0d3d"
+    },
+    {
+      "path": "tools/horary-gepa/src/status.rs",
+      "sha256": "1f4f221b8ef55da658913293277311eb1dbc94d416835f193837a6b2986b9dab"
+    },
+    {
+      "path": "tools/horary-gepa/src/supplying_extractor.rs",
+      "sha256": "4f56f7d6644e23aa339f6cae495c776aa75ee18dfa22cf512d8f470ddbe24414"
+    },
+    {
+      "path": "tools/horary-gepa/src/teacher.rs",
+      "sha256": "bf8b966754e0f532539b516afe7543081e458f25f94ed0173a34a43d43d9b837"
+    },
+    {
+      "path": "tools/horary-loop/Cargo.lock",
+      "sha256": "696930dc5cbd3b6e6aeb11565bc253bf73b0b6bdc2648ec2db78f1089b6ac5c7"
+    },
+    {
+      "path": "tools/horary-loop/Cargo.toml",
+      "sha256": "16ca8de8adb08f046d504bf2fa28f646560da4b066e11e38cce6f43e1fd44b59"
+    },
+    {
+      "path": "tools/horary-loop/README.md",
+      "sha256": "e4227d210e7934a3f88631ca1e19303a871b3f0a13d6d7f18855bd7a7029d85b"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-catalogue.rs",
+      "sha256": "9955b5801d7898b68b4258ff10f45dbcefbb2bd76d73cc684025e427a9be4574"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-experiment.rs",
+      "sha256": "9edd242ef1400f4dac0c34c0400423a30c27c4e588e7a84edc6a9f876b6c8aa5"
+    },
+    {
+      "path": "tools/horary-loop/src/bin/horary-optimize.rs",
+      "sha256": "d5a592f43fe57b7cb6e8d119dfc6cb00a1ee780e083aa47b339395072419b03e"
+    },
+    {
+      "path": "tools/horary-loop/src/campaign.rs",
+      "sha256": "c505989b599698c823ccf0ff0f7b8bc9a6315f2ca8796fdc46a5413d3f73ee1a"
+    },
+    {
+      "path": "tools/horary-loop/src/catalogue.rs",
+      "sha256": "0ebc67c2326fea2caa5d4c8f9eded9e7d3c60e57c977333da69da2d6c6e8cc7c"
+    },
+    {
+      "path": "tools/horary-loop/src/comparison.rs",
+      "sha256": "57215a11a11728b22869a68d3dcd5b86f72529b5cb0e27aac039cbeb850d9351"
+    },
+    {
+      "path": "tools/horary-loop/src/lib.rs",
+      "sha256": "b7aaf2fa6900dda97752d5b1b3cc62aee16cca4cfcebff5fb1ada57eb9f2635d"
+    },
+    {
+      "path": "tools/horary-loop/src/main.rs",
+      "sha256": "fc937b75fac647513a1d09cd977c38e87eb06b8bc4cf7ec979264661e6a21985"
+    },
+    {
+      "path": "tools/horary-loop/src/packet.rs",
+      "sha256": "28fed57a8335bfdfd0674e0234072463e05da11cf17b1acdf57f92153f300f77"
+    },
+    {
+      "path": "tools/horary-loop/src/refs.rs",
+      "sha256": "0dbb34e14882e9f0dfd3d5f2256408a500368b57598396f070709fcdac112cb9"
+    },
+    {
+      "path": "tools/horary-loop/src/review_events.rs",
+      "sha256": "252826e9c0a5d5285fda72aa84c477bf8506430d442c96bad813388d47a233e1"
+    },
+    {
+      "path": "tools/horary-loop/src/schema_check.rs",
+      "sha256": "7444f7d32f9d1c45baf627f738b5776e9a9441f1e85fda5666d2562c46db82ff"
+    },
+    {
+      "path": "tools/horary-loop/src/store.rs",
+      "sha256": "af90f2c9d34852adbc99ec2c6d80023e5c87ed14b9ecef79e0085bb6c8ba74c1"
+    },
+    {
+      "path": "tools/horary-loop/src/types.rs",
+      "sha256": "f6359257b66d077715ddd81990f56430a0f9a2a2b224dcbf50bd36468324fb78"
+    }
+  ]
+}

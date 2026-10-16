@@ -1,0 +1,112 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "confidence",
+    "judgementTrace",
+    "keyFactors",
+    "cautions",
+    "followUpQuestions"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "maxLength": 640
+    },
+    "directAnswer": {
+      "type": "string",
+      "maxLength": 640
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "judgementTrace": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stepId",
+          "finding",
+          "chartEvidence",
+          "confidence"
+        ],
+        "properties": {
+          "stepId": {
+            "type": "string"
+          },
+          "finding": {
+            "type": "string",
+            "description": "A short sentence explaining the finding for this question; never a step identifier or stage name.",
+            "minLength": 32,
+            "maxLength": 360
+          },
+          "chartEvidence": {
+            "type": "string",
+            "maxLength": 220
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        }
+      }
+    },
+    "keyFactors": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "factor",
+          "chartEvidence",
+          "interpretation"
+        ],
+        "properties": {
+          "factor": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "chartEvidence": {
+            "type": "string",
+            "maxLength": 220
+          },
+          "interpretation": {
+            "type": "string",
+            "maxLength": 360
+          }
+        }
+      }
+    },
+    "cautions": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string",
+        "maxLength": 260
+      }
+    },
+    "followUpQuestions": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string",
+        "maxLength": 180
+      }
+    }
+  }
+}

@@ -1,0 +1,1644 @@
+# fertility: full questions and worked answers
+
+Generated reference answers for expert review; rubrics remain separate from answers. Original splits are retained. These are reading-component examples, not observed first-message application journeys.
+
+## fertility-01 (train)
+
+### Question
+
+Will I conceive a child within the next six months? I am asking about conception, not carrying an existing pregnancy.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "conceive a child"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-02 (train)
+
+### Question
+
+I am pregnant and asking whether I will carry this pregnancy to term, not whether I conceived.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "carrying_to_term",
+      "quote": "carry this pregnancy to term"
+    },
+    {
+      "field": "context",
+      "value": "I am pregnant",
+      "quote": "I am pregnant"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-03 (train)
+
+### Question
+
+Will I ever have children? I am thirty-eight and asking about lifetime fertility, not whether I am pregnant now.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "lifetime fertility"
+    },
+    {
+      "field": "context",
+      "value": "thirty-eight",
+      "quote": "thirty-eight"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-04 (train)
+
+### Question
+
+My wife Cora asked me to relay her own question: will she conceive during the coming year? We are considering assisted treatment but none has begun.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "people.cora.label",
+      "value": "Cora",
+      "quote": "My wife Cora"
+    },
+    {
+      "field": "people.cora.relationship",
+      "value": "partner",
+      "quote": "My wife Cora"
+    },
+    {
+      "field": "principal_mode",
+      "value": "relay",
+      "quote": "asked me to relay her own question"
+    },
+    {
+      "field": "subject.name",
+      "value": "Cora",
+      "quote": "My wife Cora"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "My wife Cora"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "cora",
+      "quote": "My wife Cora"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "conceive during the coming year"
+    },
+    {
+      "field": "context",
+      "value": "assisted treatment but none has begun",
+      "quote": "assisted treatment but none has begun"
+    },
+    {
+      "field": "principal_id",
+      "value": "cora",
+      "quote": "My wife Cora"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-05 (train)
+
+### Question
+
+My sister Mara is already pregnant. I am concerned whether she will carry to term; this is my own question about her.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "people.mara.label",
+      "value": "Mara",
+      "quote": "My sister Mara"
+    },
+    {
+      "field": "people.mara.relationship",
+      "value": "sibling",
+      "quote": "My sister Mara"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "My sister Mara"
+    },
+    {
+      "field": "subject.name",
+      "value": "Mara",
+      "quote": "My sister Mara"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "My sister Mara"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "mara",
+      "quote": "My sister Mara"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "carrying_to_term",
+      "quote": "carry to term"
+    },
+    {
+      "field": "context",
+      "value": "already pregnant",
+      "quote": "already pregnant"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-06 (train)
+
+### Question
+
+I would like a broad indication of whether I will have one or two children or a larger family in my lifetime, not an exact count.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "quantity",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "in my lifetime"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-07 (train)
+
+### Question
+
+We are trying for a baby and I wonder if it will happen for me before Christmas. There is no known pregnancy yet.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "We are trying for a baby"
+    },
+    {
+      "field": "context",
+      "value": "There is no known pregnancy yet",
+      "quote": "There is no known pregnancy yet"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-08 (train)
+
+### Question
+
+My daughter Lena asked me to put her question to you: she is expecting already and wants to know whether the baby will reach full term.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "people.lena.label",
+      "value": "Lena",
+      "quote": "My daughter Lena"
+    },
+    {
+      "field": "people.lena.relationship",
+      "value": "child",
+      "quote": "My daughter Lena"
+    },
+    {
+      "field": "principal_mode",
+      "value": "relay",
+      "quote": "asked me to put her question"
+    },
+    {
+      "field": "subject.name",
+      "value": "Lena",
+      "quote": "My daughter Lena"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "My daughter Lena"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "lena",
+      "quote": "My daughter Lena"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "carrying_to_term",
+      "quote": "reach full term"
+    },
+    {
+      "field": "context",
+      "value": "expecting already",
+      "quote": "expecting already"
+    },
+    {
+      "field": "principal_id",
+      "value": "lena",
+      "quote": "My daughter Lena"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-09 (train)
+
+### Question
+
+I am forty-six and have no children. Is parenthood ever likely for me, rather than only this month's chances?
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "ever likely for me"
+    },
+    {
+      "field": "context",
+      "value": "forty-six and have no children",
+      "quote": "forty-six and have no children"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-10 (train)
+
+### Question
+
+My partner May and I have begun an assisted-conception cycle; I am asking for myself whether we will conceive through it.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I am asking for myself"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I am asking for myself"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I am asking for myself"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I am asking for myself"
+    },
+    {
+      "field": "people.may.label",
+      "value": "May",
+      "quote": "My partner May"
+    },
+    {
+      "field": "people.may.relationship",
+      "value": "partner",
+      "quote": "My partner May"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "will conceive through it"
+    },
+    {
+      "field": "context",
+      "value": "begun an assisted-conception cycle",
+      "quote": "begun an assisted-conception cycle"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-11 (train)
+
+### Question
+
+My own pregnancy is confirmed, and I want to ask if it lasts until the due date. I do not need a conception prediction.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "carrying_to_term",
+      "quote": "lasts until the due date"
+    },
+    {
+      "field": "context",
+      "value": "My own pregnancy is confirmed",
+      "quote": "My own pregnancy is confirmed"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-12 (train)
+
+### Question
+
+I have never had a child and am asking whether that ever changes; I am twenty-nine, not asking for a diagnosis of a particular illness.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "whether that ever changes"
+    },
+    {
+      "field": "context",
+      "value": "twenty-nine",
+      "quote": "twenty-nine"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-13 (development)
+
+### Question
+
+I am asking about my possible future first child: if having at least one child is indicated, what sex does the book’s broad testimony suggest? I am thirty-one and not asking for a clinical test.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "description",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I am asking"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "my possible future first child"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I am asking"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I am asking"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "my possible future first child"
+    },
+    {
+      "field": "context",
+      "value": "thirty-one",
+      "quote": "thirty-one"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-14 (development)
+
+### Question
+
+I am asking whether conception is likely for me during a treatment cycle starting on October 12, 2026. Judge conception, not medication dosage.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "conception is likely for me"
+    },
+    {
+      "field": "context",
+      "value": "treatment cycle",
+      "quote": "treatment cycle"
+    },
+    {
+      "field": "event_time",
+      "value": "2026-10-12",
+      "quote": "October 12, 2026"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-15 (development)
+
+### Question
+
+I am the prospective father, married to my wife Nina. Will we conceive a baby within the coming year?
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I am the prospective father"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I am the prospective father"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I am the prospective father"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I am the prospective father"
+    },
+    {
+      "field": "people.nina.label",
+      "value": "Nina",
+      "quote": "my wife Nina"
+    },
+    {
+      "field": "people.nina.relationship",
+      "value": "partner",
+      "quote": "my wife Nina"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "conceive a baby"
+    },
+    {
+      "field": "context",
+      "value": "within the coming year",
+      "quote": "within the coming year"
+    },
+    {
+      "field": "parenthood",
+      "value": "father",
+      "quote": "prospective father"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-16 (development)
+
+### Question
+
+My sister Bina asked me to relay whether her established pregnancy will carry to term; she is under medical care.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "people.bina.label",
+      "value": "Bina",
+      "quote": "My sister Bina"
+    },
+    {
+      "field": "people.bina.relationship",
+      "value": "sibling",
+      "quote": "My sister Bina"
+    },
+    {
+      "field": "principal_mode",
+      "value": "relay",
+      "quote": "asked me to relay"
+    },
+    {
+      "field": "subject.name",
+      "value": "Bina",
+      "quote": "My sister Bina"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "My sister Bina"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "bina",
+      "quote": "My sister Bina"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "carrying_to_term",
+      "quote": "carry to term"
+    },
+    {
+      "field": "context",
+      "value": "established pregnancy",
+      "quote": "established pregnancy"
+    },
+    {
+      "field": "principal_id",
+      "value": "bina",
+      "quote": "My sister Bina"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-17 (test)
+
+### Question
+
+We are trying to start a family and I am not pregnant now. If conception is indicated, when might it happen for me within the coming year?
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "timing",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "for me"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "for me"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "for me"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "for me"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "conception",
+      "quote": "conception"
+    },
+    {
+      "field": "context",
+      "value": "I am not pregnant now",
+      "quote": "I am not pregnant now"
+    },
+    {
+      "field": "horizon",
+      "value": "coming year",
+      "quote": "coming year"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-18 (test)
+
+### Question
+
+I am thirty-three and would like to know if my future family looks small or large, rather than to be promised precisely three children.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "quantity",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "my future family"
+    },
+    {
+      "field": "context",
+      "value": "thirty-three",
+      "quote": "thirty-three"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-19 (test)
+
+### Question
+
+I have no children and am twenty-eight. Once a child is actually indicated, does the source’s masculine/feminine balance suggest a boy or a girl for my first child, without claiming a clinical diagnosis?
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "description",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I have no children"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I have no children"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I have no children"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I have no children"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "lifetime",
+      "quote": "my first child"
+    },
+    {
+      "field": "context",
+      "value": "no children and am twenty-eight",
+      "quote": "no children and am twenty-eight"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+
+## fertility-20 (test)
+
+### Question
+
+It is the pregnancy I already have that I want to ask about, specifically whether it will go all the way to term, not whether another starts.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "principal_mode",
+      "value": "self",
+      "quote": "I"
+    },
+    {
+      "field": "subject.name",
+      "value": "Querent",
+      "quote": "I"
+    },
+    {
+      "field": "subject.kind",
+      "value": "person",
+      "quote": "I"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I"
+    },
+    {
+      "field": "fertility_scope",
+      "value": "carrying_to_term",
+      "quote": "go all the way to term"
+    },
+    {
+      "field": "context",
+      "value": "pregnancy I already have",
+      "quote": "pregnancy I already have"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Keep current pregnancy, future conception, carrying to term and lifetime potential distinct. Relevant age and known treatment/parenthood circumstances affect the question, without imposing universal birthday collection.",
+    "Conception requires a relevant mother-child perfection testimony; fertile/barren signs support or qualify it and do not veto a strong clear aspect by themselves.",
+    "For potential consider relevant Lords 1, 5, 7 and 11, Moon and Moon dispositor; assess rulers and their signs, not an indiscriminate count of cusp signs.",
+    "Assisted conception may be reflected by actual collection or translation joining parent and child; do not automatically import the medical tenth-house treatment recipe. The assisting planet and its reception/condition matter.",
+    "Determine that a birth/conception is indicated before symbolic timing; use actual context and retain obstacles such as a station or an intervening Sun conjunction. Child-count testimony gives coarse categories, not arbitrary exact integers.",
+    "Keep the answer personal and clinically qualified; chart symbolism is not a clinical fertility measurement or advice to change treatment.",
+    "For the p.177 first-child sex branch, first establish a child, then weigh masculine/feminine planets and signs with actual accidental capacity, retaining feminine Moon. Significant dissent refers to a second child only when a second is established; this is not a clinical prenatal test or gender-identity determination.",
+    "Use the moment and place this question is understood; an event venue, deadline or remembered event time is separate context. If evidence is incomplete, describe the actual source limit in natural language addressed to the person."
+  ],
+  "must_not": [
+    "Do not infer pregnancy, age, paternity or treatment success from a name; do not count sign qualities into an exact promised number.",
+    "Do not assert lifetime infertility from one barren sign or use the conception aspect as proof of carrying to term.",
+    "Do not invent chart positions or a fixed outcome before native chart calculation; preserve exact source words, explicit corrections and separately identified principals."
+  ],
+  "source_pages": [
+    7,
+    8,
+    173,
+    174,
+    175,
+    176,
+    177
+  ]
+}
+```
+

@@ -1,0 +1,1064 @@
+{
+  "ascendant": {
+    "degree": 25.1233,
+    "sign": "Libra"
+  },
+  "aspects": [
+    {
+      "applying": false,
+      "aspectName": "Sextile",
+      "exact": false,
+      "major": true,
+      "orb": 0.21,
+      "planet1": "Sun",
+      "planet2": "Mars",
+      "separating": true
+    },
+    {
+      "applying": true,
+      "aspectName": "Conjunction",
+      "exact": false,
+      "major": true,
+      "orb": 1.01,
+      "planet1": "Moon",
+      "planet2": "Venus",
+      "separating": false
+    },
+    {
+      "applying": false,
+      "aspectName": "Trine",
+      "exact": false,
+      "major": true,
+      "orb": 3.77,
+      "planet1": "Jupiter",
+      "planet2": "Saturn",
+      "separating": true
+    }
+  ],
+  "bodies": [
+    {
+      "accidentalDignity": {
+        "angularity": "succedent",
+        "house": 11,
+        "houseCapacity": "neutral",
+        "inJoy": false,
+        "joyHouse": 9,
+        "retrograde": false,
+        "solarCondition": null
+      },
+      "cuspAdvance": null,
+      "degree": 21.5675,
+      "dignity": {
+        "detriment": false,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": false,
+        "fall": false,
+        "peregrine": true,
+        "termRuler": false,
+        "triplicityRuler": false
+      },
+      "geometricHouse": 11,
+      "house": 11,
+      "name": "Sun",
+      "retrograde": false,
+      "sign": "Virgo"
+    },
+    {
+      "accidentalDignity": {
+        "angularity": "angular",
+        "house": 1,
+        "houseCapacity": "strong",
+        "inJoy": false,
+        "joyHouse": 3,
+        "retrograde": false,
+        "solarCondition": "clear"
+      },
+      "cuspAdvance": null,
+      "degree": 1.1033,
+      "dignity": {
+        "detriment": false,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": false,
+        "fall": true,
+        "peregrine": false,
+        "termRuler": false,
+        "triplicityRuler": false
+      },
+      "geometricHouse": 1,
+      "house": 1,
+      "name": "Moon",
+      "retrograde": false,
+      "sign": "Scorpio"
+    },
+    {
+      "accidentalDignity": {
+        "angularity": "cadent",
+        "house": 12,
+        "houseCapacity": "weak",
+        "inJoy": false,
+        "joyHouse": 1,
+        "retrograde": false,
+        "solarCondition": "underBeams"
+      },
+      "cuspAdvance": null,
+      "degree": 5.7447,
+      "dignity": {
+        "detriment": false,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": false,
+        "fall": false,
+        "peregrine": true,
+        "termRuler": false,
+        "triplicityRuler": false
+      },
+      "geometricHouse": 12,
+      "house": 12,
+      "name": "Mercury",
+      "retrograde": false,
+      "sign": "Libra"
+    },
+    {
+      "accidentalDignity": {
+        "angularity": "angular",
+        "house": 1,
+        "houseCapacity": "strong",
+        "inJoy": false,
+        "joyHouse": 5,
+        "retrograde": false,
+        "solarCondition": "clear"
+      },
+      "cuspAdvance": null,
+      "degree": 2.111,
+      "dignity": {
+        "detriment": true,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": false,
+        "fall": false,
+        "peregrine": false,
+        "termRuler": false,
+        "triplicityRuler": false
+      },
+      "geometricHouse": 1,
+      "house": 1,
+      "name": "Venus",
+      "retrograde": false,
+      "sign": "Scorpio"
+    },
+    {
+      "accidentalDignity": {
+        "angularity": "cadent",
+        "house": 9,
+        "houseCapacity": "neutral",
+        "inJoy": false,
+        "joyHouse": 6,
+        "retrograde": false,
+        "solarCondition": "clear"
+      },
+      "cuspAdvance": null,
+      "degree": 21.3541,
+      "dignity": {
+        "detriment": false,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": false,
+        "fall": true,
+        "peregrine": false,
+        "termRuler": false,
+        "triplicityRuler": true
+      },
+      "geometricHouse": 9,
+      "house": 9,
+      "name": "Mars",
+      "retrograde": false,
+      "sign": "Cancer"
+    },
+    {
+      "accidentalDignity": {
+        "angularity": "angular",
+        "house": 10,
+        "houseCapacity": "strong",
+        "inJoy": false,
+        "joyHouse": 11,
+        "retrograde": false,
+        "solarCondition": "clear"
+      },
+      "cuspAdvance": null,
+      "degree": 16.0896,
+      "dignity": {
+        "detriment": false,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": true,
+        "fall": false,
+        "peregrine": false,
+        "termRuler": false,
+        "triplicityRuler": false
+      },
+      "geometricHouse": 10,
+      "house": 10,
+      "name": "Jupiter",
+      "retrograde": false,
+      "sign": "Leo"
+    },
+    {
+      "accidentalDignity": {
+        "angularity": "cadent",
+        "house": 6,
+        "houseCapacity": "weak",
+        "inJoy": false,
+        "joyHouse": 12,
+        "retrograde": true,
+        "solarCondition": "clear"
+      },
+      "cuspAdvance": null,
+      "degree": 12.3213,
+      "dignity": {
+        "detriment": false,
+        "domicile": false,
+        "exaltation": false,
+        "faceRuler": false,
+        "fall": true,
+        "peregrine": false,
+        "termRuler": false,
+        "triplicityRuler": false
+      },
+      "geometricHouse": 6,
+      "house": 6,
+      "name": "Saturn",
+      "retrograde": true,
+      "sign": "Aries"
+    },
+    {
+      "degree": 6.2714,
+      "house": 8,
+      "name": "Uranus",
+      "retrograde": true,
+      "sign": "Gemini"
+    },
+    {
+      "degree": 2.3067,
+      "house": 5,
+      "name": "Neptune",
+      "retrograde": true,
+      "sign": "Aries"
+    },
+    {
+      "degree": 4.1496,
+      "house": 4,
+      "name": "Pluto",
+      "retrograde": false,
+      "sign": "Aquarius"
+    }
+  ],
+  "bookMethod": {
+    "context": "Essential condition is distinct from capacity to act. House capacity, retrogradation and combustion require question context; no summed strength score or automatic veto.",
+    "cuspRule": "Within approximately five degrees before the next cusp and in its sign, use that next house for judgement; geometricHouse preserves the unadjusted placement.",
+    "missingSect": false,
+    "printedPages": [
+      44,
+      56,
+      58,
+      59,
+      71,
+      72,
+      73,
+      74,
+      75
+    ],
+    "profile": "frawley-2005-v1",
+    "receptionDirection": "The guest occupies a dignity or debility of the host: read the guest's inclination toward the host. Opposite directions may differ; negative and positive testimony may coexist."
+  },
+  "castLocalTime": "2026-09-14 09:50 Europe/London",
+  "castUtcTime": "2026-09-14T08:50:00.000Z",
+  "derived": {
+    "antisciaContacts": [],
+    "ascendantRuler": "Venus",
+    "chartSect": "day",
+    "eventSearch": {
+      "available": true,
+      "checkedUntilHours": 168,
+      "events": [
+        {
+          "aspectName": "Conjunction",
+          "bracketHours": [
+            1,
+            2
+          ],
+          "estimatedPerfectsWithinHours": 1.990905474395531,
+          "moonTravelDegrees": 1.0553661076487515,
+          "planet1": "Moon",
+          "planet2": "Venus",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": true
+        },
+        {
+          "aspectName": "Square",
+          "bracketHours": [
+            29,
+            30
+          ],
+          "estimatedPerfectsWithinHours": 29.102909220931952,
+          "moonTravelDegrees": 15.226807883186723,
+          "planet1": "Moon",
+          "planet2": "Jupiter",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": true
+        },
+        {
+          "aspectName": "Trine",
+          "bracketHours": [
+            40,
+            41
+          ],
+          "estimatedPerfectsWithinHours": 40.916367764885536,
+          "moonTravelDegrees": 21.293766430821165,
+          "planet1": "Moon",
+          "planet2": "Mars",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": true
+        },
+        {
+          "aspectName": "Sextile",
+          "bracketHours": [
+            42,
+            43
+          ],
+          "estimatedPerfectsWithinHours": 42.68521883051835,
+          "moonTravelDegrees": 22.19707304336052,
+          "planet1": "Sun",
+          "planet2": "Moon",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": true
+        },
+        {
+          "aspectName": "Sextile",
+          "bracketHours": [
+            77,
+            78
+          ],
+          "estimatedPerfectsWithinHours": 77.58766861954642,
+          "moonTravelDegrees": 39.79540656493623,
+          "planet1": "Moon",
+          "planet2": "Mercury",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Trine",
+          "bracketHours": [
+            79,
+            80
+          ],
+          "estimatedPerfectsWithinHours": 79.96279063447345,
+          "moonTravelDegrees": 40.980144960228216,
+          "planet1": "Moon",
+          "planet2": "Saturn",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Trine",
+          "bracketHours": [
+            89,
+            90
+          ],
+          "estimatedPerfectsWithinHours": 89.49100011566678,
+          "moonTravelDegrees": 45.72095119320929,
+          "planet1": "Moon",
+          "planet2": "Jupiter",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Opposition",
+          "bracketHours": [
+            95,
+            96
+          ],
+          "estimatedPerfectsWithinHours": 95.11247486367371,
+          "moonTravelDegrees": null,
+          "planet1": "Mercury",
+          "planet2": "Saturn",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": true
+        },
+        {
+          "aspectName": "Square",
+          "bracketHours": [
+            107,
+            108
+          ],
+          "estimatedPerfectsWithinHours": 107.91432463997096,
+          "moonTravelDegrees": 54.848361471351865,
+          "planet1": "Sun",
+          "planet2": "Moon",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Sextile",
+          "bracketHours": [
+            125,
+            126
+          ],
+          "estimatedPerfectsWithinHours": 125.84673327870351,
+          "moonTravelDegrees": 63.71167581231512,
+          "planet1": "Moon",
+          "planet2": "Venus",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Square",
+          "bracketHours": [
+            140,
+            141
+          ],
+          "estimatedPerfectsWithinHours": 140.16325505445195,
+          "moonTravelDegrees": 70.79598905362403,
+          "planet1": "Moon",
+          "planet2": "Saturn",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Square",
+          "bracketHours": [
+            147,
+            148
+          ],
+          "estimatedPerfectsWithinHours": 147.14948973567775,
+          "moonTravelDegrees": 74.26138982617582,
+          "planet1": "Moon",
+          "planet2": "Mercury",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        },
+        {
+          "aspectName": "Opposition",
+          "bracketHours": [
+            167,
+            168
+          ],
+          "estimatedPerfectsWithinHours": 167.6663990958246,
+          "moonTravelDegrees": 84.49280308779672,
+          "planet1": "Moon",
+          "planet2": "Mars",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": false
+        }
+      ],
+      "ingresses": [
+        {
+          "estimatedHours": 55.87866750211572,
+          "fromSign": 7,
+          "planet": "Moon",
+          "toSign": 8
+        },
+        {
+          "estimatedHours": 116.10405686864706,
+          "fromSign": 8,
+          "planet": "Moon",
+          "toSign": 9
+        }
+      ],
+      "method": "Major aspect crossings in continuous hourly ephemeris samples; estimated by interpolation. No display-orb gate. A reversal within a sample can remain unresolved.",
+      "timingCaution": "Astronomical hours are not a predicted date for the question. Interpret symbolic timing only with question context and a plausible timeframe.",
+      "voidOfCourseMoon": {
+        "available": true,
+        "checkedUntilHours": 55.87866750211572,
+        "context": "isVoid reports absence of an aspect before sign exit. Frawley also treats a long gap, roughly 15 degrees or more, as possible void-like stagnation; this requires contextual judgment (printed p. 65).",
+        "isVoid": false,
+        "longGapNeedsReview": false,
+        "nextApplyingAspect": {
+          "aspectName": "Conjunction",
+          "bracketHours": [
+            1,
+            2
+          ],
+          "estimatedPerfectsWithinHours": 1.990905474395531,
+          "moonTravelDegrees": 1.0553661076487515,
+          "planet1": "Moon",
+          "planet2": "Venus",
+          "type": "perfectionCandidate",
+          "withinCurrentSigns": true
+        },
+        "reason": null
+      }
+    },
+    "houseSystem": "regiomontanus",
+    "partOfFortune": {
+      "degree": 4.6591,
+      "formula": "ASC + Moon - Sun",
+      "house": 2,
+      "name": "Part of Fortune",
+      "sign": "Sagittarius"
+    },
+    "planetaryHour": {
+      "available": true,
+      "endsAtUtc": "2026-09-14T09:48:08.345Z",
+      "hourNumber": 4,
+      "period": "day",
+      "planetaryDay": "Monday",
+      "planetaryDayRuler": "Moon",
+      "planetaryHourRuler": "Mars",
+      "reason": null,
+      "startsAtUtc": "2026-09-14T08:44:22.366Z"
+    },
+    "receptions": [
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Mercury",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "exaltation",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Mercury",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "triplicityRuler",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Venus",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Saturn",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "faceRuler",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Mercury",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "detriment",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Jupiter",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "fall",
+        "guestPlanet": "Sun",
+        "hostPlanet": "Venus",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Moon",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "triplicityRuler",
+        "guestPlanet": "Moon",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Moon",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "faceRuler",
+        "guestPlanet": "Moon",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "detriment",
+        "guestPlanet": "Moon",
+        "hostPlanet": "Venus",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Venus",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "exaltation",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Saturn",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "triplicityRuler",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Saturn",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Saturn",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "faceRuler",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Moon",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "detriment",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Mars",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "fall",
+        "guestPlanet": "Mercury",
+        "hostPlanet": "Sun",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Venus",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "triplicityRuler",
+        "guestPlanet": "Venus",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Venus",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "faceRuler",
+        "guestPlanet": "Venus",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "fall",
+        "guestPlanet": "Venus",
+        "hostPlanet": "Moon",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Mars",
+        "hostPlanet": "Moon",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "exaltation",
+        "guestPlanet": "Mars",
+        "hostPlanet": "Jupiter",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Mars",
+        "hostPlanet": "Venus",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "faceRuler",
+        "guestPlanet": "Mars",
+        "hostPlanet": "Moon",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "detriment",
+        "guestPlanet": "Mars",
+        "hostPlanet": "Saturn",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Jupiter",
+        "hostPlanet": "Sun",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "triplicityRuler",
+        "guestPlanet": "Jupiter",
+        "hostPlanet": "Sun",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Jupiter",
+        "hostPlanet": "Venus",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "detriment",
+        "guestPlanet": "Jupiter",
+        "hostPlanet": "Saturn",
+        "polarity": "negative"
+      },
+      {
+        "dignity": "domicile",
+        "guestPlanet": "Saturn",
+        "hostPlanet": "Mars",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "exaltation",
+        "guestPlanet": "Saturn",
+        "hostPlanet": "Sun",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "triplicityRuler",
+        "guestPlanet": "Saturn",
+        "hostPlanet": "Sun",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "termRuler",
+        "guestPlanet": "Saturn",
+        "hostPlanet": "Venus",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "faceRuler",
+        "guestPlanet": "Saturn",
+        "hostPlanet": "Sun",
+        "polarity": "positive"
+      },
+      {
+        "dignity": "detriment",
+        "guestPlanet": "Saturn",
+        "hostPlanet": "Venus",
+        "polarity": "negative"
+      }
+    ],
+    "solarConditions": [
+      {
+        "condition": "clear",
+        "planet": "Moon",
+        "sameSignAsSun": false,
+        "separationDegrees": 39.535799999999995
+      },
+      {
+        "condition": "underBeams",
+        "planet": "Mercury",
+        "sameSignAsSun": false,
+        "separationDegrees": 14.1772
+      },
+      {
+        "condition": "clear",
+        "planet": "Venus",
+        "sameSignAsSun": false,
+        "separationDegrees": 40.543499999999995
+      },
+      {
+        "condition": "clear",
+        "planet": "Mars",
+        "sameSignAsSun": false,
+        "separationDegrees": 60.21339999999999
+      },
+      {
+        "condition": "clear",
+        "planet": "Jupiter",
+        "sameSignAsSun": false,
+        "separationDegrees": 35.477900000000005
+      },
+      {
+        "condition": "clear",
+        "planet": "Saturn",
+        "sameSignAsSun": false,
+        "separationDegrees": 159.2462
+      }
+    ],
+    "timingPatterns": [
+      {
+        "aspectName": "Conjunction",
+        "bracketHours": [
+          1,
+          2
+        ],
+        "estimatedPerfectsWithinHours": 1.990905474395531,
+        "moonTravelDegrees": 1.0553661076487515,
+        "planet1": "Moon",
+        "planet2": "Venus",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": true
+      },
+      {
+        "aspectName": "Square",
+        "bracketHours": [
+          29,
+          30
+        ],
+        "estimatedPerfectsWithinHours": 29.102909220931952,
+        "moonTravelDegrees": 15.226807883186723,
+        "planet1": "Moon",
+        "planet2": "Jupiter",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": true
+      },
+      {
+        "aspectName": "Trine",
+        "bracketHours": [
+          40,
+          41
+        ],
+        "estimatedPerfectsWithinHours": 40.916367764885536,
+        "moonTravelDegrees": 21.293766430821165,
+        "planet1": "Moon",
+        "planet2": "Mars",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": true
+      },
+      {
+        "aspectName": "Sextile",
+        "bracketHours": [
+          42,
+          43
+        ],
+        "estimatedPerfectsWithinHours": 42.68521883051835,
+        "moonTravelDegrees": 22.19707304336052,
+        "planet1": "Sun",
+        "planet2": "Moon",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": true
+      },
+      {
+        "aspectName": "Sextile",
+        "bracketHours": [
+          77,
+          78
+        ],
+        "estimatedPerfectsWithinHours": 77.58766861954642,
+        "moonTravelDegrees": 39.79540656493623,
+        "planet1": "Moon",
+        "planet2": "Mercury",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Trine",
+        "bracketHours": [
+          79,
+          80
+        ],
+        "estimatedPerfectsWithinHours": 79.96279063447345,
+        "moonTravelDegrees": 40.980144960228216,
+        "planet1": "Moon",
+        "planet2": "Saturn",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Trine",
+        "bracketHours": [
+          89,
+          90
+        ],
+        "estimatedPerfectsWithinHours": 89.49100011566678,
+        "moonTravelDegrees": 45.72095119320929,
+        "planet1": "Moon",
+        "planet2": "Jupiter",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Opposition",
+        "bracketHours": [
+          95,
+          96
+        ],
+        "estimatedPerfectsWithinHours": 95.11247486367371,
+        "moonTravelDegrees": null,
+        "planet1": "Mercury",
+        "planet2": "Saturn",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": true
+      },
+      {
+        "aspectName": "Square",
+        "bracketHours": [
+          107,
+          108
+        ],
+        "estimatedPerfectsWithinHours": 107.91432463997096,
+        "moonTravelDegrees": 54.848361471351865,
+        "planet1": "Sun",
+        "planet2": "Moon",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Sextile",
+        "bracketHours": [
+          125,
+          126
+        ],
+        "estimatedPerfectsWithinHours": 125.84673327870351,
+        "moonTravelDegrees": 63.71167581231512,
+        "planet1": "Moon",
+        "planet2": "Venus",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Square",
+        "bracketHours": [
+          140,
+          141
+        ],
+        "estimatedPerfectsWithinHours": 140.16325505445195,
+        "moonTravelDegrees": 70.79598905362403,
+        "planet1": "Moon",
+        "planet2": "Saturn",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Square",
+        "bracketHours": [
+          147,
+          148
+        ],
+        "estimatedPerfectsWithinHours": 147.14948973567775,
+        "moonTravelDegrees": 74.26138982617582,
+        "planet1": "Moon",
+        "planet2": "Mercury",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      },
+      {
+        "aspectName": "Opposition",
+        "bracketHours": [
+          167,
+          168
+        ],
+        "estimatedPerfectsWithinHours": 167.6663990958246,
+        "moonTravelDegrees": 84.49280308779672,
+        "planet1": "Moon",
+        "planet2": "Mars",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": false
+      }
+    ],
+    "voidOfCourseMoon": {
+      "available": true,
+      "checkedUntilHours": 55.87866750211572,
+      "context": "isVoid reports absence of an aspect before sign exit. Frawley also treats a long gap, roughly 15 degrees or more, as possible void-like stagnation; this requires contextual judgment (printed p. 65).",
+      "isVoid": false,
+      "longGapNeedsReview": false,
+      "nextApplyingAspect": {
+        "aspectName": "Conjunction",
+        "bracketHours": [
+          1,
+          2
+        ],
+        "estimatedPerfectsWithinHours": 1.990905474395531,
+        "moonTravelDegrees": 1.0553661076487515,
+        "planet1": "Moon",
+        "planet2": "Venus",
+        "type": "perfectionCandidate",
+        "withinCurrentSigns": true
+      },
+      "reason": null
+    },
+    "zodiac": "tropical"
+  },
+  "houses": [
+    {
+      "degree": 25.1233,
+      "number": 1,
+      "ruler": "Venus",
+      "sign": "Libra"
+    },
+    {
+      "degree": 18.3614,
+      "number": 2,
+      "ruler": "Mars",
+      "sign": "Scorpio"
+    },
+    {
+      "degree": 20.9422,
+      "number": 3,
+      "ruler": "Jupiter",
+      "sign": "Sagittarius"
+    },
+    {
+      "degree": 3.4171,
+      "number": 4,
+      "ruler": "Saturn",
+      "sign": "Aquarius"
+    },
+    {
+      "degree": 9.2705,
+      "number": 5,
+      "ruler": "Jupiter",
+      "sign": "Pisces"
+    },
+    {
+      "degree": 4.2357,
+      "number": 6,
+      "ruler": "Mars",
+      "sign": "Aries"
+    },
+    {
+      "degree": 25.1233,
+      "number": 7,
+      "ruler": "Mars",
+      "sign": "Aries"
+    },
+    {
+      "degree": 18.3614,
+      "number": 8,
+      "ruler": "Venus",
+      "sign": "Taurus"
+    },
+    {
+      "degree": 20.9422,
+      "number": 9,
+      "ruler": "Mercury",
+      "sign": "Gemini"
+    },
+    {
+      "degree": 3.4171,
+      "number": 10,
+      "ruler": "Sun",
+      "sign": "Leo"
+    },
+    {
+      "degree": 9.2705,
+      "number": 11,
+      "ruler": "Mercury",
+      "sign": "Virgo"
+    },
+    {
+      "degree": 4.2357,
+      "number": 12,
+      "ruler": "Venus",
+      "sign": "Libra"
+    }
+  ],
+  "location": {
+    "label": "51.5075, -0.12777777777777777",
+    "latitude": 51.5075,
+    "longitude": -0.127778
+  },
+  "midheaven": {
+    "degree": 3.4171,
+    "sign": "Leo"
+  },
+  "timezone": "Europe/London"
+}

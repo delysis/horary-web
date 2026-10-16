@@ -1,0 +1,339 @@
+{
+  "source": {
+    "name": "NASA/JPL Horizons API",
+    "url": "https://ssd.jpl.nasa.gov/api/horizons.api",
+    "retrievedAt": "2026-06-30",
+    "parameters": {
+      "EPHEM_TYPE": "OBSERVER",
+      "CENTER": "500@399",
+      "TIME_TYPE": "UT",
+      "TLIST_TYPE": "CAL",
+      "QUANTITIES": "31",
+      "ANG_FORMAT": "DEG",
+      "EXTRA_PREC": "YES"
+    },
+    "commands": {
+      "Sun": "10",
+      "Moon": "301",
+      "Mercury": "199",
+      "Venus": "299",
+      "Mars": "499",
+      "Jupiter": "599",
+      "Saturn": "699",
+      "Uranus": "799",
+      "Neptune": "899",
+      "Pluto": "999"
+    },
+    "notes": "Observer ecliptic longitude and latitude for geocentric bodies. Tests use longitude only. Planetary tolerances reflect the app's deliberately compact Meeus/orbital-elements engine rather than full Swiss Ephemeris precision."
+  },
+  "tolerancesArcMinutes": {
+    "Sun": 3,
+    "Moon": 5,
+    "Mercury": 25,
+    "Venus": 25,
+    "Mars": 25,
+    "Jupiter": 25,
+    "Saturn": 30,
+    "Uranus": 45,
+    "Neptune": 65,
+    "Pluto": 100
+  },
+  "cases": [
+    {
+      "id": "london-solstice-2024",
+      "description": "London near the 2024 June solstice.",
+      "input": {
+        "utc": "2024-06-21T12:00:00.000Z",
+        "latitude": 51.5,
+        "longitude": -0.1
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 90.6021552
+        },
+        "Moon": {
+          "longitude": 263.7435278
+        },
+        "Mercury": {
+          "longitude": 98.82274
+        },
+        "Venus": {
+          "longitude": 95.2038229
+        },
+        "Mars": {
+          "longitude": 39.0711222
+        },
+        "Jupiter": {
+          "longitude": 66.122316
+        },
+        "Saturn": {
+          "longitude": 349.3705412
+        },
+        "Uranus": {
+          "longitude": 55.2672118
+        },
+        "Neptune": {
+          "longitude": 359.8994536
+        },
+        "Pluto": {
+          "longitude": 301.5759502
+        }
+      }
+    },
+    {
+      "id": "nyc-dst-spring-2024",
+      "description": "New York instant during the 2024 spring DST transition day.",
+      "input": {
+        "utc": "2024-03-10T07:30:00.000Z",
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 350.2170769
+        },
+        "Moon": {
+          "longitude": 349.3215011
+        },
+        "Mercury": {
+          "longitude": 0.2766108
+        },
+        "Venus": {
+          "longitude": 328.0222917
+        },
+        "Mars": {
+          "longitude": 320.1413138
+        },
+        "Jupiter": {
+          "longitude": 42.9803716
+        },
+        "Saturn": {
+          "longitude": 341.0478844
+        },
+        "Uranus": {
+          "longitude": 49.8762021
+        },
+        "Neptune": {
+          "longitude": 357.0882118
+        },
+        "Pluto": {
+          "longitude": 301.4484704
+        }
+      }
+    },
+    {
+      "id": "nyc-dst-fall-2024",
+      "description": "New York instant during the repeated-hour DST fall transition day.",
+      "input": {
+        "utc": "2024-11-03T06:30:00.000Z",
+        "latitude": 40.7128,
+        "longitude": -74.006
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 221.3299804
+        },
+        "Moon": {
+          "longitude": 240.598626
+        },
+        "Mercury": {
+          "longitude": 240.648358
+        },
+        "Venus": {
+          "longitude": 259.8314275
+        },
+        "Mars": {
+          "longitude": 119.6886696
+        },
+        "Jupiter": {
+          "longitude": 80.3074912
+        },
+        "Saturn": {
+          "longitude": 342.8253226
+        },
+        "Uranus": {
+          "longitude": 55.810468
+        },
+        "Neptune": {
+          "longitude": 357.4592486
+        },
+        "Pluto": {
+          "longitude": 299.7604139
+        }
+      }
+    },
+    {
+      "id": "sydney-summer-2024",
+      "description": "Sydney southern-hemisphere chart.",
+      "input": {
+        "utc": "2024-01-15T03:00:00.000Z",
+        "latitude": -33.8688,
+        "longitude": 151.2093
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 294.4366044
+        },
+        "Moon": {
+          "longitude": 344.4256461
+        },
+        "Mercury": {
+          "longitude": 271.1102571
+        },
+        "Venus": {
+          "longitude": 259.8723909
+        },
+        "Mars": {
+          "longitude": 277.8548291
+        },
+        "Jupiter": {
+          "longitude": 35.9689833
+        },
+        "Saturn": {
+          "longitude": 334.5986406
+        },
+        "Uranus": {
+          "longitude": 49.1529988
+        },
+        "Neptune": {
+          "longitude": 355.3347841
+        },
+        "Pluto": {
+          "longitude": 299.8078184
+        }
+      }
+    },
+    {
+      "id": "tokyo-equinox-2024",
+      "description": "Tokyo chart near the 2024 September equinox.",
+      "input": {
+        "utc": "2024-09-22T12:00:00.000Z",
+        "latitude": 35.6762,
+        "longitude": 139.6503
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 179.9703278,
+          "signIndex": 5
+        },
+        "Moon": {
+          "longitude": 60.9421511
+        },
+        "Mercury": {
+          "longitude": 172.9118018
+        },
+        "Venus": {
+          "longitude": 209.258538
+        },
+        "Mars": {
+          "longitude": 100.2606616
+        },
+        "Jupiter": {
+          "longitude": 80.8719546
+        },
+        "Saturn": {
+          "longitude": 344.9506992
+        },
+        "Uranus": {
+          "longitude": 57.0764714
+        },
+        "Neptune": {
+          "longitude": 358.4739272
+        },
+        "Pluto": {
+          "longitude": 299.7315478
+        }
+      }
+    },
+    {
+      "id": "reykjavik-winter-2024",
+      "description": "Reykjavik high-latitude winter chart.",
+      "input": {
+        "utc": "2024-12-21T12:00:00.000Z",
+        "latitude": 64.1466,
+        "longitude": -21.9426
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 270.1127224,
+          "signIndex": 9
+        },
+        "Moon": {
+          "longitude": 164.48818
+        },
+        "Mercury": {
+          "longitude": 248.6539916
+        },
+        "Venus": {
+          "longitude": 316.2018073
+        },
+        "Mars": {
+          "longitude": 124.724776
+        },
+        "Jupiter": {
+          "longitude": 74.4459437
+        },
+        "Saturn": {
+          "longitude": 343.8079221
+        },
+        "Uranus": {
+          "longitude": 53.9291736
+        },
+        "Neptune": {
+          "longitude": 357.1841655
+        },
+        "Pluto": {
+          "longitude": 300.7530372
+        }
+      }
+    },
+    {
+      "id": "london-historical-1899",
+      "description": "Historical pre-1900 UTC date.",
+      "input": {
+        "utc": "1899-12-31T12:00:00.000Z",
+        "latitude": 51.5,
+        "longitude": -0.1
+      },
+      "expected": {
+        "Sun": {
+          "longitude": 279.6433727
+        },
+        "Moon": {
+          "longitude": 265.2969812
+        },
+        "Mercury": {
+          "longitude": 258.3628101,
+          "toleranceArcMinutes": 90
+        },
+        "Venus": {
+          "longitude": 305.7525788,
+          "toleranceArcMinutes": 90
+        },
+        "Mars": {
+          "longitude": 283.482545,
+          "toleranceArcMinutes": 90
+        },
+        "Jupiter": {
+          "longitude": 241.0379335,
+          "toleranceArcMinutes": 80
+        },
+        "Saturn": {
+          "longitude": 267.6585278,
+          "toleranceArcMinutes": 120
+        },
+        "Uranus": {
+          "longitude": 250.1114303,
+          "toleranceArcMinutes": 130
+        },
+        "Neptune": {
+          "longitude": 85.2322671
+        },
+        "Pluto": {
+          "longitude": 75.2600439,
+          "toleranceArcMinutes": 120
+        }
+      }
+    }
+  ]
+}

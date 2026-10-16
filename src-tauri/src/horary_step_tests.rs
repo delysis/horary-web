@@ -1,0 +1,577 @@
+use super::*;
+
+fn condition_fixture(planets: &[&str]) -> (Value, Value, Vec<Fact>) {
+    let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+    condition_fixture_for_chart(&chart, planets)
+}
+
+fn condition_fixture_for_chart(chart: &Value, planets: &[&str]) -> (Value, Value, Vec<Fact>) {
+    use horary_ai_core::book_method::ConditionFacet;
+    let facts = crate::reading_method::facts(Some(chart));
+    let roles: Vec<_> = planets.iter().map(|planet|
+        json!({"label":planet,"house":null,"planet":planet,"reason":"Authored selected role"})).collect();
+    let input = json!({"question":{"roles":roles},"facts":facts});
+    let ids = |facet| {
+        facts
+            .iter()
+            .filter(|fact| {
+                fact.condition_facet == Some(facet)
+                    && fact
+                        .planets
+                        .iter()
+                        .any(|planet| planets.contains(&planet.as_str()))
+            })
+            .map(|fact| fact.id.clone())
+            .collect::<Vec<_>>()
+    };
+    let contextual_ids = facts
+        .iter()
+        .filter(|fact| {
+            fact.condition_facet
+                .is_some_and(ConditionFacet::requires_context_review)
+                && fact
+                    .planets
+                    .iter()
+                    .any(|planet| planets.contains(&planet.as_str()))
+        })
+        .map(|fact| fact.id.clone())
+        .collect::<Vec<_>>();
+    let value = json!({"checks":{
+        "own_dignity":{"state":"unestablished","evidence":ids(ConditionFacet::Essential),
+            "finding":"Authored coverage only; interpretation is unqualified."},
+        "ability_to_act":{"state":"unestablished","evidence":ids(ConditionFacet::HouseCapacity),
+            "finding":"Authored coverage includes supplied neutral or weak capacity."},
+        "context_exceptions":{"state":"unestablished","evidence":contextual_ids,
+            "finding":"No exception asserted by this authored coverage fixture."}},
+        "summary":"Authored native coverage regression; not an oracle reading.","unknowns":[]});
+    (input, value, facts)
+}
+
+fn contextual_condition_fixture() -> (Value, Value, Vec<Fact>) {
+    // Synthetic positions test the native rule, not an authored oracle answer.
+    let chart = horary_ai_core::book_method::apply(&json!({"bodies":[
+        {"name":"Sun","sign":"Aries","degree":0.0,"house":10,"retrograde":false},
+        {"name":"Saturn","sign":"Libra","degree":4.0,"house":4,"retrograde":true},
+        {"name":"Venus","sign":"Cancer","degree":12.0,"house":9,"retrograde":false},
+        {"name":"Mars","sign":"Capricorn","degree":14.0,"house":7,"retrograde":true}
+    ],"derived":{"chartSect":"day"}}));
+    condition_fixture_for_chart(&chart, &["Saturn", "Saturn", "Venus"])
+}
+
+#[test]
+fn contextual_motion_and_sun_opposition_each_require_their_native_testimony() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, complete, facts) = contextual_condition_fixture();
+    assert!(check(Stage::Condition, Matter::Other, &complete, &input, &facts).is_ok());
+    for facet in [ConditionFacet::Retrograde, ConditionFacet::SolarOpposition] {
+        let fact = facts
+            .iter()
+            .find(|fact| fact.planets == ["Saturn"] && fact.condition_facet == Some(facet))
+            .unwrap();
+        let mut omitted = complete.clone();
+        omitted["checks"]["context_exceptions"]["evidence"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|id| id != &fact.id);
+        let error = check(Stage::Condition, Matter::Other, &omitted, &input, &facts)
+            .err()
+            .unwrap();
+        let literal = format!("{}: {}", fact.id, fact.detail);
+        assert_eq!(
+            error.matches(&literal).count(),
+            1,
+            "Shared rulers do not duplicate the requirement."
+        );
+        assert!(error.contains("no particular state or verdict is required"));
+        assert!(error.contains("Evidence maxima for this input"));
+        // Citing a position that mentions motion cannot replace the native facet.
+        let position = facts
+            .iter()
+            .find(|fact| fact.kind == "position" && fact.planets == ["Saturn"])
+            .unwrap();
+        omitted["checks"]["context_exceptions"]["evidence"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!(position.id));
+        assert!(
+            check(Stage::Condition, Matter::Other, &omitted, &input, &facts)
+                .err()
+                .unwrap()
+                .contains(&literal)
+        );
+    }
+}
+
+#[test]
+fn contextual_testimony_allows_either_relevant_check_and_does_not_force_a_verdict() {
+    let (input, complete, facts) = contextual_condition_fixture();
+    for state in ["supported", "contradicted", "unestablished", "not_relevant"] {
+        let mut value = complete.clone();
+        value["checks"]["context_exceptions"]["state"] = json!(state);
+        assert!(check(Stage::Condition, Matter::Other, &value, &input, &facts).is_ok());
+    }
+    let contextual_ids = complete["checks"]["context_exceptions"]["evidence"]
+        .as_array()
+        .unwrap();
+    let mut ability = complete.clone();
+    ability["checks"]["ability_to_act"]["evidence"]
+        .as_array_mut()
+        .unwrap()
+        .extend(contextual_ids.iter().cloned());
+    ability["checks"]["context_exceptions"]["evidence"] = json!([]);
+    assert!(check(Stage::Condition, Matter::Other, &ability, &input, &facts).is_ok());
+    let mut dignity_only = complete.clone();
+    dignity_only["checks"]["own_dignity"]["evidence"]
+        .as_array_mut()
+        .unwrap()
+        .extend(contextual_ids.iter().cloned());
+    dignity_only["checks"]["context_exceptions"]["evidence"] = json!([]);
+    let error = check(
+        Stage::Condition,
+        Matter::Other,
+        &dignity_only,
+        &input,
+        &facts,
+    )
+    .err()
+    .unwrap();
+    assert!(error.contains("required contextual testimony"));
+    assert!(error.contains("ability_to_act or context_exceptions"));
+}
+
+#[test]
+fn contextual_condition_coverage_retains_original_roles_and_leaves_unknowns_unknown() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, mut value, facts) = contextual_condition_fixture();
+    // Unselected Mars is retrograde; it is available evidence, not a required role.
+    let mars = facts
+        .iter()
+        .find(|fact| {
+            fact.planets == ["Mars"] && fact.condition_facet == Some(ConditionFacet::Retrograde)
+        })
+        .unwrap();
+    assert!(!value["checks"]["context_exceptions"]["evidence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|id| id == &mars.id));
+    let repair = json!({"original_input":input,"previous_worksheet":{"question":{"roles":[]}}});
+    assert!(check(Stage::Condition, Matter::Other, &value, &repair, &facts).is_ok());
+    value["checks"]["context_exceptions"]["evidence"] = json!([]);
+    let error = check(Stage::Condition, Matter::Other, &value, &repair, &facts)
+        .err()
+        .unwrap();
+    assert!(error.contains("Saturn's required contextual testimony"));
+    assert!(!error.contains("Mars's required contextual testimony"));
+    let unknown = horary_ai_core::book_method::apply(&json!({"bodies":[
+        {"name":"Saturn","sign":"Libra","degree":4.0,"house":4}
+    ],"derived":{"chartSect":"day"}}));
+    let (input, value, facts) = condition_fixture_for_chart(&unknown, &["Saturn"]);
+    assert!(!facts.iter().any(|fact| fact
+        .condition_facet
+        .is_some_and(ConditionFacet::requires_context_review)));
+    assert!(check(Stage::Condition, Matter::Other, &value, &input, &facts).is_ok());
+}
+
+#[test]
+fn condition_coverage_rejects_each_omitted_selected_actor_facet() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, complete, facts) = condition_fixture(&["Jupiter", "Mercury"]);
+    for (facet, key) in [
+        (ConditionFacet::Essential, "own_dignity"),
+        (ConditionFacet::HouseCapacity, "ability_to_act"),
+    ] {
+        let mut omitted = complete.clone();
+        let id = &facts
+            .iter()
+            .find(|fact| fact.condition_facet == Some(facet) && fact.planets == ["Mercury"])
+            .unwrap()
+            .id;
+        omitted["checks"][key]["evidence"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|item| item != id);
+        let error = check(Stage::Condition, Matter::Work, &omitted, &input, &facts)
+            .err()
+            .expect("The job's omitted testimony must reject");
+        assert!(error.contains(&format!("omits Mercury from {key}")));
+    }
+    assert!(matches!(
+        check(Stage::Condition, Matter::Work, &complete, &input, &facts).unwrap(),
+        Checked::Data(_)
+    ));
+}
+
+#[test]
+fn condition_coverage_cannot_substitute_a_different_native_facet() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, mut value, facts) = condition_fixture(&["Mercury"]);
+    let solar = facts
+        .iter()
+        .find(|fact| {
+            fact.condition_facet == Some(ConditionFacet::Solar) && fact.planets == ["Mercury"]
+        })
+        .unwrap();
+    value["checks"]["own_dignity"]["evidence"] = json!([solar.id]);
+    assert!(
+        check(Stage::Condition, Matter::Work, &value, &input, &facts)
+            .err()
+            .unwrap()
+            .contains("omits Mercury from own_dignity")
+    );
+}
+
+#[test]
+fn condition_coverage_shared_rulers_reuse_proof_without_forcing_a_state() {
+    let (input, value, facts) = condition_fixture(&["Jupiter", "Mercury", "Mercury"]);
+    assert_eq!(
+        value["checks"]["own_dignity"]["evidence"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    for state in ["supported", "contradicted", "unestablished", "not_relevant"] {
+        let mut proposal = value.clone();
+        proposal["checks"]["own_dignity"]["state"] = json!(state);
+        assert!(check(Stage::Condition, Matter::Work, &proposal, &input, &facts).is_ok());
+    }
+}
+
+#[test]
+fn condition_coverage_uses_original_input_and_does_not_invent_missing_calculations() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (mut input, mut value, mut facts) = condition_fixture(&["Jupiter", "Mercury"]);
+    facts.retain(|fact| {
+        !(fact.condition_facet == Some(ConditionFacet::Essential) && fact.planets == ["Mercury"])
+    });
+    value["checks"]["own_dignity"]["evidence"] = json!([facts
+        .iter()
+        .find(
+            |fact| fact.condition_facet == Some(ConditionFacet::Essential)
+                && fact.planets == ["Jupiter"]
+        )
+        .unwrap()
+        .id]);
+    input["facts"] = json!(facts);
+    let repair = json!({"original_input":input,"previous_worksheet":{"question":{"roles":[]}}});
+    assert!(check(Stage::Condition, Matter::Work, &value, &repair, &facts).is_ok());
+    value["checks"]["ability_to_act"]["evidence"] = json!([facts
+        .iter()
+        .find(
+            |fact| fact.condition_facet == Some(ConditionFacet::HouseCapacity)
+                && fact.planets == ["Jupiter"]
+        )
+        .unwrap()
+        .id]);
+    assert!(
+        check(Stage::Condition, Matter::Work, &value, &repair, &facts)
+            .err()
+            .unwrap()
+            .contains("omits Mercury from ability_to_act")
+    );
+}
+
+#[test]
+fn condition_coverage_seven_planets_fit_without_broadening_other_stage_contracts() {
+    let planets = [
+        "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+    ];
+    let (input, value, facts) = condition_fixture(&planets);
+    assert_eq!(
+        value["checks"]["own_dignity"]["evidence"]
+            .as_array()
+            .unwrap()
+            .len(),
+        7
+    );
+    assert!(check(Stage::Condition, Matter::Other, &value, &input, &facts).is_ok());
+    let schema = horary_contract::schema(Stage::Reception, &facts);
+    let ids = value["checks"]["own_dignity"]["evidence"].clone();
+    assert_eq!(
+        schema["properties"]["checks"]["properties"]["direction"]["properties"]["evidence"]
+            ["maxItems"],
+        6
+    );
+    let reception = json!({"checks":{
+        "direction":{"state":"unestablished","evidence":ids,"finding":"Authored excess-evidence rejection."},
+        "strength_and_quality":{"state":"unestablished","evidence":[],"finding":"Unestablished."},
+        "contextual_motive":{"state":"not_relevant","evidence":[],"finding":"Not relevant."}},
+        "summary":"Authored reception shape.","unknowns":[]});
+    assert!(horary_contract::validate_shape(&reception, &schema).is_err());
+}
+
+#[test]
+fn condition_bundle_budget_includes_motion_solar_and_cusp_without_forcing_a_verdict() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let planets = ["Jupiter", "Mercury", "Moon", "Saturn"];
+    let (input, mut value, facts) = condition_fixture(&planets);
+    let supporting: Vec<_> = facts
+        .iter()
+        .filter(|fact| {
+            fact.planets
+                .iter()
+                .any(|planet| planets.contains(&planet.as_str()))
+                && (fact.kind == "position"
+                    || matches!(
+                        fact.condition_facet,
+                        Some(
+                            ConditionFacet::HouseCapacity
+                                | ConditionFacet::Solar
+                                | ConditionFacet::SolarOpposition
+                                | ConditionFacet::Retrograde
+                                | ConditionFacet::CuspAdvance
+                        )
+                    ))
+        })
+        .map(|fact| fact.id.clone())
+        .collect();
+    assert!(
+        supporting.len() > 7,
+        "This regression must cover the old evidence limit."
+    );
+    value["checks"]["ability_to_act"]["evidence"] = json!(supporting);
+    let schema = response_schema_for(Stage::Condition, Matter::Other, &input, &facts);
+    assert_eq!(
+        schema["oneOf"][0]["properties"]["checks"]["properties"]["ability_to_act"]["properties"]
+            ["evidence"]["maxItems"],
+        supporting.len()
+    );
+    assert!(matches!(
+        check(Stage::Condition, Matter::Other, &value, &input, &facts).unwrap(),
+        Checked::Data(_)
+    ));
+    // These assertions qualify native coverage, never the authored finding.
+    let house = facts
+        .iter()
+        .find(|fact| {
+            fact.planets == ["Jupiter"]
+                && fact.condition_facet == Some(ConditionFacet::HouseCapacity)
+        })
+        .unwrap();
+    value["checks"]["ability_to_act"]["evidence"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|id| id != &house.id);
+    assert!(
+        check(Stage::Condition, Matter::Other, &value, &input, &facts)
+            .err()
+            .unwrap()
+            .contains("omits Jupiter from ability_to_act")
+    );
+}
+
+#[test]
+fn condition_repair_reports_all_missing_native_facets_and_limits_together() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, mut value, facts) = condition_fixture(&["Jupiter", "Mercury", "Mercury"]);
+    value["checks"]["own_dignity"]["evidence"] = json!([]);
+    value["checks"]["ability_to_act"]["evidence"] = json!([]);
+    let error = check(Stage::Condition, Matter::Work, &value, &input, &facts)
+        .err()
+        .unwrap();
+    for planet in ["Jupiter", "Mercury"] {
+        for (facet, key) in [
+            (ConditionFacet::Essential, "own_dignity"),
+            (ConditionFacet::HouseCapacity, "ability_to_act"),
+        ] {
+            assert_eq!(
+                error.matches(&format!("omits {planet} from {key}")).count(),
+                1,
+                "Shared roles must not duplicate the requirement."
+            );
+            let fact = facts
+                .iter()
+                .find(|fact| fact.planets == [planet] && fact.condition_facet == Some(facet))
+                .unwrap();
+            assert!(
+                error.contains(&format!("{}: {}", fact.id, fact.detail)),
+                "Feedback must use literal current native testimony."
+            );
+        }
+    }
+    assert!(error.contains("Allowed states: supported, contradicted, unestablished, not_relevant"));
+    assert!(error.contains("Evidence maxima for this input"));
+    // A schema-valid positive check with no IDs fails a different native
+    // guard; that early rejection must still carry the complete checklist.
+    value["checks"]["own_dignity"]["state"] = json!("supported");
+    let positive_error = check(Stage::Condition, Matter::Work, &value, &input, &facts)
+        .err()
+        .unwrap();
+    assert!(positive_error.contains("needs supplied evidence"));
+    assert!(positive_error.contains("omits Mercury from own_dignity"));
+    assert!(positive_error.contains("omits Jupiter from ability_to_act"));
+    assert!(positive_error.contains("Evidence maxima for this input"));
+    value["checks"]["own_dignity"]["state"] = json!("mixed");
+    let shape_error = check(Stage::Condition, Matter::Work, &value, &input, &facts)
+        .err()
+        .unwrap();
+    assert!(shape_error.contains("unexpected value \"mixed\""));
+    assert!(shape_error.contains("omits Mercury from own_dignity"));
+    assert!(shape_error.contains("omits Jupiter from ability_to_act"));
+}
+
+#[test]
+fn condition_budget_follows_original_selected_roles_and_missing_calculations() {
+    use horary_ai_core::book_method::ConditionFacet;
+    let (input, _, facts) = condition_fixture(&["Mercury", "Mercury"]);
+    let budget = |input: &Value, facts: &[Fact]| {
+        response_schema_for(Stage::Condition, Matter::Other, input, facts)["oneOf"][0]["properties"]
+            ["checks"]["properties"]["own_dignity"]["properties"]["evidence"]["maxItems"]
+            .as_u64()
+            .unwrap()
+    };
+    assert_eq!(budget(&input, &facts), 2);
+    let repair = json!({"original_input":input,"previous_worksheet":{"question":{"roles":[{"planet":"Saturn"}]}}});
+    assert_eq!(
+        budget(&repair, &facts),
+        2,
+        "A rejected proposal cannot change the budget's roles."
+    );
+    let mut missing = facts.clone();
+    missing.retain(|fact| {
+        !(fact.planets == ["Mercury"] && fact.condition_facet == Some(ConditionFacet::Essential))
+    });
+    assert_eq!(
+        budget(&repair, &missing),
+        1,
+        "Missing native calculations provide no invented evidence capacity."
+    );
+    let mut duplicated = facts.clone();
+    duplicated.extend(facts.clone());
+    assert_eq!(budget(&repair, &duplicated), 2);
+}
+
+#[test]
+fn condition_larger_budget_keeps_current_id_and_shape_guards() {
+    let (input, mut value, facts) = condition_fixture(&["Jupiter", "Mercury", "Moon", "Saturn"]);
+    value["checks"]["ability_to_act"]["evidence"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("invented-fact"));
+    assert!(check(Stage::Condition, Matter::Other, &value, &input, &facts).is_err());
+    let (_, mut value, _) = condition_fixture(&["Jupiter", "Mercury", "Moon", "Saturn"]);
+    let schema = horary_contract::condition_schema(&input, &facts);
+    let limit = schema["properties"]["checks"]["properties"]["ability_to_act"]["properties"]
+        ["evidence"]["maxItems"]
+        .as_u64()
+        .unwrap() as usize;
+    value["checks"]["ability_to_act"]["evidence"] = json!(vec![facts[0].id.clone(); limit + 1]);
+    assert!(
+        check(Stage::Condition, Matter::Other, &value, &input, &facts)
+            .err()
+            .unwrap()
+            .contains(&format!("maximum is {limit}"))
+    );
+}
+fn permit(marker: &str) -> CheckedData {
+    let options = crate::horary_role_options::build(
+        Matter::Work,
+        &[],
+        &crate::horary_role_options::Subject {
+            name: "Job".into(),
+            kind: "job".into(),
+            owner_id: "querent".into(),
+            source_quote: String::new(),
+        },
+    );
+    let input = json!({"native_role_options":options,"marker":marker});
+    let chart = horary_ai_core::astronomy::chart(1789387200000., 38.657, -77.249).unwrap();
+    let facts = crate::reading_method::facts(Some(&chart));
+    let value = json!({"selections":[{"id":"querent.self","reason":"The native first represents the person asking."},{"id":"subject.primary","reason":"The native tenth represents this job."}],"summary":"Authored invariant fixture.","unknowns":[]});
+    let Checked::Data(data) =
+        check(Stage::Significators, Matter::Work, &value, &input, &facts).unwrap()
+    else {
+        panic!("Fixture must produce data")
+    };
+    data
+}
+#[test]
+fn a_completion_permit_cannot_complete_another_input_or_stage() {
+    let data = permit("one");
+    let foreign = permit("two");
+    let mut journal = Journal::default();
+    journal
+        .begin(
+            "job".into(),
+            Stage::Significators,
+            1,
+            data.input_sha256.clone(),
+        )
+        .unwrap();
+    assert!(journal.finish("job", &foreign, 0).is_err());
+    assert_eq!(journal.jobs[0].phase(), &Phase::Running);
+    journal.finish("job", &data, 0).unwrap();
+    assert!(journal
+        .begin(
+            "job".into(),
+            Stage::Significators,
+            1,
+            data.input_sha256.clone()
+        )
+        .is_err());
+    let mut wrong = Journal::default();
+    wrong
+        .begin(
+            "other".into(),
+            Stage::Condition,
+            1,
+            data.input_sha256.clone(),
+        )
+        .unwrap();
+    assert!(wrong.finish("other", &data, 0).is_err());
+}
+#[test]
+fn every_analysis_stage_has_an_internal_context_gate_before_generation() {
+    for stage in [
+        Stage::Significators,
+        Stage::Condition,
+        Stage::Reception,
+        Stage::Contacts,
+        Stage::Location,
+        Stage::Judgment,
+        Stage::Explanation,
+    ] {
+        assert!(
+            prerequisites(stage, &json!({})).is_err(),
+            "{} must not dispatch without its own input",
+            stage.name()
+        );
+    }
+    assert!(prerequisites(
+        Stage::Judgment,
+        &json!({"condition":{"request_input":{}},"reception":{},"contacts":{}})
+    )
+    .is_err());
+}
+#[test]
+fn four_independent_steps_can_run_but_a_fifth_cannot_enter_the_batch() {
+    let mut journal = Journal::default();
+    for (index, stage) in [
+        Stage::Condition,
+        Stage::Reception,
+        Stage::Contacts,
+        Stage::Location,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        journal
+            .begin(index.to_string(), stage, 1, "input".into())
+            .unwrap();
+    }
+    assert!(journal
+        .begin("fifth".into(), Stage::Judgment, 1, "input".into())
+        .is_err());
+    journal.pause("Interrupted".into());
+    assert!(journal.active.is_empty());
+    assert!(journal
+        .jobs
+        .iter()
+        .all(|job| matches!(job.phase(), Phase::Paused { .. })));
+}
+#[test]
+fn superseded_or_completed_work_cannot_restart_as_a_generation() {
+    assert!(!Phase::Superseded { by: "new".into() }.allows(&Phase::Complete { record_index: 0 }));
+    assert!(!Phase::Complete { record_index: 0 }.allows(&Phase::Running));
+}

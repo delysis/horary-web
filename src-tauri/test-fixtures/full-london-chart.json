@@ -1,0 +1,2855 @@
+{
+  "castLocalTime": "2026-09-10 23:47 Europe/London",
+  "castUtcTime": "2026-09-10T22:47:00.000Z",
+  "timezone": "Europe/London",
+  "location": {
+    "label": "51.5000, -0.1275",
+    "latitude": 51.5,
+    "longitude": -0.1275
+  },
+  "ascendant": {
+    "sign": "Cancer",
+    "degree": 4.1418
+  },
+  "midheaven": {
+    "sign": "Aquarius",
+    "degree": 29.4905
+  },
+  "houses": [
+    {
+      "number": 1,
+      "sign": "Cancer",
+      "degree": 4.1418,
+      "ruler": "Moon"
+    },
+    {
+      "number": 2,
+      "sign": "Cancer",
+      "degree": 24.6499,
+      "ruler": "Moon"
+    },
+    {
+      "number": 3,
+      "sign": "Leo",
+      "degree": 10.6312,
+      "ruler": "Sun"
+    },
+    {
+      "number": 4,
+      "sign": "Leo",
+      "degree": 29.4905,
+      "ruler": "Sun"
+    },
+    {
+      "number": 5,
+      "sign": "Libra",
+      "degree": 2.4,
+      "ruler": "Venus"
+    },
+    {
+      "number": 6,
+      "sign": "Scorpio",
+      "degree": 26.3834,
+      "ruler": "Mars"
+    },
+    {
+      "number": 7,
+      "sign": "Capricorn",
+      "degree": 4.1418,
+      "ruler": "Saturn"
+    },
+    {
+      "number": 8,
+      "sign": "Capricorn",
+      "degree": 24.6499,
+      "ruler": "Saturn"
+    },
+    {
+      "number": 9,
+      "sign": "Aquarius",
+      "degree": 10.6312,
+      "ruler": "Saturn"
+    },
+    {
+      "number": 10,
+      "sign": "Aquarius",
+      "degree": 29.4905,
+      "ruler": "Saturn"
+    },
+    {
+      "number": 11,
+      "sign": "Aries",
+      "degree": 2.4,
+      "ruler": "Mars"
+    },
+    {
+      "number": 12,
+      "sign": "Taurus",
+      "degree": 26.3834,
+      "ruler": "Venus"
+    }
+  ],
+  "bodies": [
+    {
+      "name": "Sun",
+      "sign": "Virgo",
+      "degree": 18.2411,
+      "house": 4,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": false,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": false,
+        "peregrine": true,
+        "score": 0
+      },
+      "accidentalDignity": {
+        "house": 4,
+        "angularity": "angular",
+        "retrograde": false,
+        "solarCondition": null,
+        "inJoy": false,
+        "joyHouse": 9,
+        "score": 5,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "angular",
+            "score": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "Moon",
+      "sign": "Virgo",
+      "degree": 15.7467,
+      "house": 4,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": true,
+        "termRuler": false,
+        "faceRuler": true,
+        "detriment": false,
+        "fall": false,
+        "peregrine": false,
+        "score": 4
+      },
+      "accidentalDignity": {
+        "house": 4,
+        "angularity": "angular",
+        "retrograde": false,
+        "solarCondition": "combust",
+        "inJoy": false,
+        "joyHouse": 3,
+        "score": 0,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "angular",
+            "score": 5
+          },
+          {
+            "type": "solarCondition",
+            "label": "combust",
+            "score": -5
+          }
+        ]
+      }
+    },
+    {
+      "name": "Mercury",
+      "sign": "Libra",
+      "degree": 0.089,
+      "house": 4,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": true,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": false,
+        "peregrine": false,
+        "score": 3
+      },
+      "accidentalDignity": {
+        "house": 4,
+        "angularity": "angular",
+        "retrograde": false,
+        "solarCondition": "underBeams",
+        "inJoy": false,
+        "joyHouse": 1,
+        "score": 1,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "angular",
+            "score": 5
+          },
+          {
+            "type": "solarCondition",
+            "label": "underBeams",
+            "score": -4
+          }
+        ]
+      }
+    },
+    {
+      "name": "Venus",
+      "sign": "Scorpio",
+      "degree": 0.0229,
+      "house": 5,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": false,
+        "termRuler": false,
+        "faceRuler": true,
+        "detriment": true,
+        "fall": false,
+        "peregrine": false,
+        "score": -4
+      },
+      "accidentalDignity": {
+        "house": 5,
+        "angularity": "succedent",
+        "retrograde": false,
+        "solarCondition": null,
+        "inJoy": true,
+        "joyHouse": 5,
+        "score": 4,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "succedent",
+            "score": 2
+          },
+          {
+            "type": "planetaryJoy",
+            "label": "joy in house 5",
+            "score": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "Mars",
+      "sign": "Cancer",
+      "degree": 19.2481,
+      "house": 1,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": true,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": true,
+        "peregrine": false,
+        "score": -1
+      },
+      "accidentalDignity": {
+        "house": 1,
+        "angularity": "angular",
+        "retrograde": false,
+        "solarCondition": null,
+        "inJoy": false,
+        "joyHouse": 6,
+        "score": 5,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "angular",
+            "score": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "Jupiter",
+      "sign": "Leo",
+      "degree": 15.404,
+      "house": 3,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": true,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": false,
+        "peregrine": false,
+        "score": 3
+      },
+      "accidentalDignity": {
+        "house": 3,
+        "angularity": "cadent",
+        "retrograde": false,
+        "solarCondition": null,
+        "inJoy": false,
+        "joyHouse": 11,
+        "score": -5,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "cadent",
+            "score": -5
+          }
+        ]
+      }
+    },
+    {
+      "name": "Saturn",
+      "sign": "Aries",
+      "degree": 12.556,
+      "house": 11,
+      "retrograde": true,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": false,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": true,
+        "peregrine": true,
+        "score": -4
+      },
+      "accidentalDignity": {
+        "house": 11,
+        "angularity": "succedent",
+        "retrograde": true,
+        "solarCondition": null,
+        "inJoy": false,
+        "joyHouse": 12,
+        "score": -3,
+        "factors": [
+          {
+            "type": "angularity",
+            "label": "succedent",
+            "score": 2
+          },
+          {
+            "type": "motion",
+            "label": "retrograde",
+            "score": -5
+          }
+        ]
+      }
+    },
+    {
+      "name": "Uranus",
+      "sign": "Gemini",
+      "degree": 6.2744,
+      "house": 12,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": false,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": false,
+        "peregrine": true,
+        "score": 0
+      },
+      "accidentalDignity": null
+    },
+    {
+      "name": "Neptune",
+      "sign": "Aries",
+      "degree": 2.3985,
+      "house": 10,
+      "retrograde": true,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": false,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": false,
+        "peregrine": true,
+        "score": 0
+      },
+      "accidentalDignity": null
+    },
+    {
+      "name": "Pluto",
+      "sign": "Aquarius",
+      "degree": 4.134,
+      "house": 8,
+      "retrograde": false,
+      "dignity": {
+        "domicile": false,
+        "exaltation": false,
+        "triplicityRuler": false,
+        "termRuler": false,
+        "faceRuler": false,
+        "detriment": false,
+        "fall": false,
+        "peregrine": true,
+        "score": 0
+      },
+      "accidentalDignity": null
+    }
+  ],
+  "aspects": [
+    {
+      "planet1": "Sun",
+      "aspectName": "Sextile",
+      "planet2": "Mars",
+      "orb": 1.01,
+      "applying": true,
+      "separating": false,
+      "exact": false,
+      "major": true
+    },
+    {
+      "planet1": "Sun",
+      "aspectName": "Conjunction",
+      "planet2": "Moon",
+      "orb": 2.49,
+      "applying": true,
+      "separating": false,
+      "exact": false,
+      "major": true
+    },
+    {
+      "planet1": "Jupiter",
+      "aspectName": "Trine",
+      "planet2": "Saturn",
+      "orb": 2.85,
+      "applying": false,
+      "separating": true,
+      "exact": false,
+      "major": true
+    },
+    {
+      "planet1": "Moon",
+      "aspectName": "Sextile",
+      "planet2": "Mars",
+      "orb": 3.5,
+      "applying": true,
+      "separating": false,
+      "exact": false,
+      "major": true
+    }
+  ],
+  "derived": {
+    "zodiac": "tropical",
+    "houseSystem": "regiomontanus",
+    "chartSect": "night",
+    "ascendantRuler": "Moon",
+    "partOfFortune": {
+      "name": "Part of Fortune",
+      "sign": "Cancer",
+      "degree": 6.6362,
+      "house": 1,
+      "formula": "ASC + Sun - Moon"
+    },
+    "receptions": [
+      {
+        "hostPlanet": "Jupiter",
+        "guestPlanet": "Saturn",
+        "dignity": "triplicity",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Jupiter",
+        "guestPlanet": "Sun",
+        "dignity": "term",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Mars",
+        "guestPlanet": "Saturn",
+        "dignity": "domicile",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Mercury",
+        "guestPlanet": "Saturn",
+        "dignity": "face",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Mercury",
+        "guestPlanet": "Saturn",
+        "dignity": "term",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Saturn",
+        "guestPlanet": "Jupiter",
+        "dignity": "term",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Saturn",
+        "guestPlanet": "Mars",
+        "dignity": "face",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Saturn",
+        "guestPlanet": "Mercury",
+        "dignity": "exaltation",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Saturn",
+        "guestPlanet": "Mercury",
+        "dignity": "term",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Sun",
+        "guestPlanet": "Jupiter",
+        "dignity": "domicile",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Sun",
+        "guestPlanet": "Jupiter",
+        "dignity": "face",
+        "mutual": true
+      },
+      {
+        "hostPlanet": "Jupiter",
+        "guestPlanet": "Mars",
+        "dignity": "exaltation",
+        "mutual": false
+      }
+    ],
+    "voidOfCourseMoon": {
+      "available": true,
+      "isVoid": false,
+      "checkedUntilHours": 4,
+      "nextApplyingAspect": {
+        "planet": "Sun",
+        "aspectName": "Conjunction",
+        "angle": 0,
+        "orb": 0.3648,
+        "perfectsWithinHours": 4
+      },
+      "reason": null
+    },
+    "antisciaContacts": [
+      {
+        "planet1": "Sun",
+        "planet2": "Saturn",
+        "type": "antiscion",
+        "orb": 0.7971
+      }
+    ],
+    "solarConditions": [
+      {
+        "planet": "Moon",
+        "condition": "combust",
+        "separationDegrees": 2.4944
+      },
+      {
+        "planet": "Mercury",
+        "condition": "underBeams",
+        "separationDegrees": 11.8479
+      }
+    ],
+    "planetaryHour": {
+      "available": true,
+      "period": "night",
+      "hourNumber": 5,
+      "planetaryDay": "Thursday",
+      "planetaryDayRuler": "Jupiter",
+      "planetaryHourRuler": "Sun",
+      "startsAtUtc": "2026-09-10T22:07:44.023Z",
+      "endsAtUtc": "2026-09-10T23:02:48.269Z",
+      "reason": null
+    },
+    "timingPatterns": [
+      {
+        "type": "prohibitionFrustration",
+        "planet1": "Sun",
+        "planet2": "Mars",
+        "sharedPlanet": "Sun",
+        "interveningPlanet": "Moon",
+        "directAspect": {
+          "planet1": "Sun",
+          "aspectName": "Sextile",
+          "planet2": "Mars",
+          "orb": 1.01,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 67.8252,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "interveningAspect": {
+          "planet1": "Sun",
+          "aspectName": "Conjunction",
+          "planet2": "Moon",
+          "orb": 2.49,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 4.6867,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "directEstimatedPerfectsWithinHours": 67.8252,
+        "interveningEstimatedPerfectsWithinHours": 4.6867
+      },
+      {
+        "type": "prohibitionFrustration",
+        "planet1": "Moon",
+        "planet2": "Mars",
+        "sharedPlanet": "Moon",
+        "interveningPlanet": "Sun",
+        "directAspect": {
+          "planet1": "Moon",
+          "aspectName": "Sextile",
+          "planet2": "Mars",
+          "orb": 3.5,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 6.4061,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "interveningAspect": {
+          "planet1": "Sun",
+          "aspectName": "Conjunction",
+          "planet2": "Moon",
+          "orb": 2.49,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 4.6867,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "directEstimatedPerfectsWithinHours": 6.4061,
+        "interveningEstimatedPerfectsWithinHours": 4.6867
+      },
+      {
+        "type": "collection",
+        "collector": "Mars",
+        "planet1": "Sun",
+        "planet2": "Moon",
+        "aspect1": {
+          "planet1": "Sun",
+          "aspectName": "Sextile",
+          "planet2": "Mars",
+          "orb": 1.01,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 67.8252,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "aspect2": {
+          "planet1": "Moon",
+          "aspectName": "Sextile",
+          "planet2": "Mars",
+          "orb": 3.5,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 6.4061,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "estimatedFirstPerfectsWithinHours": 6.4061,
+        "estimatedSecondPerfectsWithinHours": 67.8252
+      },
+      {
+        "type": "prohibitionFrustration",
+        "planet1": "Sun",
+        "planet2": "Mars",
+        "sharedPlanet": "Mars",
+        "interveningPlanet": "Moon",
+        "directAspect": {
+          "planet1": "Sun",
+          "aspectName": "Sextile",
+          "planet2": "Mars",
+          "orb": 1.01,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 67.8252,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "interveningAspect": {
+          "planet1": "Moon",
+          "aspectName": "Sextile",
+          "planet2": "Mars",
+          "orb": 3.5,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 6.4061,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "directEstimatedPerfectsWithinHours": 67.8252,
+        "interveningEstimatedPerfectsWithinHours": 6.4061
+      },
+      {
+        "type": "prohibitionFrustration",
+        "planet1": "Mercury",
+        "planet2": "Pluto",
+        "sharedPlanet": "Mercury",
+        "interveningPlanet": "Neptune",
+        "directAspect": {
+          "planet1": "Mercury",
+          "aspectName": "Trine",
+          "planet2": "Pluto",
+          "orb": 4.05,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 58.5258,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "interveningAspect": {
+          "planet1": "Mercury",
+          "aspectName": "Opposition",
+          "planet2": "Neptune",
+          "orb": 2.31,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 32.6037,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "directEstimatedPerfectsWithinHours": 58.5258,
+        "interveningEstimatedPerfectsWithinHours": 32.6037
+      },
+      {
+        "type": "translation",
+        "mediator": "Neptune",
+        "fromPlanet": "Pluto",
+        "toPlanet": "Mercury",
+        "separatedAspect": {
+          "planet1": "Neptune",
+          "aspectName": "Sextile",
+          "planet2": "Pluto",
+          "orb": 1.74,
+          "applying": false,
+          "separating": true,
+          "estimatedPerfectsWithinHours": null,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "applyingAspect": {
+          "planet1": "Mercury",
+          "aspectName": "Opposition",
+          "planet2": "Neptune",
+          "orb": 2.31,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 32.6037,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "estimatedPerfectsWithinHours": 32.6037
+      },
+      {
+        "type": "translation",
+        "mediator": "Neptune",
+        "fromPlanet": "Uranus",
+        "toPlanet": "Mercury",
+        "separatedAspect": {
+          "planet1": "Uranus",
+          "aspectName": "Sextile",
+          "planet2": "Neptune",
+          "orb": 3.88,
+          "applying": false,
+          "separating": true,
+          "estimatedPerfectsWithinHours": null,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "applyingAspect": {
+          "planet1": "Mercury",
+          "aspectName": "Opposition",
+          "planet2": "Neptune",
+          "orb": 2.31,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 32.6037,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "estimatedPerfectsWithinHours": 32.6037
+      },
+      {
+        "type": "translation",
+        "mediator": "Pluto",
+        "fromPlanet": "Neptune",
+        "toPlanet": "Mercury",
+        "separatedAspect": {
+          "planet1": "Neptune",
+          "aspectName": "Sextile",
+          "planet2": "Pluto",
+          "orb": 1.74,
+          "applying": false,
+          "separating": true,
+          "estimatedPerfectsWithinHours": null,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "applyingAspect": {
+          "planet1": "Mercury",
+          "aspectName": "Trine",
+          "planet2": "Pluto",
+          "orb": 4.05,
+          "applying": true,
+          "separating": false,
+          "estimatedPerfectsWithinHours": 58.5258,
+          "blockedBySignBoundary": false,
+          "stationBeforePerfection": false
+        },
+        "estimatedPerfectsWithinHours": 58.5258
+      }
+    ]
+  },
+  "motionSamples": [
+    {
+      "hours": 0,
+      "positions": {
+        "Sun": 168.2410894944228,
+        "Moon": 165.74673475208886,
+        "Mercury": 180.08897891893093,
+        "Venus": 210.02286849796283,
+        "Mars": 109.24807451969355,
+        "Jupiter": 135.40398607781583,
+        "Saturn": 12.556015702684135
+      }
+    },
+    {
+      "hours": 1,
+      "positions": {
+        "Sun": 168.28159485778724,
+        "Moon": 166.3203023038427,
+        "Mercury": 180.15921776506693,
+        "Venus": 210.04969619729326,
+        "Mars": 109.27385722048132,
+        "Jupiter": 135.41240824021594,
+        "Saturn": 12.553217294854164
+      }
+    },
+    {
+      "hours": 2,
+      "positions": {
+        "Sun": 168.3221010935572,
+        "Moon": 166.89341907476057,
+        "Mercury": 180.2294237898832,
+        "Venus": 210.07649134541268,
+        "Mars": 109.29963711077244,
+        "Jupiter": 135.42082882472505,
+        "Saturn": 12.550417279635838
+      }
+    },
+    {
+      "hours": 3,
+      "positions": {
+        "Sun": 168.36260820115092,
+        "Moon": 167.4660815804839,
+        "Mercury": 180.29959701174255,
+        "Venus": 210.1032538884246,
+        "Mars": 109.32541418887695,
+        "Jupiter": 135.42924782946875,
+        "Saturn": 12.547615659545954
+      }
+    },
+    {
+      "hours": 4,
+      "positions": {
+        "Sun": 168.40311618132978,
+        "Moon": 168.03828640479924,
+        "Mercury": 180.36973745135447,
+        "Venus": 210.12998377324757,
+        "Mars": 109.35118845396494,
+        "Jupiter": 135.43766525285434,
+        "Saturn": 12.544812437009625
+      }
+    },
+    {
+      "hours": 5,
+      "positions": {
+        "Sun": 168.4436250348674,
+        "Moon": 168.61003018137149,
+        "Mercury": 180.43984512943365,
+        "Venus": 210.15668094671378,
+        "Mars": 109.37695990520922,
+        "Jupiter": 135.44608109328948,
+        "Saturn": 12.5420076144527
+      }
+    },
+    {
+      "hours": 6,
+      "positions": {
+        "Sun": 168.48413476117162,
+        "Moon": 169.18130957518588,
+        "Mercury": 180.50992006433503,
+        "Venus": 210.18334535466957,
+        "Mars": 109.40272854091398,
+        "Jupiter": 135.45449534889826,
+        "Saturn": 12.539201194398515
+      }
+    },
+    {
+      "hours": 7,
+      "positions": {
+        "Sun": 168.52464536101502,
+        "Moon": 169.7521213217476,
+        "Mercury": 180.57996227676736,
+        "Venus": 210.20997694377957,
+        "Mars": 109.42849436025011,
+        "Jupiter": 135.46290801808743,
+        "Saturn": 12.536393179277127
+      }
+    },
+    {
+      "hours": 8,
+      "positions": {
+        "Sun": 168.56515683515738,
+        "Moon": 170.3224622084747,
+        "Mercury": 180.6499717874157,
+        "Venus": 210.23657566060362,
+        "Mars": 109.45425736238064,
+        "Jupiter": 135.47131909926088,
+        "Saturn": 12.533583571521376
+      }
+    },
+    {
+      "hours": 9,
+      "positions": {
+        "Sun": 168.60566918301447,
+        "Moon": 170.8923290565907,
+        "Mercury": 180.7199486146376,
+        "Venus": 210.2631414507429,
+        "Mars": 109.48001754561244,
+        "Jupiter": 135.47972859054335,
+        "Saturn": 12.53077237365926
+      }
+    },
+    {
+      "hours": 10,
+      "positions": {
+        "Sun": 168.64618240534878,
+        "Moon": 171.4617187597769,
+        "Mercury": 180.78989277910915,
+        "Venus": 210.28967426059268,
+        "Mars": 109.5057749091074,
+        "Jupiter": 135.4881364903386,
+        "Saturn": 12.527959588127146
+      }
+    },
+    {
+      "hours": 11,
+      "positions": {
+        "Sun": 168.68669650293145,
+        "Moon": 172.03062826600285,
+        "Mercury": 180.85980430150536,
+        "Venus": 210.31617403645754,
+        "Mars": 109.53152945202896,
+        "Jupiter": 135.4965427970502,
+        "Saturn": 12.525145217363445
+      }
+    },
+    {
+      "hours": 12,
+      "positions": {
+        "Sun": 168.72721147516245,
+        "Moon": 172.59905455893693,
+        "Mercury": 180.92968320015157,
+        "Venus": 210.3426407236802,
+        "Mars": 109.55728117267756,
+        "Jupiter": 135.50494750880023,
+        "Saturn": 12.52232926390218
+      }
+    },
+    {
+      "hours": 13,
+      "positions": {
+        "Sun": 168.76772732281756,
+        "Moon": 173.16699469701064,
+        "Mercury": 180.99952949570465,
+        "Venus": 210.36907426839028,
+        "Mars": 109.58303007021391,
+        "Jupiter": 135.5133506239914,
+        "Saturn": 12.519511730185457
+      }
+    },
+    {
+      "hours": 14,
+      "positions": {
+        "Sun": 168.8082440466544,
+        "Moon": 173.73444579469378,
+        "Mercury": 181.06934320880546,
+        "Venus": 210.39547461663813,
+        "Mars": 109.60877614379672,
+        "Jupiter": 135.52175214102567,
+        "Saturn": 12.516692618656919
+      }
+    },
+    {
+      "hours": 15,
+      "positions": {
+        "Sun": 168.84876164608215,
+        "Moon": 174.3014050043946,
+        "Mercury": 181.13912435774753,
+        "Venus": 210.4218417134977,
+        "Mars": 109.63451939172091,
+        "Jupiter": 135.53015205802302,
+        "Saturn": 12.513871931857295
+      }
+    },
+    {
+      "hours": 16,
+      "positions": {
+        "Sun": 168.88928012186102,
+        "Moon": 174.8678695549787,
+        "Mercury": 181.20887296315306,
+        "Venus": 210.4481755048471,
+        "Mars": 109.66025981314453,
+        "Jupiter": 135.53855037338508,
+        "Saturn": 12.511049672233867
+      }
+    },
+    {
+      "hours": 17,
+      "positions": {
+        "Sun": 168.92979947476374,
+        "Moon": 175.4338367334385,
+        "Mercury": 181.2785890456296,
+        "Venus": 210.47447593647277,
+        "Mars": 109.68599740722357,
+        "Jupiter": 135.54694708551256,
+        "Saturn": 12.508225842235959
+      }
+    },
+    {
+      "hours": 18,
+      "positions": {
+        "Sun": 168.97031970418925,
+        "Moon": 175.9993038664984,
+        "Mercury": 181.3482726234331,
+        "Venus": 210.50074295319163,
+        "Mars": 109.71173217225129,
+        "Jupiter": 135.5553421925241,
+        "Saturn": 12.50540044440993
+      }
+    },
+    {
+      "hours": 19,
+      "positions": {
+        "Sun": 169.01084081090028,
+        "Moon": 176.56426835907996,
+        "Mercury": 181.4179237171363,
+        "Venus": 210.526976500615,
+        "Mars": 109.73746410737789,
+        "Jupiter": 135.56373569281868,
+        "Saturn": 12.502573481209197
+      }
+    },
+    {
+      "hours": 20,
+      "positions": {
+        "Sun": 169.05136279566284,
+        "Moon": 177.12872767605154,
+        "Mercury": 181.4875423473037,
+        "Venus": 210.55317652427178,
+        "Mars": 109.76319321175731,
+        "Jupiter": 135.57212758479614,
+        "Saturn": 12.499744955088431
+      }
+    },
+    {
+      "hours": 21,
+      "positions": {
+        "Sun": 169.09188565787986,
+        "Moon": 177.69267932368973,
+        "Mercury": 181.55712853214288,
+        "Venus": 210.57934296871787,
+        "Mars": 109.78891948367755,
+        "Jupiter": 135.58051786657285,
+        "Saturn": 12.496914868600186
+      }
+    },
+    {
+      "hours": 22,
+      "positions": {
+        "Sun": 169.13240939831314,
+        "Moon": 178.25612088825073,
+        "Mercury": 181.6266822921845,
+        "Venus": 210.60547577930544,
+        "Mars": 109.81464292228958,
+        "Jupiter": 135.5889065365477,
+        "Saturn": 12.494083224202939
+      }
+    },
+    {
+      "hours": 23,
+      "positions": {
+        "Sun": 169.17293401772372,
+        "Moon": 178.81905001734845,
+        "Mercury": 181.69620364793025,
+        "Venus": 210.63157490129868,
+        "Mars": 109.8403635267403,
+        "Jupiter": 135.5972935931174,
+        "Saturn": 12.491250024357555
+      }
+    },
+    {
+      "hours": 24,
+      "positions": {
+        "Sun": 169.2134595155153,
+        "Moon": 179.38146440181094,
+        "Mercury": 181.7656926175377,
+        "Venus": 210.65764027899567,
+        "Mars": 109.86608129531407,
+        "Jupiter": 135.60567903439778,
+        "Saturn": 12.488415271621989
+      }
+    },
+    {
+      "hours": 25,
+      "positions": {
+        "Sun": 169.2539858924464,
+        "Moon": 179.94336181377457,
+        "Mercury": 181.83514922147384,
+        "Venus": 210.68367185748625,
+        "Mars": 109.8917962271575,
+        "Jupiter": 135.61406285878525,
+        "Saturn": 12.4855789684608
+      }
+    },
+    {
+      "hours": 26,
+      "positions": {
+        "Sun": 169.29451314928065,
+        "Moon": 180.50474008834976,
+        "Mercury": 181.90457348019027,
+        "Venus": 210.70966958177172,
+        "Mars": 109.9175083214152,
+        "Jupiter": 135.62244506467596,
+        "Saturn": 12.482741117340254
+      }
+    },
+    {
+      "hours": 27,
+      "positions": {
+        "Sun": 169.3350412854187,
+        "Moon": 181.06559710529757,
+        "Mercury": 181.97396541178014,
+        "Venus": 210.73563339589404,
+        "Mars": 109.9432175763705,
+        "Jupiter": 135.63082565018414,
+        "Saturn": 12.479901720823591
+      }
+    },
+    {
+      "hours": 28,
+      "positions": {
+        "Sun": 169.37557030161952,
+        "Moon": 181.62593082696367,
+        "Mercury": 182.04332503663724,
+        "Venus": 210.76156324467547,
+        "Mars": 109.96892399116047,
+        "Jupiter": 135.6392046137036,
+        "Saturn": 12.477060781381795
+      }
+    },
+    {
+      "hours": 29,
+      "positions": {
+        "Sun": 169.4161001986405,
+        "Moon": 182.18573928009278,
+        "Mercury": 182.1126523751484,
+        "Venus": 210.78745907285696,
+        "Mars": 109.99462756493006,
+        "Jupiter": 135.64758195362947,
+        "Saturn": 12.474218301486417
+      }
+    },
+    {
+      "hours": 30,
+      "positions": {
+        "Sun": 169.4566309758859,
+        "Moon": 182.74502053729134,
+        "Mercury": 182.18194744533292,
+        "Venus": 210.81332082421878,
+        "Mars": 110.02032829595476,
+        "Jupiter": 135.65595766807394,
+        "Saturn": 12.47137428370678
+      }
+    },
+    {
+      "hours": 31,
+      "positions": {
+        "Sun": 169.4971626341105,
+        "Moon": 183.30377275511285,
+        "Mercury": 182.25121026752447,
+        "Venus": 210.83914844332432,
+        "Mars": 110.04602618337361,
+        "Jupiter": 135.66433175543028,
+        "Saturn": 12.468528730518926
+      }
+    },
+    {
+      "hours": 32,
+      "positions": {
+        "Sun": 169.5376951740751,
+        "Moon": 183.86199415558417,
+        "Mercury": 182.3204408620227,
+        "Venus": 210.8649418746515,
+        "Mars": 110.07172122632443,
+        "Jupiter": 135.67270421409148,
+        "Saturn": 12.465681644399979
+      }
+    },
+    {
+      "hours": 33,
+      "positions": {
+        "Sun": 169.5782285951783,
+        "Moon": 184.41968300785072,
+        "Mercury": 182.38963924678126,
+        "Venus": 210.89070106172073,
+        "Mars": 110.09741342308058,
+        "Jupiter": 135.68107504216863,
+        "Saturn": 12.462833027925342
+      }
+    },
+    {
+      "hours": 34,
+      "positions": {
+        "Sun": 169.61876289817633,
+        "Moon": 184.97683766595708,
+        "Mercury": 182.45880544204167,
+        "Venus": 210.91642594883203,
+        "Mars": 110.12310277277533,
+        "Jupiter": 135.68944423805272,
+        "Saturn": 12.459982883576572
+      }
+    },
+    {
+      "hours": 35,
+      "positions": {
+        "Sun": 169.65929808382418,
+        "Moon": 185.53345655055682,
+        "Mercury": 182.52793946802484,
+        "Venus": 210.94211648019757,
+        "Mars": 110.14878927454282,
+        "Jupiter": 135.69781180013513,
+        "Saturn": 12.457131213836476
+      }
+    },
+    {
+      "hours": 36,
+      "positions": {
+        "Sun": 169.69983415152387,
+        "Moon": 186.08953813042615,
+        "Mercury": 182.5970413425989,
+        "Venus": 210.96777259908114,
+        "Mars": 110.17447292665338,
+        "Jupiter": 135.70617772652548,
+        "Saturn": 12.454278021286086
+      }
+    },
+    {
+      "hours": 37,
+      "positions": {
+        "Sun": 169.74037110202926,
+        "Moon": 186.6450809602137,
+        "Mercury": 182.66611108592622,
+        "Venus": 210.99339424952046,
+        "Mars": 110.20015372823889,
+        "Jupiter": 135.7145420156141,
+        "Saturn": 12.451423308412075
+      }
+    },
+    {
+      "hours": 38,
+      "positions": {
+        "Sun": 169.78090893609556,
+        "Moon": 187.20008366192462,
+        "Mercury": 182.73514871812822,
+        "Venus": 211.01898137546394,
+        "Mars": 110.22583167842686,
+        "Jupiter": 135.72290466578966,
+        "Saturn": 12.448567077703444
+      }
+    },
+    {
+      "hours": 39,
+      "positions": {
+        "Sun": 169.82144765311818,
+        "Moon": 187.754544906732,
+        "Mercury": 182.8041542569861,
+        "Venus": 211.04453391991208,
+        "Mars": 110.25150677548413,
+        "Jupiter": 135.7312656751604,
+        "Saturn": 12.445709331746684
+      }
+    },
+    {
+      "hours": 40,
+      "positions": {
+        "Sun": 169.86198725385543,
+        "Moon": 188.30846345234886,
+        "Mercury": 182.87312772256413,
+        "Venus": 211.07005182664278,
+        "Mars": 110.27717901853794,
+        "Jupiter": 135.73962504211505,
+        "Saturn": 12.442850073034265
+      }
+    },
+    {
+      "hours": 41,
+      "positions": {
+        "Sun": 169.90252773905718,
+        "Moon": 188.86183812472404,
+        "Mercury": 182.9420691348921,
+        "Venus": 211.095535039341,
+        "Mars": 110.30284840671436,
+        "Jupiter": 135.74798276504117,
+        "Saturn": 12.439989304060134
+      }
+    },
+    {
+      "hours": 42,
+      "positions": {
+        "Sun": 169.94306910812543,
+        "Moon": 189.4146677995975,
+        "Mercury": 183.01097851165474,
+        "Venus": 211.12098350074928,
+        "Mars": 110.32851493827667,
+        "Jupiter": 135.7563388420458,
+        "Saturn": 12.437127027416807
+      }
+    },
+    {
+      "hours": 43,
+      "positions": {
+        "Sun": 169.98361136180756,
+        "Moon": 189.966951439877,
+        "Mercury": 183.07985587280925,
+        "Venus": 211.14639715437949,
+        "Mars": 110.35417861234646,
+        "Jupiter": 135.76469327151506,
+        "Saturn": 12.434263245602097
+      }
+    },
+    {
+      "hours": 44,
+      "positions": {
+        "Sun": 170.02415450085846,
+        "Moon": 190.5186880773225,
+        "Mercury": 183.14870123827993,
+        "Venus": 211.17177594364873,
+        "Mars": 110.37983942804493,
+        "Jupiter": 135.77304605183497,
+        "Saturn": 12.431397961116375
+      }
+    },
+    {
+      "hours": 45,
+      "positions": {
+        "Sun": 170.06469852467103,
+        "Moon": 191.06987679415442,
+        "Mercury": 183.21751462565027,
+        "Venus": 211.19711981104953,
+        "Mars": 110.40549738363364,
+        "Jupiter": 135.7813971811113,
+        "Saturn": 12.428531176556476
+      }
+    },
+    {
+      "hours": 46,
+      "positions": {
+        "Sun": 170.1052434340006,
+        "Moon": 191.62051676023327,
+        "Mercury": 183.28629605477215,
+        "Venus": 211.22242869982205,
+        "Mars": 110.43115247823124,
+        "Jupiter": 135.78974665772893,
+        "Saturn": 12.425662894426466
+      }
+    },
+    {
+      "hours": 47,
+      "positions": {
+        "Sun": 170.14578922959925,
+        "Moon": 192.1706072146294,
+        "Mercury": 183.35504554545497,
+        "Venus": 211.24770255312734,
+        "Mars": 110.45680471095432,
+        "Jupiter": 135.79809448007188,
+        "Saturn": 12.42279311723189
+      }
+    },
+    {
+      "hours": 48,
+      "positions": {
+        "Sun": 170.18633591085472,
+        "Moon": 192.72014744743512,
+        "Mercury": 183.42376311516932,
+        "Venus": 211.2729413131865,
+        "Mars": 110.48245408005863,
+        "Jupiter": 135.80644064624414,
+        "Saturn": 12.419921847575779
+      }
+    },
+    {
+      "hours": 49,
+      "positions": {
+        "Sun": 170.2268834785216,
+        "Moon": 193.26913683668943,
+        "Mercury": 183.49244878365246,
+        "Venus": 211.29814492298686,
+        "Mars": 110.50810058466004,
+        "Jupiter": 135.81478515462902,
+        "Saturn": 12.417049087967484
+      }
+    },
+    {
+      "hours": 50,
+      "positions": {
+        "Sun": 170.26743193335187,
+        "Moon": 193.8175748300349,
+        "Mercury": 183.56110257060035,
+        "Venus": 211.3233133254235,
+        "Mars": 110.53374422387282,
+        "Jupiter": 135.82312800360978,
+        "Saturn": 12.41417484091744
+      }
+    },
+    {
+      "hours": 51,
+      "positions": {
+        "Sun": 170.30798127473622,
+        "Moon": 194.36546092635717,
+        "Mercury": 183.62972449336374,
+        "Venus": 211.34844646245685,
+        "Mars": 110.55938499594754,
+        "Jupiter": 135.83146919128797,
+        "Saturn": 12.411299109034928
+      }
+    },
+    {
+      "hours": 52,
+      "positions": {
+        "Sun": 170.348531503422,
+        "Moon": 194.91279471277767,
+        "Mercury": 183.6983145715602,
+        "Venus": 211.3735442768115,
+        "Mars": 110.58502289999876,
+        "Jupiter": 135.83980871604626,
+        "Saturn": 12.408421894834362
+      }
+    },
+    {
+      "hours": 53,
+      "positions": {
+        "Sun": 170.38908262016446,
+        "Moon": 195.45957584607982,
+        "Mercury": 183.76687282475507,
+        "Venus": 211.39860671111722,
+        "Mars": 110.61065793513251,
+        "Jupiter": 135.84814657626487,
+        "Saturn": 12.405543200831971
+      }
+    },
+    {
+      "hours": 54,
+      "positions": {
+        "Sun": 170.42963462434682,
+        "Moon": 196.0058040346919,
+        "Mercury": 183.8353992701785,
+        "Venus": 211.42363370707673,
+        "Mars": 110.63629009959891,
+        "Jupiter": 135.85648277004498,
+        "Saturn": 12.40266302964244
+      }
+    },
+    {
+      "hours": 55,
+      "positions": {
+        "Sun": 170.47018751672113,
+        "Moon": 196.551479075138,
+        "Mercury": 183.90389392731447,
+        "Venus": 211.44862520714705,
+        "Mars": 110.66191939250564,
+        "Jupiter": 135.86481729576644,
+        "Saturn": 12.399781383785808
+      }
+    },
+    {
+      "hours": 56,
+      "positions": {
+        "Sun": 170.51074129803737,
+        "Moon": 197.09660083384347,
+        "Mercury": 183.97235681560807,
+        "Venus": 211.4735811536993,
+        "Mars": 110.68754581295883,
+        "Jupiter": 135.8731501518091,
+        "Saturn": 12.39689826578359
+      }
+    },
+    {
+      "hours": 57,
+      "positions": {
+        "Sun": 170.55129596768495,
+        "Moon": 197.64116922882022,
+        "Mercury": 184.0407879521542,
+        "Venus": 211.49850148817498,
+        "Mars": 110.7131693592035,
+        "Jupiter": 135.8814813362725,
+        "Saturn": 12.394013678255988
+      }
+    },
+    {
+      "hours": 58,
+      "positions": {
+        "Sun": 170.5918515264076,
+        "Moon": 198.1851842661315,
+        "Mercury": 184.10918735629716,
+        "Venus": 211.52338615276753,
+        "Mars": 110.73879003034142,
+        "Jupiter": 135.88981084753436,
+        "Saturn": 12.391127623728437
+      }
+    },
+    {
+      "hours": 59,
+      "positions": {
+        "Sun": 170.63240797495212,
+        "Moon": 198.7286460217174,
+        "Mercury": 184.17755504734737,
+        "Venus": 211.54823508958324,
+        "Mars": 110.76440782547576,
+        "Jupiter": 135.89813868397277,
+        "Saturn": 12.388240104728197
+      }
+    },
+    {
+      "hours": 60,
+      "positions": {
+        "Sun": 170.6729653127104,
+        "Moon": 199.27155462297094,
+        "Mercury": 184.24589104225862,
+        "Venus": 211.5730482398031,
+        "Mars": 110.79002274284767,
+        "Jupiter": 135.90646484368568,
+        "Saturn": 12.385351123880696
+      }
+    },
+    {
+      "hours": 61,
+      "positions": {
+        "Sun": 170.71352354042654,
+        "Moon": 199.8139102852881,
+        "Mercury": 184.31419536024842,
+        "Venus": 211.59782554536451,
+        "Mars": 110.8156347815588,
+        "Jupiter": 135.91478932505032,
+        "Saturn": 12.382460683716715
+      }
+    },
+    {
+      "hours": 62,
+      "positions": {
+        "Sun": 170.7540826588463,
+        "Moon": 200.35571329357367,
+        "Mercury": 184.3824680204638,
+        "Venus": 211.62256694809813,
+        "Mars": 110.84124394070227,
+        "Jupiter": 135.92311212644177,
+        "Saturn": 12.379568786769596
+      }
+    },
+    {
+      "hours": 63,
+      "positions": {
+        "Sun": 170.79464266735476,
+        "Moon": 200.89696398412354,
+        "Mercury": 184.4507090397304,
+        "Venus": 211.64727238893937,
+        "Mars": 110.86685021851963,
+        "Jupiter": 135.93143324595712,
+        "Saturn": 12.376675435669483
+      }
+    },
+    {
+      "hours": 64,
+      "positions": {
+        "Sun": 170.83520356670022,
+        "Moon": 201.43766278085843,
+        "Mercury": 184.51891843710456,
+        "Venus": 211.67194180954607,
+        "Mars": 110.89245361410434,
+        "Jupiter": 135.93975268197124,
+        "Saturn": 12.373780632953185
+      }
+    },
+    {
+      "hours": 65,
+      "positions": {
+        "Sun": 170.87576535762366,
+        "Moon": 201.97781017695831,
+        "Mercury": 184.5870962315958,
+        "Venus": 211.696575151503,
+        "Mars": 110.91805412655202,
+        "Jupiter": 135.9480704328588,
+        "Saturn": 12.370884381158703
+      }
+    },
+    {
+      "hours": 66,
+      "positions": {
+        "Sun": 170.9163280395161,
+        "Moon": 202.51740671673838,
+        "Mercury": 184.65524243987542,
+        "Venus": 211.72117235547228,
+        "Mars": 110.94365175409621,
+        "Jupiter": 135.9563864967149,
+        "Saturn": 12.367986682922265
+      }
+    },
+    {
+      "hours": 67,
+      "positions": {
+        "Sun": 170.95689161311395,
+        "Moon": 203.05645303158303,
+        "Mercury": 184.72335708084321,
+        "Venus": 211.74573336285795,
+        "Mars": 110.9692464958269,
+        "Jupiter": 135.9647008719122,
+        "Saturn": 12.365087540785908
+      }
+    },
+    {
+      "hours": 68,
+      "positions": {
+        "Sun": 170.99745607916566,
+        "Moon": 203.5949498217601,
+        "Mercury": 184.79144017335406,
+        "Venus": 211.77025811497555,
+        "Mars": 110.99483835083521,
+        "Jupiter": 135.97301355682436,
+        "Saturn": 12.362186957292806
+      }
+    },
+    {
+      "hours": 69,
+      "positions": {
+        "Sun": 171.03802143705207,
+        "Moon": 204.13289783825667,
+        "Mercury": 184.85949173392092,
+        "Venus": 211.79474655223135,
+        "Mars": 111.02042731735139,
+        "Jupiter": 135.98132454954413,
+        "Saturn": 12.3592849350851
+      }
+    },
+    {
+      "hours": 70,
+      "positions": {
+        "Sun": 171.07858768752124,
+        "Moon": 204.67029791869004,
+        "Mercury": 184.92751178129208,
+        "Venus": 211.8191986157669,
+        "Mars": 111.04601339446401,
+        "Jupiter": 135.98963384844404,
+        "Saturn": 12.356381476709657
+      }
+    },
+    {
+      "hours": 71,
+      "positions": {
+        "Sun": 171.11915483130952,
+        "Moon": 205.20715096894173,
+        "Mercury": 184.99550033415073,
+        "Venus": 211.84361424663422,
+        "Mars": 111.0715965812575,
+        "Jupiter": 135.99794145189458,
+        "Saturn": 12.35347658471511
+      }
+    },
+    {
+      "hours": 72,
+      "positions": {
+        "Sun": 171.1597228677997,
+        "Moon": 205.74345794509463,
+        "Mercury": 185.06345740885158,
+        "Venus": 211.86799338497738,
+        "Mars": 111.09717687595816,
+        "Jupiter": 136.00624735798777,
+        "Saturn": 12.35057026174968
+      }
+    },
+    {
+      "hours": 73,
+      "positions": {
+        "Sun": 171.200291797737,
+        "Moon": 206.2792198892207,
+        "Mercury": 185.13138302397314,
+        "Venus": 211.8923359716786,
+        "Mars": 111.12275427765042,
+        "Jupiter": 136.0145515650937,
+        "Saturn": 12.347662510364842
+      }
+    },
+    {
+      "hours": 74,
+      "positions": {
+        "Sun": 171.24086162185836,
+        "Moon": 206.81443791108939,
+        "Mercury": 185.19927719803613,
+        "Venus": 211.916641947527,
+        "Mars": 111.14832878541654,
+        "Jupiter": 136.0228540715823,
+        "Saturn": 12.344753333114909
+      }
+    },
+    {
+      "hours": 75,
+      "positions": {
+        "Sun": 171.28143233954927,
+        "Moon": 207.34911317003673,
+        "Mercury": 185.26713994722468,
+        "Venus": 211.94091125240888,
+        "Mars": 111.17390039747829,
+        "Jupiter": 136.03115487554356,
+        "Saturn": 12.341842732652935
+      }
+    },
+    {
+      "hours": 76,
+      "positions": {
+        "Sun": 171.32200395154769,
+        "Moon": 207.88324691060268,
+        "Mercury": 185.3349712899477,
+        "Venus": 211.9651438269404,
+        "Mars": 111.19946911291669,
+        "Jupiter": 136.03945397534642,
+        "Saturn": 12.338930711536591
+      }
+    },
+    {
+      "hours": 77,
+      "positions": {
+        "Sun": 171.36257645859519,
+        "Moon": 208.41684044426336,
+        "Mercury": 185.40277124454542,
+        "Venus": 211.98933961165142,
+        "Mars": 111.22503493080768,
+        "Jupiter": 136.04775136935802,
+        "Saturn": 12.33601727232491
+      }
+    },
+    {
+      "hours": 78,
+      "positions": {
+        "Sun": 171.4031498600649,
+        "Moon": 208.94989513145276,
+        "Mercury": 185.47053982703167,
+        "Venus": 212.0134985461688,
+        "Mars": 111.25059784937127,
+        "Jupiter": 136.0560470556676,
+        "Saturn": 12.333102417676855
+      }
+    },
+    {
+      "hours": 79,
+      "positions": {
+        "Sun": 171.44372415670443,
+        "Moon": 209.48241241691585,
+        "Mercury": 185.53827705563518,
+        "Venus": 212.03762057085058,
+        "Mars": 111.27615786768365,
+        "Jupiter": 136.06434103264212,
+        "Saturn": 12.330186150154645
+      }
+    },
+    {
+      "hours": 80,
+      "positions": {
+        "Sun": 171.48429934924877,
+        "Moon": 210.01439381159742,
+        "Mercury": 185.6059829485175,
+        "Venus": 212.0617056259527,
+        "Mars": 111.30171498481758,
+        "Jupiter": 136.07263329864713,
+        "Saturn": 12.32726847232351
+      }
+    },
+    {
+      "hours": 81,
+      "positions": {
+        "Sun": 171.52487543707707,
+        "Moon": 210.54584087447665,
+        "Mercury": 185.67365752151838,
+        "Venus": 212.08575365085971,
+        "Mars": 111.3272691989904,
+        "Jupiter": 136.08092385177122,
+        "Saturn": 12.324349386846734
+      }
+    },
+    {
+      "hours": 82,
+      "positions": {
+        "Sun": 171.56545242092648,
+        "Moon": 211.07675524794809,
+        "Mercury": 185.74130079267107,
+        "Venus": 212.10976458565327,
+        "Mars": 111.35282050927037,
+        "Jupiter": 136.0892126903782,
+        "Saturn": 12.321428896293071
+      }
+    },
+    {
+      "hours": 83,
+      "positions": {
+        "Sun": 171.60603030153447,
+        "Moon": 211.60713863975514,
+        "Mercury": 185.80891277995912,
+        "Venus": 212.13373837034192,
+        "Mars": 111.37836891472955,
+        "Jupiter": 136.09749981283312,
+        "Saturn": 12.318507003231616
+      }
+    },
+    {
+      "hours": 84,
+      "positions": {
+        "Sun": 171.64660907827874,
+        "Moon": 212.136992804746,
+        "Mercury": 185.87649349902895,
+        "Venus": 212.15767494403585,
+        "Mars": 111.40391441357838,
+        "Jupiter": 136.10578521722175,
+        "Saturn": 12.315583710332476
+      }
+    },
+    {
+      "hours": 85,
+      "positions": {
+        "Sun": 171.6871887518938,
+        "Moon": 212.66631958028245,
+        "Mercury": 185.94404296773624,
+        "Venus": 212.18157424656988,
+        "Mars": 111.42945700488576,
+        "Jupiter": 136.11406890190813,
+        "Saturn": 12.312659020168326
+      }
+    },
+    {
+      "hours": 86,
+      "positions": {
+        "Sun": 171.72776932312104,
+        "Moon": 213.195120867907,
+        "Mercury": 186.01156120386239,
+        "Venus": 212.20543621768516,
+        "Mars": 111.45499668771538,
+        "Jupiter": 136.12235086525425,
+        "Saturn": 12.3097329353144
+      }
+    },
+    {
+      "hours": 87,
+      "positions": {
+        "Sun": 171.76835079132957,
+        "Moon": 213.72339861546902,
+        "Mercury": 186.0790482228658,
+        "Venus": 212.2292607962364,
+        "Mars": 111.48053346027598,
+        "Jupiter": 136.1306311053446,
+        "Saturn": 12.306805458445751
+      }
+    },
+    {
+      "hours": 88,
+      "positions": {
+        "Sun": 171.80893315725825,
+        "Moon": 214.25115485214292,
+        "Mercury": 186.14650404240186,
+        "Venus": 212.2530479217933,
+        "Mars": 111.50606732163106,
+        "Jupiter": 136.1389096205413,
+        "Saturn": 12.303876592140455
+      }
+    },
+    {
+      "hours": 89,
+      "positions": {
+        "Sun": 171.84951642164344,
+        "Moon": 214.7783916703246,
+        "Mercury": 186.21392868006467,
+        "Venus": 212.2767975338409,
+        "Mars": 111.53159827084266,
+        "Jupiter": 136.14718640920535,
+        "Saturn": 12.300946338978974
+      }
+    },
+    {
+      "hours": 90,
+      "positions": {
+        "Sun": 171.89010058386043,
+        "Moon": 215.3051112076255,
+        "Mercury": 186.28132215110963,
+        "Venus": 212.30050957097575,
+        "Mars": 111.55712630611492,
+        "Jupiter": 136.15546146941995,
+        "Saturn": 12.29801470164125
+      }
+    },
+    {
+      "hours": 91,
+      "positions": {
+        "Sun": 171.9306856446376,
+        "Moon": 215.83131568177123,
+        "Mercury": 186.34868447299107,
+        "Venus": 212.32418397250697,
+        "Mars": 111.58265142650521,
+        "Jupiter": 136.1637347995444,
+        "Saturn": 12.29508168271127
+      }
+    },
+    {
+      "hours": 92,
+      "positions": {
+        "Sun": 171.97127160471382,
+        "Moon": 216.35700737267962,
+        "Mercury": 186.41601566309623,
+        "Venus": 212.34782067765772,
+        "Mars": 111.6081736310723,
+        "Jupiter": 136.17200639793884,
+        "Saturn": 12.29214728477399
+      }
+    },
+    {
+      "hours": 93,
+      "positions": {
+        "Sun": 172.0118584634613,
+        "Moon": 216.88218860428412,
+        "Mercury": 186.48331573648176,
+        "Venus": 212.37141962476727,
+        "Mars": 111.63369291801644,
+        "Jupiter": 136.1802762626843,
+        "Saturn": 12.289211510515429
+      }
+    },
+    {
+      "hours": 94,
+      "positions": {
+        "Sun": 172.05244622161229,
+        "Moon": 217.40686177956002,
+        "Mercury": 186.55058471039987,
+        "Venus": 212.39498075289217,
+        "Mars": 111.65920928639486,
+        "Jupiter": 136.18854439213976,
+        "Saturn": 12.286274362523784
+      }
+    },
+    {
+      "hours": 95,
+      "positions": {
+        "Sun": 172.0930348798977,
+        "Moon": 217.93102936225762,
+        "Mercury": 186.61782260201483,
+        "Venus": 212.41850400098278,
+        "Mars": 111.68472273525504,
+        "Jupiter": 136.19681078466158,
+        "Saturn": 12.283335843390432
+      }
+    },
+    {
+      "hours": 96,
+      "positions": {
+        "Sun": 172.13362443769336,
+        "Moon": 218.45469385925003,
+        "Mercury": 186.68502942619097,
+        "Venus": 212.44198930713546,
+        "Mars": 111.71023326279999,
+        "Jupiter": 136.20507543833133,
+        "Saturn": 12.280395955805318
+      }
+    },
+    {
+      "hours": 97,
+      "positions": {
+        "Sun": 172.17421489572894,
+        "Moon": 218.97785785491124,
+        "Mercury": 186.75220519995497,
+        "Venus": 212.4654366101382,
+        "Mars": 111.73574086807713,
+        "Jupiter": 136.21333835150483,
+        "Saturn": 12.277454702363116
+      }
+    },
+    {
+      "hours": 98,
+      "positions": {
+        "Sun": 172.21480625473362,
+        "Moon": 219.50052399332958,
+        "Mercury": 186.81934994026776,
+        "Venus": 212.4888458486879,
+        "Mars": 111.76124555013621,
+        "Jupiter": 136.22159952253793,
+        "Saturn": 12.274512085659012
+      }
+    },
+    {
+      "hours": 99,
+      "positions": {
+        "Sun": 172.25539851408257,
+        "Moon": 220.02269496031704,
+        "Mercury": 186.8864636617702,
+        "Venus": 212.5122169606254,
+        "Mars": 111.78674730717057,
+        "Jupiter": 136.22985894950978,
+        "Saturn": 12.271568108389374
+      }
+    },
+    {
+      "hours": 100,
+      "positions": {
+        "Sun": 172.29599167450363,
+        "Moon": 220.54437351803585,
+        "Mercury": 186.95354638127813,
+        "Venus": 212.53554988447368,
+        "Mars": 111.81224613822718,
+        "Jupiter": 136.23811663077504,
+        "Saturn": 12.268622773153368
+      }
+    },
+    {
+      "hours": 101,
+      "positions": {
+        "Sun": 172.33658573672687,
+        "Moon": 221.06556248691993,
+        "Mercury": 187.020598115529,
+        "Venus": 212.5588445586794,
+        "Mars": 111.83774204234965,
+        "Jupiter": 136.24637256468782,
+        "Saturn": 12.265676082551465
+      }
+    },
+    {
+      "hours": 102,
+      "positions": {
+        "Sun": 172.37718070012204,
+        "Moon": 221.58626472786898,
+        "Mercury": 187.08761887894246,
+        "Venus": 212.58210092081694,
+        "Mars": 111.86323501772773,
+        "Jupiter": 136.2546267493251,
+        "Saturn": 12.262728039285605
+      }
+    },
+    {
+      "hours": 103,
+      "positions": {
+        "Sun": 172.4177765654165,
+        "Moon": 222.10648317674531,
+        "Mercury": 187.15460868811155,
+        "Venus": 212.60531890916235,
+        "Mars": 111.88872506340408,
+        "Jupiter": 136.26287918304013,
+        "Saturn": 12.2597786459595
+      }
+    },
+    {
+      "hours": 104,
+      "positions": {
+        "Sun": 172.45837333334225,
+        "Moon": 222.62622082638063,
+        "Mercury": 187.22156755955257,
+        "Venus": 212.62849846190076,
+        "Mars": 111.91421217842043,
+        "Jupiter": 136.27112986418592,
+        "Saturn": 12.256827905179136
+      }
+    },
+    {
+      "hours": 105,
+      "positions": {
+        "Sun": 172.4989710032661,
+        "Moon": 223.14548070874196,
+        "Mercury": 187.28849550746077,
+        "Venus": 212.65163951635364,
+        "Mars": 111.93969636096148,
+        "Jupiter": 136.279378790838,
+        "Saturn": 12.253875819651228
+      }
+    },
+    {
+      "hours": 106,
+      "positions": {
+        "Sun": 172.53956957591572,
+        "Moon": 223.66426592917878,
+        "Mercury": 187.35539254819435,
+        "Venus": 212.67474201053508,
+        "Mars": 111.9651776100643,
+        "Jupiter": 136.2876259613472,
+        "Saturn": 12.250922391985227
+      }
+    },
+    {
+      "hours": 107,
+      "positions": {
+        "Sun": 172.58016905201657,
+        "Moon": 224.18257964874078,
+        "Mercury": 187.4222586980414,
+        "Venus": 212.6978058823771,
+        "Mars": 111.9906559247674,
+        "Jupiter": 136.2958713740652,
+        "Saturn": 12.24796762479167
+      }
+    },
+    {
+      "hours": 108,
+      "positions": {
+        "Sun": 172.62076943093962,
+        "Moon": 224.7004250661622,
+        "Mercury": 187.48909397096455,
+        "Venus": 212.7208310689461,
+        "Mars": 112.01613130325063,
+        "Jupiter": 136.30411502706534,
+        "Saturn": 12.245011520782896
+      }
+    },
+    {
+      "hours": 109,
+      "positions": {
+        "Sun": 172.6613707134096,
+        "Moon": 225.21780545222396,
+        "Mercury": 187.555898383096,
+        "Venus": 212.743817508002,
+        "Mars": 112.04160374454995,
+        "Jupiter": 136.31235691869824,
+        "Saturn": 12.242054082572793
+      }
+    },
+    {
+      "hours": 110,
+      "positions": {
+        "Sun": 172.70197290015426,
+        "Moon": 225.73472413175068,
+        "Mercury": 187.62267195047875,
+        "Venus": 212.76676513721463,
+        "Mars": 112.06707324769604,
+        "Jupiter": 136.32059704731273,
+        "Saturn": 12.239095312777863
+      }
+    },
+    {
+      "hours": 111,
+      "positions": {
+        "Sun": 172.74257599053408,
+        "Moon": 226.25118446595548,
+        "Mercury": 187.6894146868433,
+        "Venus": 212.7896738934027,
+        "Mars": 112.0925398108671,
+        "Jupiter": 136.32883541098084,
+        "Saturn": 12.23613521411471
+      }
+    },
+    {
+      "hours": 112,
+      "positions": {
+        "Sun": 172.7831799852779,
+        "Moon": 226.76718988653317,
+        "Mercury": 187.756126608079,
+        "Venus": 212.81254371406817,
+        "Mars": 112.11800343309312,
+        "Jupiter": 136.33707200805117,
+        "Saturn": 12.233173789203022
+      }
+    },
+    {
+      "hours": 113,
+      "positions": {
+        "Sun": 172.82378488511438,
+        "Moon": 227.28274387782062,
+        "Mercury": 187.8228077299928,
+        "Venus": 212.83537453662714,
+        "Mars": 112.14346411340364,
+        "Jupiter": 136.3453068368715,
+        "Saturn": 12.230211040663619
+      }
+    },
+    {
+      "hours": 114,
+      "positions": {
+        "Sun": 172.8643906894007,
+        "Moon": 227.7978499589916,
+        "Mercury": 187.88945806607614,
+        "Venus": 212.85816629764602,
+        "Mars": 112.16892184997187,
+        "Jupiter": 136.35353989551288,
+        "Saturn": 12.227246971218563
+      }
+    },
+    {
+      "hours": 115,
+      "positions": {
+        "Sun": 172.90499739886627,
+        "Moon": 228.31251171813142,
+        "Mercury": 187.95607763196455,
+        "Venus": 212.88091893436783,
+        "Mars": 112.19437664182135,
+        "Jupiter": 136.3617711823207,
+        "Saturn": 12.224281583492939
+      }
+    },
+    {
+      "hours": 116,
+      "positions": {
+        "Sun": 172.94560501423302,
+        "Moon": 228.82673279449955,
+        "Mercury": 188.02266644322242,
+        "Venus": 212.90363238395668,
+        "Mars": 112.2198284879787,
+        "Jupiter": 136.37000069564175,
+        "Saturn": 12.221314880112288
+      }
+    },
+    {
+      "hours": 117,
+      "positions": {
+        "Sun": 172.9862135348642,
+        "Moon": 229.34051686069358,
+        "Mercury": 188.08922451309107,
+        "Venus": 212.92630658272532,
+        "Mars": 112.24527738661197,
+        "Jupiter": 136.37822843354502,
+        "Saturn": 12.218346863804186
+      }
+    },
+    {
+      "hours": 118,
+      "positions": {
+        "Sun": 173.02682296148055,
+        "Moon": 229.85386765667567,
+        "Mercury": 188.15575185696233,
+        "Venus": 212.9489414676658,
+        "Mars": 112.27072333674283,
+        "Jupiter": 136.3864543943754,
+        "Saturn": 12.215377537198037
+      }
+    },
+    {
+      "hours": 119,
+      "positions": {
+        "Sun": 173.0674332948082,
+        "Moon": 230.36678897192132,
+        "Mercury": 188.2222484901472,
+        "Venus": 212.97153697568837,
+        "Mars": 112.29616633739346,
+        "Jupiter": 136.3946785764773,
+        "Saturn": 12.212406902924613
+      }
+    },
+    {
+      "hours": 120,
+      "positions": {
+        "Sun": 173.10804453420906,
+        "Moon": 230.87928462780906,
+        "Mercury": 188.28871442563744,
+        "Venus": 212.99409304285538,
+        "Mars": 112.32160638672832,
+        "Jupiter": 136.40290097791853,
+        "Saturn": 12.20943496371649
+      }
+    },
+    {
+      "hours": 121,
+      "positions": {
+        "Sun": 173.14865668039738,
+        "Moon": 231.391358511391,
+        "Mercury": 188.35514967856486,
+        "Venus": 213.01660960590553,
+        "Mars": 112.34704348376351,
+        "Jupiter": 136.41112159704142,
+        "Saturn": 12.206461722208417
+      }
+    },
+    {
+      "hours": 122,
+      "positions": {
+        "Sun": 173.1892697341052,
+        "Moon": 231.90301455774625,
+        "Mercury": 188.42155426398264,
+        "Venus": 213.03908660149258,
+        "Mars": 112.37247762751656,
+        "Jupiter": 136.4193404321893,
+        "Saturn": 12.203487181035939
+      }
+    },
+    {
+      "hours": 123,
+      "positions": {
+        "Sun": 173.22988369468396,
+        "Moon": 232.414256732186,
+        "Mercury": 188.48792819462494,
+        "Venus": 213.0615239654331,
+        "Mars": 112.39790881614772,
+        "Jupiter": 136.42755748142804,
+        "Saturn": 12.200511342936807
+      }
+    },
+    {
+      "hours": 124,
+      "positions": {
+        "Sun": 173.27049856286123,
+        "Moon": 232.9250890641822,
+        "Mercury": 188.5542714853713,
+        "Venus": 213.08392163421368,
+        "Mars": 112.42333704867201,
+        "Jupiter": 136.4357727430995,
+        "Saturn": 12.197534210550373
+      }
+    },
+    {
+      "hours": 125,
+      "positions": {
+        "Sun": 173.31111433934961,
+        "Moon": 233.4355156294689,
+        "Mercury": 188.6205841510035,
+        "Venus": 213.1062795442357,
+        "Mars": 112.44876232409945,
+        "Jupiter": 136.44398621554387,
+        "Saturn": 12.194555786517867
+      }
+    },
+    {
+      "hours": 126,
+      "positions": {
+        "Sun": 173.35173102351393,
+        "Moon": 233.94554053257218,
+        "Mercury": 188.68686620399725,
+        "Venus": 213.1285976310647,
+        "Mars": 112.47418464058694,
+        "Jupiter": 136.4521978968259,
+        "Saturn": 12.19157607358136
+      }
+    },
+    {
+      "hours": 127,
+      "positions": {
+        "Sun": 173.39234861607133,
+        "Moon": 234.45516794042976,
+        "Mercury": 188.75311765896302,
+        "Venus": 213.15087583093893,
+        "Mars": 112.49960399714541,
+        "Jupiter": 136.4604077852856,
+        "Saturn": 12.18859507438566
+      }
+    },
+    {
+      "hours": 128,
+      "positions": {
+        "Sun": 173.43296711773849,
+        "Moon": 234.96440206465547,
+        "Mercury": 188.81933853042028,
+        "Venus": 213.17311408000828,
+        "Mars": 112.52502039278193,
+        "Jupiter": 136.46861587926207,
+        "Saturn": 12.185612791576318
+      }
+    },
+    {
+      "hours": 129,
+      "positions": {
+        "Sun": 173.47358652787875,
+        "Moon": 235.4732471440485,
+        "Mercury": 188.88552883057824,
+        "Venus": 213.19531231359258,
+        "Mars": 112.55043382565032,
+        "Jupiter": 136.4768221768186,
+        "Saturn": 12.182629227900975
+      }
+    },
+    {
+      "hours": 130,
+      "positions": {
+        "Sun": 173.5142068472029,
+        "Moon": 235.98170747802283,
+        "Mercury": 188.95168857377158,
+        "Venus": 213.2174704676785,
+        "Mars": 112.57584429475406,
+        "Jupiter": 136.4850266762927,
+        "Saturn": 12.179644386009045
+      }
+    },
+    {
+      "hours": 131,
+      "positions": {
+        "Sun": 173.55482807643352,
+        "Moon": 236.4897874092219,
+        "Mercury": 189.01781777424574,
+        "Venus": 213.2395884781605,
+        "Mars": 112.60125179909653,
+        "Jupiter": 136.49322937602176,
+        "Saturn": 12.176658268551591
+      }
+    },
+    {
+      "hours": 132,
+      "positions": {
+        "Sun": 173.59545021492363,
+        "Moon": 236.99749130561145,
+        "Mercury": 189.08391644394052,
+        "Venus": 213.261666280124,
+        "Mars": 112.6266563368282,
+        "Jupiter": 136.50143027406796,
+        "Saturn": 12.17367087828029
+      }
+    },
+    {
+      "hours": 133,
+      "positions": {
+        "Sun": 173.63607326339525,
+        "Moon": 237.5048235943134,
+        "Mercury": 189.14998459691736,
+        "Venus": 213.28370380929553,
+        "Mars": 112.65205790694955,
+        "Jupiter": 136.50962936876738,
+        "Saturn": 12.170682217850242
+      }
+    },
+    {
+      "hours": 134,
+      "positions": {
+        "Sun": 173.67669722255891,
+        "Moon": 238.0117887437341,
+        "Mercury": 189.21602224714033,
+        "Venus": 213.30570100133016,
+        "Mars": 112.67745650845791,
+        "Jupiter": 136.51782665845542,
+        "Saturn": 12.167692289916943
+      }
+    },
+    {
+      "hours": 135,
+      "positions": {
+        "Sun": 173.71732209177003,
+        "Moon": 238.51839124621677,
+        "Mercury": 189.2820294062699,
+        "Venus": 213.32765779105603,
+        "Mars": 112.70285213949995,
+        "Jupiter": 136.52602214119213,
+        "Saturn": 12.164701097237753
+      }
+    },
+    {
+      "hours": 136,
+      "positions": {
+        "Sun": 173.75794787174743,
+        "Moon": 239.02463565133223,
+        "Mercury": 189.34800608808717,
+        "Venus": 213.3495741139643,
+        "Mars": 112.72824479907183,
+        "Jupiter": 136.53421581531228,
+        "Saturn": 12.161708642471638
+      }
+    },
+    {
+      "hours": 137,
+      "positions": {
+        "Sun": 173.79857456320235,
+        "Moon": 239.5305265484035,
+        "Mercury": 189.4139523062771,
+        "Venus": 213.37144990545764,
+        "Mars": 112.75363448616866,
+        "Jupiter": 136.54240767915002,
+        "Saturn": 12.15871492827955
+      }
+    },
+    {
+      "hours": 138,
+      "positions": {
+        "Sun": 173.83920216549404,
+        "Moon": 240.03606854894883,
+        "Mercury": 189.47986807221835,
+        "Venus": 213.39328510012308,
+        "Mars": 112.77902119893201,
+        "Jupiter": 136.55059773076397,
+        "Saturn": 12.155719957423571
+      }
+    },
+    {
+      "hours": 139,
+      "positions": {
+        "Sun": 173.87983067932942,
+        "Moon": 240.54126631996292,
+        "Mercury": 189.5457533993995,
+        "Venus": 213.41507963319918,
+        "Mars": 112.80440493635211,
+        "Jupiter": 136.5587859684863,
+        "Saturn": 12.152723732567893
+      }
+    },
+    {
+      "hours": 140,
+      "positions": {
+        "Sun": 173.92046010542742,
+        "Moon": 241.0461245665225,
+        "Mercury": 189.6116083012202,
+        "Venus": 213.436833439848,
+        "Mars": 112.82978569742102,
+        "Jupiter": 136.56697239064982,
+        "Saturn": 12.149726256377676
+      }
+    },
+    {
+      "hours": 141,
+      "positions": {
+        "Sun": 173.96109044313891,
+        "Moon": 241.55064801418644,
+        "Mercury": 189.67743278876904,
+        "Venus": 213.4585464544116,
+        "Mars": 112.855163480275,
+        "Jupiter": 136.57515699531137,
+        "Saturn": 12.146727531620513
+      }
+    },
+    {
+      "hours": 142,
+      "positions": {
+        "Sun": 174.0017216931749,
+        "Moon": 242.05484144232605,
+        "Mercury": 189.74322687524855,
+        "Venus": 213.4802186118846,
+        "Mars": 112.88053828390218,
+        "Jupiter": 136.58333978080202,
+        "Saturn": 12.14372756096526
+      }
+    },
+    {
+      "hours": 143,
+      "positions": {
+        "Sun": 174.042353856251,
+        "Moon": 242.55870966660655,
+        "Mercury": 189.80899057376212,
+        "Venus": 213.501849847183,
+        "Mars": 112.90591010728866,
+        "Jupiter": 136.59152074545273,
+        "Saturn": 12.140726347081682
+      }
+    },
+    {
+      "hours": 144,
+      "positions": {
+        "Sun": 174.08298693171685,
+        "Moon": 243.0622575214927,
+        "Mercury": 189.87472389510904,
+        "Venus": 213.5234400944092,
+        "Mars": 112.93127894856889,
+        "Jupiter": 136.5996998873187,
+        "Saturn": 12.137723892742656
+      }
+    },
+    {
+      "hours": 145,
+      "positions": {
+        "Sun": 174.1236209202841,
+        "Moon": 243.56548989346948,
+        "Mercury": 189.9404268521896,
+        "Venus": 213.5449892883144,
+        "Mars": 112.95664480672406,
+        "Jupiter": 136.607877204729,
+        "Saturn": 12.134720200621416
+      }
+    },
+    {
+      "hours": 146,
+      "positions": {
+        "Sun": 174.16425582266356,
+        "Moon": 244.06841170363862,
+        "Mercury": 190.00609945781108,
+        "Venus": 213.56649736356783,
+        "Mars": 112.98200768073735,
+        "Jupiter": 136.61605269601273,
+        "Saturn": 12.131715273392956
+      }
+    },
+    {
+      "hours": 147,
+      "positions": {
+        "Sun": 174.20489163820355,
+        "Moon": 244.57102789019382,
+        "Mercury": 190.0717417224716,
+        "Venus": 213.5879642540329,
+        "Mars": 113.00736756873698,
+        "Jupiter": 136.62422635922388,
+        "Saturn": 12.128709113834645
+      }
+    },
+    {
+      "hours": 148,
+      "positions": {
+        "Sun": 174.2455283676196,
+        "Moon": 245.0733434416336,
+        "Mercury": 190.13735365878225,
+        "Venus": 213.60938989422507,
+        "Mars": 113.03272446970419,
+        "Jupiter": 136.63239819269063,
+        "Saturn": 12.12570172462432
+      }
+    },
+    {
+      "hours": 149,
+      "positions": {
+        "Sun": 174.28616601161593,
+        "Moon": 245.57536337920214,
+        "Mercury": 190.20293527923445,
+        "Venus": 213.63077421855928,
+        "Mars": 113.05807838261302,
+        "Jupiter": 136.64056819473876,
+        "Saturn": 12.122693108442604
+      }
+    },
+    {
+      "hours": 150,
+      "positions": {
+        "Sun": 174.32680456954154,
+        "Moon": 246.0770927396204,
+        "Mercury": 190.26848659402913,
+        "Venus": 213.65211716067583,
+        "Mars": 113.08342930559093,
+        "Jupiter": 136.6487363634218,
+        "Saturn": 12.119683268071014
+      }
+    },
+    {
+      "hours": 151,
+      "positions": {
+        "Sun": 174.36744404210674,
+        "Moon": 246.57853660809565,
+        "Mercury": 190.33400761546386,
+        "Venus": 213.6734186548314,
+        "Mars": 113.1087772376112,
+        "Jupiter": 136.65690269706522,
+        "Saturn": 12.116672206192675
+      }
+    },
+    {
+      "hours": 152,
+      "positions": {
+        "Sun": 174.40808443002402,
+        "Moon": 247.07970010091765,
+        "Mercury": 190.39949835573088,
+        "Venus": 213.69467863521805,
+        "Mars": 113.13412217764755,
+        "Jupiter": 136.66506719399445,
+        "Saturn": 12.113659925492243
+      }
+    },
+    {
+      "hours": 153,
+      "positions": {
+        "Sun": 174.44872573263683,
+        "Moon": 247.58058834804763,
+        "Mercury": 190.46495882472334,
+        "Venus": 213.71589703522616,
+        "Mars": 113.15946412382232,
+        "Jupiter": 136.67322985226076,
+        "Saturn": 12.11064642875641
+      }
+    },
+    {
+      "hours": 154,
+      "positions": {
+        "Sun": 174.48936795064742,
+        "Moon": 248.0812065261431,
+        "Mercury": 190.53038903442052,
+        "Venus": 213.7370737888827,
+        "Mars": 113.18480307510339,
+        "Jupiter": 136.68139067018745,
+        "Saturn": 12.107631718673247
+      }
+    },
+    {
+      "hours": 155,
+      "positions": {
+        "Sun": 174.53001108477395,
+        "Moon": 248.58155984123755,
+        "Mercury": 190.59578899670396,
+        "Venus": 213.75820883013472,
+        "Mars": 113.210139030461,
+        "Jupiter": 136.68954964609907,
+        "Saturn": 12.104615797931842
+      }
+    },
+    {
+      "hours": 156,
+      "positions": {
+        "Sun": 174.57065513435327,
+        "Moon": 249.0816535113147,
+        "Mercury": 190.6611587211518,
+        "Venus": 213.77930209213778,
+        "Mars": 113.23547198801123,
+        "Jupiter": 136.69770677804428,
+        "Saturn": 12.101598669323948
+      }
+    },
+    {
+      "hours": 157,
+      "positions": {
+        "Sun": 174.61130010009902,
+        "Moon": 249.58149279928898,
+        "Mercury": 190.72649821943483,
+        "Venus": 213.80035350868496,
+        "Mars": 113.26080194672136,
+        "Jupiter": 136.70586206434632,
+        "Saturn": 12.09858033554201
+      }
+    },
+    {
+      "hours": 158,
+      "positions": {
+        "Sun": 174.65194598271,
+        "Moon": 250.08108299560274,
+        "Mercury": 190.79180750310763,
+        "Venus": 213.82136301348334,
+        "Mars": 113.28612890555428,
+        "Jupiter": 136.71401550332638,
+        "Saturn": 12.095560799279838
+      }
+    },
+    {
+      "hours": 159,
+      "positions": {
+        "Sun": 174.69259278153618,
+        "Moon": 250.58042940096925,
+        "Mercury": 190.85708658143372,
+        "Venus": 213.84233053945732,
+        "Mars": 113.31145286262256,
+        "Jupiter": 136.72216709303245,
+        "Saturn": 12.092540063334411
+      }
+    },
+    {
+      "hours": 160,
+      "positions": {
+        "Sun": 174.7332404972808,
+        "Moon": 251.0795373592814,
+        "Mercury": 190.92233546575915,
+        "Venus": 213.86325602015873,
+        "Mars": 113.33677381688778,
+        "Jupiter": 136.73031683178522,
+        "Saturn": 12.089518130402496
+      }
+    },
+    {
+      "hours": 161,
+      "positions": {
+        "Sun": 174.77388913064704,
+        "Moon": 251.57841224020524,
+        "Mercury": 190.9875541673205,
+        "Venus": 213.8841393890642,
+        "Mars": 113.36209176731143,
+        "Jupiter": 136.73846471790523,
+        "Saturn": 12.08649500318279
+      }
+    },
+    {
+      "hours": 162,
+      "positions": {
+        "Sun": 174.8145386809813,
+        "Moon": 252.07705942187306,
+        "Mercury": 191.05274269505622,
+        "Venus": 213.90498057886515,
+        "Mars": 113.38740671200077,
+        "Jupiter": 136.74661074943822,
+        "Saturn": 12.083470684476708
+      }
+    },
+    {
+      "hours": 163,
+      "positions": {
+        "Sun": 174.85518914898603,
+        "Moon": 252.57548432386488,
+        "Mercury": 191.11790105998818,
+        "Venus": 213.92577952287934,
+        "Mars": 113.41271864991432,
+        "Jupiter": 136.75475492470378,
+        "Saturn": 12.080445176985961
+      }
+    },
+    {
+      "hours": 164,
+      "positions": {
+        "Sun": 174.8958405353643,
+        "Moon": 253.07369238967385,
+        "Mercury": 191.18302927301866,
+        "Venus": 213.94653615434837,
+        "Mars": 113.43802758000584,
+        "Jupiter": 136.76289724201985,
+        "Saturn": 12.07741848341351
+      }
+    },
+    {
+      "hours": 165,
+      "positions": {
+        "Sun": 174.9364928394566,
+        "Moon": 253.57168906966876,
+        "Mercury": 191.24812734276162,
+        "Venus": 213.96725040573497,
+        "Mars": 113.46333350038009,
+        "Jupiter": 136.7710376994312,
+        "Saturn": 12.074390606566226
+      }
+    },
+    {
+      "hours": 166,
+      "positions": {
+        "Sun": 174.97714606196882,
+        "Moon": 254.06947985373256,
+        "Mercury": 191.3131952799054,
+        "Venus": 213.9879222101284,
+        "Mars": 113.48863640999059,
+        "Jupiter": 136.7791762952553,
+        "Saturn": 12.071361549149572
+      }
+    },
+    {
+      "hours": 167,
+      "positions": {
+        "Sun": 175.01780020360138,
+        "Moon": 254.56707025406263,
+        "Mercury": 191.3782330950203,
+        "Venus": 214.00855150052598,
+        "Mars": 113.51393630778682,
+        "Jupiter": 136.78731302780847,
+        "Saturn": 12.068331313872193
+      }
+    },
+    {
+      "hours": 168,
+      "positions": {
+        "Sun": 175.0584552636949,
+        "Moon": 255.06446578785835,
+        "Mercury": 191.44324079639335,
+        "Venus": 214.02913820917644,
+        "Mars": 113.53923319187243,
+        "Jupiter": 136.79544789513483,
+        "Saturn": 12.0652999035442
+      }
+    }
+  ]
+}

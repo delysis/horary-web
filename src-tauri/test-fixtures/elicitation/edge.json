@@ -1,0 +1,437 @@
+[
+  {
+    "id": "anchor-device-default",
+    "method": "relationship",
+    "mode": "implicit",
+    "words": "I'm single. Will I get married within a year? I'm asking from here, now.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "chart_place_contains": "Woodbridge",
+      "chart_local_time": "2026-10-07T12:00",
+      "forbidden_facts": [
+        "reader_place",
+        "question_time"
+      ]
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "Here and now use the device anchor, without inventing location/time overrides."
+  },
+  {
+    "id": "anchor-nearby-springfield",
+    "method": "relationship",
+    "mode": "implicit",
+    "words": "I'm single. Will I marry within a year? I'm asking from Springfield.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        },
+        {
+          "field": "reader_place",
+          "contains": "Springfield"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "chart_place_contains": "Springfield, VA",
+      "chart_local_time": "2026-10-07T12:00"
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "An unqualified reader city resolves to the unique nearby Springfield, Virginia from the sourced Woodbridge device context."
+  },
+  {
+    "id": "anchor-explicit-illinois",
+    "method": "relationship",
+    "mode": "explicit",
+    "words": "I'm single. Will I marry within a year? Cast this question for Springfield, Illinois, United States, where I understood it now.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        },
+        {
+          "field": "reader_place",
+          "contains": "Illinois"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "chart_place_contains": "Springfield, IL",
+      "chart_local_time": "2026-10-07T11:00"
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "An explicit Illinois qualifier defeats Virginia proximity; the same native UTC instant has Central civil time."
+  },
+  {
+    "id": "anchor-location-unavailable",
+    "method": "relationship",
+    "mode": "missing",
+    "device_available": false,
+    "words": "I'm single. Will I marry within a year?",
+    "follow_up": "I'm asking from Woodbridge, Virginia, United States.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "chart_place"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "A native time zone alone cannot supply coordinates; request reader location, then preserve the question moment on reply.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "relationship"
+      ],
+      "chart_place_contains": "Woodbridge"
+    }
+  },
+  {
+    "id": "anchor-explicit-historical",
+    "method": "relationship",
+    "mode": "explicit",
+    "words": "I'm single. Will I marry within a year? I understood this question in London, United Kingdom, on January 14, 2026 at 14:30 local time. Please use that earlier consultation.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        },
+        {
+          "field": "reader_place",
+          "contains": "London"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "chart_place_contains": "London",
+      "chart_local_time": "2026-01-14T14:30"
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "An earlier consultation overrides both anchor components; London zone must be used rather than device Eastern time."
+  },
+  {
+    "id": "anchor-clock-fold",
+    "method": "relationship",
+    "mode": "missing",
+    "words": "I'm single. Will I marry within a year? Use my earlier consultation in New York City, United States, on November 2, 2025 at 1:30 AM.",
+    "follow_up": "The second 1:30 AM, after the clocks moved back.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "chart_moment"
+        }
+      ],
+      "ready": false,
+      "needs_alternatives": [
+        [
+          {
+            "kind": "field",
+            "id": "time_occurrence"
+          }
+        ]
+      ]
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "Even a fully named civil time needs the DST occurrence. An unresolved moment must ask about time, never ask for the already resolved city.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        },
+        {
+          "field": "time_occurrence",
+          "contains": "later"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "relationship"
+      ],
+      "chart_place_contains": "New York",
+      "chart_local_time": "2025-11-02T01:30",
+      "chart_moment_ms": 1762065000000
+    }
+  },
+  {
+    "id": "anchor-clock-gap",
+    "method": "relationship",
+    "mode": "missing",
+    "words": "I'm single. Will I marry within a year? Use the question I understood in New York City, United States, on March 8, 2026 at 2:30 AM.",
+    "follow_up": "I meant 3:30 AM that morning.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "chart_moment"
+        }
+      ],
+      "ready": false
+    },
+    "source_pages": "7–8, 191–200",
+    "rationale": "The spring clock gap cannot silently produce a chart; correct the impossible moment conversationally.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "baseline",
+          "contains": "hoped_for"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "allowed_methods": [
+        "relationship"
+      ],
+      "chart_place_contains": "New York",
+      "chart_local_time": "2026-03-08T03:30"
+    }
+  },
+  {
+    "id": "context-relative-friday",
+    "method": "movable_deal",
+    "mode": "implicit",
+    "words": "Will I sell my own handmade bowls at the Springfield market this Friday? I'm asking about completing sales, not an exact count.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "querent"
+        },
+        {
+          "field": "event_time",
+          "contains": "2026-10-09"
+        },
+        {
+          "field": "event_place",
+          "contains": "Springfield"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge",
+      "chart_local_time": "2026-10-07T12:00",
+      "forbidden_facts": [
+        "reader_place",
+        "question_time"
+      ]
+    },
+    "source_pages": "7–8, 156–161",
+    "rationale": "The native Oct 7 clock resolves Friday to Oct 9 while source quote retains Friday; the venue/date do not relocate the ordinary question chart."
+  },
+  {
+    "id": "context-distant-venue",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "Will I sell my own pottery at the Springfield, Illinois market on October 9, 2026? I'm asking from here in Woodbridge today, not from the market.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "event_place",
+          "contains": "Illinois"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "querent",
+      "chart_place_contains": "Woodbridge",
+      "chart_local_time": "2026-10-07T12:00",
+      "forbidden_facts": [
+        "question_time"
+      ]
+    },
+    "source_pages": "7–8, 156–161",
+    "rationale": "Explicit distant event region overrides nearby-event inference while device remains chart anchor."
+  },
+  {
+    "id": "count-sales-reframing",
+    "method": "movable_deal",
+    "mode": "explicit",
+    "words": "How many fish will my husband Bob sell at the market on Friday? Bob owns the fish.",
+    "follow_up": "Yes, that is what I want to know.",
+    "expected": {
+      "facet": "quantity",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        }
+      ],
+      "needs": [],
+      "ready": false,
+      "owner": "bob",
+      "relationships": {
+        "bob": "partner"
+      }
+    },
+    "source_pages": "156–161",
+    "rationale": "Sufficient context does not make an exact sales count supported. Guru should offer one relevant reframing and the clear affirmative should authorize it without losing Bob or ownership.",
+    "follow_up_accepts_proposal": true,
+    "follow_up_expected": {
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "bob",
+      "relationships": {
+        "bob": "partner"
+      },
+      "allowed_methods": [
+        "movable_deal"
+      ],
+      "allowed_facets": [
+        "profit",
+        "event",
+        "situation"
+      ]
+    }
+  },
+  {
+    "id": "ownership-seller-is-not-owner",
+    "method": "movable_deal",
+    "mode": "missing",
+    "words": "Will my husband Bob sell the fish at Friday's market?",
+    "follow_up": "The fish belong to my sister Alice; Bob is selling them for her.",
+    "expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "bob"
+        }
+      ],
+      "needs": [
+        {
+          "kind": "owner"
+        }
+      ],
+      "ready": false,
+      "owner": "",
+      "relationships": {
+        "bob": "partner"
+      }
+    },
+    "source_pages": "156–161",
+    "rationale": "Seller identity and relationship are supplied but ownership genuinely remains missing; no silent owner assumption.",
+    "follow_up_expected": {
+      "facet": "event",
+      "facts": [
+        {
+          "field": "deal_capacity",
+          "contains": "sell"
+        },
+        {
+          "field": "seller",
+          "contains": "bob"
+        }
+      ],
+      "needs": [],
+      "ready": true,
+      "owner": "alice",
+      "relationships": {
+        "bob": "partner",
+        "alice": "sibling"
+      },
+      "allowed_methods": [
+        "movable_deal"
+      ]
+    }
+  },
+  {
+    "id": "classification-negated-job",
+    "method": "return_to_job",
+    "mode": "explicit",
+    "words": "I'm not applying for a new job and I have no new offer. Will I return to my old job at the library after leaving last year?",
+    "expected": {
+      "facet": "event",
+      "facts": [],
+      "needs": [],
+      "ready": true,
+      "owner": "querent"
+    },
+    "source_pages": "225–226",
+    "rationale": "Negated new-job/offer cues must not defeat the actual return-to-job question."
+  },
+  {
+    "id": "person-description-future-marriage-role",
+    "method": "person_description",
+    "mode": "explicit",
+    "words": "What will my future marriage partner look like? I have no particular person in mind; I would like a broad physical description.",
+    "expected": {
+      "facet": "description",
+      "facts": [],
+      "needs": [],
+      "ready": false,
+      "owner": "querent",
+      "relationships": {},
+      "subject_kind": "person_role",
+      "subject_name_contains": "Future marriage partner"
+    },
+    "source_pages": "143–145, 191, 196",
+    "rationale": "An explicitly unnamed future marriage partner is a seventh-house role tied to the speaker, rather than an invented spouse identity or the speaker as the descriptive target. No identity inquiry is needed. Elicitation can be complete while the descriptive judgment program retains its expert-review boundary."
+  }
+]
