@@ -1218,6 +1218,48 @@ pub fn evaluation_receipt(evaluation: &dsrust::Evaluation) -> Value {
         }).collect::<Vec<_>>()})
 }
 
+/// Fixed display-only comparison: identical reader/judge contracts to the
+/// reviewed-Gold compiler, using stock Evaluate without search or reflection.
+pub async fn evaluate_gold_predictor(
+    fixtures: &[Fixture],
+    book: Arc<Book>,
+    models: &crate::runner::Models,
+    predictor: Predict,
+    directory: &Path,
+) -> Result<Value> {
+    fs::create_dir_all(directory)?;
+    let examples = fixtures
+        .iter()
+        .map(|f| f.example.clone())
+        .collect::<Vec<_>>();
+    let mut program = Graded::new(
+        "contact",
+        "reading",
+        &examples,
+        models.student.clone(),
+        models.teacher.clone(),
+        Some(book),
+    )?
+    .with_stream(directory.join("observations.jsonl"))?;
+    program.oracle = Oracle::Single(predictor.with_lm(models.student.clone()));
+    for predictor in program.judge.named_predictors() {
+        predictor.config.max_tokens = Some(8192);
+    }
+    program.judge.signature.instructions.push_str(" Return ONLY the requested output fields score, passed, classification, extraction, reading, answer_quality and feedback, in their requested field markers, beginning with score. Never copy the input, prediction, rubric or source_text fields. Keep feedback specific and concise, with observed quotations and printed source references.");
+    program.save(&directory.join("program.json"))?;
+    let evaluation = Evaluate::new(examples, |input| program.forward(input), Graded::metric)
+        .run()
+        .await;
+    program.save_observations(&directory.join("observations.json"))?;
+    let receipt = evaluation_receipt(&evaluation);
+    crate::queue::write_json_atomic(&directory.join("result.json"), &receipt)?;
+    ensure!(
+        evaluation.failure_count() == 0,
+        "Display comparison has an unobserved execution/review error; no replacement submission"
+    );
+    Ok(receipt)
+}
+
 struct ReflectionGuard {
     inner: Arc<dyn DynChatModel>,
     failed: Arc<AtomicBool>,

@@ -36,6 +36,19 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Fixed original-training display comparison; no search or new Gold calls.
+    CompareContactDepth {
+        #[arg(long)]
+        examples: PathBuf,
+        #[arg(long)]
+        gold_campaign: PathBuf,
+        #[arg(long)]
+        closed_comparison: PathBuf,
+        #[arg(long)]
+        prepare_only: bool,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Stock labeled demonstrations and GEPA using actual reviewed family answers.
     OptimizeGoldReadings {
         #[arg(long, default_value = "examples")]
@@ -369,6 +382,30 @@ async fn main() -> Result<()> {
     }
     let optimize_reception = matches!(&args.command, Command::OptimizeReception { .. });
     match args.command {
+        Command::CompareContactDepth {
+            examples,
+            gold_campaign,
+            closed_comparison,
+            prepare_only,
+            output,
+        } => {
+            ensure!(
+                matches!(args.teacher, Teacher::Codex) && args.student_local_url.is_none(),
+                "Declared fixed hosted comparison uses existing tool-free Codex reviewer"
+            );
+            let result = gold::compare_contact_depth(
+                &examples,
+                Arc::new(book::Book::open(&args.book)?),
+                &gold_campaign,
+                &closed_comparison,
+                &args.codex,
+                google::client(&args.credential_file)?,
+                &output,
+                prepare_only,
+            )
+            .await?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+        }
         Command::OptimizeGoldReadings {
             examples,
             gold_campaign,

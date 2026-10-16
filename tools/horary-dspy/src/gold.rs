@@ -2550,3 +2550,459 @@ mod tests {
         );
     }
 }
+
+const DEPTH_CASES: [&str; 4] = [
+    "dspy-contact-first-003",
+    "dspy-contact-first-006",
+    "dspy-contact-first-008",
+    "dspy-contact-first-012",
+];
+
+struct CachedStudent(Arc<google::Google>);
+impl DynChatModel for CachedStudent {
+    fn forward_dyn<'a>(
+        &'a self,
+        _http: &'a reqwest::Client,
+        request: &'a dsrust::lm::api::LmRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<dsrust::lm::api::LmResponse>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            self.0.cached_response(request)?.context(
+                "Fixed original-format control cache is absent; no student generation allowed",
+            )
+        })
+    }
+    fn capabilities_dyn<'a>(
+        &'a self,
+        http: &'a reqwest::Client,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = dsrust::lm::Capabilities> + Send + 'a>>
+    {
+        self.0.capabilities_dyn(http)
+    }
+    fn native_reasoning_usable_dyn(&self) -> bool {
+        self.0.native_reasoning_usable_dyn()
+    }
+}
+
+struct DepthInputs {
+    off: Vec<Fixture>,
+    on: Vec<Fixture>,
+    off_predictor: Predict,
+    on_predictor: Predict,
+    origin: Value,
+}
+
+fn depth_inputs(
+    examples: &Path,
+    book: &Book,
+    campaign: &Path,
+    closed: &Path,
+) -> Result<DepthInputs> {
+    let closure: Value = serde_json::from_slice(&fs::read(closed.join("closure.json"))?)?;
+    ensure!(
+        closure["cumulative_student_physical_calls"] == 38
+            && closure["cumulative_teacher_physical_calls"] == 41
+            && closure["new_uncertain_paid_operations"] == 0
+            && closure["selected_instruction_identical_to_baseline"] == true,
+        "Only the closed observed Contact comparison supplies this control"
+    );
+    verify_retained_seals(closed, &closure)?;
+    let (mut all, _) = reviewed_family(examples, book, campaign, "contact")?;
+    concise_fixtures(&mut all, "contact")?;
+    let old_state: Value = serde_json::from_slice(&fs::read(
+        closed.join("run/contact/compile/baseline-program.json"),
+    )?)?;
+    ensure!(
+        old_state["reading.contact"]["signature"]["instructions"] == CONCISE_BASELINE,
+        "Original control instruction differs"
+    );
+    let demo = &old_state["reading.contact"]["demos"][0];
+    let old_demo = Example::new(
+        [
+            "question",
+            "consultation",
+            "chart_evidence",
+            "status",
+            "answer",
+            "analysis",
+            "evidence",
+            "unresolved",
+        ]
+        .map(|key| (key.to_owned(), demo[key].clone())),
+    )
+    .with_inputs(["question", "consultation", "chart_evidence"]);
+    let answer = WorkedAnswer::from_prediction(&Prediction::new(
+        old_demo.clone(),
+        "Reused approved worked example",
+    ))?;
+    let retained: WorkedAnswer = serde_json::from_slice(&fs::read(
+        closed.join("run/contact/concise-demo/answer.json"),
+    )?)?;
+    ensure!(
+        answer == retained && answer.word_count() <= 250,
+        "Approved worked answer changed"
+    );
+    let origin: Value = serde_json::from_slice(&fs::read(
+        closed.join("run/contact/concise-demo/source.json"),
+    )?)?;
+    let first = all
+        .iter()
+        .find(|f| f.example.get("case_id") == Some(&origin["case_id"]))
+        .context("Original TRAIN demo missing")?;
+    ensure!(first.split == "train", "Demonstration is not TRAIN");
+    let canonical = canonical_review_inputs(&first.example)?;
+    ensure!(
+        origin["canonical_input_sha256"] == optimize::input_key(&canonical)?
+            && origin["teacher_source_sha256"]
+                == google::digest(catalogue::reference_reader_source(book, "contact")?),
+        "Canonical demonstration/book changed; no approval transfer"
+    );
+    let new_label = relevant_demo_label(&first.example, &canonical, "contact", &answer)?;
+    let new_demo = crate::demo::compact(&new_label)?;
+    for key in [
+        "question",
+        "consultation",
+        "status",
+        "answer",
+        "analysis",
+        "evidence",
+        "unresolved",
+    ] {
+        ensure!(
+            new_demo.get(key) == old_demo.get(key),
+            "Display comparison changed worked answer/context field {key}"
+        );
+    }
+    let observations: Vec<Value> = serde_json::from_slice(&fs::read(
+        closed.join("run/contact/compile/search-observations.json"),
+    )?)?;
+    let mut off = Vec::new();
+    let mut on = Vec::new();
+    for case in DEPTH_CASES {
+        let current = all
+            .iter()
+            .find(|f| f.example.get("case_id") == Some(&json!(case)))
+            .context("Missing original case")?;
+        ensure!(
+            current.split == "train",
+            "Display probes must be original TRAIN"
+        );
+        verify_concise_fixture(&current.example, "contact")?;
+        let observed = observations
+            .iter()
+            .find(|row| row["case_id"] == case)
+            .context("No actual original-format observation")?;
+        let mut original = current.clone();
+        for (key, value) in
+            serde_json::from_value::<Vec<(String, String)>>(observed["inputs"].clone())?
+        {
+            original.example.set(key, json!(value));
+        }
+        for key in ["question", "consultation", "source_text"] {
+            ensure!(
+                original.example.get(key) == current.example.get(key),
+                "Comparison changed {key}"
+            );
+        }
+        let old_chart = original
+            .example
+            .get("chart_evidence")
+            .and_then(Value::as_str)
+            .context("No old chart")?;
+        let new_chart = current
+            .example
+            .get("chart_evidence")
+            .and_then(Value::as_str)
+            .context("No new chart")?;
+        ensure!(
+            catalogue::relevant_chart_ids(old_chart)? == catalogue::relevant_chart_ids(new_chart)?,
+            "Display changed supplied fact domain"
+        );
+        // Unchanged non-event facts are a mechanical source boundary. Events may
+        // add native derived sign/depth labels, never alter canonical facts.
+        for line in old_chart
+            .lines()
+            .filter(|line| line.starts_with('e') && line.contains('|') && !line.contains("|event|"))
+        {
+            ensure!(
+                new_chart.lines().any(|new| new == line),
+                "Non-event native fact changed"
+            );
+        }
+        off.push(original);
+        on.push(current.clone());
+    }
+    let mut old_predictor = concise_predictor("contact", &[], 0)?;
+    old_predictor.demos = vec![old_demo];
+    let new_predictor = concise_predictor("contact", &[new_label], 1)?;
+    let receipt = json!({"case_ids":DEPTH_CASES,"split":"original_training_only","off_dataset_sha256":optimize::fixtures_digest(&off)?,"on_dataset_sha256":optimize::fixtures_digest(&on)?,"approved_answer_sha256":google::digest(serde_json::to_vec(&answer)?),"old_demo_sha256":google::digest(serde_json::to_vec(&old_predictor.demos[0].fields().collect::<Vec<_>>())?),"new_demo_sha256":google::digest(serde_json::to_vec(&new_demo.fields().collect::<Vec<_>>())?),"closure_sha256":google::digest(fs::read(closed.join("closure.json"))?),"changed_variable":"Native event display: chartGap separated from per-body perfection sign/signEntries/entryDepth; same change to demonstration inputs","bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,"gold_changed":false,"question_context_and_answer_changed":false});
+    Ok(DepthInputs {
+        off,
+        on,
+        off_predictor: old_predictor,
+        on_predictor: new_predictor,
+        origin: receipt,
+    })
+}
+
+/// Stock Evaluate on four original TRAIN cases. Off arm is exact completed
+/// response/review replay; only the declared new presentation buys generations.
+#[allow(clippy::too_many_arguments)]
+pub async fn compare_contact_depth(
+    examples: &Path,
+    book: Arc<Book>,
+    campaign: &Path,
+    closed: &Path,
+    codex_path: &Path,
+    http: reqwest::Client,
+    directory: &Path,
+    prepare_only: bool,
+) -> Result<Value> {
+    let DepthInputs {
+        off,
+        on,
+        off_predictor,
+        on_predictor,
+        origin,
+    } = depth_inputs(examples, &book, campaign, closed)?;
+    if prepare_only {
+        ensure!(
+            !directory.exists(),
+            "Preserve existing comparison preparation"
+        );
+        fs::create_dir(directory)?;
+        let mut wires = Vec::new();
+        for (arm, fixtures, predictor) in
+            [("off", &off, &off_predictor), ("on", &on, &on_predictor)]
+        {
+            for mut row in preflight::reader_requests(fixtures, predictor)? {
+                row["arm"] = json!(arm);
+                wires.push(row);
+            }
+        }
+        let plan = json!({"phase":"contact_native_depth_fixed_evaluate","executable_sha256":google::digest(fs::read(std::env::current_exe()?)?),"origin":origin,"wires":wires,"student_cumulative_before":38,"teacher_cumulative_before":41,"student_fresh_physical_cap":8,"student_new_logical_cases":4,"teacher_fresh_cap":4,"original_student_cap":64,"original_teacher_cap":80,"hard_student_input_tokens":6000,"student_output_tokens":2048,"automatic_installation":false});
+        crate::queue::write_json_atomic(&directory.join("preparation.json"), &plan)?;
+        let mut counts = Vec::new();
+        for (index, row) in wires.iter().enumerate() {
+            let mut request: dsrust::lm::api::LmRequest =
+                serde_json::from_value(row["request"].clone())?;
+            request.model = google::STUDENT.into();
+            let count = google::count_tokens(
+                &http,
+                &request,
+                &directory.join(format!("count-{index:02}")),
+            )
+            .await?;
+            counts.push(json!({"case_id":row["case_id"],"arm":row["arm"],"input_tokens":count["input_tokens"],"request_sha256":row["request_sha256"]}));
+        }
+        let result = json!({"counts":counts,"fits":counts.iter().all(|v|v["input_tokens"].as_u64().is_some_and(|n|n<=6000)),"generation_submitted":false,"teacher_called":false});
+        crate::queue::write_json_atomic(&directory.join("counts.json"), &result)?;
+        ensure!(
+            result["fits"] == true,
+            "Actual display wire exceeds6000tokens"
+        );
+        return Ok(result);
+    }
+    let prepared: Value = serde_json::from_slice(&fs::read(directory.join("preparation.json"))?)?;
+    ensure!(
+        prepared["origin"] == origin
+            && prepared["executable_sha256"] == google::digest(fs::read(std::env::current_exe()?)?),
+        "Prepared comparison input/source/executable changed"
+    );
+    let counts: Value = serde_json::from_slice(&fs::read(directory.join("counts.json"))?)?;
+    ensure!(
+        counts["fits"] == true && counts["counts"].as_array().is_some_and(|v| v.len() == 8),
+        "No exact8wireadmission"
+    );
+    ensure!(
+        !directory.join("executed.json").exists(),
+        "Comparison already started; no automatic replay"
+    );
+    crate::queue::write_json_atomic(
+        &directory.join("executed.json"),
+        &json!({"origin":origin,"new_student_logical_max":4,"new_teacher_max":4}),
+    )?;
+    let student_cache = directory.join("student");
+    fs::create_dir(&student_cache)?;
+    let closure: Value = serde_json::from_slice(&fs::read(closed.join("closure.json"))?)?;
+    for entry in fs::read_dir(closed.join("run/student"))? {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if let Some(key) = name.strip_suffix(".response.json") {
+            for suffix in ["request.json", "response.json"] {
+                let file = format!("{key}.{suffix}");
+                ensure!(
+                    closure["sealed_files"][format!("run/student/{file}")]
+                        == google::digest(fs::read(closed.join("run/student").join(&file))?),
+                    "Unsealed student cache"
+                );
+                fs::copy(
+                    closed.join("run/student").join(&file),
+                    student_cache.join(&file),
+                )?;
+            }
+        }
+    }
+    let teacher_cache = directory.join("teacher");
+    let operations = completed_teacher_seals(
+        &closed.join("run/teacher/contact"),
+        Some("387101e1e54227fea44b94a5efa0992c53f6f3be358bbd15b656a78e0d803026"),
+    )?;
+    for operation in operations
+        .as_array()
+        .context("No completed teacher operations")?
+    {
+        codex::import_completed(
+            Path::new(operation["source"].as_str().context("No teacher source")?),
+            &teacher_cache,
+        )?;
+    }
+    let unknown = "387101e1e54227fea44b94a5efa0992c53f6f3be358bbd15b656a78e0d803026";
+    let guard = teacher_cache.join(unknown);
+    fs::create_dir(&guard)?;
+    for entry in fs::read_dir(closed.join("run/teacher/contact").join(unknown))? {
+        let entry = entry?;
+        ensure!(
+            entry.file_type()?.is_file(),
+            "Unknown-operation guard must contain files only"
+        );
+        let relative = format!(
+            "run/teacher/contact/{unknown}/{}",
+            entry.file_name().to_string_lossy()
+        );
+        ensure!(
+            closure["sealed_files"][&relative] == google::digest(fs::read(entry.path())?),
+            "Unsealed unknown-operation guard"
+        );
+        fs::copy(entry.path(), guard.join(entry.file_name()))?;
+    }
+    let sb = google::CallBudget::seeded(46, 38)?;
+    let tb = google::CallBudget::seeded(45, 41)?;
+    let listing = google::models(&http).await?;
+    let student = Arc::new(
+        google::Google::from_listing(
+            serde_json::from_value(listing["student"].clone())?,
+            http,
+            student_cache,
+            sb.clone(),
+            google::RateLimiter::with_probe_ceiling(14000, 16000)?,
+        )?
+        .with_input_limit(6000)?,
+    );
+    let teacher = Arc::new(
+        codex::Codex::new(codex_path.to_path_buf(), teacher_cache.clone(), 80)?
+            .with_budget(tb.clone()),
+    );
+    let mut results = BTreeMap::new();
+    let cached_models = runner::Models {
+        student: Arc::new(CachedStudent(student.clone())),
+        teacher: Arc::new(
+            codex::Codex::new(codex_path.to_path_buf(), teacher_cache, 80)?
+                .with_budget(tb.clone())
+                .with_completed_cache_only(),
+        ),
+        student_id: google::STUDENT.into(),
+        teacher_id: "codex-saved-login-tool-free-no-override".into(),
+    };
+    results.insert(
+        "off",
+        optimize::evaluate_gold_predictor(
+            &off,
+            book.clone(),
+            &cached_models,
+            off_predictor,
+            &directory.join("off"),
+        )
+        .await?,
+    );
+    ensure!(
+        sb.spent() == 38 && tb.spent() == 41,
+        "Control must replay completed student/reviews without fresh reservations"
+    );
+    let models = runner::Models {
+        student,
+        teacher,
+        student_id: google::STUDENT.into(),
+        teacher_id: "codex-saved-login-tool-free-no-override".into(),
+    };
+    results.insert(
+        "on",
+        optimize::evaluate_gold_predictor(&on, book, &models, on_predictor, &directory.join("on"))
+            .await?,
+    );
+    let result = json!({"origin":origin,"arms":results,"student_cumulative":sb.spent(),"teacher_cumulative":tb.spent(),"student_fresh_physical":sb.spent()-38,"teacher_fresh":tb.spent()-41,"bootstrap_calls":0,"reflection_calls":0,"selection_calls":0,"application_promoted":false,"source_correct_reading_qualified":false});
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    Ok(result)
+}
+
+#[cfg(test)]
+mod depth_tests {
+    use super::*;
+    #[tokio::test]
+    #[ignore = "Retained local book/Gold/closed caches; no provider calls"]
+    async fn actual_depth_controls_replay_exact_student_and_judge_without_network() {
+        let w = Path::new("/Users/george/.codex/evidence/horary-working-loop-20261010");
+        let closed = w.join("hosted-gold-contact-rewrite-r3-37e451d");
+        let book=Arc::new(Book::open(Path::new("/Users/george/.codex/evidence/horary-readings-20261008/worker-readable-book-20261009/frawley-ocr.md")).unwrap());
+        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let DepthInputs {
+            off,
+            on,
+            off_predictor: predictor,
+            on_predictor: _,
+            origin,
+        } = depth_inputs(
+            &examples,
+            &book,
+            &w.join("gold-readings-r1-codex-e346907"),
+            &closed,
+        )
+        .unwrap();
+        assert_eq!(off.len(), 4);
+        assert_eq!(on.len(), 4);
+        assert_ne!(origin["off_dataset_sha256"], origin["on_dataset_sha256"]);
+        let sb = google::CallBudget::seeded(46, 38).unwrap();
+        let tb = google::CallBudget::seeded(45, 41).unwrap();
+        let listing: Value =
+            serde_json::from_slice(&fs::read(closed.join("run/models.json")).unwrap()).unwrap();
+        let student = Arc::new(
+            google::Google::from_listing(
+                serde_json::from_value(listing["student"].clone()).unwrap(),
+                reqwest::Client::new(),
+                closed.join("run/student"),
+                sb.clone(),
+                google::RateLimiter::with_probe_ceiling(14000, 16000).unwrap(),
+            )
+            .unwrap(),
+        );
+        let teacher = Arc::new(
+            codex::Codex::new(
+                std::path::PathBuf::from("/opt/homebrew/bin/codex"),
+                closed.join("run/teacher/contact"),
+                80,
+            )
+            .unwrap()
+            .with_budget(tb.clone())
+            .with_completed_cache_only(),
+        );
+        let models = runner::Models {
+            student: Arc::new(CachedStudent(student)),
+            teacher,
+            student_id: google::STUDENT.into(),
+            teacher_id: "codex-saved-login-tool-free-no-override".into(),
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let result = optimize::evaluate_gold_predictor(&off, book, &models, predictor, tmp.path())
+            .await
+            .unwrap();
+        assert_eq!(result["execution_errors"], 0);
+        assert_eq!(sb.spent(), 38);
+        assert_eq!(tb.spent(), 41);
+        assert_eq!(result["case_count"], 4);
+        println!(
+            "Exact controls replayed with zero student/teacher reservations: {}",
+            result["score"]
+        );
+    }
+}
