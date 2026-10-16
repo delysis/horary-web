@@ -233,6 +233,10 @@ fn component_family_role_reference(
                 | "visit"
                 | "trust"
                 | "information"
+                | "vehicle"
+                | "person_description"
+                | "tax"
+                | "bet"
         ),
         "Unsupported role family"
     );
@@ -451,6 +455,121 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if method == "vehicle" {
+        add(
+            "vehicle.undertaking",
+            None,
+            principal.map(|_| 1),
+            false,
+            "source_vehicle_role_not_title_ownership",
+            value("subject.name").unwrap_or("Vehicle of journey").into(),
+            vec!["subject.name".into()],
+        );
+        add(
+            "vehicle.eighth",
+            None,
+            principal.map(|_| 8),
+            true,
+            "conditional_material_harm_reference",
+            "Eighth-house harm if operative".into(),
+            vec![],
+        );
+    } else if method == "person_description" {
+        let future = value("subject.kind") == Some("person_role");
+        let person = (!future).then(|| value("subject.owner_id")).flatten();
+        let house = if future {
+            principal.map(|_| 7)
+        } else {
+            person.and_then(person_house)
+        };
+        add(
+            "description.person",
+            person,
+            house,
+            false,
+            "main_person_ruler_not_natural_cosignificator",
+            value("subject.name").unwrap_or("Person described").into(),
+            vec!["subject.kind".into(), "subject.owner_id".into()],
+        );
+    } else if method == "tax" {
+        let taxpayer = value("subject.owner_id");
+        let house = taxpayer.and_then(person_house);
+        add(
+            "taxpayer.person",
+            taxpayer,
+            house,
+            false,
+            "calculated_reference",
+            taxpayer
+                .map(label)
+                .unwrap_or_else(|| "Unbound taxpayer".into()),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "taxpayer.money",
+            taxpayer,
+            house.map(|h| crate::native_evidence::turn(h, 2)),
+            false,
+            "calculated_reference",
+            "Taxpayer's purse".into(),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "government.authority",
+            None,
+            principal.map(|_| 10),
+            false,
+            "actual_government_reference_not_taxpayer_turned_boss",
+            "Government".into(),
+            vec![],
+        );
+        add(
+            "government.coffers",
+            None,
+            principal.map(|_| 11),
+            false,
+            "actual_government_money_reference",
+            "Government coffers".into(),
+            vec![],
+        );
+    } else if method == "bet" {
+        let player = value("subject.owner_id");
+        let house = player.and_then(person_house);
+        add(
+            "bet.player",
+            player,
+            house,
+            false,
+            "calculated_reference",
+            player.map(label).unwrap_or_else(|| "Unbound bettor".into()),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "bet.pocket",
+            player,
+            house.map(|h| crate::native_evidence::turn(h, 2)),
+            false,
+            "calculated_reference",
+            "Bettor's pocket".into(),
+            vec!["subject.owner_id".into()],
+        );
+        for (id, offset, label) in [
+            ("bet.opponent", 7, "Bookmaker or opposing player"),
+            ("bet.winnings", 8, "Opponent's money"),
+            ("bet.lottery", 11, "Ordinary lottery gift"),
+            ("bet.horse", 12, "Owned horse"),
+            ("bet.horse_prize", 1, "Profit from owned horse"),
+        ] {
+            add(
+                id,
+                None,
+                house.map(|h| crate::native_evidence::turn(h, offset)),
+                true,
+                "conditional_gambling_source_only_actual_question_selects",
+                label.into(),
+                vec!["subject.owner_id".into(), "context".into()],
+            );
+        }
     } else if method == "parcel" {
         let sender = value("sender");
         let sender_house = sender.and_then(person_house);
@@ -980,6 +1099,13 @@ fn component_family_role_reference(
     if method == "movable_deal" && facet.is_none() {
         unknowns.push("No facet is declared: object and sale-profit rows are conditional references, not selected roles or additional required inputs.".into());
     }
+    if method == "vehicle" {
+        for planet in ["Sun", "Mars", "Saturn"] {
+            rows.push(json!({"role_id":format!("vehicle.reference.{planet}"),"actor_id":null,"label":"Conditional natural danger/solar reference, not a causal verdict",
+                "significator_house":null,"ruler_planet":planet,"optional":true,"authority":"source_governed_conditional_body_reference",
+                "selected_id":null,"cusp_fact_id":null,"position_fact_ids":native.iter().filter(|f|f.kind=="position" && f.planets.iter().any(|p|p==planet)).map(|f|f.id.clone()).collect::<Vec<_>>(),"source_fields":[]}));
+        }
+    }
     if method == "relationship" {
         for (planet, role) in [("Sun", "natural.sun"), ("Venus", "natural.venus")] {
             let claimed = rows.iter().any(|r| {
@@ -1265,6 +1391,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "visit" => Ok(CONCISE_VISIT_PROCEDURE),
         "trust" => Ok(CONCISE_TRUST_PROCEDURE),
         "information" => Ok(CONCISE_INFORMATION_PROCEDURE),
+        "vehicle" => Ok(CONCISE_VEHICLE_PROCEDURE),
+        "person_description" => Ok(CONCISE_DESCRIPTION_PROCEDURE),
+        "tax" => Ok(CONCISE_TAX_PROCEDURE),
+        "bet" => Ok(CONCISE_BET_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -1477,6 +1607,60 @@ Use actual supplied signs, house positions, essential condition and afflictions;
 Genuine relay principal takes first; concerning another person does not. Preserve the understood chart moment and supplied reader place. Missing techniques remain unknown. Return only status, answer, analysis, evidence, unresolved: a direct qualified veracity judgment, material eIDs/pages and both positive/negative testimonies, with no invented real-world confirmation or civil-time prediction.
 ";
 
+const CONCISE_VEHICLE_PROCEDURE: &str = "VEHICLE-OF-JOURNEY PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 142–143.
+Preserve the actual journey and vehicle undertaking, whether the principal is aboard, and the bounded concern. 'The ship that I sail in' is first-house vehicle/body of the undertaking even if the principal is not presently aboard or has never boarded. Owner identity or a vehicle's being hired does not turn that role into second. A car considered as saleable possession or proposed purchase belongs to the movable-object recipe instead. Genuine relay principal takes first; do not invent an actor or vessel from private expected labels.
+
+Use Lord 1 as the vehicle's main significator. Judge genuinely harmful coming testimony: debilitated Mars/Saturn, Lord 8, combustion and a supplied South Node conjunction are serious possibilities; weaker afflictions from debilitated Venus/Jupiter suggest trouble rather than necessarily disaster. A natural malefic that is the vehicle's own ruler cannot be treated as a separate attacker merely because its name is Saturn or Mars. Assess actual condition and role-bound connection. Essential dignity, occupied-house capacity, solar state and actual motion qualify the vehicle's condition; do not invent an engineering defect from a weak ruler alone.
+
+Inspect the supplied chronological event set involving the vehicle, distinguishing material harm from every incidental aspect. A benefic with debility can harm and a dignified planet can help; do not use a crude planet-name score. Candidate endpoints are storage order, not a causal/applier arrow. Sign change and reversal can alter later condition; do not carry current reception unchanged or invent a station. Hourly interpolation can miss fine order or intra-hour reversals.
+
+The source's absence-of-affliction testimony supports safety only within the actual supplied coverage and resolved techniques. A seven-day search cannot promise an unbounded future journey or all physical safety; absent nodes, fixed stars or antiscia are uncomputed, not favourable evidence. Do not substitute unsupported chart certainty for real-world reports or mechanically call every opposition a fatal accident.
+
+If the actual question asks when a material event occurs, establish it first and use actual applying travel plus justified context; astronomical search hours are not civil times. Retain understanding moment/reader place, not a chart recast for the departure date. Reception A→B is A's regard for B, preserving all qualities; it is not mechanical proof that the car has feelings or an accident occurs. Return status, answer, analysis, evidence, unresolved: direct bounded judgment with material eIDs/pages, severity distinctions, contrary evidence and explicit limits.
+";
+
+const CONCISE_DESCRIPTION_PROCEDURE: &str = "PERSON DESCRIPTION PROCEDURE — Frawley printed pp. 19–32, 44–77, 143–145, 191–192, 196.
+Preserve who is described and any actual known context. Use that person's MAIN operative house ruler, not an arbitrary natural cosignificator or the person's career ruler. An unnamed future marriage partner is seventh, not an invented identity; a declared relative uses their actual relationship. Genuine relay principal takes first; concerning another person does not. A subject.kind=person_role is a requested role, not the current owner's physical body. Assigned house differs from occupied house; shared rulers retain their aliases.
+
+Begin with the main planet's broad build: Saturn tall/slim; Jupiter big and fleshy, especially in water; Mars short/muscular/solid; Sun tall/well-built but not Jupiter's size; Venus short/soft; Mercury mid-height or above and slim; Moon fleshy/not tall, generally bigger waxing than waning. Qualify this base using its domicile ruler, other major dignities and relevant tight aspects. A qualifying influence modifies rather than wholly replacing the main planet. Debility can diminish the body's characteristic, e.g. Mars lacking its usual muscle, without proving disease or deformity.
+
+Treat age comparatively: Moon can mean younger, Saturn older; neither determines an infant/ancient person or an exact age. Sun/Venus/Mars can show comparable age. The chart does not establish race, and hair/skin/eye assumptions depend strongly on actual context; do not infer ethnicity or racial background. Avoid exact inches, measurements or an identifying tattoo/scar invented to appear clever.
+
+Close aspects can qualify details, but source advice prefers confirming an actually reported feature instead of inventing hidden marks. A supplied Mars square can fit a reported scar; it does not justify announcing a scar as independently known. Uncomputed fixed stars, tight aspect precision or unavailable phase/particular dignity remain unknown. Main-role reception to its dignity hosts supplies qualifiers, not those hosts as extra people.
+
+Physical description is a present-state question, not an event requiring future perfection. Do not reject description solely because no new aspect occurs or Moon is void. Nor does describing a future-partner role establish that a meeting or marriage will occur. Separate that event claim and its timing. Maintain proportionate uncertainty from approximate positions and the source's broad descriptive method.
+
+Return only status, answer, analysis, evidence, unresolved: useful broad description first with material native eIDs/pages, conditional qualifications and limits; no invented exact identity, race, age or unsupported physical diagnosis.
+";
+
+const CONCISE_TAX_PROCEDURE: &str = "TAX BURDEN PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 231–232.
+Preserve the actual taxpayer, pending/already-assessed bill, burden question and relevant deadline. Government is tenth and its coffers eleventh; taxpayer's purse is their own second. For a genuinely relayed question the relay principal takes first. For concerning another person use that person's actual house and turned second; do not turn the actual government into that person's boss. Keep authority, coffers and purse distinct even if rulers coincide.
+
+These charts commonly show taxpayer money joining government or its coffers. Consider reception of BOTH government and coffers toward the purse, giving particular weight to whichever actually contacts it. A→B means A regards B, not B's response. The more the tax authority wants the money, the greater its demand may be; exaltation can show overestimation of what exists or is owed. Do not reverse that direction into the taxpayer loving the government.
+
+The contrary reception matters: strong mutual reception can reduce demands even though the taxman likes the money. Keep every positive AND negative quality instead of a single weighted strength score. Domicile/exaltation are major, triplicity moderate, term/face minor. Chart affinity is a source-defined fiscal metaphor, not literal government emotion or independent evidence of an unlawful assessment.
+
+Judge other forthcoming actual afflictions to the purse and its essential/accidental strength to assess capacity to withstand the bill. Good purse strength does not erase tax demand; low demand and ease of surviving it are different questions. An assessed bill is a stated observation, not a newly predicted unknown amount, and a qualitative chart burden does not create an exact currency number.
+
+If timing of a supported demand/payment is actually asked, use native order, actual applying travel and justified contextual units. Do not treat any incidental contact as collection, tax seizure or prohibition without its connecting role. Astronomical hours are not civil dates. An explicit timeframe may have relevant sign-end testimony; missing candidates, fine order, future dignity and uncomputed techniques remain unknown.
+
+No universal future-arrival aspect is required merely to judge how burdensome an already-assessed tax bill is. Do not silently reframe it as winning a grant, customer payment or general financial prophecy. Keep understood chart time and supplied reader place. Return status, answer, analysis, evidence, unresolved: useful proportionate burden judgment with material eIDs/pages, countervailing reception and purse evidence, limits and no invented monetary calculation.
+";
+
+const CONCISE_BET_PROCEDURE: &str = "BETTING AND PRIZE MONEY PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 156, 158–163.
+Preserve the actual bettor, wager/lottery/horse-prize type, selected proposition and requested net profit. Gambling profit is not fifth-house recreation merely because betting can be entertaining. A winner ends with more money, not simply a favoured team winning or a stake being refunded. Genuine relay principal takes first; another bettor retains their actual house. Conditional source rows are alternatives selected by the original question, not all operative simultaneously.
+
+Ordinary bookmaker or private cash opponent is the bettor's seventh, their money eighth. Needed winnings must reach the bettor's ruler, available contextual Moon or pocket (second); which body applies does not change the assumed recipient. Establish a supported connection and relevant prevention/translation, then use the money's condition to qualify gain relative to stake, not invent an exact sum. A strong opponent without money-to-recipient testimony is not a win. Returning one's own money can be refund rather than profit.
+
+Ordinary public lottery is gift/pennies-from-heaven, eleventh, not a contest by default. Only an explicitly competitive scheme to outwit the lottery company can invoke opponent/eighth. A jackpot-only claim needs exceptionally strong money testimony; minor gain is not automatically a jackpot. Do not equate winning a sports contest with receiving a wager's money.
+
+Owned horse prize uses horse twelfth and its second, radical first for the principal's horse. Give first to horse profit in that branch rather than inventing a duplicate independent querent ruler. Strong benefit to recipient first/second by placement can support profit; otherwise examine horse money joining available Moon/pocket. House priority can remove the ordinary contextual Moon when it actually rules opponent/money. Retain coincident aliases without pretending they independently perfect an aspect.
+
+Reception A→B means A regards B; preserve positive AND negative qualities. Attribute money condition and ability to its actual role. Inspect source-supported intervening contacts, not every incidental planet as a bookmaker or thief. An incomplete seven-day search cannot prove no possible win forever, and missing antiscia or precise order remains unknown. Do not chase a long chain until one looks profitable.
+
+Timing follows established occurrence with actual applying travel and contextual units; astronomical search hours are not civil outcome dates. Respect the stated bet and horizon, not a recast event chart or an invented recommended wager. Return status, answer, analysis, evidence, unresolved: direct qualified net-profit judgment, material eIDs/pages, contrary testimony and honest calculation limits.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -1545,7 +1729,7 @@ fn verified_concise_chart(
         "contact" => component_contact_role_reference(consultation, &native)?,
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
-        | "visit" | "trust" | "information" => {
+        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet" => {
             component_family_role_reference(consultation, &native, method)?
         }
         _ => unreachable!("The concise procedure admits only implemented families"),
@@ -1707,7 +1891,7 @@ pub fn relevant_reader_chart(
         "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
-        | "visit" | "trust" | "information" => {
+        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -2044,6 +2228,28 @@ fn relevant_family_ids(
                 }
             }
         },
+        "vehicle" => {
+            recipient("vehicle.undertaking");
+            target("vehicle.eighth");
+        }
+        "person_description" => {
+            recipient("description.person");
+        }
+        "tax" => {
+            recipient("taxpayer.money");
+            target("government.authority");
+            target("government.coffers");
+        }
+        "bet" => {
+            recipient("bet.player");
+            recipient("bet.pocket");
+            if is_principal("bet.player") {
+                recipient("principal.moon");
+            }
+            for id in ["bet.winnings", "bet.lottery", "bet.horse_prize"] {
+                target(id);
+            }
+        }
         "parcel" => {
             recipient("parcel.recipient");
             recipient("parcel.pocket");
@@ -2121,6 +2327,20 @@ fn relevant_family_ids(
     }
     // These bodies have explicit family-specific ancillary relevance even
     // without an assigned person alias. This does not assign natural roles.
+    if method == "person_description"
+        && let Some(main) = planet("description.person")
+    {
+        for fact in native {
+            if let Some(edge) = fact.reception.as_ref().filter(|e| {
+                e.guest_planet == main
+                    && e.qualities
+                        .iter()
+                        .any(|q| q.polarity == crate::native_evidence::ReceptionPolarity::Positive)
+            }) {
+                planets.insert(edge.host_planet.clone());
+            }
+        }
+    }
     if method == "information" {
         for fact in native {
             if let Some(edge) = fact.reception.as_ref().filter(|e| {
@@ -2139,7 +2359,7 @@ fn relevant_family_ids(
     }
     if matches!(
         method,
-        "property" | "rental" | "business_property" | "money" | "investment"
+        "property" | "rental" | "business_property" | "money" | "investment" | "bet"
     ) {
         let relevant_houses: BTreeSet<_> = roles.iter().filter_map(|r| r[3].as_u64()).collect();
         for fact in native.iter().filter(|f| f.kind == "position") {
@@ -2156,6 +2376,36 @@ fn relevant_family_ids(
     }
     planets.extend(recipients.iter().cloned());
     planets.extend(targets.iter().cloned());
+    // An unbound canonical actor is not missing information in the original
+    // question. Keep the native house/condition/reception alternatives so
+    // the reader can resolve the original words rather than manufacturing a
+    // missing calculation by pruning the very ruler it needs.
+    if roles.iter().any(|r| r[5] == false && !r[4].is_string()) {
+        for fact in native.iter().filter(|f| {
+            matches!(
+                f.kind.as_str(),
+                "house" | "position" | "condition" | "reception"
+            )
+        }) {
+            ids.insert(fact.id.clone());
+        }
+    }
+    let mut extra = extra_demo_ids.cloned().unwrap_or_default();
+    if matches!(method, "vehicle" | "tax") {
+        let subject = if method == "vehicle" {
+            "vehicle.undertaking"
+        } else {
+            "taxpayer.money"
+        };
+        if let Some(vehicle) = planet(subject) {
+            extra.extend(
+                native
+                    .iter()
+                    .filter(|f| f.kind == "event" && f.planets.iter().any(|p| p == vehicle))
+                    .map(|f| f.id.clone()),
+            );
+        }
+    }
     relevant_bound_ids(
         native,
         ids,
@@ -2163,7 +2413,7 @@ fn relevant_family_ids(
         recipients,
         targets,
         conditional_pairs,
-        extra_demo_ids,
+        Some(&extra),
     )
 }
 
@@ -2897,6 +3147,94 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_safety_description_tax_and_bet_keep_distinct_source_roles() {
+        let (input, native) = relevant_family_input(
+            "vehicle",
+            json!({"facts":[fact("subject.name","cargo voyage")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("vehicle.undertaking(?) = H1/Saturn"));
+        assert!(!chart.contains("subject.primary(?) = H2/"));
+        // Required unknown canonical roles retain the native alternatives.
+        let (unbound, native_unbound) = relevant_family_input(
+            "person_description",
+            json!({"facts":[fact("subject.owner_id","max"),fact("subject.kind","person"),fact("people.max.relationship","unknown")],"unknown":[]}),
+        );
+        let unbound_ids =
+            relevant_chart_ids(unbound.get("chart_evidence").unwrap().as_str().unwrap()).unwrap();
+        assert!(
+            native_unbound
+                .iter()
+                .filter(|f| matches!(
+                    f.kind.as_str(),
+                    "house" | "position" | "condition" | "reception"
+                ))
+                .all(|f| unbound_ids.contains(&f.id))
+        );
+
+        let ids = relevant_chart_ids(chart).unwrap();
+        for fact in native
+            .iter()
+            .filter(|f| f.kind == "event" && f.planets.iter().any(|p| p == "Saturn"))
+        {
+            assert!(
+                ids.contains(&fact.id),
+                "Later bounded harm candidate dropped: {}",
+                fact.id
+            );
+        }
+        let (input, _) = relevant_family_input(
+            "person_description",
+            json!({"facts":[fact("subject.kind","person_role"),fact("subject.owner_id","querent")],"unknown":[]}),
+        );
+        assert!(
+            input
+                .get("chart_evidence")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("description.person(?) = H7/")
+        );
+        let (input, _) = relevant_family_input(
+            "person_description",
+            json!({"facts":[fact("subject.kind","person"),fact("subject.owner_id","father"),fact("people.father.relationship","father")],"unknown":[]}),
+        );
+        assert!(
+            input
+                .get("chart_evidence")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("description.person(father) = H4/")
+        );
+        let (input, _) = relevant_family_input(
+            "tax",
+            json!({"facts":[fact("subject.owner_id","sister"),fact("people.sister.relationship","sibling")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("taxpayer.money(sister) = H4/")
+                && chart.contains("government.authority(?) = H10/")
+                && chart.contains("government.coffers(?) = H11/")
+        );
+        let (input, _) = relevant_family_input(
+            "bet",
+            json!({"facts":[fact("subject.owner_id","querent"),fact("context","ordinary bookmaker")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("bet.winnings(?) = H8/")
+                && chart.contains("bet.lottery(?) = H11/")
+                && chart.contains("bet.horse_prize(?) = H1/")
+        );
+        assert!(
+            concise_reader_source("bet")
+                .unwrap()
+                .contains("Conditional source rows are alternatives")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -2908,6 +3246,10 @@ mod concise_projection_tests {
             "visit",
             "trust",
             "information",
+            "vehicle",
+            "person_description",
+            "tax",
+            "bet",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
