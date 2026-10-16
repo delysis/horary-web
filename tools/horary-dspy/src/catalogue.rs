@@ -256,6 +256,10 @@ fn component_family_role_reference(
                 | "fertility"
                 | "adoption"
                 | "medical"
+                | "allegation"
+                | "custody"
+                | "weather"
+                | "election"
         ),
         "Unsupported role family"
     );
@@ -477,6 +481,128 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if method == "allegation" {
+        let person = value("subject.owner_id").or_else(|| {
+            (value("principal_mode") != Some("concerning_other"))
+                .then_some(principal)
+                .flatten()
+        });
+        let house = person.and_then(person_house);
+        add(
+            "concern.person",
+            person,
+            house,
+            false,
+            "actual_subject_of_reported_concern_not_verified_attack",
+            person
+                .map(label)
+                .unwrap_or_else(|| "Unbound person concerned".into()),
+            vec!["subject.owner_id".into(), "principal_mode".into()],
+        );
+        add(
+            "concern.twelfth",
+            None,
+            house.map(|h| crate::native_evidence::turn(h, 12)),
+            false,
+            "reported_harm_or_self_undoing_not_culprit_identity",
+            "Twelfth-house concern".into(),
+            vec!["claim".into()],
+        );
+        for field in fields
+            .keys()
+            .filter(|f| f.starts_with("people.") && f.ends_with(".relationship"))
+        {
+            let id = &field[7..field.len() - 13];
+            add(
+                &format!("concern.declared.{id}"),
+                Some(id),
+                person_house(id),
+                true,
+                "conditional_named_relationship_not_assailant_fact",
+                label(id),
+                person_sources(Some(id)),
+            );
+        }
+    } else if method == "custody" {
+        let person = value("subject.owner_id");
+        let house = person.and_then(person_house);
+        add(
+            "custody.person",
+            person,
+            house,
+            false,
+            "actual_person_and_observed_custody_state",
+            person.map(label).unwrap_or_else(|| "Unbound person".into()),
+            vec!["subject.owner_id".into(), "custody_state".into()],
+        );
+        add(
+            "custody.turned_prison",
+            None,
+            house.map(|h| crate::native_evidence::turn(h, 12)),
+            true,
+            "radical_and_turned_imprisonment_references",
+            "Person's twelfth".into(),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "custody.radical_prison",
+            None,
+            Some(12),
+            true,
+            "radical_and_turned_imprisonment_references",
+            "Radical twelfth".into(),
+            vec![],
+        );
+    } else if matches!(method, "weather" | "election") {
+        let refs: &[(&str, u8, &str)] = if method == "weather" {
+            &[
+                ("weather.here", 1, "General local weather only"),
+                ("weather.pleasure", 5, "Actual party/golf/recreation"),
+                ("weather.voyage", 9, "Actual long voyage"),
+                ("weather.routine_journey", 3, "Actual routine commute"),
+                ("weather.friend", 11, "Actual friend visit"),
+            ]
+        } else {
+            &[
+                ("election.person", 1, "Best day for actual actor"),
+                ("election.creative", 5, "Party/manuscript/creative baby"),
+                ("election.work", 10, "Work project"),
+                (
+                    "election.institution",
+                    9,
+                    "External institution if actual action requires it",
+                ),
+            ]
+        };
+        for (role, house, label) in refs {
+            if method == "weather" && value("weather_scope") == Some("general") && *house != 1 {
+                continue;
+            }
+            add(
+                role,
+                None,
+                Some(*house),
+                true,
+                "conditional_action_or_event_original_question_selects",
+                (*label).into(),
+                vec!["weather_scope".into(), "context".into(), "action".into()],
+            );
+        }
+        for field in fields
+            .keys()
+            .filter(|f| f.starts_with("people.") && f.ends_with(".relationship"))
+        {
+            let id = &field[7..field.len() - 13];
+            add(
+                &format!("event.declared.{id}"),
+                Some(id),
+                person_house(id),
+                true,
+                "conditional_actual_event_person_not_selected_action",
+                label(id),
+                person_sources(Some(id)),
+            );
+        }
     } else if matches!(method, "pregnancy" | "fertility" | "medical") {
         let person = value("subject.owner_id");
         let animal = value("subject.kind") == Some("animal");
@@ -1773,7 +1899,7 @@ fn component_family_role_reference(
         .filter(|r| r["planet"] == "Moon" && r["optional"] == true)
         .map(|r| r["role_id"].clone())
         .collect();
-    let moon_available = !matches!(method, "contest" | "politics")
+    let moon_available = !matches!(method, "contest" | "politics" | "weather" | "election")
         && principal.is_some()
         && moon_claims.is_empty()
         && rows
@@ -1795,6 +1921,10 @@ fn component_family_role_reference(
                 | "pregnancy"
                 | "fertility"
                 | "medical"
+                | "allegation"
+                | "custody"
+                | "weather"
+                | "election"
         ) || value("subject.owner_id") == principal);
     if moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
@@ -2066,6 +2196,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "fertility" => Ok(CONCISE_FERTILITY_PROCEDURE),
         "adoption" => Ok(CONCISE_ADOPTION_PROCEDURE),
         "medical" => Ok(CONCISE_MEDICAL_PROCEDURE),
+        "allegation" => Ok(CONCISE_ALLEGATION_PROCEDURE),
+        "custody" => Ok(CONCISE_CUSTODY_PROCEDURE),
+        "weather" => Ok(CONCISE_WEATHER_PROCEDURE),
+        "election" => Ok(CONCISE_ELECTION_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -2596,6 +2730,62 @@ Actual treating/potential doctor is patient's seventh, not generic ninth. Treatm
 Assess actual power over illness and effect on patient: illness in doctor's dignity gives doctor power; doctor in illness's dignity gives illness power. Treatment favouring patient helps, harming patient is adverse. Preserve every positive AND negative directed reception A→B, not reversed control. Descriptive surgery debility may fit its nature; dignity alone is not treatment efficacy. Don't fabricate medical knowledge or tell a person to change treatment from an unsupported inference.
 
 Astronomical hours are not clinical dates. Unknown separating contacts, future condition, Parts or fine order stay unknown. Return status, answer, analysis, evidence, unresolved: qualified source-scoped answer with native eIDs/pages, counterevidence and explicit diagnostic/calculation limits, not an invented clinical finding.
+";
+
+const CONCISE_ALLEGATION_PROCEDURE: &str = "REPORTED HARM AND SELF-UNDOING PROCEDURE — Frawley printed pp. 19–32, 44–83, 84–101, 233–234.
+Preserve the exact reported concern and distinguish a fear of harmful practice from an observed fact and from habitual self-undoing. Do not introduce an attacker, supernatural mechanism, diagnosis or independent accusation. Genuine relay principal takes first; concerning someone else retains their actual role. The nature of the alleged assault makes twelfth relevant even if a name is supplied; a specific operative relationship such as ex-partner can also need its actual house. Named-person references remain conditional, not verified assailants.
+
+The source examines shared first/twelfth ruler or genuinely close contact between them with directed receptions. An applying future aspect cannot prove a reported present/past harmful act. If separating contact, exact conjunction or relevant hidden technique is uncomputed, do not invent it. A single shared ruler or adverse condition is not independently verified evidence that another person attacked the principal.
+
+Reception direction is crucial: if twelfth is ruled by first, principal has power over the supposed threat. If first is ruled by twelfth, perceived power can arise from the supposition itself, without the suspect having done anything. A→B records A's regard for B, preserving all positive AND negative qualities; do not reverse control or call exaggerated fear proof of an external act. Keep the source's symbolic assessment separate from a factual allegation.
+
+For an actual harmful habit/addiction concern, twelfth represents self-undoing, not fifth merely because an activity can give pleasure. Assess its actual dignity and relationship to principal. Even a benefic in detriment/fall can be harmful. Principal in strong dignity of twelfth can show the habit's hold; minor term/face influence is weaker, not identical to domicile/exaltation. Do not fabricate a clinical diagnosis or universal planet-name moral score.
+
+Fixed can describe persistence, mutable recurrence, cardinal shorter duration, qualified by actual change. Leaving a fixed sign and moving away from that power can improve; entering a fixed stronger hold can worsen. Only use calculated movement/new condition; no invented recovery date or certainty that a practice is harmless. A present-state concern does not universally need a new future perfection.
+
+Source-bounded motion and precision remain material; missing calculations are unknown, not absence or a covert event. Astronomical hours are not civil dates. Do not claim a chart independently establishes thought control, spell-casting or a particular person's guilt. Return status, answer, analysis, evidence, unresolved: direct proportionate response with material eIDs/pages, counterevidence, actual reported context and honest limits, without validating an unsupported allegation as fact.
+";
+
+const CONCISE_CUSTODY_PROCEDURE: &str = "IMPRISONMENT AND RELEASE PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 234–237.
+Preserve actual person and whether not held, on remand/already held, committed or seeking release. These are different defaults. Genuine relay principal takes first; concerning another detainee keeps their actual relationship house. An indifferent unrelated person can be seventh; don't assign first merely because their name appears first. Consider BOTH radical and person's turned twelfth as imprisonment. Assigned house differs from body's occupied house; retain shared aliases and do not transfer principal Moon to another person.
+
+A real forthcoming entry into relevant twelfth can show imprisonment; a genuine reversal before entry can avert it. Current ruler already in twelfth can reflect already being held, not an event just occurring. Do not invent house crossing, station or direction reversal from a current position alone. An actual cusp reference is not a certified future cusp-event calculation.
+
+For someone on remand, condition worsening by real affliction, loss of dignity or moving toward a more fixed state can support commitment. An actual joining with relevant prison ruler can say the same; entering fall can fit 'going down'. Evaluate actual seriousness and context, not every incidental malefic contact as automatic imprisonment. For release seek the reverse: leaving confinement, improving condition, actual returning-home testimony or supported reversal of the imprisonment pattern.
+
+Essential dignity may suggest innocence in the source's framework, but innocence and outcome differ. Do not turn dignity into a verified legal finding or guilt. Actual conflicting testimony may show conviction followed by release; distinguish that sequence rather than compress it into a single unqualified yes/no. A relevant planet's retrogradation can signify changed testimony only with actual source support, not a fabricated witness or appeal.
+
+Receptions can show whether real helpers can help and whether the person can receive help; mutual regard alone without actual strength is not unlimited assistance. A→B means A regards B, preserving every positive AND negative quality. Identify friends, lawyer or witness only from actual question/source role, not any unassigned body. Supplied nodes/antiscia can qualify but may not be invented.
+
+Do not override an explicit reported custody state with a literalistic chart-house assertion. Keep court verdict, sentence duration, actual physical confinement and return home distinct. Timing needs supported event and actual travel/contextual units; astronomical hours are not civil release dates. Uncomputed cusp crossings, separating contacts, stations and fine order remain unknown. Return status, answer, analysis, evidence, unresolved: practical state-correct custody/release judgment with eIDs/pages, contrary testimony and limits, no invented crime or guaranteed legal outcome.
+";
+
+const CONCISE_WEATHER_PROCEDURE: &str = "HORARY WEATHER PROCEDURE — Frawley printed pp. 19–32, 40–44, 54–77, 84–101, 238–240.
+Preserve actual location, season/period and whether general local weather or weather at a specific event. Reader chart anchor remains the place/time of understanding; event place/date are context, not an automatic recast. General 'here' uses first. Event weather uses that event's house: party/golf/recreation fifth, friend's visit eleventh, long voyage ninth, routine work ferry/journey third. Conditional event references do not select a private expected branch. Other actual event roles can require their ordinary house; do not force every gathering into a generic first.
+
+The relevant house RULER IS THE EVENT, not the weather. Its NATURE or the SIGN ON THE CUSP describes the event, not the weather at it. Read weather from the sign the event ruler actually occupies: fire hot/dry, earth cold/dry, air hot/moist, water cold/moist. Saturn ruling the event does not by itself prove cold/dry weather; Mars ruling a barbecue does not itself make that day's weather hot.
+
+Then use the actual ruler of the ruler's occupied sign to qualify how hot/cold/moist/dry. Further supplied tight contacts can amplify or modify: a moist planet in a moist sign can bring rain, with aspect/context distinguishing a shower from a destructive downpour. Do not invent a close aspect or a future ephemeris position absent calculation. Assigned event house differs from planet's occupied house and all interpretations must retain that distinction.
+
+Jupiter naturally signifies rain, 'beneficial' from farming perspective rather than necessarily good for a picnic. Mercury rules wind; actual condition and contact can qualify its strength/help/hindrance. These natural influences are source-specific references, not every planet automatically a separate weather event. Keep all relevant condition and sign evidence, not a simple planet-name score or an ungrounded mathematical weather model.
+
+Calibrate to actual season and geography: winter heat differs from summer heat, and cold moisture can be snow only in the appropriate context. Do not promise exact degrees, rainfall totals, wind speeds or a minute-by-minute forecast from these qualitative symbols. Missing sign/dispositor/contact data remains unknown, not evidence of fine weather.
+
+The source does not endorse mechanically repeating a routine daily question without a genuine inquiry. This family is not a political election or a general outing-quality question. Moon is not automatically the principal's emotional cosignificator here. Return status, answer, analysis, evidence, unresolved: useful qualitative event-specific weather judgment with native eIDs/pages, material counterevidence and honest precision/coverage limits, not an invented measured forecast.
+";
+
+const CONCISE_ELECTION_PROCEDURE: &str = "ELECTING WITH HORARY PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 241–242.
+Preserve actual action, actor, available window, fixed alternative days and required precision. This is choosing when to act, not predicting a political election or whether the action succeeds. Full natal election is different and requires birthchart study; this horary method offers broad useful timing, usually a day, 'after a date' or 'as soon as possible', never an invented exact clock minute.
+
+Choose the relevant action's actual house ruler: party fifth, work project tenth, creative manuscript as one's baby fifth; sometimes the question simply concerns the best day for actual principal/first. An admission interview can involve candidate and external institution/ninth. Conditional action references are alternatives; do not select a private expected role or assign a relative's action to the literal speaker when actual question identifies another actor. Preserve genuine relay versus concerning-other distinction.
+
+Follow the chosen planet's actual movement toward a materially better situation in the near future: stronger essential condition, a supplied beneficial contact or other contextual improvement. Identify what changes and why it is good for this action, then use its actual distance/travel and justified contextual units. A known window can settle plausible scale; astronomical event hours are not automatically civil days. Retrogradation/stations or solar contacts can alter a proposed improvement; never invent them or move through them without source support.
+
+For constrained alternatives, actual TRANSITS TO THE ORIGINAL HORARY on those days can decide: candidate reaching a relevant institution cusp in good condition, or institution changing reception toward candidate. These must be genuinely calculated for those dates. Current chart data alone does not supply an arbitrary future calendar ephemeris or hypothetical dignity; if absent, state that specific limit and use only the supported broad comparison. Do not secretly create a new elected chart or import a held answer to choose a day.
+
+Most important: DO NOT set a new chart for the chosen future time and then optimize its houses, Moon placement or unrelated future aspects. That would be a full election without the required natal basis. An existing bounded search can support actual chosen-planet development; it does not justify broad guarantees beyond its coverage. Don't chase a long chain until a pleasing date appears.
+
+Reception A→B preserves all positive AND negative qualities and may qualify action/recipient context, not independently known acceptance. Shared rulers retain aliases rather than a fictitious aspect. Return status, answer, analysis, evidence, unresolved: useful action-specific broad timing with material native eIDs/pages, contrary evidence and explicit calculation/precision limits, not a guaranteed successful launch or fabricated exact appointment.
 ";
 
 /// Present an existing declared component input with the same finite native
@@ -3162,6 +3352,23 @@ fn relevant_family_ids(
                 }
             }
         },
+        "allegation" => {
+            recipient("concern.person");
+            target("concern.twelfth");
+        }
+        "custody" => {
+            recipient("custody.person");
+            target("custody.turned_prison");
+            target("custody.radical_prison");
+        }
+        "weather" | "election" => {
+            for row in roles.iter().filter(|r| r[0] != "principal.person") {
+                if let Some(p) = row[4].as_str() {
+                    recipients.insert(p.into());
+                    targets.insert(p.into());
+                }
+            }
+        }
         "pregnancy" | "fertility" => {
             recipient("mother.person");
             if is_principal("mother.person") {
@@ -3402,7 +3609,11 @@ fn relevant_family_ids(
     // without an assigned person alias. This does not assign natural roles.
     if matches!(
         method,
-        "education"
+        "allegation"
+            | "custody"
+            | "weather"
+            | "election"
+            | "education"
             | "dream"
             | "choice"
             | "contest"
@@ -4672,41 +4883,71 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_last_families_preserve_concern_state_and_event_specificity() {
+        let (input, _) = relevant_family_input(
+            "allegation",
+            json!({"facts":[fact("claim","a reported fear, not a fact")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("concern.person(querent) = H1/")
+                && chart.contains("concern.twelfth(?) = H12/")
+        );
+        assert!(!chart.contains("assailant(") && !chart.contains("verified_attack"));
+        let (input, _) = relevant_family_input(
+            "custody",
+            json!({"facts":[fact("subject.owner_id","sister"),fact("people.sister.relationship","sibling"),fact("custody_state","already_held")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("custody.person(sister) = H3/")
+                && chart.contains("custody.turned_prison(?) = H2/")
+                && chart.contains("custody.radical_prison(?) = H12/")
+        );
+        assert!(
+            input
+                .get("consultation")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("custody_state=already_held")
+        );
+        let (input, _) = relevant_family_input(
+            "weather",
+            json!({"facts":[fact("weather_scope","general"),fact("target_place","Woodbridge, Virginia"),fact("target_period","winter")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("weather.here(?) = H1/"));
+        assert!(!chart.contains("weather.pleasure(") && !chart.contains("principal.moon("));
+        let (input, _) = relevant_family_input(
+            "election",
+            json!({"facts":[fact("action","Hold a party"),fact("action_window","Friday or Sunday")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("election.creative(?) = H5/")
+                && chart.contains("election.work(?) = H10/")
+        );
+        assert!(!chart.contains("principal.moon("));
+        let source = concise_reader_source("election").unwrap();
+        assert!(
+            source.contains("DO NOT set a new chart")
+                && source.contains("TRANSITS TO THE ORIGINAL HORARY")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
-        for method in [
-            "return_to_job",
-            "job_offer",
-            "investment",
-            "business_property",
-            "parcel",
-            "visit",
-            "trust",
-            "information",
-            "vehicle",
-            "person_description",
-            "tax",
-            "bet",
-            "existing_job",
-            "work_person",
-            "hiring",
-            "lost_object",
-            "lost_animal",
-            "missing_person",
-            "knowledge",
-            "exam",
-            "undertaking",
-            "education",
-            "dream",
-            "choice",
-            "contest",
-            "politics",
-            "court_case",
-            "pregnancy",
-            "fertility",
-            "adoption",
-            "medical",
-        ] {
+        let mut methods = fs::read_dir(base.join("examples"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|x| x == "jsonl"))
+            .map(|p| p.file_stem().unwrap().to_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        methods.sort();
+        assert_eq!(methods.len(), 42);
+        for method in &methods {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
             let mut unknown = Vec::new();
@@ -4734,13 +4975,15 @@ mod concise_projection_tests {
                 }
                 max_bytes = max_bytes.max(chart.len());
             }
-            assert!(
-                concise_reader_source(method)
-                    .unwrap()
-                    .split_whitespace()
-                    .count()
-                    <= 450
-            );
+            if !matches!(method.as_str(), "new_job" | "movable_deal") {
+                assert!(
+                    concise_reader_source(method)
+                        .unwrap()
+                        .split_whitespace()
+                        .count()
+                        <= 450
+                );
+            }
             eprintln!(
                 "{method}: twenty authored components native-verified; max chart {max_bytes} bytes; unresolved {unknown:?}"
             );
