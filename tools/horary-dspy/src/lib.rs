@@ -26,6 +26,8 @@ pub mod preflight;
 pub mod queue;
 pub mod reading;
 pub mod reception;
+pub mod rewrite;
+
 pub mod runner;
 pub mod signatures;
 pub mod teachers;

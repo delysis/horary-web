@@ -1388,6 +1388,84 @@ fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize
     };
     let bytes = fs::read(path)?;
     let closure: Value = serde_json::from_slice(&bytes)?;
+    if closure["cumulative_student_physical_calls"] == 16
+        && closure["cumulative_teacher_physical_calls"] == 15
+    {
+        ensure!(
+            concise
+                && closure["original_student_cap"] == 64
+                && closure["original_teacher_cap"] == 80
+                && closure["fresh_student_physical_calls"] == 13
+                && closure["fresh_teacher_physical_calls"] == 12
+                && closure["new_uncertain_paid_operations"] == 0
+                && closure["old_unknown_teacher_key_preserved_without_replay"] == true
+                && closure["successful_student_responses"] == 11
+                && closure["exact_pids_absent"]
+                    .as_array()
+                    .is_some_and(|p| p.len() == 2),
+            "Only the sealed completed Contact rewrite-limit failure may continue with these deductions"
+        );
+        let root = Path::new(
+            closure["campaign"]
+                .as_str()
+                .context("No closed rewrite campaign")?,
+        );
+        verify_retained_seals(root, &closure)?;
+        let prior = Path::new(
+            closure["prior_consumer_closure"]["path"]
+                .as_str()
+                .context("No rewrite ancestry")?,
+        );
+        ensure!(
+            closure["prior_consumer_closure"]["sha256"] == google::digest(fs::read(prior)?),
+            "Rewrite ancestry changed"
+        );
+        let (s, t, mut ancestry) = inherited_consumer_calls(Some(prior), true)?;
+        ensure!(s == 3 && t == 3, "Rewrite predecessor deductions differ");
+        let plan: Value = serde_json::from_slice(&fs::read(root.join("run/plan.json"))?)?;
+        ensure!(
+            plan["author_plan_sha256"] == ancestry["author_plan_sha256"]
+                && plan["codex_executable_sha256"] == ancestry["codex_executable_sha256"],
+            "Rewrite teacher/author identity changed"
+        );
+        let operations = completed_teacher_seals(
+            &root.join("run/teacher/contact"),
+            ancestry["unsettled_teacher_key"].as_str(),
+        )?;
+        ensure!(
+            operations.as_array().is_some_and(|ops| ops.len() == 14),
+            "Closed teacher operation count differs"
+        );
+        for operation in operations
+            .as_array()
+            .context("No closed teacher operations")?
+        {
+            let source = Path::new(operation["source"].as_str().context("No teacher source")?);
+            for (file, sha) in operation["sealed_files"]
+                .as_object()
+                .context("No teacher seals")?
+            {
+                let key = source
+                    .strip_prefix(root)?
+                    .join(file)
+                    .to_string_lossy()
+                    .into_owned();
+                ensure!(
+                    closure["sealed_files"][&key] == *sha,
+                    "Unsealed received teacher carrier: {key}"
+                );
+            }
+        }
+        ancestry["settled_student_cache_seals"] = closure["sealed_files"].clone();
+        ancestry["path"] = json!(path);
+        ancestry["sha256"] = json!(google::digest(bytes));
+        ancestry["student_physical_calls"] = json!(16);
+        ancestry["teacher_physical_calls"] = json!(15);
+        ancestry["completed_teacher_operations"] = operations;
+        ancestry["settled_student_cache"] = json!(root.join("run/student"));
+        ancestry["replay_closed_student_and_teacher_only"] = json!(true);
+        return Ok((16, 15, ancestry));
+    }
     if closure["cumulative_student_calls"] == 3 && closure["cumulative_teacher_calls"] == 3 {
         ensure!(
             concise
@@ -1726,6 +1804,40 @@ pub async fn optimize_families(
             "Completed worked-example executable/author identity differs; no repurchase"
         );
     }
+    if let Some(cache) = ancestry["settled_student_cache"].as_str() {
+        let source = Path::new(cache);
+        let destination = directory.join("student");
+        fs::create_dir(&destination)?;
+        let mut imported = Vec::new();
+        for entry in fs::read_dir(source)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if let Some(key) = name.strip_suffix(".response.json") {
+                ensure!(
+                    key.len() == 64 && key.bytes().all(|b| b.is_ascii_hexdigit()),
+                    "Invalid settled student key"
+                );
+                for suffix in ["request.json", "response.json"] {
+                    let file = format!("{key}.{suffix}");
+                    ensure!(
+                        ancestry["settled_student_cache_seals"][format!("run/student/{file}")]
+                            == google::digest(fs::read(source.join(&file))?),
+                        "Unsealed settled student cache file"
+                    );
+                    fs::copy(source.join(&file), destination.join(&file))?;
+                }
+                imported.push(key.to_owned());
+            }
+        }
+        ensure!(
+            imported.len() == 11,
+            "Closed successful student cache count differs"
+        );
+        crate::queue::write_json_atomic(
+            &directory.join("settled-student-import.json"),
+            &json!({"source":source,"keys":imported,"fresh_calls":0,"scores_imported":false,"uncertain_requests_replayed":false}),
+        )?;
+    }
     let prepared_receipt = if let Some(prepared) = student.prepared {
         let (prior_student, prior_teacher, receipt) = prepared_consumption(
             prepared,
@@ -1866,7 +1978,8 @@ pub async fn optimize_families(
                     codex::import_completed(Path::new(operation["source"].as_str().context("No received worked-example path")?),&teacher_directory)?;
                 }
             }
-            let teacher:Arc<dyn DynChatModel>=Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory.clone(),80)?.with_budget(teacher_budget.clone()));
+            let codex_teacher=Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory.clone(),80)?.with_budget(teacher_budget.clone()));
+            let teacher:Arc<dyn DynChatModel>=codex_teacher.clone();
             if student.concise {
                 concise_fixtures(&mut fixtures,method)?;
                 let initial=count_labeled_inputs(&fixtures,method,&[],&http,&listing,&family.join("authored-preflight"),&student).await?;
@@ -1889,6 +2002,7 @@ pub async fn optimize_families(
                 let mut google=google::Google::from_listing(serde_json::from_value(listing["student"].clone())?,http.clone(),directory.join("student"),student_budget.clone(),limiter.clone())?;
                 if student.concise {google=google.with_input_limit(STUDENT_INPUT_LIMIT)?;}Arc::new(google)
             };
+            let teacher:Arc<dyn DynChatModel>=if student.concise && student.local_url.is_none() {Arc::new(crate::rewrite::CompactTeacher::new(codex_teacher,concise_predictor(method,&labels,1)?,fixtures.clone(),family.join("rewrite-admission"),http.clone()))} else {teacher};
             let models=runner::Models{student:selected,teacher,student_id:student_id.into(),teacher_id:"codex-saved-login-tool-free-no-override".into()};
             crate::queue::write_json_atomic(&family.join("started.json"),&json!({"gold_bank_sha256":google::digest(fs::read(campaign.join("run").join(method).join("answers.jsonl"))?),"fixture_digest":optimize::fixtures_digest(&fixtures)?,"preflight":preflight,"inherited_student_physical_calls":student_spent,"inherited_teacher_physical_calls":teacher_spent,"caps_carried_without_reset":true}))?;
             let baseline=if student.concise {CONCISE_BASELINE.to_owned()} else {reading::direct_reader_baseline(method)?};
