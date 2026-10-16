@@ -237,6 +237,9 @@ fn component_family_role_reference(
                 | "person_description"
                 | "tax"
                 | "bet"
+                | "existing_job"
+                | "work_person"
+                | "hiring"
         ),
         "Unsupported role family"
     );
@@ -405,11 +408,14 @@ fn component_family_role_reference(
             .unwrap_or_else(|| "Unresolved principal".into()),
         person_sources(principal),
     );
-    if matches!(method, "new_job" | "return_to_job" | "job_offer") {
+    if matches!(
+        method,
+        "new_job" | "return_to_job" | "job_offer" | "existing_job"
+    ) {
         let worker = value("subject.owner_id");
         let worker_house = worker.and_then(person_house);
         let job_house = worker_house.map(|h| {
-            if method == "return_to_job" || h == 10 {
+            if matches!(method, "return_to_job" | "existing_job") || h == 10 {
                 crate::native_evidence::turn(h, 10)
             } else {
                 10
@@ -455,6 +461,85 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if method == "hiring" {
+        let employer = value("employer").or_else(|| {
+            (value("principal_mode") != Some("concerning_other"))
+                .then_some(principal)
+                .flatten()
+        });
+        let house = employer.and_then(person_house);
+        add(
+            "hiring.employer",
+            employer,
+            house,
+            false,
+            "actual_employer_not_merely_speaker",
+            employer
+                .map(label)
+                .unwrap_or_else(|| "Unbound hiring employer".into()),
+            vec!["employer".into(), "principal_mode".into()],
+        );
+        add(
+            "hiring.candidate",
+            None,
+            house.map(|h| crate::native_evidence::turn(h, 6)),
+            true,
+            "favoured_or_sole_candidate_only_original_question_selects",
+            "Available prospective employee".into(),
+            vec!["candidates".into()],
+        );
+    } else if method == "work_person" {
+        let capacity = value("work_capacity");
+        let house = match capacity {
+            Some("boss") => Some(10),
+            Some("colleague") => Some(7),
+            Some("subordinate") => Some(6),
+            _ => None,
+        };
+        add(
+            "work.person",
+            None,
+            house,
+            capacity == Some("boss"),
+            "direct_person_work_capacity_only_if_house_not_claimed_by_job",
+            value("subject.name").unwrap_or("Person at work").into(),
+            vec!["work_capacity".into(), "subject.name".into()],
+        );
+        if capacity == Some("boss") {
+            add(
+                "work.job",
+                None,
+                Some(10),
+                true,
+                "conditional_job_if_simultaneously_asked_about",
+                "Job, only if itself asked about".into(),
+                vec!["job_context".into()],
+            );
+            add(
+                "work.boss_of_job",
+                None,
+                Some(7),
+                true,
+                "conditional_boss_when_tenth_is_job_and_seventh_not_already_busy",
+                "Boss of job, if seventh available".into(),
+                vec!["job_context".into()],
+            );
+        }
+        for field in fields
+            .keys()
+            .filter(|f| f.starts_with("people.") && f.ends_with(".relationship"))
+        {
+            let id = &field[7..field.len() - 13];
+            add(
+                &format!("declared.{id}"),
+                Some(id),
+                person_house(id),
+                true,
+                "conditional_actual_declared_person_capacity_not_preselected_collision_solution",
+                label(id),
+                person_sources(Some(id)),
+            );
+        }
     } else if method == "vehicle" {
         add(
             "vehicle.undertaking",
@@ -1099,6 +1184,20 @@ fn component_family_role_reference(
     if method == "movable_deal" && facet.is_none() {
         unknowns.push("No facet is declared: object and sale-profit rows are conditional references, not selected roles or additional required inputs.".into());
     }
+    if method == "existing_job" {
+        for (role, house) in [
+            ("company.reference", 10),
+            ("company.turned_death", 5),
+            ("company.radical_death", 8),
+        ] {
+            let cusp = native
+                .iter()
+                .find(|f| f.kind == "house" && f.label == format!("House {house}"));
+            rows.push(json!({"role_id":role,"actor_id":null,"label":"Conditional employer-solvency reference, not employee retention verdict",
+                "significator_house":house,"ruler_planet":cusp.and_then(|f|f.planets.first()),"optional":true,"authority":"conditional_actual_employer_question_not_company_owned_by_principal",
+                "selected_id":null,"cusp_fact_id":cusp.map(|f|f.id.clone()),"position_fact_ids":[],"source_fields":[]}));
+        }
+    }
     if method == "vehicle" {
         for planet in ["Sun", "Mars", "Saturn"] {
             rows.push(json!({"role_id":format!("vehicle.reference.{planet}"),"actor_id":null,"label":"Conditional natural danger/solar reference, not a causal verdict",
@@ -1142,7 +1241,7 @@ fn component_family_role_reference(
             .all(|r| r["ruler_planet"].is_string())
         && (!matches!(
             method,
-            "new_job" | "return_to_job" | "job_offer" | "money" | "investment"
+            "new_job" | "return_to_job" | "job_offer" | "existing_job" | "money" | "investment"
         ) || value("subject.owner_id") == principal);
     if moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
@@ -1395,6 +1494,9 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "person_description" => Ok(CONCISE_DESCRIPTION_PROCEDURE),
         "tax" => Ok(CONCISE_TAX_PROCEDURE),
         "bet" => Ok(CONCISE_BET_PROCEDURE),
+        "existing_job" => Ok(CONCISE_EXISTING_JOB_PROCEDURE),
+        "work_person" => Ok(CONCISE_WORK_PERSON_PROCEDURE),
+        "hiring" => Ok(CONCISE_HIRING_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -1661,6 +1763,48 @@ Reception A→B means A regards B; preserve positive AND negative qualities. Att
 Timing follows established occurrence with actual applying travel and contextual units; astronomical search hours are not civil outcome dates. Respect the stated bet and horizon, not a recast event chart or an invented recommended wager. Return status, answer, analysis, evidence, unresolved: direct qualified net-profit judgment, material eIDs/pages, contrary testimony and honest calculation limits.
 ";
 
+const CONCISE_EXISTING_JOB_PROCEDURE: &str = "EXISTING JOB PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 179–188, 224–230.
+Preserve whether the actual concern is retention, the employer's solvency or another person's existing occupation. Genuine relay takes first; concerning another worker retains their actual relationship. Current job/career/boss uses that worker's TURNED tenth, unlike an external new-job application. Wages are its second, worker pocket their second. Do not transfer principal Moon to another worker. Assigned houses differ from occupied houses and shared rulers retain roles.
+
+Keeping the existing job is the default, not a new acquisition requiring an aspect. Fixed angles or worker/job rulers support stability; void Moon likewise. Worker or job ruler about to leave a sign can show change even from a fixed sign, especially losing dignity. Principal cosignifying Moon changing sign can merely show worry. Do not invent an uncomputed ingress or next-sign condition. Actual prior opposition can explain impermanence but does not itself time dismissal now.
+
+Reception can support keeping a liked worker, but does not override stronger change testimony. A real me-or-colleague dismissal comparison uses seventh for the rival, while allowing that both/neither might go. Supplied Resignation/Dismissal Part or Antares can contribute; don't invent them or take company announcements as guaranteed outcome. Attribute each dignity, house capacity, solar state and motion to its actual role.
+
+Employer collapse is a DIFFERENT prognosis: treat the actual company as the sick person, not its employee or the principal's owned business. Inspect afflicting planet/dispositor, condition improving/worsening and actual direction/stations. Sixth is not automatically the illness. For threatened death consider company joining both actual radical and company-turned eighth, solar application/deterioration, context, and countervailing major mutual reception. Any planet can signify death; benefic name alone does not save. A weak company or an incidental aspect alone does not prove bankruptcy. Never extend certain-death timing rules into an uncertain collapse; missing prognosis calculations remain unknown.
+
+For another person's actual vocation, describe their turned tenth using broad appropriate house/natural indications, not that person's bodily ruler or the principal's strongest Mercury/Venus/Mars. Compare possibilities with known circumstances; no invented precise job title. Current work differs from choosing a new vocation, which needs actual options.
+
+Reception A→B is A's regard for B; keep all positive AND negative qualities, not invented reciprocity. Use supported event order/prevention without inventing an intermediary. Timing requires justified travel/context; astronomical hours are not civil dates. Return status, answer, analysis, evidence, unresolved: useful branch-correct judgment with material eIDs/pages, contrary evidence and limits.
+";
+
+const CONCISE_WORK_PERSON_PROCEDURE: &str = "PEOPLE AT WORK PROCEDURE — Frawley printed pp. 19–32, 44–83, 84–101, 127–136, 224–225.
+Preserve the actual person, operative work capacity and requested relationship/action. Directly asked boss or any superior is tenth; equal coworker seventh even if socially a friend; subordinate sixth. Work capacity overrides an incidental social label. Genuine relay principal takes first; concerning someone else does not. Use actual subject identity and retain coincident aliases; assigned houses differ from occupied houses.
+
+If job and boss are both asked about, tenth is already job. Boss may be tenth from tenth, seventh, only if seventh is not already claimed by coworkers/rivals. Otherwise use job ruler's dispositor. Conditional direct-boss, job and boss-of-job references are alternatives requiring actual question/house-priority resolution, not multiple bosses automatically assigned to one person. A context mentioning an existing job does not itself make it the main question. Native positions/receptions retain dignity hosts so the actual dispositor can be identified without a private Gold role.
+
+For an actual choice of management level, rulers of the dignities occupied by principal's ruler can identify levels: domicile highest, then other actual dignity levels. Evaluate both their reception toward principal and accidental ability to act. Names/titles alone do not fabricate a planetary management hierarchy. Preserve supplied capacities and any unresolved mapping instead of inventing sympathy or authority.
+
+Current 'will I get along with them?' or professional regard is situation analysis: directed reception is central and no new event aspect is compulsory. A→B means A regards B; do not reverse it or infer reciprocation. Retain every positive AND negative quality; domicile/exaltation major, triplicity moderate, term/face minor. Exaltation can overrate someone. Another planet influencing the boss by disposition can matter, but needs a supported actual role, not a fabricated hostile colleague.
+
+Essential condition describes honesty/quality; occupied-house capacity, solar condition and actual motion qualify ability. A boss liking the principal is different from having the power to help. Subordinate willingness to accept orders and competence differ from principal merely liking them. Retrograde or weakness can be descriptive where context makes it appropriate, not automatically refusal.
+
+If the inquiry instead asks an actual approval, cooperation or completed task, distinguish willingness from a supported occasion and material prevention. Do not label every prior contact prohibition or a new intermediary. Do not promise action from favourable reception alone. Astronomical search hours are not civil deadlines; missing techniques/fine order remain unknown. Return status, answer, analysis, evidence, unresolved: useful answer with native eIDs/pages, contrary testimony and qualified limits, without invented workplace events or private motives.
+";
+
+const CONCISE_HIRING_PROCEDURE: &str = "HIRING STAFF PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 189–190.
+Preserve the actual employer/principal, finite available candidates, favoured candidate if any, distinguishing brief descriptions and priorities. This is whether to employ someone, not whether the principal will get a new job. Genuine relay principal takes first; concerning another employer retains that person's operative house. A prospective subordinate/plumber/domestic employee is sixth from the actual employer, not an equal seventh-house colleague or romantic partner.
+
+The source assumes the person can be hired if chosen: no obligatory acquisition aspect. Give sixth to the sole or favoured candidate. Alternatives need planetary identification from actual supplied distinguishing descriptions, not arbitrary sequential houses or private expected mappings. E.g. a genuinely supplied redhead can fit Mars, solemn manner Saturn; do not invent a description or assign the same generic rule without checking the actual chart. An absent favourite does not make the first written name the favourite. Native bodies remain available for source-governed comparison without preselecting an answer.
+
+Judge essential dignity for honesty and competence; accidental freedom from affliction for ability to use skills; reception of candidate toward employer for willingness to take orders. A→B means A regards B. Employer liking candidate is not the same as candidate accepting authority. Candidate in employer's detriment/fall is strongly adverse. Retain all positive AND negative qualities: domicile/exaltation major, triplicity moderate, term/face minor. Exaltation can overrate someone rather than demonstrate skill.
+
+Mercury and its signs require caution: even good condition can show flexible honesty. A debilitated candidate in Mercury's sign is particularly unpromising for trust-sensitive work. Weigh actual essential strength and role-bound afflictions, not planet-name stereotypes. Sixth-house afflictions, including an actually supplied South Node, matter. Do not invent uncomputed nodes, a criminal record, unreliability incident or hidden motive.
+
+A situation/quality comparison does not need a future perfection, but an actually supplied applying opposition between employer and candidate is a strong regret warning. Inspect material future change if supplied, with actual motion and source-supported prevention, not every incidental contact as a veto. Assigned houses differ from occupied houses and shared rulers preserve aliases rather than magically deciding among candidates.
+
+Do not convert astronomical hours into promised start dates or claim the worker already accepted. If actual availability is not established, keep that limit instead of pretending a quality answer completes a contract. Return status, answer, analysis, evidence, unresolved: direct proportionate recommendation, material eIDs/pages, contrary evidence, uncertain candidate mapping and calculation limits, without fabricated skill scores or hiring outcomes.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -1729,7 +1873,8 @@ fn verified_concise_chart(
         "contact" => component_contact_role_reference(consultation, &native)?,
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
-        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet" => {
+        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
+        | "existing_job" | "work_person" | "hiring" => {
             component_family_role_reference(consultation, &native, method)?
         }
         _ => unreachable!("The concise procedure admits only implemented families"),
@@ -1891,7 +2036,8 @@ pub fn relevant_reader_chart(
         "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
-        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet" => {
+        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
+        | "existing_job" | "work_person" | "hiring" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -2140,12 +2286,17 @@ fn relevant_family_ids(
         }
     };
     match method {
-        "new_job" | "return_to_job" | "job_offer" => {
+        "new_job" | "return_to_job" | "job_offer" | "existing_job" => {
             recipient("worker.person");
             if is_principal("worker.person") {
                 recipient("principal.moon");
             }
             target("subject.primary");
+            if method == "existing_job" {
+                recipient("company.reference");
+                target("company.turned_death");
+                target("company.radical_death");
+            }
             // Pocket and wages remain conditional condition/reception
             // references. A wages connection is not job acquisition.
         }
@@ -2228,6 +2379,28 @@ fn relevant_family_ids(
                 }
             }
         },
+        "hiring" => {
+            recipient("hiring.employer");
+            if is_principal("hiring.employer") {
+                recipient("principal.moon");
+            }
+            target("hiring.candidate");
+        }
+        "work_person" => {
+            recipient("principal.person");
+            recipient("principal.moon");
+            for id in ["work.person", "work.job", "work.boss_of_job"] {
+                target(id);
+            }
+            for row in roles
+                .iter()
+                .filter(|r| r[0].as_str().is_some_and(|id| id.starts_with("declared.")))
+            {
+                if let Some(p) = row[4].as_str() {
+                    targets.insert(p.into());
+                }
+            }
+        }
         "vehicle" => {
             recipient("vehicle.undertaking");
             target("vehicle.eighth");
@@ -2327,6 +2500,29 @@ fn relevant_family_ids(
     }
     // These bodies have explicit family-specific ancillary relevance even
     // without an assigned person alias. This does not assign natural roles.
+    if matches!(method, "hiring" | "work_person" | "existing_job") {
+        // Shortlisted candidates, dignity rulers of management, and a
+        // conditional company prognosis cannot lose a body merely because
+        // the canonical facts contain brief descriptions rather than IDs.
+        planets.extend(
+            [
+                "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+            ]
+            .map(str::to_owned),
+        );
+        ids.extend(
+            native
+                .iter()
+                .filter(|f| {
+                    f.kind == "house"
+                        && matches!(
+                            f.label.as_str(),
+                            "House 1" | "House 4" | "House 7" | "House 10"
+                        )
+                })
+                .map(|f| f.id.clone()),
+        );
+    }
     if method == "person_description"
         && let Some(main) = planet("description.person")
     {
@@ -3235,6 +3431,56 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_work_and_hiring_preserve_operative_capacity_and_collisions() {
+        for (capacity, house) in [("boss", 10), ("colleague", 7), ("subordinate", 6)] {
+            let (input, _) = relevant_family_input(
+                "work_person",
+                json!({"facts":[fact("work_capacity",capacity),fact("subject.name","Actual person")],"unknown":[]}),
+            );
+            let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(chart.contains(&format!("work.person(?) = H{house}/")));
+            if capacity == "boss" {
+                assert!(
+                    chart.contains("work.job(?) = H10/")
+                        && chart.contains("work.boss_of_job(?) = H7/")
+                );
+                let ids = relevant_chart_ids(chart).unwrap();
+                assert!(ids.contains("e0") && ids.contains("e2") && ids.contains("e3"));
+            }
+        }
+        let (input, _) = relevant_family_input(
+            "hiring",
+            json!({"facts":[fact("principal_mode","concerning_other"),fact("people.carys.relationship","partner"),fact("candidates","Xara and Yestin"),fact("context","Carys is actual employer")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("hiring.employer(?) = —/?"));
+        assert!(!chart.contains("hiring.candidate(?) = H6/"));
+        assert!(chart.contains("e18|house|")); // includes actual possible H12: sixth from partner.
+        let (input, _) = relevant_family_input(
+            "hiring",
+            json!({"facts":[fact("employer","sister"),fact("people.sister.relationship","sibling"),fact("principal_mode","concerning_other")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("hiring.employer(sister) = H3/")
+                && chart.contains("hiring.candidate(?) = H8/")
+        );
+        let (input, _) = relevant_family_input(
+            "existing_job",
+            json!({"facts":[fact("subject.owner_id","mother"),fact("people.mother.relationship","mother")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("worker.person(mother) = H10/")
+                && chart.contains("subject.primary(?) = H7/")
+        );
+        assert!(
+            chart.contains("company.turned_death(?) = H5/")
+                && chart.contains("company.radical_death(?) = H8/")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -3250,6 +3496,9 @@ mod concise_projection_tests {
             "person_description",
             "tax",
             "bet",
+            "existing_job",
+            "work_person",
+            "hiring",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
