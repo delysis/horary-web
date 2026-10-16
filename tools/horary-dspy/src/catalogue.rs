@@ -3353,27 +3353,48 @@ fn relevant_bound_ids(
             .astronomical_hours
             .total_cmp(&b.event.as_ref().unwrap().astronomical_hours)
     });
+    let supported_pair = |f: &&crate::native_evidence::Fact| {
+        if let Some(allowed) = &conditional_pairs {
+            let mut pair = f.planets.clone();
+            pair.sort();
+            allowed.contains(&pair)
+        } else {
+            (recipients.contains(&f.planets[0]) && targets.contains(&f.planets[1]))
+                || (recipients.contains(&f.planets[1]) && targets.contains(&f.planets[0]))
+        }
+    };
+    // The Moon can itself hold either event role. Its first role-pair contact
+    // must not disappear merely because two incidental lunar contacts precede
+    // it. Retain that intervening sequence without declaring it effective.
+    let mut lunar_pairs = BTreeSet::new();
+    let lunar_until = events
+        .iter()
+        .copied()
+        .filter(|f| f.planets.iter().any(|p| p == "Moon") && supported_pair(f))
+        .filter(|f| {
+            let mut pair = f.planets.clone();
+            pair.sort();
+            lunar_pairs.insert(pair)
+        })
+        .map(|f| f.event.as_ref().unwrap().astronomical_hours)
+        .max_by(f64::total_cmp);
     let lunar: Vec<_> = events
         .iter()
         .copied()
         .filter(|f| f.planets.iter().any(|p| p == "Moon"))
-        .take(2)
+        .enumerate()
+        .filter(|(index, f)| {
+            *index < 2
+                || lunar_until
+                    .is_some_and(|until| f.event.as_ref().unwrap().astronomical_hours <= until)
+        })
+        .map(|(_, f)| f)
         .collect();
     let mut pairs = BTreeSet::new();
     let direct: Vec<_> = events
         .iter()
         .copied()
-        .filter(|f| {
-            let supported_pair = if let Some(allowed) = &conditional_pairs {
-                let mut pair = f.planets.clone();
-                pair.sort();
-                allowed.contains(&pair)
-            } else {
-                (recipients.contains(&f.planets[0]) && targets.contains(&f.planets[1]))
-                    || (recipients.contains(&f.planets[1]) && targets.contains(&f.planets[0]))
-            };
-            !f.planets.iter().any(|p| p == "Moon") && supported_pair
-        })
+        .filter(|f| !f.planets.iter().any(|p| p == "Moon") && supported_pair(f))
         .filter(|f| {
             let mut pair = f.planets.clone();
             pair.sort();
@@ -5179,6 +5200,57 @@ mod concise_projection_tests {
         assert!(text.contains("target.person(alma) = —/?"));
         assert!(text.contains("UNKNOWN The target's operative relationship is absent"));
         assert!(!text.contains("target.person(alma) = H7"));
+    }
+
+    #[test]
+    fn relevant_lunar_event_roles_keep_later_connections_and_the_intervening_sequence() {
+        let event = |id: &str, a: &str, b: &str, hours: f64| crate::native_evidence::Fact {
+            id: id.into(),
+            kind: "event".into(),
+            label: format!("{a} · {b}"),
+            detail: "synthetic actual candidate".into(),
+            planets: vec![a.into(), b.into()],
+            condition_facet: None,
+            reception: None,
+            event: Some(crate::native_evidence::EventCandidate {
+                within_current_signs: Some(false),
+                astronomical_hours: hours,
+                perfection_motion: None,
+            }),
+        };
+        let native = vec![
+            event("e1", "Moon", "Mars", 1.),
+            event("e2", "Saturn", "Moon", 2.),
+            event("e3", "Moon", "Sun", 3.),
+            event("e4", "Venus", "Moon", 4.),
+            event("e5", "Moon", "Mercury", 5.),
+            event("e6", "Moon", "Venus", 6.),
+        ];
+        for (recipients, targets) in [
+            (
+                BTreeSet::from(["Moon".into(), "Jupiter".into()]),
+                BTreeSet::from(["Venus".into()]),
+            ),
+            (
+                BTreeSet::from(["Venus".into()]),
+                BTreeSet::from(["Moon".into()]),
+            ),
+        ] {
+            let ids = relevant_bound_ids(
+                &native,
+                BTreeSet::new(),
+                BTreeSet::new(),
+                recipients,
+                targets,
+                None,
+                None,
+            )
+            .unwrap();
+            assert_eq!(
+                ids,
+                BTreeSet::from(["e1", "e2", "e3", "e4"].map(str::to_owned))
+            );
+        }
     }
 
     #[test]
