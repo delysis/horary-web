@@ -1,8 +1,8 @@
 {
   "questions": 840,
   "families": 42,
-  "approved_saved_answers": 469,
-  "missing_answers": 371,
+  "approved_saved_answers": 504,
+  "missing_answers": 336,
   "author_campaign": "gold-readings-continuation-r2-02e3965",
   "snapshot_date": "2026-10-15",
   "book_excerpts_included": false,
@@ -292,12 +292,8 @@
     {
       "method": "information",
       "questions": 20,
-      "approved_saved_answers": 0,
+      "approved_saved_answers": 4,
       "missing_answers": [
-        "information-01",
-        "information-02",
-        "information-03",
-        "information-04",
         "information-05",
         "information-06",
         "information-07",
@@ -445,28 +441,9 @@
     {
       "method": "person_description",
       "questions": 20,
-      "approved_saved_answers": 0,
+      "approved_saved_answers": 20,
       "missing_answers": [
-        "person_description-01",
-        "person_description-02",
-        "person_description-03",
-        "person_description-04",
-        "person_description-05",
-        "person_description-06",
-        "person_description-07",
-        "person_description-08",
-        "person_description-09",
-        "person_description-10",
-        "person_description-11",
-        "person_description-12",
-        "person_description-13",
-        "person_description-14",
-        "person_description-15",
-        "person_description-16",
-        "person_description-17",
-        "person_description-18",
-        "person_description-19",
-        "person_description-20"
+
       ]
     },
     {
@@ -639,19 +616,9 @@
     {
       "method": "vehicle",
       "questions": 20,
-      "approved_saved_answers": 9,
+      "approved_saved_answers": 20,
       "missing_answers": [
-        "vehicle-10",
-        "vehicle-11",
-        "vehicle-12",
-        "vehicle-13",
-        "vehicle-14",
-        "vehicle-15",
-        "vehicle-16",
-        "vehicle-17",
-        "vehicle-18",
-        "vehicle-19",
-        "vehicle-20"
+
       ]
     },
     {

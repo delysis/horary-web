@@ -871,7 +871,41 @@ I lease the plane for carrying my equipment to the island but will stay at home.
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied chart, I would provisionally judge yes: the leased plane is more likely to arrive without a serious accident. Its main significator shows no immediate major affliction, and the Moon’s inactivity supports an uneventful outcome. This is a qualified horary judgment, not a certification of flight safety; the supplied calculations leave some checks unresolved.
+
+### Reasoning
+
+The question concerns the plane carrying your equipment safely, not ownership, a purchase or your own journey. Frawley explicitly assigns a vessel sent on the querent’s errand to the first house even when the querent never boards it. Sagittarius rises, so Jupiter signifies the plane (e7). Leasing it and staying home do not move it to the second, seventh or ninth house. Jupiter’s physical placement in the ninth is distinct from its first-house role.
+
+Jupiter at 20.571° Leo has modest essential dignity by term, rather than major strength (e5, e34). It is direct and clear of combustion (e36). Being only 1.29° before the ninth cusp in the same sign places it in the ninth under the cusp rule; it should not be treated as debilitated in the eighth (e15, e35–e37). Its house capacity is neutral. Its speed and station status are not established.
+
+For this branch, the test is whether something seriously harmful is happening or about to happen to Jupiter. Safe arrival does not require an aspect to a separate destination significator. Saturn is a genuine potential danger: fallen, angular, retrograde and afflicted by opposition to the Sun (e6, e38–e41). Mars is peregrine and weak by house (e4, e31–e33). Neither is shown making an immediate close or forthcoming contact with Jupiter in the supplied sequence. Their poor condition alone does not establish an accident.
+
+Cancer on the eighth cusp makes the Moon Lord 8 (e14). That specific role takes priority over treating it as an independent reassuring cosignificator of you. The Moon is peregrine, neutral by house and clear of the Sun, but waning toward conjunction (e0–e1, e21–e23). Its placement in Virgo is in Jupiter’s detriment: the direction is Moon toward Jupiter, an adverse reception, not Jupiter’s hostility toward the Moon (e51). However, the Moon makes no aspect before leaving Virgo (e77). This supports nothing disruptive happening now.
+
+The later Moon–Jupiter sextile cannot simply be read as an accident because the Moon rules the eighth. It follows a sign change and earlier contacts with Mars, Saturn and the Sun (e65–e69); it is not an immediate next-sign perfection. Pushing through those contacts to manufacture a catastrophe would violate the prescribed event-order discipline.
+
+The Sun–Jupiter sextile is the remaining supplied bodily candidate involving Jupiter (e76). The Sun is fallen but angular (e19–e20), so this is contrary evidence to an entirely trouble-free journey. Yet it is neither a debilitated Mars/Saturn contact nor Lord 8. Jupiter strongly regards the Sun by domicile and triplicity; the Sun’s regard for Jupiter is only by term (e44, e58). This unequal positive reception moderates the concern without cancelling the Sun’s fall. It does not establish serious harm.
+
+Overall, the immediate testimonies favour the ordinary safe-arrival default. No accident event is established, and no arrival time was requested; the astronomical-hour estimates are not earthly timings.
+
+### Evidence
+
+e7, e14–e15, e34–e37: significators and Jupiter’s condition; printed pp. 17–18, 30–32, 49, 56, 142–143.
+
+e4–e6, e19–e20, e31–e41: quality, capacity, motion and solar affliction; printed pp. 50–51, 54–61, 143.
+
+e44, e51, e58: directed, unequal receptions; printed pp. 71–77.
+
+e65–e77: ordered contacts and void Moon; printed pp. 64–65, 90–97, 140, 143. Timing restraint: printed pp. 127–133.
+
+e78: approximate calculation and coverage limitations.
+
+### Unresolved
+
+Exact moving perfections, planetary speeds and intervening stations are not certified. Nodal positions, including any South Node conjunction with Jupiter, are not supplied; antiscia and fixed-star contacts are also unverified. The seven-day approximate search cannot establish an exhaustive absence of later affliction.
 
 ### Rubric (separate from the worked answer)
 
@@ -932,7 +966,41 @@ I am asking if the coach gets me there, not what price I could sell it for. The 
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+The supplied chart leans toward a safe ride, though possibly with some trouble or inconvenience. It does not establish a serious accident, but the incomplete calculations mean this is a qualified judgment, not a guarantee of safety.
+
+### Reasoning
+
+The coach is your immediate vehicle: “the ship that I sail in.” Sagittarius on the first cusp makes Jupiter its significator, regardless of the tour operator’s ownership. Neither your second house nor the operator’s turned possessions answers this question. Jupiter can represent you and the vehicle together here; no separate contact between passenger and coach is required.
+
+Jupiter has modest essential dignity by term, is direct and clear of combustion. Although just before the ninth cusp, it is in the same sign and within five degrees, so it belongs to the ninth for judgment: neutral capacity, not eighth-house weakness. These are moderately reassuring conditions, not evidence of exceptional strength.
+
+The safety procedure asks whether serious affliction approaches Jupiter. Saturn is fallen, retrograde and angular, with additional affliction from opposition to the Sun; Mars is peregrine and weak by house. Neither has a supplied approaching contact with Jupiter. Their adverse conditions alone do not establish an accident.
+
+Cancer on the eighth cusp makes the Moon Lord 8. Its specific role as the danger significator takes priority over treating it simply as your emotional cosignificator. The Moon is peregrine, neutral by house, clear of the beams but waning, and void of course in the supplied calculation. Its position in Jupiter’s detriment is adverse toward Jupiter; this is not reciprocal reception and does not itself create a harmful event. Its later sextile to Jupiter follows a sign change and several intervening contacts, so it cannot be promoted into an immediate accident testimony using its present reception.
+
+The relevant contrary testimony is the forthcoming Sun–Jupiter sextile. The Sun is fallen and angular, so the easy aspect does not automatically mean a beneficial influence. Jupiter strongly favours the Sun by sign and triplicity; the Sun favours Jupiter only weakly by term. That modest mutual support softens, but does not erase, the Sun’s debility. This supports possible trouble more readily than catastrophe.
+
+With Jupiter reasonably supported and no established immediate severe affliction, safe passage remains the better reading. No accident or other definite event is established to time; the astronomical contact estimates are not journey dates or hours.
+
+### Evidence
+
+e7, e14: first-cusp Sagittarius → Jupiter; eighth-cusp Cancer → Moon. Frawley printed pp. 18, 30–32, 142–143: vehicle roles, house rulers and Moon-role priority.
+
+e5, e34–e37, e15: Jupiter’s term dignity, direct motion, solar clearance and ninth-house placement. Printed pp. 17, 49, 54–60.
+
+e4, e6, e31–e33, e38–e41: Mars and Saturn’s adverse conditions; e65–e76 contain no supplied direct contact from either to Jupiter. Printed pp. 62–63, 143: affliction requires relevant connection and contextual assessment.
+
+e1, e0, e21–e23, e51, e65–e69, e77: Moon’s condition, waning light, adverse reception toward Jupiter, void status and intervening event order. Printed pp. 64–65, 71–76, 90–97.
+
+e19–e20, e44, e58, e76: fallen angular Sun, asymmetric positive receptions and approaching sextile to Jupiter. Printed pp. 50, 62–63, 73–77, 88.
+
+e78: calculation limits. Printed pp. 127–133: establish an event before timing it; astronomical time is not symbolic timing.
+
+### Unresolved
+
+The seven-day hourly search does not certify exact perfections, fine event order or intervening stations. Jupiter’s speed is unreported; nodal contacts are unsupplied, and fixed-star and antiscion checks are not certified. These limitations prevent an exhaustive clearance of afflictions or precise event timing.
 
 ### Rubric (separate from the worked answer)
 
@@ -993,7 +1061,36 @@ I own a van. How sound is it as the vehicle for my regular delivery round? I am 
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+Your van looks serviceable for your regular delivery round, though the chart gives only modest support for its soundness. The supplied evidence does not show an immediate serious affliction to its vehicle significator; its next indicated contact suggests some trouble rather than disaster. This is a qualified judgment about its service, not a mechanical diagnosis or a guarantee of continued reliability.
+
+### Reasoning
+
+The van’s capacity to carry you on your round makes it “the ship that I sail in”: radical house 1, Sagittarius, ruled by Jupiter. Ownership does not make Saturn, Lord 2, the appropriate vehicle significator for this enquiry. House 3 describes the routine journey, not the van itself. Jupiter can represent you and your immediate vehicle together here; no separate planets or aspect between them are needed to judge its condition.
+
+Jupiter at 20.571° Leo has dignity by term: a small positive, suggesting modest serviceability rather than outstanding quality. There is no supplied descriptive circumstance that overrides this assessment. Although just before the ninth cusp, Jupiter is within 1.29° of it in the same sign, so belongs to house 9. That gives neutral capacity, not the weakness of house 8. Jupiter is direct and clear of solar affliction. Its speed and proximity to station are not established.
+
+The vehicle procedure is to inspect afflictions to Jupiter. Saturn is fallen, retrograde and severely afflicted near opposition to the Sun, but those conditions do not transfer automatically to Jupiter merely because Saturn rules your possessions and daily round. Mars is peregrine and weak by house; no immediate damaging contact from either planet to Jupiter is supplied.
+
+The first listed future contact involving Jupiter is the Sun’s applying sextile, before either changes sign. The Sun is fallen and angular, so this is material contrary testimony: an easy aspect does not make an impaired planet wholly helpful. Receptions soften that concern unevenly. Jupiter strongly favours the Sun by domicile and triplicity; the Sun has only minor regard for Jupiter by term. These are not equal reciprocal support, and neither reception removes the Sun’s fall. On balance, this qualifies the van’s usefulness rather than establishing a serious accident.
+
+Cancer on house 8 makes the Moon Lord 8. For the vehicle’s safety assessment, that specific role takes priority over treating its contacts simply as your emotional cosignificator. The Moon makes no major contact before leaving Virgo. Its later sextile to Jupiter comes after several intervening contacts and a sign change; it cannot be promoted into an immediate damaging event using its present negative reception toward Jupiter. The void Moon supports little immediate change, but does not certify mechanical soundness.
+
+This is primarily a service-condition question, so no successful event aspect is required. No breakdown or accident is sufficiently established to time.
+
+### Evidence
+
+e7–e9: vehicle, possession and routine-journey distinctions; Frawley printed pp. 18–19, 142–143.
+e5, e15, e34–e37: Jupiter’s minor dignity, ninth-house placement and solar condition; pp. 17, 49, 54–60.
+e4, e6, e31–e33, e38–e41: potential malefics’ conditions, without an established immediate affliction to Jupiter; pp. 57–63, 143.
+e0, e19–e20, e44, e58, e76: fallen angular Sun’s prospective sextile and unequal directed receptions; pp. 71–77, 87–88.
+e14, e51, e65–e69, e77: Moon’s eighth-house role, present reception, void condition and intervening event order; pp. 32, 65, 90–97.
+e78: approximate calculations and limited coverage; timing principles pp. 127–133.
+
+### Unresolved
+
+Planetary speeds, exact moving perfections, intervening stations, nodal contacts, fixed stars and antiscia are not certified by the supplied evidence. The seven-day approximate search cannot establish long-term freedom from breakdown or identify a mechanical defect.
 
 ### Rubric (separate from the worked answer)
 
@@ -1059,7 +1156,36 @@ The flight leaves at 3 PM tomorrow. I am the passenger, asking whether it arrive
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied horary evidence, I would judge that your flight is likely to arrive safely. The main flight significator is not shown facing an immediate serious affliction. There is some testimony for lesser trouble, so this is a qualified favourable reading, not a guarantee of flight safety.
+
+### Reasoning
+
+This is your question as passenger about safe arrival. Sagittarius on the first cusp gives Jupiter to the flight as “the ship that I sail in”; neither the second-house possession rule nor a departure election applies. Jupiter can represent you and your vehicle together without requiring separate significators. Cancer on the eighth cusp makes the Moon Lord 8, giving it a specific potential-danger role rather than treating all its contacts as helpful querent testimony.
+
+Jupiter has modest essential dignity by term, not major strength. Its position 1.29° before the ninth cusp, in the same sign, places it in the ninth by the cusp rule: neutral capacity, not eighth-house weakness. It is direct and clear of combustion. Its ninth-house placement fits the journey but does not itself prove safety.
+
+The default is that the planned journey proceeds safely unless significant affliction contradicts it. Saturn is a serious potential afflictor: fallen, angular, retrograde and near opposition to the Sun. Mars is peregrine and weak in the eighth; occupying that house does not make it Lord 8. Neither has an immediate applying contact to Jupiter established here.
+
+The Moon, as Lord 8, is peregrine, clear of the Sun and presently void of course. Its negative reception toward Jupiter is adverse, but reception alone does not establish an accident. Its first listed contacts require ingress and concern Mars, then Saturn and the Sun; the later Jupiter contact cannot be extracted from that chain as an immediate danger prediction.
+
+Jupiter’s first listed direct contact is the Sun’s sextile. The Sun is fallen and angular, so an easy aspect is not automatically beneficial: this is contrary testimony for possible trouble. However, Jupiter strongly favours the Sun by domicile and triplicity, while the Sun favours Jupiter only modestly by term. Those directions are unequal, and neither makes the Sun essentially sound. This contact is less compelling evidence of serious danger than the chapter’s principal accident indicators.
+
+No arrival time is inferred. The stated departure time identifies the journey; astronomical contact hours are not a civil arrival forecast.
+
+### Evidence
+
+Roles and procedure: e7, e14; Frawley printed pp. 18, 30–32, 142–143.
+Jupiter’s condition and placement: e5, e34–e37; pp. 17, 49, 54–60.
+Potential afflictors: e4, e6, e31–e33, e38–e41; pp. 50–51, 56–61, 143.
+Directed receptions: e44, e51, e58; pp. 71–77.
+Ordered contacts and contrary testimony: e19–e20, e65–e69, e76–e77; pp. 65, 87–91, 97.
+Default and timing: printed pp. 127–133, 140.
+
+### Unresolved
+
+The seven-day contact search is approximate: exact perfections, fine event order and intervening stations are not certified. Relevant nodal contacts are not supplied; fixed-star and antiscia checks are not certified. No calculated check at the specifically stated departure time is supplied. These limit confidence without establishing danger.
 
 ### Rubric (separate from the worked answer)
 
@@ -1120,7 +1246,36 @@ I am a passenger on the hired river launch from Alexandria to Georgetown on Octo
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied chart, I would judge that the launch will complete your Alexandria–Georgetown journey safely, though minor trouble is possible. The main vehicle significator has no demonstrated immediate serious affliction. This is a qualified horary judgment: the approximate calculations do not establish a guarantee of safety or a specific incident.
+
+### Reasoning
+
+The launch is “the ship that I sail in,” so it takes the first house even though you are a passenger and do not own it. Sagittarius on the first cusp gives Jupiter. The second house would describe an owned possession, not the launch in its present capacity. You and your conveyance need not have separate significators for this safety judgment. Cancer on the eighth cusp makes the Moon Lord 8; that specific role takes precedence over its usual role as your cosignificator.
+
+Jupiter has minor essential dignity by term: modest soundness, not outstanding strength. Its placement 1.29° before the ninth cusp in the same sign puts it in the ninth by the cusp rule, giving neutral capacity rather than eighth-house weakness. It is direct and clear of the Sun. Actual speed is not supplied. Its Leo placement supplies no specific descriptive exception needed to override these conditions.
+
+The procedure is to examine threats to Jupiter, not demand an aspect showing arrival. Mars is peregrine and weak in the eighth; being physically there does not make it Lord 8. Saturn is a more serious potential malefic: fallen, angular, retrograde and afflicted by solar opposition. Neither has a supplied immediate damaging contact with Jupiter. Jupiter’s minor regard for Mars and strong aversion to Saturn do not themselves constitute accidents; neither establishes reciprocal regard.
+
+The Moon, as Lord 8, is in Jupiter’s detriment: adverse reception toward the launch. However, it is currently void of course. Its later Jupiter sextile is preceded by sign change, contacts with Mars and Saturn, and conjunction with the Sun. It cannot be promoted into an immediate danger testimony by carrying the Moon through this sequence or retaining its present reception after ingress.
+
+The next listed direct contact involving Jupiter is the fallen Sun’s sextile. This supplies a reservation about trouble, rather than an identified catastrophic threat. Jupiter strongly values the Sun by domicile and triplicity; the Sun has only minor regard for Jupiter by term. That unequal positive reception moderates the concern without removing the Sun’s fall. Its present separation exceeds the roughly three-degree range for a close afflicting influence.
+
+The balance therefore favours safe completion under this branch’s default, with some possibility of lesser trouble. No accident is established to time, and the listed astronomical hours cannot be converted into an October 10 incident prediction.
+
+### Evidence
+
+Roles: e7, e14; printed pp. 18, 30–32, 142–143.
+Jupiter’s quality and capacity: e5, e15, e34–e37; printed pp. 17, 49, 54–60.
+Potential threats and directed receptions: e4, e6, e31–e43, e51; printed pp. 50, 57, 61–63, 71–77, 143.
+Sun qualification: e0, e19–e20, e44, e58, e76; printed pp. 62–63, 74–77, 87–88.
+Lunar sequence and limits: e65–e69, e77–e78; printed pp. 65, 90–97.
+Timing restraint: printed pp. 127–133, 135–136.
+
+### Unresolved
+
+The supplied seven-day search is approximate. Exact perfections, fine event order, intervening stations, fixed-star contacts and antiscia are not certified. Nodal evidence and a separately calculated October 10 comparison are not supplied. These remain unobserved, limiting confidence in the provisional safety judgment.
 
 ### Rubric (separate from the worked answer)
 
@@ -1181,7 +1336,36 @@ I own the tractor and will use it to carry my harvest back to the barn. Will the
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied chart, I would provisionally judge yes: your tractor should get the harvest back to the barn safely. The main vehicle significator shows no established serious affliction. There is some testimony for trouble or inconvenience, but insufficient evidence to predict an accident or loss of the load.
+
+### Reasoning
+
+This is a question about the tractor carrying its load safely, so Frawley’s “ship that I sail in” procedure applies. Sagittarius on the first cusp makes Jupiter the vehicle’s significator. Ownership does not make Saturn, ruler of the Capricorn second cusp, the vehicle’s principal significator here. Jupiter can represent you and your vehicle together; no substitute ruler or buyer is needed.
+
+Jupiter in Leo has modest essential dignity by term, rather than outstanding strength. It is direct and clear of combustion. Although immediately before the ninth cusp, it counts as ninth-house by the same-sign five-degree rule; that gives neutral capacity, not the severe weakness of the eighth. Its condition therefore supports carrying out the journey.
+
+The procedure is to examine threats to Jupiter, not demand an aspect to the barn before allowing safe arrival. Mars is peregrine and weak in the eighth; Saturn is fallen, angular, retrograde and afflicted by opposition to the Sun. These are potential sources of harm, but neither has an established imminent damaging contact with Jupiter in the supplied evidence. Saturn’s poor condition cannot be transferred to the tractor merely because Saturn rules your possessions.
+
+Jupiter’s next listed direct contact is the Sun’s applying sextile. The Sun is fallen and angular, so an easy aspect is not automatically beneficial: this supplies some contrary testimony for trouble. However, the Sun regards Jupiter positively by term, while Jupiter regards the Sun strongly by domicile and triplicity. These unequal receptions are supportive, not hostile; they do not remove the Sun’s fall.
+
+The Moon rules the Cancer eighth cusp, so its specific role as a potential danger takes priority over treating it simply as your emotional cosignificator. Its current placement in Jupiter’s detriment is adverse toward the vehicle, but reception alone does not establish an accident. It is currently void of course. Its later listed sextile to Jupiter follows sign change and several intervening contacts; it is not an immediate threat, and its present reception cannot be carried forward unchanged.
+
+The balance favours safe passage, with a qualified possibility of inconvenience. No accident or timed arrival is established, so the astronomical contact hours are not converted into a journey timetable.
+
+### Evidence
+
+Role selection: e7–e8, e14; Frawley printed pp. 18, 30–32, 142–143.
+Vehicle condition and house assignment: e5, e15, e34–e37; pp. 17, 49, 54–60.
+Potential afflictors: e4, e6, e31–e33, e38–e41; pp. 61–63, 143.
+Directed receptions and Sun contact: e19–e20, e43–e44, e51, e58, e76; pp. 71–77, 87–88.
+Moon and event order: e65–e69, e77; pp. 65, 90–97.
+Calculation and timing limits: e78; pp. 127–133.
+
+### Unresolved
+
+The seven-day event search is approximate. Exact perfections, planetary speeds and intervening stations are not certified; nodal positions, fixed-star contacts and antiscia are not supplied or certified. These limit confidence in the safety judgment and prevent precise timing.
 
 ### Rubric (separate from the worked answer)
 
@@ -1242,7 +1426,34 @@ I own this motorboat and am asking about the condition of its service on the lak
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On this reading, your motorboat looks reasonably serviceable for use on the lake, though the support for calling it highly dependable is modest. The supplied evidence does not show a clear serious affliction to its vehicle significator. This is a qualified astrological judgment, not confirmation of its mechanical condition.
+
+### Reasoning
+
+Your question concerns the boat serving as your vehicle, so the “ship that I sail in” rule applies: Sagittarius on the first cusp gives Jupiter to the boat. Capricorn on the second gives Saturn to the boat as a possession, but that is not the facet you asked about. Saturn’s poor condition therefore does not establish that the boat is unreliable. The shared first-house role needs no replacement ruler because this is a condition question, not an event requiring contact between you and the boat.
+
+Jupiter at 20.571° Leo has its own term: a small positive for serviceability, not strong essential excellence. Its fixed sign supports steadiness. It counts in the ninth house because it is within 1.29° of that cusp in the same sign; its capacity is neutral, not the weakness of the eighth. It is direct and clear of combustion. Direct motion and solar clearance remove concerns rather than adding exceptional strength. No supplied description warrants substituting descriptive fit for this dignity assessment.
+
+The vehicle recipe asks whether anything seriously harmful threatens Lord 1. No close damaging contact to Jupiter is demonstrated here. Its supplied Sun sextile candidate is more than 5° away at present, beyond the usual range for a close conditioning influence. The Sun is fallen, so that prospective contact is a caution about possible lesser trouble, not an assurance of benefit simply because it is a sextile. Jupiter strongly regards the Sun by domicile and triplicity; the Sun regards Jupiter only by term. This unequal reception does not transfer dignity or make either planet’s condition disappear. Jupiter’s negative reception toward Saturn likewise does not itself constitute an afflicting contact.
+
+The Moon remains your cosignificator while also ruling the eighth through Cancer. It is peregrine, neutral by house, waning and presently void of course. Its negative reception toward Jupiter is contrary testimony, especially given its eighth-house role, but reception alone does not establish an accident. The listed Moon–Jupiter contact occurs only after ingress and several earlier contacts; it cannot responsibly be promoted into an immediate threat or guarantee.
+
+Overall, Jupiter’s modest dignity, stable sign and lack of demonstrated serious affliction favour usable, reasonably steady service. Neither a new aspect nor a purchase or sale is required to answer this state question. No breakdown or other event is established, so no timing is assigned.
+
+### Evidence
+
+e7–e8: first-house Jupiter versus second-house Saturn; Frawley printed pp. 18, 30, 142–143.
+e5, e34–e37, e15: Jupiter’s term dignity, direct motion, solar clearance and ninth-house placement; printed pp. 17, 41, 49, 56–60.
+e6, e38–e41: Saturn’s afflictions belong to the alternative possession significator, not automatically to the vehicle-service judgment.
+e0, e19, e44, e58, e76: fallen Sun, unequal directed receptions and prospective sextile; printed pp. 62–63, 71–77, 143.
+e1, e14, e21–e23, e51, e65–e69, e77: Moon’s roles, condition, negative reception and ordered post-ingress contacts; printed pp. 32, 64–65, 90–97.
+e78: calculation boundaries. State-based judgment and timing restraint: printed pp. 84, 127–133.
+
+### Unresolved
+
+The approximate seven-day calculation does not certify fine event order, intervening stations, fixed-star contacts or antiscia; planetary speeds are not supplied. It cannot establish long-term freedom from failure. Actual mechanical condition remains unobserved.
 
 ### Rubric (separate from the worked answer)
 
@@ -1303,7 +1514,36 @@ The aircraft carrying my camera equipment leaves for the island tomorrow. I am s
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied chart, I would judge that your equipment’s flight is likely to be safe, though possibly troublesome rather than entirely smooth. Staying on shore does not change the vehicle significator. This is a qualified judgment: the calculations do not establish a serious accident, but they are not precise enough to guarantee safety.
+
+### Reasoning
+
+The question concerns the aircraft carrying your equipment safely, not the equipment’s value or ownership. Frawley explicitly includes an unaccompanied treasure-ship in “the ship that I sail in.” Sagittarius on the first cusp therefore gives the aircraft Jupiter. Capricorn on the second gives Saturn for your possessions, but Saturn’s poor condition is not a substitute for judging Jupiter’s flight safety. No separate significator for you is needed to establish a meeting or transaction.
+
+Jupiter has modest essential dignity by term, is direct and clear of solar affliction. It is within 1.29° of the ninth cusp in the same sign, so belongs to the ninth by the five-degree rule: neutral capacity, not eighth-house weakness. These are adequate rather than exceptionally strong conditions.
+
+The safety recipe is to look for harm coming to Jupiter. Mars is peregrine and weak in the eighth; Saturn is fallen, angular, retrograde and afflicted near opposition to the Sun. These are potential sources of trouble, but the supplied evidence does not show either making an immediate harmful contact with Jupiter. Saturn’s condition alone cannot establish an accident.
+
+The Moon rules the eighth through its Cancer cusp, so its possible contact with Jupiter deserves particular attention beyond its usual role as your cosignificator. Moon → Jupiter is adverse by detriment; this is not reciprocal testimony. Nevertheless, the Moon is currently void of course. Its listed sextile to Jupiter comes only after ingress and intervening contacts with Mars, Saturn and the Sun, well beyond the first few degrees of the next sign. It should not be promoted into an immediate accident testimony.
+
+The Sun–Jupiter sextile is a qualified contrary indication: the Sun is fallen and angular, so contact is not automatically beneficial. Jupiter strongly favours the Sun by domicile and triplicity; the Sun’s regard for Jupiter is only minor, by term. This provides some mitigation, not equal mutual support. It suggests possible trouble rather than establishing catastrophe.
+
+The balance favours safe passage under this branch’s default. No separate accident or arrival time is established; astronomical hours cannot be converted into a forecast for tomorrow.
+
+### Evidence
+
+- e7–e8: aircraft versus possession roles; Frawley printed pp. 18, 142–143.
+- e5, e15, e34–e37: Jupiter’s dignity, motion, solar condition and ninth-house placement; pp. 17, 49, 54–60.
+- e4, e6, e31–e41: potential malefic afflictions and their capacity; pp. 56–61, 143.
+- e14, e21–e23, e51, e65–e69, e77: eighth-ruler Moon, adverse directed reception, void condition and intervening contacts; pp. 32, 65, 71–76, 90–97.
+- e0, e19–e20, e44, e58, e76: fallen Sun’s prospective contact and unequal receptions; pp. 62–63, 73–77, 87–89.
+- e78: calculation limits; timing distinctions on pp. 127–133.
+
+### Unresolved
+
+The seven-day event search is approximate. Exact perfections, fine event order, intervening stations, antiscia and fixed-star contacts are uncertified; nodal testimony and planetary speeds are not supplied. No placements specifically calculated for the named flight date are supplied. These limit confidence without preventing the provisional safety judgment.
 
 ### Rubric (separate from the worked answer)
 
@@ -1364,7 +1604,35 @@ My sister Pia has booked the overnight train home and I am worried about her jou
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+Within this reading, I would lean toward Pia getting home, but with reservations about an entirely trouble-free journey. The chart contains a substantial existing affliction, so it does not give an unqualified promise of safety; equally, the supplied evidence does not establish a serious accident.
+
+### Reasoning
+
+You are asking your own question about your sister, not relaying hers. Pia therefore belongs to the radical 3rd: its Aquarius cusp gives Saturn. Her train, considered as “the ship that she sails in,” uses her turned 1st, also the radical 3rd. Saturn legitimately represents Pia and her vehicle together; no replacement ruler is needed. Your significator is Jupiter from Sagittarius rising. The Moon remains your cosignificator, not Pia’s. Neither the train’s ownership nor the journey’s length changes this assignment.
+
+Saturn is in fall in Aries: a genuine adverse condition, not simply a description of an overnight train. Its placement in radical house 4 gives strong accidental capacity, but does not erase that poor condition. Retrogradation fits coming home and need not count as an additional debility.
+
+The principal concern is Saturn’s proximity to opposition with the fallen Sun. It is within the supplied severe-affliction region. However, the positions and directions show this opposition separating, not approaching perfection. Sun and Saturn also mutually exalt one another, with triplicity and face reception in both directions. This supplies mitigation, although two essentially debilitated planets cannot be assumed to rescue one another completely.
+
+Mars regards Saturn predominantly adversely by detriment, despite minor term and face reception; Saturn regards Mars favourably by domicile. This is not reciprocal hostility or protection. Their present trine is wider than the approximately three-degree allowance for a material background influence, and no imminent perfection is established.
+
+Pia’s turned 8th is radical house 10, ruled by Venus. Venus is debilitated, but its condition alone does not establish harm to Saturn. The radical 8th ruler is the Moon. Its later opposition candidate to Saturn requires ingress and follows another lunar contact; it is not a present, immediate threat that can simply be promoted into an accident prediction.
+
+The Moon is presently void of course, supporting little disruption to an already booked journey. This is qualified support, not an override of Saturn’s affliction. The vehicle procedure asks whether harm threatens its ruler; it does not require an arrival aspect. No accident or distinct delay is established sufficiently to time.
+
+### Evidence
+
+Roles: e7, e9, e14, e16; printed pp. 19, 25–27, 30–32, 138, 142–143.
+Saturn’s condition and separating solar opposition: e0, e6, e38–e41; printed pp. 50, 54–57, 61.
+Directed receptions and mitigation: e45, e55–e57, e60; printed pp. 71–77. Close-influence limit: e4, e6; printed p. 63.
+Turned 8th and lunar sequence: e16, e27–e30, e65–e66, e77; printed pp. 65, 90–97.
+Journey default and judgment: printed pp. 140, 142–143. Calculation and timing limits: e78; printed pp. 127–133.
+
+### Unresolved
+
+Exact speeds, stations, antiscia, fixed-star contacts and precise perfection positions are not certified. The approximate seven-day contact search cannot exclude every relevant affliction or certify physical safety. No specific mechanical fault, accident or arrival time is established.
 
 ### Rubric (separate from the worked answer)
 
@@ -1435,7 +1703,37 @@ I am waiting at the station to board the commuter train. Will this train carry m
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied chart, I judge that this train will carry you to work without a serious mishap. The main vehicle significator shows no demonstrated serious affliction; there is some testimony for lesser trouble, so this is a qualified judgment, not a guarantee of safety or an entirely trouble-free journey.
+
+### Reasoning
+
+This is the “ship that I sail in” question: the train as your immediate conveyance takes the 1st house, even though you have not boarded. Sagittarius on its cusp gives Jupiter. The routine commute belongs to the 3rd as a journey, but its ruler Saturn does not replace Jupiter as the train. Neither ownership nor a purchase is involved, so the 2nd is inappropriate. You and your conveyance need not have separate significators for this safety judgment.
+
+Jupiter at 20.571° Leo has modest essential dignity by term. It is direct and clear of the Sun. Its position 1.29° before the same-sign 9th cusp places it in the 9th under the cusp rule, giving neutral capacity rather than the weakness of the 8th. These are reasonably supportive conditions, though not exceptional strength. No supplied descriptive circumstance overrides them.
+
+The serious hazards must actually afflict Jupiter. Mars is peregrine and weak in the 8th; occupying that house does not make it Lord 8. Saturn is fallen, retrograde, angular and afflicted by solar opposition, making it potentially troublesome, but no relevant close or forthcoming contact with Jupiter is demonstrated. Jupiter’s minor regard for Mars and strong aversion to Saturn do not themselves create such contacts or establish reciprocal hostility.
+
+Cancer on the 8th cusp makes the Moon Lord 8. Its hazard role takes precedence over treating every lunar action as your emotional cosignificator. The Moon is peregrine, clear of the Sun and waning; its placement gives neutral capacity. It is in Jupiter’s detriment, an adverse directed reception, but presently makes no aspect before leaving Virgo. Its later sextile to Jupiter follows contacts with Mars, Saturn and the Sun and requires substantial travel into another sign. That sequence cannot be promoted into a present promise of mishap; its current reception cannot simply be carried into the later sign.
+
+The supplied Sun–Jupiter sextile candidate is a contrary consideration: the Sun is fallen and angular, so contact from it could indicate trouble. However, it is not among this branch’s principal serious-accident signatures. Jupiter strongly regards the Sun by domicile and triplicity; the Sun has only minor regard for Jupiter by term. This unequal reception does not erase the Sun’s debility, but neither does the contact establish disaster.
+
+The default is that the expected journey proceeds safely unless significant affliction overturns it. The supplied evidence does not overturn that default. No accident is established, so there is no accident timing to give.
+
+### Evidence
+
+e7, e14: vehicle and hazard rulers; Frawley printed pp. 18, 30–32, 142–143.
+e5, e15, e34–e37: Jupiter’s dignity, solar condition and corrected house placement; pp. 17, 49, 56–60.
+e4, e6, e31–e33, e38–e41: potential malefics and their capacity; pp. 50–61, 143.
+e42–e44, e51, e58: directed receptions; pp. 71–77.
+e1, e21–e23, e65–e69, e77: Moon, void testimony and ordered later contacts; pp. 64–65, 90–97.
+e0, e19–e20, e76: fallen Sun and conditional contact with Jupiter; pp. 62–63, 143.
+e78: calculation limits; judgment and timing principles, pp. 127–133, 140, 244.
+
+### Unresolved
+
+Node positions and contacts are not supplied. Antiscia, fixed stars, precise speeds, intervening stations and exact contact order are not certified. The seven-day approximate search supports a provisional judgment, not proof that every possible affliction is absent.
 
 ### Rubric (separate from the worked answer)
 
@@ -1491,7 +1789,36 @@ I have hired a coach for my tour Sunday. It belongs to the operator; will it com
 
 ### Worked answer
 
-**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+**Status:** answer
+
+On the supplied chart, I would judge that the hired coach will probably complete your Sunday excursion safely, though some inconvenience or disruption is possible. The main vehicle significator shows no established serious affliction. This is a qualified horary judgment, not a mechanical assessment or guarantee of safety.
+
+### Reasoning
+
+The coach is your immediate vehicle for this excursion: “the ship that I sail in.” Ownership by the operator does not change that role. Sagittarius on the first cusp gives Jupiter as its significator; neither your second house nor the operator’s turned second is appropriate. Jupiter can represent you and the vehicle together here because no transaction between them needs establishing. Cancer on the eighth cusp makes the Moon Lord 8, so its specific role takes priority over its usual role as your cosignificator.
+
+Jupiter has modest essential dignity by term, is direct and clear of combustion. Although just before the ninth cusp, it is in the same sign and within five degrees, so belongs to the ninth: neutral house capacity, with a placement appropriate to an excursion. This is adequate condition, rather than outstanding strength; ownership and descriptive fit do not supply additional essential dignity.
+
+The safety procedure asks whether something seriously harmful threatens Jupiter, rather than demanding an aspect to prove safe arrival. Mars is peregrine and weak by house. Saturn is fallen, angular, retrograde and afflicted by solar opposition: potentially troublesome, but no relevant close or upcoming contact with Jupiter is established in the supplied evidence. Their poor condition alone does not predict an accident.
+
+The Moon, as Lord 8, is in Jupiter’s detriment: its reception toward the vehicle is adverse, not reciprocal. Nevertheless, it is currently void of course. Its eventual sextile to Jupiter follows a sign change and earlier contacts with Mars, Saturn and the Sun. It cannot be promoted into an immediate accident testimony by skipping that sequence or carrying its present reception unchanged into Libra.
+
+The other supplied Jupiter contact is the Sun’s later sextile. The Sun is fallen, so an easy aspect is not automatically beneficial. However, Jupiter strongly regards the Sun by domicile and triplicity, while the Sun has only minor regard for Jupiter by term. This is unequal positive reception, not mutual hostility. The Sun rules the ninth-house excursion; its poor condition adds a reservation about the outing’s smoothness, without establishing serious harm to the coach.
+
+Safe completion is the default unless meaningful affliction overturns it. Jupiter’s adequate condition and the absence of an established serious attack support that default; the fallen excursion ruler qualifies it. No separate accident or delay is established to time, and the candidate astronomical hours must not be read as Sunday’s event schedule.
+
+### Evidence
+
+- Vehicle role and safe-journey procedure: e7; Frawley printed pp. 18, 142–143.
+- Jupiter’s condition and ninth-house placement: e5, e15, e34–e37; printed pp. 17, 49, 54–60.
+- Moon as Lord 8, adverse directed reception and void condition: e14, e21–e23, e51, e77; printed pp. 32, 65, 71–76.
+- Potential malefics require relevant contact: e4, e6, e31–e33, e38–e41; printed pp. 61–63, 143.
+- Ordered lunar candidates and later Sun–Jupiter contact: e65–e69, e76; receptions e44, e58; Sun’s fall e19. Printed pp. 90–97.
+- Default and timing limits: e78; printed pp. 127–133, 140.
+
+### Unresolved
+
+The seven-day contact search uses approximate positions and hourly brackets; exact perfections, intervening stations, antiscia and fixed-star contacts are not certified. Nodal positions and planetary speeds are not supplied. No separate planetary-position check for the named Sunday is supplied. These limit confidence but do not prevent the provisional safety judgment.
 
 ### Rubric (separate from the worked answer)
 
