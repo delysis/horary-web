@@ -218,6 +218,8 @@ async fn generate_case(
     book: &Book,
     model: Arc<dyn DynChatModel>,
     directory: &Path,
+    recovery: Option<(&str, bool)>,
+    max_attempts: usize,
 ) -> Result<Option<GoldRecord>> {
     let (student_inputs, rubric) = inputs_and_rubric(case, book)?;
     let source = catalogue::reference_reader_source(book, &case.method)?;
@@ -233,11 +235,15 @@ async fn generate_case(
     )?;
     crate::queue::write_json_atomic(&directory.join("rubric.json"), &rubric)?;
     let mut correction = None;
-    for attempt in 1..=2 {
+    for attempt in 1..=max_attempts {
         let target = directory.join(format!("attempt-{attempt}"));
         fs::create_dir(&target)?;
         let mut trace = Vec::new();
-        let outcome = author(&case.method, model.clone(), correction.as_deref())?
+        let mut writer = author(&case.method, model.clone(), correction.as_deref())?;
+        if let Some((notice, true)) = recovery {
+            writer.signature.instructions.push_str(notice);
+        }
+        let outcome = writer
             .forward_traced(teacher_inputs.clone(), &mut trace)
             .await;
         let prediction = match outcome {
@@ -285,6 +291,9 @@ async fn generate_case(
             .signature
             .instructions
             .push_str(&format!("\n\n{REVIEW_INSTRUCTION}"));
+        if let Some((recovery, _)) = recovery {
+            judge.signature.instructions.push_str(recovery);
+        }
         let review = judge
             .forward(review_input(
                 &student_inputs,
@@ -384,7 +393,7 @@ pub async fn generate(
                 codex::Codex::new(codex_path.to_path_buf(), target.join("teacher"), 4)?
                     .with_budget(budget.clone()),
             );
-            let outcome = generate_case(case, &book, model, &target).await;
+            let outcome = generate_case(case, &book, model, &target, None, 2).await;
             match outcome {
                 Ok(Some(record)) => {
                     eprintln!("gold {method} {} approved", case.id);
@@ -417,6 +426,289 @@ pub async fn generate(
         )?;
     }
     let result = json!({"families":results,"teacher_physical_calls":budget.spent(),"physical_teacher_cap":AUTHOR_CALL_CAP,"student_calls":0,"planned_cases":840,"automatic_uncertain_replays":0});
+    crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
+    Ok(result)
+}
+
+/// A continuation carries physical charges, approvals and exact completed caches;
+/// it never edits or resumes a prior provider operation.
+fn continuation_inventory(prior: &Path) -> Result<Value> {
+    let mut approvals = Vec::new();
+    let mut operations = Vec::new();
+    let run = prior.join("run");
+    for family in fs::read_dir(&run)? {
+        let family = family?.path();
+        if !family.is_dir() {
+            continue;
+        }
+        for case in fs::read_dir(&family)? {
+            let case = case?.path();
+            if !case.is_dir() {
+                continue;
+            }
+            let gold = case.join("gold.json");
+            if gold.exists() {
+                let bytes = fs::read(&gold)?;
+                let record: GoldRecord = serde_json::from_slice(&bytes)?;
+                ensure!(
+                    record.review["passed"] == true
+                        && record.review["reading"] == "pass"
+                        && record.review["answer_quality"] == "pass",
+                    "Prior approval is not a complete received pass"
+                );
+                approvals.push(
+                    json!({"path":gold,"sha256":google::digest(bytes),"case_id":record.case_id}),
+                );
+            }
+            let teacher = case.join("teacher");
+            if !teacher.exists() {
+                continue;
+            }
+            for operation in fs::read_dir(&teacher)? {
+                let operation = operation?.path();
+                if !operation.join("request.json").exists() {
+                    continue;
+                }
+                let mut files = BTreeMap::new();
+                for name in [
+                    "request.json",
+                    "response.json",
+                    "answer.txt",
+                    "exit.json",
+                    "events.jsonl",
+                    "failure.json",
+                ] {
+                    let file = operation.join(name);
+                    if file.exists() {
+                        files.insert(name, google::digest(fs::read(file)?));
+                    }
+                }
+                operations.push(json!({"path":operation,"files":files,"completed":operation.join("response.json").exists()}));
+            }
+        }
+    }
+    approvals.sort_by_key(|v| v["path"].as_str().unwrap_or_default().to_owned());
+    operations.sort_by_key(|v| v["path"].as_str().unwrap_or_default().to_owned());
+    ensure!(
+        operations.len() <= AUTHOR_CALL_CAP,
+        "Prior physical cap exhausted"
+    );
+    Ok(
+        json!({"prior":prior,"prior_prepared_sha256":google::digest(fs::read(prior.join("prepared/plan.json"))?),"approved":approvals,"operations":operations,"inherited_physical_charges":operations.len(),"remaining_physical_cap":AUTHOR_CALL_CAP-operations.len(),"uncertain_operations_replayed":false,"replacement_cases_authorized_by_user":true}),
+    )
+}
+
+pub fn prepare_continuation(
+    examples: &Path,
+    book: &Book,
+    codex_path: &Path,
+    prior: &Path,
+    directory: &Path,
+) -> Result<Value> {
+    let original: Value = serde_json::from_slice(&fs::read(prior.join("prepared/plan.json"))?)?;
+    let inventory = continuation_inventory(prior)?;
+    let mut plan = prepare(examples, book, codex_path, directory)?;
+    // Source, original case bytes, split and calculated inputs must still agree.
+    ensure!(
+        plan["families"] == original["families"] && plan["book_sha256"] == original["book_sha256"],
+        "Original author inputs or source changed; do not silently replace gold"
+    );
+    plan["continuation"] = inventory;
+    crate::queue::write_json_atomic(&directory.join("plan.json"), &plan)?;
+    Ok(plan)
+}
+
+fn check_author_disk(directory: &Path) -> Result<()> {
+    let output = std::process::Command::new("df")
+        .arg("-Pk")
+        .arg(directory)
+        .output()?;
+    ensure!(
+        output.status.success(),
+        "Cannot check author checkpoint capacity"
+    );
+    let text = String::from_utf8(output.stdout)?;
+    let available: u64 = text
+        .lines()
+        .last()
+        .context("Missing free-space row")?
+        .split_whitespace()
+        .nth(3)
+        .context("Missing available space")?
+        .parse()?;
+    ensure!(
+        available >= 5 * 1024 * 1024,
+        "Less than 5 GiB free; author stops before another provider request"
+    );
+    Ok(())
+}
+
+pub async fn continue_generation(
+    examples: &Path,
+    book: Arc<Book>,
+    prepared: &Path,
+    codex_path: &Path,
+    prior: &Path,
+    directory: &Path,
+) -> Result<Value> {
+    ensure!(!directory.exists(), "Preserve prior continuation outputs");
+    let plan: Value = serde_json::from_slice(&fs::read(prepared.join("plan.json"))?)?;
+    ensure!(
+        plan["executable_sha256"] == google::digest(fs::read(std::env::current_exe()?)?)
+            && plan["codex_executable_sha256"] == google::digest(fs::read(codex_path)?)
+            && plan["book_sha256"] == crate::book::OCR_SHA256
+            && plan["teaching_sources_sha256"] == json!(optimize::teaching_sources()),
+        "Continuation source/executable identity differs"
+    );
+    let inventory = continuation_inventory(prior)?;
+    ensure!(
+        plan["continuation"] == inventory,
+        "Prior approval or paid ledger changed after preparation"
+    );
+    let spent = inventory["inherited_physical_charges"]
+        .as_u64()
+        .context("Missing inherited physical count")? as usize;
+    let budget = google::CallBudget::seeded(AUTHOR_CALL_CAP, spent)?;
+    fs::create_dir(directory)?;
+    let mut summaries = Vec::new();
+    let mut total = 0;
+    for method in family_order() {
+        let cases = catalogue::cases(examples, method)?;
+        let bound = plan["families"]
+            .as_array()
+            .context("Missing families")?
+            .iter()
+            .find(|v| v["method"] == method)
+            .context("Missing bound family")?;
+        ensure!(
+            bound["case_bank_sha256"] == google::digest(serde_json::to_vec(&cases)?)
+                && bound["reference_source_sha256"]
+                    == google::digest(catalogue::reference_reader_source(&book, method)?),
+            "Continuation corpus/source drift"
+        );
+        let family = directory.join(method);
+        fs::create_dir(&family)?;
+        let mut records = Vec::new();
+        let mut withheld = Vec::new();
+        for case in &cases {
+            check_author_disk(directory)?;
+            let expected = bound["cases"]
+                .as_array()
+                .context("Missing cases")?
+                .iter()
+                .find(|v| v["case_id"] == case.id)
+                .context("Missing bound case")?;
+            let (inputs, _) = inputs_and_rubric(case, &book)?;
+            ensure!(
+                expected["input_hash"] == optimize::input_key(&inputs)?
+                    && expected["split"] == case.split,
+                "Continuation input identity changed"
+            );
+            let target = family.join(&case.id);
+            fs::create_dir(&target)?;
+            let old = prior.join("run").join(method).join(&case.id);
+            let gold = old.join("gold.json");
+            if gold.exists() {
+                let bytes = fs::read(&gold)?;
+                let record: GoldRecord = serde_json::from_slice(&bytes)?;
+                ensure!(
+                    record.input_hash == optimize::input_key(&inputs)?
+                        && record.case_id == case.id
+                        && record.split == case.split,
+                    "Saved approval input identity differs"
+                );
+                fs::write(target.join("gold.json"), &bytes)?;
+                for name in ["student-inputs.json", "teacher-inputs.json", "rubric.json"] {
+                    fs::copy(old.join(name), target.join(name))?;
+                }
+                crate::queue::write_json_atomic(
+                    &target.join("reused-approval.json"),
+                    &json!({"source":gold,"sha256":google::digest(bytes),"new_provider_calls":0}),
+                )?;
+                records.push(record);
+            } else {
+                let teacher = target.join("teacher");
+                let old_teacher = old.join("teacher");
+                let mut old_requests = 0;
+                let mut incomplete_author = false;
+                let mut incomplete_review = false;
+                let mut old_authors = 0;
+                if old_teacher.exists() {
+                    for op in fs::read_dir(&old_teacher)? {
+                        let op = op?.path();
+                        if !op.join("request.json").exists() {
+                            continue;
+                        }
+                        old_requests += 1;
+                        let request = fs::read_to_string(op.join("request.json"))?;
+                        let author = request.contains(AUTHOR_INSTRUCTION);
+                        old_authors += usize::from(author);
+                        if op.join("response.json").exists() {
+                            codex::import_completed(&op, &teacher)?;
+                        } else if author {
+                            incomplete_author = true;
+                        } else {
+                            incomplete_review = true;
+                        }
+                    }
+                }
+                ensure!(
+                    old_requests <= 4 && old_authors <= 2,
+                    "Original per-case bound exceeded"
+                );
+                let notice = format!(
+                    "\nINDEPENDENT REPLACEMENT CASE REVIEW, explicitly authorized after the original stopped campaign. Case {}. Prior incomplete operations remain charged and are not resumed or replayed. Assess the same original question, native facts and salient source; the recovery label supplies no semantic evidence.",
+                    case.id
+                );
+                let recovery = (incomplete_author || incomplete_review)
+                    .then_some((notice.as_str(), incomplete_author));
+                crate::queue::write_json_atomic(
+                    &target.join("continuation.json"),
+                    &json!({"prior_case":old,"prior_physical_charges":old_requests,"prior_author_attempts":old_authors,"completed_operations_imported":old_requests-usize::from(incomplete_author)-usize::from(incomplete_review),"author_replacement":incomplete_author,"review_replacement":incomplete_review,"uncertain_replay":false}),
+                )?;
+                let model: Arc<dyn DynChatModel> = Arc::new(
+                    codex::Codex::new(codex_path.to_path_buf(), teacher, 4 - old_requests)?
+                        .with_budget(budget.clone()),
+                );
+                let max_attempts = if incomplete_author {
+                    2 - old_authors
+                } else {
+                    2
+                };
+                match generate_case(case, &book, model, &target, recovery, max_attempts).await {
+                    Ok(Some(record)) => {
+                        eprintln!("gold {method} {} approved", case.id);
+                        records.push(record);
+                    }
+                    outcome => {
+                        let failure = json!({"case_id":case.id,"error":outcome.err().map(|e|e.to_string()),"unknown_is_not_failure_score":true,"automatic_retry":false});
+                        crate::queue::write_json_atomic(
+                            &target.join("case-withheld.json"),
+                            &failure,
+                        )?;
+                        withheld.push(failure);
+                    }
+                }
+            }
+            total += usize::from(target.join("gold.json").exists());
+            // A single completed case survives an interruption before its family closes.
+            crate::queue::write_json_atomic(
+                &directory.join("progress.json"),
+                &json!({"last_case":case.id,"approved":total,"inherited_approved":inventory["approved"].as_array().map(Vec::len),"physical_teacher_calls":budget.spent(),"physical_teacher_cap":AUTHOR_CALL_CAP,"student_calls":0}),
+            )?;
+        }
+        let lines = records
+            .iter()
+            .map(serde_json::to_string)
+            .collect::<std::result::Result<Vec<_>, _>>()?
+            .join("\n")
+            + "\n";
+        fs::write(family.join("answers.jsonl"), lines)?;
+        let summary = json!({"method":method,"original_cases":20,"approved":records.len(),"failed_or_unknown":withheld,"ready_for_student":records.len()==20,"teacher_physical_spent_total":budget.spent(),"physical_teacher_cap":AUTHOR_CALL_CAP,"rubrics_are_not_demo_outputs":true});
+        crate::queue::write_json_atomic(&family.join("result.json"), &summary)?;
+        summaries.push(summary);
+    }
+    let result = json!({"families":summaries,"approved":total,"planned_cases":840,"teacher_physical_calls":budget.spent(),"inherited_teacher_physical_calls":spent,"physical_teacher_cap":AUTHOR_CALL_CAP,"student_calls":0,"automatic_uncertain_replays":0});
     crate::queue::write_json_atomic(&directory.join("result.json"), &result)?;
     Ok(result)
 }
@@ -1603,6 +1895,22 @@ mod tests {
             unresolved: "Synthetic missing calculation".into(),
         }
     }
+    #[test]
+    fn continuation_inventory_charges_unsettled_requests_and_binds_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("prepared")).unwrap();
+        fs::write(temp.path().join("prepared/plan.json"), "{}").unwrap();
+        let operation = temp.path().join("run/contact/case/teacher/unknown-key");
+        fs::create_dir_all(&operation).unwrap();
+        fs::write(operation.join("request.json"), r#"{"submitted":true}"#).unwrap();
+        let original = continuation_inventory(temp.path()).unwrap();
+        assert_eq!(original["inherited_physical_charges"], 1);
+        assert_eq!(original["remaining_physical_cap"], AUTHOR_CALL_CAP - 1);
+        assert_eq!(original["operations"][0]["completed"], false);
+        fs::write(operation.join("answer.txt"), "Later recovered bytes").unwrap();
+        assert_ne!(original, continuation_inventory(temp.path()).unwrap());
+    }
+
     #[test]
     fn labeled_answers_have_exactly_four_inputs_and_five_answers_without_rubric_or_metadata() {
         let input = dsrust::input! {source_text:"Synthetic source",question:"Synthetic question",consultation:"{}",chart_evidence:"{}"};

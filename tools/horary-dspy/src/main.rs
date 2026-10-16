@@ -64,6 +64,9 @@ enum Command {
     },
     /// Author and independently review all 42 original twenty-case reading banks.
     GenerateGoldReadings {
+        /// Continue exact approved outputs and charged teacher work from a stopped campaign.
+        #[arg(long)]
+        continue_from: Option<PathBuf>,
         #[arg(long, default_value = "examples")]
         examples: PathBuf,
         #[arg(long)]
@@ -413,6 +416,7 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
         Command::GenerateGoldReadings {
+            continue_from,
             examples,
             prepare_only,
             prepared,
@@ -428,16 +432,32 @@ async fn main() -> Result<()> {
                     prepared.is_none(),
                     "Prepare a fresh gold plan, without executing another plan"
                 );
-                gold::prepare(&examples, &book, &args.codex, &output)?
+                if let Some(prior) = continue_from.as_deref() {
+                    gold::prepare_continuation(&examples, &book, &args.codex, prior, &output)?
+                } else {
+                    gold::prepare(&examples, &book, &args.codex, &output)?
+                }
             } else {
-                gold::generate(
-                    &examples,
-                    book,
-                    &prepared.context("No source-bound gold authoring plan")?,
-                    &args.codex,
-                    &output,
-                )
-                .await?
+                if let Some(prior) = continue_from.as_deref() {
+                    gold::continue_generation(
+                        &examples,
+                        book,
+                        &prepared.context("No continuation plan")?,
+                        &args.codex,
+                        prior,
+                        &output,
+                    )
+                    .await?
+                } else {
+                    gold::generate(
+                        &examples,
+                        book,
+                        &prepared.context("No source-bound gold authoring plan")?,
+                        &args.codex,
+                        &output,
+                    )
+                    .await?
+                }
             };
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
