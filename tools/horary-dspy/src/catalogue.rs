@@ -837,6 +837,21 @@ fn component_family_role_reference(
     if method == "movable_deal" && facet.is_none() {
         unknowns.push("No facet is declared: object and sale-profit rows are conditional references, not selected roles or additional required inputs.".into());
     }
+    if method == "relationship" {
+        for (planet, role) in [("Sun", "natural.sun"), ("Venus", "natural.venus")] {
+            let claimed = rows.iter().any(|r| {
+                matches!(
+                    r["role_id"].as_str(),
+                    Some("principal.person" | "target.partner")
+                ) && r["ruler_planet"] == planet
+            });
+            if !claimed {
+                rows.push(json!({"role_id":role,"actor_id":null,"label":"Conditional natural reference: actual question must establish applicable roles; never assign from names or between same-sex partners",
+                "significator_house":null,"ruler_planet":planet,"optional":true,"authority":"conditional_original_question_natural_role_not_selected_actor",
+                "selected_id":null,"cusp_fact_id":null,"position_fact_ids":native.iter().filter(|f|f.kind=="position" && f.planets.iter().any(|p|p==planet)).map(|f|f.id.clone()).collect::<Vec<_>>(),"source_fields":[]}));
+            }
+        }
+    }
     let mut aliases: Vec<_> = rows.iter().filter(|r|r["ruler_planet"].is_string()).map(|r|
         json!({"role_id":r["role_id"],"actor_id":r["actor_id"],"label":r["label"],
             "significator_house":r["significator_house"],"planet":r["ruler_planet"],"optional":r["optional"]})).collect();
@@ -1152,7 +1167,7 @@ Return only status, answer, analysis, evidence, unresolved. Give the useful deci
 const CONCISE_RELATIONSHIP_PROCEDURE: &str = "RELATIONSHIP PROCEDURE — Frawley printed pp. 19–32, 44–83, 84–101, 120–123, 127–140, 191–201.
 Preserve the actual person, question and baseline: hopes, arranged wedding and existing relationship have different defaults. The principal is first with available Moon; the partner specifically asked about is seventh, including an unnamed future partner or a friend considered as partner. A question specifically about a neighbour's feelings can use third. Declared-person rows are conditional alternatives, not extra lovers. A concerning-other inquiry does not turn that person into a relay principal. Turn an actual other person's partner from that person's house. Assigned houses differ from occupied houses; preserve shared rulers and house priority over Moon.
 
-Only explicitly applicable man/woman roles permit Sun/Venus as natural cosignificators; house rulers have first claim, with no substitute Mars, arbitrary allocation between same-sex partners, or inference from names. Lord 1/7 concerns the person; Moon the principal's feelings; applicable Sun/Venus attraction. If these roles are unavailable, state that this testimony is unavailable without inventing it.
+Use man/woman roles explicitly established in the original question or declared consultation, not a mandatory typed gender field. Only applicable roles permit Sun/Venus as natural cosignificators; house rulers have first claim, with no substitute Mars, arbitrary allocation between same-sex partners, or inference from names. Lord 1/7 concerns the person; Moon the principal's feelings; applicable Sun/Venus attraction. If these roles are unavailable, state that this testimony is unavailable without inventing it.
 
 Reception A→B is A's regard for B, never B's response. Preserve positive AND negative qualities: domicile/exaltation major, triplicity moderate, term/face minor. Exaltation can exaggerate and change. Different significators can disagree; neither minor reception nor an easy aspect proves love. Current feelings need no new event aspect. Weigh role-bound condition, solar state, occupied-house capacity and motion contextually; vulnerability from loving the other is not a mechanical refusal.
 
@@ -2670,6 +2685,71 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn relationship_natural_references_keep_native_testimony_without_inventing_actor_sex() {
+        let (input, native) = relevant_family_input(
+            "relationship",
+            json!({"facts":[fact("subject.name","Alex"),fact("baseline","ongoing")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        let ids = relevant_chart_ids(chart).unwrap();
+        for fact in native.iter().filter(|f| {
+            matches!(f.kind.as_str(), "position" | "condition")
+                && f.planets
+                    .iter()
+                    .any(|p| matches!(p.as_str(), "Sun" | "Venus"))
+        }) {
+            assert!(
+                ids.contains(&fact.id),
+                "Missing natural-body testimony {}",
+                fact.id
+            );
+        }
+        for fact in native.iter().filter(|f| {
+            f.kind == "reception"
+                && f.planets
+                    .iter()
+                    .all(|p| matches!(p.as_str(), "Sun" | "Venus" | "Saturn" | "Moon"))
+        }) {
+            assert!(
+                ids.contains(&fact.id),
+                "Missing directed natural-body edge {}",
+                fact.id
+            );
+        }
+        assert!(chart.contains("natural.sun(?) = —/Sun optional"));
+        assert!(chart.contains("natural.venus(?) = —/Venus optional"));
+        let source = concise_reader_source("relationship").unwrap();
+        assert!(
+            source.contains("original question")
+                && source.contains("not a mandatory typed gender field")
+        );
+        let (_, mut canonical, native) = declared(None);
+        canonical.as_object_mut().unwrap().remove("role_reference");
+        // A native fixture with H1/Saturn and H7/Moon leaves Sun/Venus free.
+        // Claim Sun as H1 using only a native synthetic house row; no names
+        // or answer labels are consulted by the role policy.
+        let mut claimed = native.clone();
+        let first = claimed
+            .iter_mut()
+            .find(|f| f.kind == "house" && f.label == "House 1")
+            .unwrap();
+        first.planets = vec!["Sun".into()];
+        let roles = component_family_role_reference(
+            &json!({"facts":[],"unknown":[]}),
+            &claimed,
+            "relationship",
+        )
+        .unwrap();
+        assert!(
+            !roles["role_rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|r| r["role_id"] == "natural.sun")
+        );
+    }
+
+    #[test]
     fn compact_additional_family_actual_twenty_inputs_keep_native_domains() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in ["relationship", "money", "property", "rental"] {
@@ -2772,7 +2852,7 @@ mod concise_projection_tests {
         let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
         assert!(chart.contains("target.partner(?) = H7/"));
         assert!(chart.contains("declared.noor(noor) = H3/"));
-        assert!(!chart.contains("natural.sun") && !chart.contains("natural.venus"));
+        assert!(chart.contains("natural.sun(?)") && chart.contains("natural.venus(?)"));
     }
 
     #[test]
