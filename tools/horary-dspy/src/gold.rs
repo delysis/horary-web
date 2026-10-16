@@ -1778,11 +1778,12 @@ mod tests {
         .unwrap();
         let examples = std::path::PathBuf::from(std::env::var("HORARY_EXAMPLES").unwrap());
         let campaign = std::path::PathBuf::from(std::env::var("HORARY_GOLD_CAMPAIGN").unwrap());
-        let (mut fixtures, _) = reviewed_family(&examples, &book, &campaign, "contact").unwrap();
+        let method = std::env::var("HORARY_RELEVANT_METHOD").unwrap_or_else(|_| "contact".into());
+        let (mut fixtures, _) = reviewed_family(&examples, &book, &campaign, &method).unwrap();
         assert_eq!(fixtures.len(), 20);
-        concise_fixtures(&mut fixtures, "contact").unwrap();
+        concise_fixtures(&mut fixtures, &method).unwrap();
         for fixture in &fixtures {
-            verify_concise_fixture(&fixture.example, "contact").unwrap();
+            verify_concise_fixture(&fixture.example, &method).unwrap();
             let chart = fixture
                 .example
                 .get("chart_evidence")
@@ -1792,14 +1793,14 @@ mod tests {
             assert!(!catalogue::relevant_chart_ids(chart).unwrap().is_empty());
         }
         let requests =
-            preflight::reader_requests(&fixtures, &concise_predictor("contact", &[], 0).unwrap())
+            preflight::reader_requests(&fixtures, &concise_predictor(&method, &[], 0).unwrap())
                 .unwrap();
         assert_eq!(requests.len(), 20);
         if let Ok(output) = std::env::var("HORARY_CONCISE_WIRES") {
             crate::queue::write_json_atomic(Path::new(&output),&json!({"cases":20,"fixture_digest":optimize::fixtures_digest(&fixtures).unwrap(),"requests":requests,"provider_calls":0,"generation_submitted":false})).unwrap();
         }
         println!(
-            "All twenty original Contact inputs projected, native-validated and rendered without provider calls"
+            "All twenty original {method} inputs projected, native-validated and rendered without provider calls"
         );
     }
 
