@@ -1258,17 +1258,22 @@ pub fn relevant_reader_chart(
             str::to_owned,
         );
         text.push_str(&format!(
-            "{}|event|{}~{} {} t≈{}astro-h {signs} gap={}; {}\n",
+            "{}|event|{}~{} {} t≈{}astro-h {signs} chartGap={}; {}\n",
             fact.id,
             row[1].as_str().context("No event endpoint")?,
             row[2].as_str().context("No event endpoint")?,
             row[3].as_str().context("No aspect")?,
             relevant_number(&row[5]),
             plain_relevant(&gap),
-            relevant_motion(&row[7])?
+            relevant_motion(
+                &row[7],
+                fact.event
+                    .as_ref()
+                    .and_then(|event| event.perfection_motion.as_ref()),
+            )?
         ));
     }
-    text.push_str("</facts>\nLegend: H assigns a role, not the body's occupied house. → is regard, preserving every +/− quality; ~ endpoints are storage order, not the applicant or caller. Events are in computed astronomical order; fine prevention order remains approximate. Motion endpoints/travel use hourly-bracket interpolation, rounded to 3 decimals (error ≤0.0005 in stated units); rounded zero is not stationarity. Astronomical hours are not earthly time. Only relevant source-selected facts are shown; omitted evidence or uncomputed techniques are unknown, not proof of absence.\n");
+    text.push_str("</facts>\nLegend: H assigns a role, not the body's occupied house. → is regard, preserving every +/− quality; ~ endpoints are storage order, not the applicant or caller. Events are in computed astronomical order; fine prevention order remains approximate. chartGap and travel are not entryDepth; entryDepth is distance in the motion direction within the entered sign, and signEntries counts crossed sign boundaries. Reversals or rounding-sensitive boundaries leave entryDepth unknown. Motion endpoints/travel use hourly-bracket interpolation, rounded to 3 decimals (error ≤0.0005 in stated units); rounded zero is not stationarity. Astronomical hours are not earthly time. Only relevant source-selected facts are shown; omitted evidence or uncomputed techniques are unknown, not proof of absence.\n");
     ensure!(
         relevant_chart_ids(&text)? == selected,
         "Relevant text lost its native ID domain"
@@ -1684,7 +1689,62 @@ fn relevant_number(value: &Value) -> String {
     )
 }
 
-fn relevant_motion(motion: &Value) -> Result<String> {
+fn relevant_perfection(body: &horary_ai_core::events::BodyMotion) -> String {
+    const SIGNS: [&str; 12] = [
+        "Aries",
+        "Taurus",
+        "Gemini",
+        "Cancer",
+        "Leo",
+        "Virgo",
+        "Libra",
+        "Scorpio",
+        "Sagittarius",
+        "Capricorn",
+        "Aquarius",
+        "Pisces",
+    ];
+    let start = body.chart_longitude_degrees.rem_euclid(360.);
+    let end = body.estimated_perfection_longitude_degrees.rem_euclid(360.);
+    let offset = end.rem_euclid(30.);
+    let mut text = format!(
+        " perfect={}{}",
+        relevant_number(&json!(offset)),
+        SIGNS[(end / 30.).floor() as usize],
+    );
+    // Calculate from unrounded native motion, not the displayed chart gap or
+    // total travel. Endpoints alone cannot certify an entry after a reversal.
+    let start_sign = (start / 30.).floor();
+    let end_sign = ((start + body.estimated_signed_travel_degrees) / 30.).floor();
+    if start_sign != end_sign {
+        if body.sampled_motion_reversal_observed
+            || body.zero_mean_motion_interval_observed
+            || offset.min(30. - offset) <= 0.0005
+            || (body.estimated_signed_travel_degrees.abs() - body.estimated_path_distance_degrees)
+                .abs()
+                > 0.0005
+        {
+            text.push_str(" signEntries=? entryDepth=?");
+        } else {
+            let depth = if body.estimated_signed_travel_degrees > 0. {
+                offset
+            } else {
+                30. - offset
+            };
+            text.push_str(&format!(
+                " signEntries={} entryDepth={}°",
+                (end_sign - start_sign).abs() as u64,
+                relevant_number(&json!(depth)),
+            ));
+        }
+    }
+    text
+}
+
+fn relevant_motion(
+    motion: &Value,
+    native: Option<&horary_ai_core::events::PerfectionMotion>,
+) -> Result<String> {
     if motion.is_null() {
         return Ok("motion=? (not supplied)".into());
     }
@@ -1712,6 +1772,14 @@ fn relevant_motion(motion: &Value) -> Result<String> {
             body[7],
             body[8]
         ));
+        if let Some(native) = native {
+            let supplied = native
+                .body_motion
+                .iter()
+                .find(|body| body.planet == name)
+                .context("Supplied motion has no native body witness")?;
+            text.push_str(&relevant_perfection(supplied));
+        }
         if body[7] == true
             || body[3]
                 .as_f64()
@@ -3065,6 +3133,65 @@ mod concise_projection_tests {
                 ]
             ])
         );
+    }
+
+    #[test]
+    fn perfection_depth_is_not_the_chart_gap_or_total_travel() {
+        let mut body = horary_ai_core::events::BodyMotion {
+            planet: "Moon".into(),
+            chart_longitude_degrees: 172.404,
+            estimated_perfection_longitude_degrees: 186.365,
+            estimated_signed_travel_degrees: 13.961,
+            estimated_path_distance_degrees: 13.961,
+            initial_interval_mean_speed_degrees_per_day: 13.,
+            perfection_bracket_mean_speed_degrees_per_day: 13.,
+            sampled_motion_reversal_observed: false,
+            zero_mean_motion_interval_observed: false,
+        };
+        let text = relevant_perfection(&body);
+        assert!(text.contains("perfect=6.365Libra"));
+        assert!(text.contains("signEntries=1 entryDepth=6.365°"));
+        assert!(!text.contains("entryDepth=13.961"));
+        body.chart_longitude_degrees = 350.;
+        body.estimated_perfection_longitude_degrees = 5.;
+        body.estimated_signed_travel_degrees = 15.;
+        body.estimated_path_distance_degrees = 15.;
+        assert!(relevant_perfection(&body).contains("perfect=5Aries signEntries=1 entryDepth=5°"));
+        body.chart_longitude_degrees = 5.;
+        body.estimated_perfection_longitude_degrees = 355.;
+        body.estimated_signed_travel_degrees = -10.;
+        body.estimated_path_distance_degrees = 10.;
+        assert!(
+            relevant_perfection(&body).contains("perfect=25Pisces signEntries=1 entryDepth=5°")
+        );
+        body.sampled_motion_reversal_observed = true;
+        assert!(relevant_perfection(&body).contains("signEntries=? entryDepth=?"));
+        assert_eq!(
+            relevant_motion(&Value::Null, None).unwrap(),
+            "motion=? (not supplied)"
+        );
+    }
+
+    #[test]
+    fn perfection_display_keeps_multiple_entries_and_boundary_uncertainty() {
+        let mut body = horary_ai_core::events::BodyMotion {
+            planet: "Moon".into(),
+            chart_longitude_degrees: 172.404,
+            estimated_perfection_longitude_degrees: 211.,
+            estimated_signed_travel_degrees: 38.596,
+            estimated_path_distance_degrees: 38.596,
+            initial_interval_mean_speed_degrees_per_day: 13.,
+            perfection_bracket_mean_speed_degrees_per_day: 13.,
+            sampled_motion_reversal_observed: false,
+            zero_mean_motion_interval_observed: false,
+        };
+        assert!(
+            relevant_perfection(&body).contains("perfect=1Scorpio signEntries=2 entryDepth=1°")
+        );
+        body.estimated_perfection_longitude_degrees = 180.0001;
+        body.estimated_signed_travel_degrees = 7.5961;
+        body.estimated_path_distance_degrees = 7.5961;
+        assert!(relevant_perfection(&body).contains("perfect=0Libra signEntries=? entryDepth=?"));
     }
 
     #[test]
