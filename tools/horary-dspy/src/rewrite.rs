@@ -12,7 +12,9 @@ use dsrust::{
 use serde_json::json;
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
 
-const CONTRACT: &str = "Return one replacement instruction in a single plain fenced block. HARD LIMIT: at most 250 whitespace-separated words AND 1800 UTF-8 bytes inside the fence. The student already receives the family procedure, chart dictionary and worked example; do not copy those inputs, restate the full book, hardcode an example's actors/eIDs/verdict, or change output fields. Spend the small instruction on generalizable corrections supported by the supplied TRAIN feedback. No commentary outside the fence.";
+const LEGACY_CONTRACT: &str = "Return one replacement instruction in a single plain fenced block. HARD LIMIT: at most 250 whitespace-separated words AND 1800 UTF-8 bytes inside the fence. The student already receives the family procedure, chart dictionary and worked example; do not copy those inputs, restate the full book, hardcode an example's actors/eIDs/verdict, or change output fields. Spend the small instruction on generalizable corrections supported by the supplied TRAIN feedback. No commentary outside the fence.";
+
+const CONTRACT: &str = "Return one replacement instruction in a single plain fenced block. Aim for 170 words and 1200 UTF-8 bytes; 250 words/1800 bytes is a soft presentation target, not a semantic requirement. The actual hard limit is the full student wire of 6000 tokens, checked for every original fixture. The student already receives the family procedure, chart dictionary and worked example; do not copy them, repeat the book, hardcode example actors/eIDs/verdicts or change output fields. Focus on generalizable corrections supported by the TRAIN feedback. No commentary outside the fence.";
 
 pub struct CompactTeacher {
     inner: Arc<Codex>,
@@ -52,7 +54,7 @@ impl CompactTeacher {
         raw
     }
     fn small(text: &str) -> bool {
-        !text.is_empty() && text.len() <= 1800 && text.split_whitespace().count() <= 250
+        !text.is_empty() && text.len() <= 4096
     }
     async fn admit(
         &self,
@@ -94,10 +96,13 @@ impl CompactTeacher {
         Ok(fits)
     }
     fn compression_request(instruction: &str) -> LmRequest {
+        Self::compression_with_contract(instruction, CONTRACT)
+    }
+    fn compression_with_contract(instruction: &str, contract: &str) -> LmRequest {
         LmRequest::new(
             "gepa-reflection",
             vec![LmMessage::user(vec![LmPart::text(format!(
-                "{CONTRACT}\n\nCompress this fully received proposal without adding claims. Preserve its useful generalizable corrections and uncertainty. This is a mechanical instruction-budget repair, not a new reflection or an answer to the underlying example.\n\nPROPOSAL:\n{instruction}"
+                "{contract}\n\nCompress this fully received proposal without adding claims. Preserve its useful generalizable corrections and uncertainty. This is a mechanical instruction-budget repair, not a new reflection or an answer to the underlying example.\n\nPROPOSAL:\n{instruction}"
             ))])],
         )
     }
@@ -141,7 +146,12 @@ impl CompactTeacher {
             }
             if attempt < 2 {
                 let compression = Self::compression_request(instruction);
-                response = self.inner.forward_dyn(http, &compression).await?;
+                let legacy = Self::compression_with_contract(instruction, LEGACY_CONTRACT);
+                response = if let Some(received) = self.inner.cached_response(&legacy)? {
+                    received
+                } else {
+                    self.inner.forward_dyn(http, &compression).await?
+                };
             }
         }
         // An observed inadmissible proposal is a rejected mutation, not an unobserved
@@ -196,7 +206,9 @@ mod tests {
     #[test]
     fn rejects_original_size_and_dense_byte_overflow() {
         assert!(!CompactTeacher::small(&"word ".repeat(1227)));
-        assert!(!CompactTeacher::small(&"x".repeat(1801)));
+        assert!(!CompactTeacher::small(&"x".repeat(4097)));
+        assert!(CompactTeacher::small(&"x".repeat(1983)));
+        assert!(CompactTeacher::small(&"word ".repeat(251)));
         assert!(CompactTeacher::small(&"word ".repeat(250)));
         assert_eq!(
             CompactTeacher::instruction("```text\nKeep directions exact.\n```"),
@@ -241,7 +253,12 @@ mod tests {
         );
         let long = "corrective ".repeat(1227);
         cache(&original, &format!("```\n{long}\n```"));
-        let short = "Preserve the actual roles and reception direction. Distinguish ability, inclination and occasion. Answer the requested horizon using supplied evidence; retain material uncertainty.";
+        let received = format!(
+            "Preserve the actual roles, direction and uncertainty.{}",
+            " contextual".repeat(180)
+        );
+        let short = received.as_str();
+        assert!(short.len() > 1800 && CompactTeacher::small(short));
         cache(
             &CompactTeacher::compression_request(long.trim()),
             &format!("```\n{short}\n```"),
