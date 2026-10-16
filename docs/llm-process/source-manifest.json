@@ -831,7 +831,7 @@
     },
     {
       "path": "tools/horary-dspy/src/catalogue.rs",
-      "sha256": "96eedc8176f99ac9b5e5db941c10aacc72e802b90de9715521fe45e70060b024"
+      "sha256": "82c3389d407240f75d7781c8b248ecffddff42657efd733c208105963ede238b"
     },
     {
       "path": "tools/horary-dspy/src/classification_export.rs",
@@ -855,7 +855,7 @@
     },
     {
       "path": "tools/horary-dspy/src/gold.rs",
-      "sha256": "bf7e41c24252b0378b9cd49271c6ede9069b0e12661dade0b0141c79f48828b4"
+      "sha256": "09851dff9560560830cef46b8864ef3519d64be8350c718baf7965073ff672fd"
     },
     {
       "path": "tools/horary-dspy/src/google.rs",
@@ -887,7 +887,7 @@
     },
     {
       "path": "tools/horary-dspy/src/optimize.rs",
-      "sha256": "25a0bd3615469db60b8f63334e39c8c2d06a3e099b3202dd81c4112e5e8a472f"
+      "sha256": "3167d0ba3bedb82d761ec43c3c921356c5220fd41c609de6b79d609486090b1f"
     },
     {
       "path": "tools/horary-dspy/src/preflight.rs",
@@ -915,7 +915,7 @@
     },
     {
       "path": "tools/horary-dspy/src/signatures.rs",
-      "sha256": "801082700f697d81c6544e2d789c896718bdbb944af2ef4247319a0d9504532e"
+      "sha256": "26d94c1b9be81d06ba3e1d6e3e98bfde8738d0a19ea8971f33f1892ce491c17e"
     },
     {
       "path": "tools/horary-dspy/src/teachers.rs",
