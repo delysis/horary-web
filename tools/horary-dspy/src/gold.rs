@@ -1398,7 +1398,6 @@ fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize
                 && closure["fresh_student_physical_calls"] == 13
                 && closure["fresh_teacher_physical_calls"] == 12
                 && closure["new_uncertain_paid_operations"] == 0
-                && closure["old_unknown_teacher_key_preserved_without_replay"] == true
                 && closure["successful_student_responses"] == 11
                 && closure["exact_pids_absent"]
                     .as_array()
@@ -1422,6 +1421,11 @@ fn inherited_consumer_calls(path: Option<&Path>, concise: bool) -> Result<(usize
         );
         let (s, t, mut ancestry) = inherited_consumer_calls(Some(prior), true)?;
         ensure!(s == 3 && t == 3, "Rewrite predecessor deductions differ");
+        ensure!(
+            closure["old_unknown_teacher_key_preserved_without_replay"]
+                == ancestry["unsettled_teacher_key"],
+            "Closed original unknown teacher key differs"
+        );
         let plan: Value = serde_json::from_slice(&fs::read(root.join("run/plan.json"))?)?;
         ensure!(
             plan["author_plan_sha256"] == ancestry["author_plan_sha256"]
@@ -2033,6 +2037,27 @@ pub async fn optimize_families(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "Uses preserved local source-hashed campaign; no network or provider calls"]
+    fn actual_closed_rewrite_ancestry_replays_only_sealed_completed_operations() {
+        let closure = Path::new(
+            "/Users/george/.codex/evidence/horary-working-loop-20261010/hosted-gold-contact-relevant-r2-586161e/closure.json",
+        );
+        let (student, teacher, ancestry) = inherited_consumer_calls(Some(closure), true).unwrap();
+        assert_eq!((student, teacher), (16, 15));
+        assert_eq!(
+            ancestry["completed_teacher_operations"]
+                .as_array()
+                .unwrap()
+                .len(),
+            14
+        );
+        assert_eq!(
+            ancestry["unsettled_teacher_key"],
+            "387101e1e54227fea44b94a5efa0992c53f6f3be358bbd15b656a78e0d803026"
+        );
+        assert_eq!(ancestry["replay_closed_student_and_teacher_only"], true);
+    }
     fn answer() -> WorkedAnswer {
         WorkedAnswer {
             status: "method_limit".into(),
