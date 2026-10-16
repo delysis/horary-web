@@ -248,6 +248,10 @@ fn component_family_role_reference(
                 | "undertaking"
                 | "education"
                 | "dream"
+                | "choice"
+                | "contest"
+                | "politics"
+                | "court_case"
         ),
         "Unsupported role family"
     );
@@ -469,6 +473,133 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if matches!(method, "choice" | "contest" | "politics") {
+        let refs: &[(&str, u8, &str)] = match method {
+            "choice" => &[
+                ("choice.current", 1, "Things as they are"),
+                ("choice.changed", 7, "Things if actual proposed change made"),
+                (
+                    "choice.home",
+                    4,
+                    "Actual home/homeland only where established",
+                ),
+                (
+                    "choice.foreign",
+                    9,
+                    "Actual foreign/college destination if appropriate",
+                ),
+                ("choice.work", 10, "Actual work destination if appropriate"),
+            ],
+            "contest" => &[
+                ("contest.us", 1, "Actually supported side only"),
+                (
+                    "contest.them",
+                    7,
+                    "Opposing or indifferent single named season side",
+                ),
+                ("contest.champion", 10, "Actual title champion only"),
+                ("contest.challenger", 4, "Actual title challenger only"),
+                ("contest.demotion", 12, "Long-season demotion only"),
+                ("contest.eighth", 8, "Long-season harm only"),
+            ],
+            _ => &[
+                (
+                    "politics.supported",
+                    1,
+                    "Actual candidate or supported side",
+                ),
+                ("politics.opponent", 7, "Opposition where no king overrides"),
+                ("politics.incumbent", 10, "Actual domestic incumbent"),
+                (
+                    "politics.challenger",
+                    4,
+                    "Domestic incumbent's opponent for impartial citizen",
+                ),
+                (
+                    "politics.foreign_incumbent",
+                    6,
+                    "Foreign country's incumbent",
+                ),
+                (
+                    "politics.foreign_challenger",
+                    12,
+                    "Foreign incumbent's opponent",
+                ),
+            ],
+        };
+        for (role, house, label) in refs {
+            add(
+                role,
+                None,
+                Some(*house),
+                true,
+                "conditional_source_branch_role_original_question_and_capacity_selects",
+                (*label).into(),
+                vec![
+                    "affiliation".into(),
+                    "competition".into(),
+                    "political_capacity".into(),
+                    "election_state".into(),
+                    "home_meaning".into(),
+                ],
+            );
+        }
+        if method == "politics" {
+            for field in fields
+                .keys()
+                .filter(|f| f.starts_with("people.") && f.ends_with(".relationship"))
+            {
+                let id = &field[7..field.len() - 13];
+                add(
+                    &format!("politics.declared.{id}"),
+                    Some(id),
+                    person_house(id),
+                    true,
+                    "actual_declared_candidate_capacity_if_operative",
+                    label(id),
+                    person_sources(Some(id)),
+                );
+            }
+        }
+    } else if method == "court_case" {
+        let party = value("subject.owner_id");
+        let house = party.and_then(person_house);
+        add(
+            "court.party",
+            party,
+            house,
+            false,
+            "actual_case_party_not_unasserted_lawyer_relay",
+            party
+                .map(label)
+                .unwrap_or_else(|| "Unbound litigant".into()),
+            vec!["subject.owner_id".into(), "principal_mode".into()],
+        );
+        for (role, offset, label) in [
+            ("court.opponent", 7, "Other party"),
+            ("court.process", 10, "Court/legal process"),
+            ("court.verdict", 4, "Verdict/end of case"),
+            (
+                "court.party_money",
+                2,
+                "Party's money/lawyer/witness if applicable",
+            ),
+            (
+                "court.opponent_money",
+                8,
+                "Other party's money/lawyer/witness if applicable",
+            ),
+        ] {
+            add(
+                role,
+                None,
+                house.map(|h| crate::native_evidence::turn(h, offset)),
+                offset == 2 || offset == 8,
+                "source_case_frame_reference_actual_role_required",
+                label.into(),
+                vec!["subject.owner_id".into()],
+            );
+        }
     } else if matches!(method, "knowledge" | "exam" | "undertaking" | "education") {
         let owner = value("subject.owner_id");
         let house = owner.and_then(person_house);
@@ -1422,6 +1553,11 @@ fn component_family_role_reference(
     if method == "movable_deal" && facet.is_none() {
         unknowns.push("No facet is declared: object and sale-profit rows are conditional references, not selected roles or additional required inputs.".into());
     }
+    if matches!(method, "contest" | "politics") {
+        rows.push(json!({"role_id":if method=="politics" {"politics.electorate"} else {"contest.flow"},"actor_id":null,"label":"Conditional natural Moon role, subject to actual main-house claims; never ordinary principal Moon",
+            "significator_house":null,"ruler_planet":"Moon","optional":true,"authority":"source_method_natural_role_not_assigned_candidate",
+            "selected_id":null,"cusp_fact_id":null,"position_fact_ids":native.iter().filter(|f|f.kind=="position" && f.planets.iter().any(|p|p=="Moon")).map(|f|f.id.clone()).collect::<Vec<_>>(),"source_fields":[]}));
+    }
     if matches!(method, "lost_object" | "lost_animal") {
         rows.push(json!({"role_id":"lost.natural_moon","actor_id":null,"label":"Secondary recovery reference, not a second competing location",
             "significator_house":null,"ruler_planet":"Moon","optional":true,"authority":"stage_scoped_natural_lost_object_reference",
@@ -1476,7 +1612,8 @@ fn component_family_role_reference(
         .filter(|r| r["planet"] == "Moon" && r["optional"] == true)
         .map(|r| r["role_id"].clone())
         .collect();
-    let moon_available = principal.is_some()
+    let moon_available = !matches!(method, "contest" | "politics")
+        && principal.is_some()
         && moon_claims.is_empty()
         && rows
             .iter()
@@ -1757,6 +1894,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "undertaking" => Ok(CONCISE_UNDERTAKING_PROCEDURE),
         "education" => Ok(CONCISE_EDUCATION_PROCEDURE),
         "dream" => Ok(CONCISE_DREAM_PROCEDURE),
+        "choice" => Ok(CONCISE_CHOICE_PROCEDURE),
+        "contest" => Ok(CONCISE_CONTEST_PROCEDURE),
+        "politics" => Ok(CONCISE_POLITICS_PROCEDURE),
+        "court_case" => Ok(CONCISE_COURT_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -2173,6 +2314,62 @@ Reception A→B is A's regard for B and retains all positive AND negative qualit
 Return only status, answer, analysis, evidence, unresolved: a useful proportionate interpretation or qualified truth judgment with material eIDs/pages, the actual account's relevant details, contrary testimony and unresolved alternatives. Never present dream interpretation as certain factual disclosure or a guaranteed civil-time prediction.
 ";
 
+const CONCISE_CHOICE_PROCEDURE: &str = "CHOICE AND CHANGE PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 142, 201–203, 227–230.
+Preserve actual current state, proposed change/options, priorities and what 'home' means. Genuine relay principal takes first; do not invent an alternative or replace an actual shortlist with coaching. General stay/change uses first/current and seventh/changed circumstances, not necessarily two people. Compare houses and rulers: better seventh favours change; otherwise stay, allowing genuinely equal or mixed prospects rather than forcing a winner.
+
+Moon/principal moving from a dignified helpful planet to a debilitated harmful one discourages change; the reverse encourages it. Any planet can help/harm according to actual dignity and context. Imminent sign change may show the proposed change; compare supplied new condition, not invented future dignity, combustion or station. An easy aspect alone does not make a choice good. Preserve every positive AND negative directed reception, A's regard for B rather than reciprocity.
+
+For genuinely specific destinations such as work/tenth and university/ninth, the source allows hypothetically placing principal ruler or emotional Moon just inside each relevant cusp to compare actual dignity/affliction. This is not the planet's real position or an automatic angularity bonus. NEVER use this trick for general first-versus-seventh stay/change: it mechanically puts principal in detriment. If hypothetical calculations are absent, state that limit rather than invent them.
+
+For relocation, first is present situation, fourth actual homeland/home and ninth foreign country as the question establishes. Current dwelling and ancestral homeland differ. Fourth can be present or proposed property; leave it unselected if actual context does not settle which. Don't infer a journey date from merely wanting to move or require geographic detail irrelevant to the asked comparison.
+
+Name reversion is first-house name, with appropriate retrograde/re-entry context; returning to own dignity or moving away from a real affliction can help, but retrograde alone is not a universal recommendation. A current-job versus next-offer comparison uses actual job-sign context; long tenure can alter which cusp sign represents which job. Vocation alternatives need brief actual options and justified house/natural roles, not tenth for everything; compare aptitude, fit and correctly derived pay without inventing a profession.
+
+A present comparison needs no future acquisition aspect merely to assess suitability. Use actual native motion and event order for material changes; do not chase a favourable chain or create intermediaries. Astronomical hours are not civil timing. Missing hypothetical conditions, Parts or precise order remain unknown. Return status, answer, analysis, evidence, unresolved: practical comparison with eIDs/pages, contrary evidence, genuine tie where appropriate and honest limits.
+";
+
+const CONCISE_CONTEST_PROCEDURE: &str = "SPORTS CONTEST PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 203–208.
+Preserve match versus title defence versus season/whole field, actual preference and whether a draw is possible. Betting profit is a money question. Ordinary single match is supported side first versus opponent seventh; actual dislike can identify enemy seventh and enemy's opponent first. Never use home team or first-mentioned name by default. Indifference to two teams leaves the single-match assignment unresolved. Moon is not the usual principal cosignificator; at most minor flow testimony.
+
+Judge first/seventh houses and rulers, especially actual occupied-house strength, cusp proximity/same sign and combustion. Planets on a cusp can control; inside the opponent's house can mean controlled. Major accidental ability outweighs essential merit, except exaltation can give powerful confidence. Reception shows power/being overawed, not personal affection; retain all qualities/directions. Outside mutual reception is not friends scoring goals. One paired node effect is one testimony, not double-counted. Symmetrical aspects to opposed cusps do not favour one side.
+
+Close helpful/harmful contacts can qualify strength; dignity decides benefic/malefic, not name alone. Source maximum is about five degrees, closer stronger. IGNORE sign changes for a single match; they matter for long-term form. Minor Moon application can break an even balance but not outweigh strong evidence. Equal prospects can mean draw where allowed; otherwise acknowledge an unresolved result after actual available checks, not an invented tiebreaker.
+
+Actual kingship/title defence is different: champion tenth, challenger fourth; Sun/king and Moon/people only if actual main houses do not claim them. Changes of dignity can decide; void Moon supports retaining the crown. Supplied Resignation/Dismissal Part can contribute, never invented. Last season's winner is not automatically today's king in an ordinary match.
+
+For one named team's season, supported side first; indifferent single named team seventh. Do not transfer the principal's Moon. Meaningful condition changes, combustion/cazimi, tenth success and eighth/twelfth demotion can matter. Do not inflate an ordinary defeat into club extinction without serious actual financial/survival context. A contact with an unrelated benefic decorates but does not itself award championship. A whole-field winner has no reliable general planet mapping; only the source's specific void/status-quo testimony can preserve the previous winner, not fabricated league assignments.
+
+Astronomical hours are not civil deadlines; missing nodes, antiscia, Parts or precise order remain unknown. Return status, answer, analysis, evidence, unresolved: useful branch-specific judgment with eIDs/pages, contrary testimony and no invented score or winner.
+";
+
+const CONCISE_POLITICS_PROCEDURE: &str = "POLITICAL ELECTION PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 212–215.
+Preserve office/constitution, incumbent versus vacant office, named contenders and questioner's actual capacity. Political election outcome differs from selecting an auspicious time. Assignment depends on who asks: candidate/supporter can be first; ordinary opponent seventh. A challenger/supporter asking whether they can beat an incumbent can be first versus incumbent tenth. An impartial domestic citizen uses incumbent tenth/opponent fourth; foreign observer uses foreign king tenth-from-ninth, sixth, and that opponent twelfth. Open office has no automatic king: preference or actual relationship identifies the named person. Do not impose a single first/seventh or tenth/fourth pair on every inquiry.
+
+Conditional role references are permitted alternatives, not all assigned candidates. Actual original question/capacity selects operative houses; never list order, a private expected answer or an invented allegiance. Retain shared rulers and natural-role house priority. A relative candidate's actual role can matter; do not assert relay merely because asking about someone else.
+
+Moon naturally shows electorate, not principal's ordinary cosignificator. If it applies to an operative candidate, this is strong winning testimony DESPITE negative reception. If no such aspect, electorate's directed receptions can show preference, not necessarily decide. Void Moon supports the actual status quo; open elections without an incumbent need their actual default. If Moon has an operative main-house claim, resolve that collision before assigning natural electorate testimony.
+
+If electorate testimony is unclear, assess main candidates' major accidental qualities, placement and meaningful impending changes. Essential virtue does not automatically win votes. Incumbent in mid fixed sign can be secure; leaving it may end tenure. Opponent's house can weaken a candidate. Entering own house/sign can literally mean going home rather than victory. Cazimi needs extra caution: being close to the king is not automatically becoming king, though it can prevail with little other evidence.
+
+If tenth is vacant as a candidate role, an operative contender joining its ruler supports obtaining office. A supplied Resignation/Dismissal Part or dispositor may help assess an incumbent's fall; do not fabricate it. Timing a supported fall uses actual travel and plausible context, with source qualifications; astronomical search hours are not civil dates or vote totals.
+
+Reception A→B is A's regard for B and preserves all positive AND negative qualities; don't infer reciprocity or independently known campaign facts. Actual source-bounded order matters; no arbitrary long chain to engineer a winner. Missing candidates, future conditions, stations and precision remain unknown. Return status, answer, analysis, evidence, unresolved: direct qualified judgment with eIDs/pages, contrary evidence, assignment limits and no invented result margins.
+";
+
+const CONCISE_COURT_PROCEDURE: &str = "CIVIL COURT PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 208–212.
+Preserve actual litigant, opponent, claim, stage of hearing, settlement offer and financial concern. Ordinary parties are first/seventh, legal process tenth, verdict fourth. Turn another person's actual case frame explicitly where appropriate; do not replace them with the speaker. An actual lawyer-mouthpiece can share client's first against their opponent, but no relay is inferred merely from asking about someone else. Moon cosignifies principal only when main house roles leave it available. Party/opponent seconds can show money, lawyers or witnesses only with context, not invented extra actors.
+
+Essential dignity tends to show merit/justice, not who wins. Comparative accidental strength matters unless connection to process/verdict overrides it, as it often does. Judge's dignity describes quality of process; accidental power is not a clever separate testimony because courts already control proceedings. Judge reception toward a party plus effective contact can outweigh that party's weakness. A→B means A regards B; preserve all positive AND negative qualities without assuming reciprocity.
+
+Verdict is more decisive than general strength: treat it as a prize, first effective party-to-verdict connection wins. Include actual supported translation/collection, not just a direct aspect. A judge separating from a party and applying to verdict can carry that party's light. Consider true chronology and relevant impediments rather than every incidental contact as prohibition. If necessary motion/separating order is not calculated, don't invent an effective connection or certify a tie-break.
+
+Parties joining each other can mean settlement: conjunction before court opens; another aspect agreement after opening but before verdict, interpreted against actual reported stage. Distinguish whether settlement or proceeding is favourable, without inventing legal advice about unstated procedure. Fixed opponent may resist, cardinal yield, mutable adapt, qualified by actual testimony.
+
+Winning and financial benefit are different. Verdict can favour a party yet harm their pocket; judge can prefer one morally but rule for the other's legal point. Consider actual money/financial reception separately. Do not turn merit into guaranteed victory or a weak judge into verified corruption. Do not introduce bribery unless raised; even then keep allegation and chart inference distinct. Abstract ninth-house law is not the active court process.
+
+Timing follows supported event with actual travel and justified units; astronomical hours are not hearing/verdict dates. No invented damages, criminal guilt or private judicial motive. Missing antiscia, separating contacts and fine precision remain unknown. Return status, answer, analysis, evidence, unresolved: useful proportionate case/settlement judgment with native eIDs/pages, contrary testimony and limits.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -2237,16 +2434,10 @@ fn verified_concise_chart(
             && original["search_limitations"] == raw["calculationNote"],
         "Declared native boundaries differ"
     );
-    let reference = match method {
-        "contact" => component_contact_role_reference(consultation, &native)?,
-        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
-        | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
-        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
-        | "existing_job" | "work_person" | "hiring" | "lost_object" | "lost_animal"
-        | "missing_person" | "knowledge" | "exam" | "undertaking" | "education" | "dream" => {
-            component_family_role_reference(consultation, &native, method)?
-        }
-        _ => unreachable!("The concise procedure admits only implemented families"),
+    let reference = if method == "contact" {
+        component_contact_role_reference(consultation, &native)?
+    } else {
+        component_family_role_reference(consultation, &native, method)?
     };
     let supplied = original.get("role_reference");
     let mut motion = BTreeMap::new();
@@ -2401,16 +2592,10 @@ pub fn relevant_reader_chart(
 ) -> Result<String> {
     concise_reader_source(method)?;
     let (table, native) = verified_concise_chart(original, consultation, method)?;
-    let selected = match method {
-        "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
-        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
-        | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
-        | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
-        | "existing_job" | "work_person" | "hiring" | "lost_object" | "lost_animal"
-        | "missing_person" | "knowledge" | "exam" | "undertaking" | "education" | "dream" => {
-            relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
-        }
-        _ => unreachable!("The source procedure admits only implemented families"),
+    let selected = if method == "contact" {
+        relevant_contact_ids(&table, &native, extra_demo_ids)?
+    } else {
+        relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
     };
     let mut text = format!(
         "Chart UTC {}\n",
@@ -2749,6 +2934,25 @@ fn relevant_family_ids(
                 }
             }
         },
+        "choice" | "contest" | "politics" => {
+            for row in roles.iter().filter(|r| r[0] != "principal.person") {
+                if let Some(p) = row[4].as_str() {
+                    recipients.insert(p.into());
+                    targets.insert(p.into());
+                }
+            }
+        }
+        "court_case" => {
+            recipient("court.party");
+            recipient("court.opponent");
+            if is_principal("court.party") {
+                recipient("principal.moon");
+            }
+            target("court.process");
+            target("court.verdict");
+            target("court.party");
+            target("court.opponent");
+        }
         "knowledge" | "exam" | "undertaking" | "education" => {
             recipient("learning.person");
             if is_principal("learning.person") {
@@ -2929,7 +3133,10 @@ fn relevant_family_ids(
     }
     // These bodies have explicit family-specific ancillary relevance even
     // without an assigned person alias. This does not assign natural roles.
-    if matches!(method, "education" | "dream") {
+    if matches!(
+        method,
+        "education" | "dream" | "choice" | "contest" | "politics" | "court_case"
+    ) {
         // Alternative schools use actually supplied natural descriptions;
         // dream meaning uses ordinary roles across the whole chart. Keep
         // source-relevant alternatives, never map them from expected answers.
@@ -3050,6 +3257,14 @@ fn relevant_family_ids(
         }
     }
     let mut extra = extra_demo_ids.cloned().unwrap_or_default();
+    if matches!(method, "politics" | "court_case") {
+        extra.extend(
+            native
+                .iter()
+                .filter(|f| f.kind == "event" && f.planets.iter().any(|p| p == "Moon"))
+                .map(|f| f.id.clone()),
+        );
+    }
     if matches!(method, "vehicle" | "tax") {
         let subject = if method == "vehicle" {
             "vehicle.undertaking"
@@ -4043,6 +4258,61 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_contest_political_and_court_roles_do_not_share_moon_by_default() {
+        for method in ["contest", "politics"] {
+            let (input, native) = relevant_family_input(method, json!({"facts":[],"unknown":[]}));
+            let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(!chart.contains("principal.moon("));
+            assert!(chart.contains("Moon contextual=no"));
+            if method == "politics" {
+                assert!(
+                    chart.contains("politics.foreign_incumbent(?) = H6/")
+                        && chart.contains("politics.foreign_challenger(?) = H12/")
+                );
+                let ids = relevant_chart_ids(chart).unwrap();
+                assert!(
+                    native
+                        .iter()
+                        .filter(|f| f.kind == "event" && f.planets.iter().any(|p| p == "Moon"))
+                        .all(|f| ids.contains(&f.id))
+                );
+            } else {
+                assert!(
+                    chart.contains("contest.us(?) = H1/")
+                        && chart.contains("contest.them(?) = H7/")
+                );
+                assert!(
+                    chart.contains("contest.champion(?) = H10/")
+                        && chart.contains("contest.challenger(?) = H4/")
+                );
+            }
+        }
+        let (input, _) = relevant_family_input(
+            "choice",
+            json!({"facts":[fact("home_meaning","homeland")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("choice.current(?) = H1/") && chart.contains("choice.changed(?) = H7/")
+        );
+        assert!(
+            chart.contains("choice.home(?) = H4/") && chart.contains("choice.foreign(?) = H9/")
+        );
+        let (input, _) = relevant_family_input(
+            "court_case",
+            json!({"facts":[fact("subject.owner_id","querent")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("court.party(querent) = H1/")
+                && chart.contains("court.opponent(?) = H7/")
+        );
+        assert!(
+            chart.contains("court.process(?) = H10/") && chart.contains("court.verdict(?) = H4/")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -4069,6 +4339,10 @@ mod concise_projection_tests {
             "undertaking",
             "education",
             "dream",
+            "choice",
+            "contest",
+            "politics",
+            "court_case",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
