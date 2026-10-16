@@ -229,6 +229,10 @@ fn component_family_role_reference(
                 | "job_offer"
                 | "investment"
                 | "business_property"
+                | "parcel"
+                | "visit"
+                | "trust"
+                | "information"
         ),
         "Unsupported role family"
     );
@@ -447,6 +451,145 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if method == "parcel" {
+        let sender = value("sender");
+        let sender_house = sender.and_then(person_house);
+        let outgoing = sender.is_some() && sender == principal;
+        let recipient = value("recipient").or_else(|| (!outgoing).then_some(principal).flatten());
+        let recipient_house = recipient.and_then(person_house);
+        add(
+            "parcel.sender",
+            sender,
+            sender_house,
+            false,
+            "calculated_reference",
+            sender
+                .map(label)
+                .unwrap_or_else(|| "Unresolved sender".into()),
+            vec!["sender".into()],
+        );
+        add(
+            "parcel.message",
+            sender,
+            sender_house.map(|h| crate::native_evidence::turn(h, 3)),
+            false,
+            "calculated_sender_third_not_person_contact",
+            value("subject.name").unwrap_or("Parcel or letter").into(),
+            vec!["sender".into(), "subject.name".into()],
+        );
+        add(
+            "parcel.recipient",
+            recipient,
+            recipient_house,
+            false,
+            "calculated_reference",
+            recipient
+                .map(label)
+                .unwrap_or_else(|| "Unbound outgoing recipient".into()),
+            vec!["recipient".into()],
+        );
+        add(
+            "parcel.pocket",
+            recipient,
+            recipient_house.map(|h| crate::native_evidence::turn(h, 2)),
+            false,
+            "calculated_reference",
+            "Recipient's possession".into(),
+            vec!["recipient".into()],
+        );
+        if outgoing && recipient.is_none() {
+            for field in fields
+                .keys()
+                .filter(|f| f.starts_with("people.") && f.ends_with(".relationship"))
+            {
+                let id = &field[7..field.len() - 13];
+                add(
+                    &format!("declared.{id}"),
+                    Some(id),
+                    person_house(id),
+                    true,
+                    "conditional_declared_person_not_selected_recipient",
+                    label(id),
+                    person_sources(Some(id)),
+                );
+                add(
+                    &format!("declared.{id}.pocket"),
+                    Some(id),
+                    person_house(id).map(|h| crate::native_evidence::turn(h, 2)),
+                    true,
+                    "conditional_possession_of_declared_person",
+                    format!("{id}'s pocket"),
+                    person_sources(Some(id)),
+                );
+            }
+        }
+    } else if matches!(method, "visit" | "trust") {
+        let person = if method == "visit" {
+            value("visitor")
+        } else {
+            value("subject.owner_id")
+        };
+        let field = if method == "visit" {
+            "visitor"
+        } else {
+            "subject.owner_id"
+        };
+        add(
+            "target.person",
+            person,
+            person.and_then(person_house),
+            false,
+            "calculated_declared_person_reference",
+            person.map(label).unwrap_or_else(|| "Unbound person".into()),
+            vec![field.into()],
+        );
+        if method == "visit" {
+            add(
+                "arrival.ascendant",
+                principal,
+                principal.map(|_| 1),
+                true,
+                "arrival_reference_only_if_expected_or_independently_established",
+                "Principal's Ascendant".into(),
+                vec!["expected".into()],
+            );
+            add(
+                "arrival.home",
+                principal,
+                principal.map(|_| 4),
+                true,
+                "conditional_home_cusp_not_arbitrary_destination",
+                "Principal's home".into(),
+                vec!["expected".into()],
+            );
+        }
+    } else if method == "information" {
+        for (id, house, label) in [
+            (
+                "claim.information",
+                3,
+                "Report or rumour, if actual information question",
+            ),
+            (
+                "claim.prediction",
+                9,
+                "Prediction, if actual prediction question",
+            ),
+            ("angle.first", 1, "First angle"),
+            ("angle.fourth", 4, "Fourth angle"),
+            ("angle.seventh", 7, "Seventh angle"),
+            ("angle.tenth", 10, "Tenth angle"),
+        ] {
+            add(
+                id,
+                None,
+                principal.map(|_| house),
+                true,
+                "conditional_veracity_reference_not_branch_selection",
+                label.into(),
+                vec!["claim".into()],
+            );
+        }
     } else if method == "relationship" {
         // No neural branch or name-to-ID guess. A desired partner is seventh;
         // other declared persons remain conditional references for questions
@@ -1118,6 +1261,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "job_offer" => Ok(CONCISE_JOB_OFFER_PROCEDURE),
         "investment" => Ok(CONCISE_INVESTMENT_PROCEDURE),
         "business_property" => Ok(CONCISE_BUSINESS_PROPERTY_PROCEDURE),
+        "parcel" => Ok(CONCISE_PARCEL_PROCEDURE),
+        "visit" => Ok(CONCISE_VISIT_PROCEDURE),
+        "trust" => Ok(CONCISE_TRUST_PROCEDURE),
+        "information" => Ok(CONCISE_INFORMATION_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -1276,6 +1423,60 @@ Reception A→B means A regards B; retain every positive AND negative quality. S
 Use actual motion/event order for material changes and impediments; no automatic applier/caller direction, no incidental-contact prohibition. Astronomical hours are not civil timing. Missing calculations, future dignity, Parts or precise order remain unknown. Return status, answer, analysis, evidence, unresolved: practical judgment first with material eIDs/pages, contrary evidence and explicit limits.
 ";
 
+const CONCISE_PARCEL_PROCEDURE: &str = "PARCEL AND LETTER PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 165–166.
+Preserve the actual object, sender, intended recipient, incoming/outgoing direction and past-receipt versus future-arrival question. A posted object is not merely contact with its seller; a sender-person aspect does not by itself deliver a parcel. Genuine relay principal takes first; concerning someone else does not. The sender's actual relationship determines their house. A sender's letter/parcel is their turned third, ordinarily ninth for a seventh-house seller. The recipient's second is their possession after receipt, not an assertion that they already own or hold it.
+
+For incoming arrival, look for the actual parcel ruler joining the recipient, available contextual Moon or recipient pocket. Inspect actual application, supported translation/collection and material prevention. Do not infer who travels from endpoint order. Timing follows supported arrival using actual applying travel and contextual units; astronomical search hours are not civil dates. An explicit bound can use relevant present-sign-end testimony; after-ingress circumstances and reception may change, with the usual roughly three-to-four-degree allowance rather than a long success chain.
+
+'Has she received my letter?' is past, not an unmade delivery. The principal's letter can be third; separating contact with recipient, or letter already in recipient's own house or second, can indicate receipt. Outgoing recipient must be identified from actual inquiry; declared persons/pockets are conditional references when the canonical recipient ID is absent, not a licence to mint a recipient. No future aspect requirement overrides actual past-placement testimony. If separating contacts are not calculated, disclose that limit.
+
+Use actual role assignments rather than bodies' occupied houses; retain shared rulers and house priority over Moon. Reception A→B is A's regard for B, preserving all positive AND negative qualities. Condition/capacity can affect delivery but does not independently establish damage, a lost parcel, postal blame or secret motive. Optional person-contact routes cannot replace the physical object in this family.
+
+No universal title-owner, address, destination name or sender biography is needed beyond the actual recipe. Reuse the understanding chart, not the proposed delivery day. Missing candidates, fine event order, antiscia and unavailable techniques remain unknown, not proof of no possible receipt. Return status, answer, analysis, evidence, unresolved: answer the actual past/future question directly with material native eIDs/pages, contrary evidence and limits.
+";
+
+const CONCISE_VISIT_PROCEDURE: &str = "VISITOR PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 166, 190.
+Preserve the actual visitor, relationship/capacity, expected arrangement, place and timeframe. A friend uses eleventh, an employee/plumber sixth, parent or sibling their actual house; coworker and social friend differ in operative capacity. Genuine relay principal takes first; merely concerning someone else does not. Unknown relationship remains unknown. Assigned houses differ from occupied houses; retain shared rulers and house priority over contextual Moon.
+
+For a visitor whose physical arrival is assumed or otherwise established, the source prefers contact to Ascendant, then principal ruler, available Moon, then fourth cusp as principal home. These are alternative arrivals, not a compulsory extra destination questionnaire. An office visit is not automatically arrival at the home cusp. A mere visit hope or 'will I ever see my long-lost friend?' does not establish arrival: application to Ascendant can show the person weighing on the principal's mind rather than knocking at the door.
+
+Do not fabricate a cusp crossing from a planetary aspect table. If cusp-event timing or separating testimony is not computed, report that boundary; native cusp/position data remains evidence for contextual assessment, not certified exact perfection. For a legitimately expected short-timescale arrival, small arc may mean immediately, and the source's minutes-of-arc/minutes-of-time calibration can be appropriate. This is contextual calibration, not converting astronomical search hours into civil minutes or applying that rule to an uncertain reunion.
+
+Inspect actual candidate order, supported translation/collection and material prevention. Which body applies does not mean the principal must go collect the visitor; who goes to whom comes from the question. A prior incidental contact is not automatically prohibition or a new intermediary. A void Moon supports the actual default, not one universal answer for arranged and unarranged visits.
+
+Reception A→B is A's regard for B. Preserve every positive AND negative quality and weigh inclination separately from ability and occasion. Attribute essential condition, house capacity, solar state and motion to the actual body; retrograde can fit coming back without proving arrival. After ingress needs changed context/reception and source-bounded travel, not an endless aspect chain.
+
+Keep understanding time and supplied reader place; do not recast for an appointment day. Missing candidates or techniques remain unknown rather than evidence of absence. Return status, answer, analysis, evidence, unresolved: useful arrival judgment first, material eIDs/pages, contrary testimony and honest timing limits.
+";
+
+const CONCISE_TRUST_PROCEDURE: &str = "TRUST PROCEDURE — Frawley printed pp. 19–32, 44–77, 165, 172, 189–190.
+Preserve the actual person and capacity in which their honesty/reliability is asked about. Trustworthiness is not automatically rumour veracity, affection, future contact, an acquisition contest or an allegation of a specific completed act. Genuine relay principal takes first; concerning another person preserves that person's relationship. Use the person's applicable house: other contracting party/partner seventh, sibling third, boss tenth, equal coworker seventh, subordinate sixth, friend eleventh in that social context. Do not infer an actor from a name or substitute a title-owner for an operative agent. Unknown capacity remains unknown.
+
+Judge that person's actual significator's essential condition. More dignity supports honourable conduct; debility is contrary. Fixity is not inherently good: a debilitated fixed significator can persist in dishonesty. Keep descriptive fitness distinct from moral debility where context warrants it, and do not translate every weak planet into an independently verified crime.
+
+The source cautions that Mercury can be amoral even when dignified: honesty may last only as long as it suits the person. Gemini can indicate playful disregard, Virgo technical small-print justification. A person whose strength comes from Mercury's sign can inherit that caution. These are qualified chart judgments in the actual concern, not facts establishing a particular deception or a universal claim about every Mercurial person.
+
+Reception A→B means A regards B, never reciprocal interest. Preserve all positive AND negative supplied qualities and weigh the person's motives toward the relevant principal separately from honesty and ability. Liking the principal does not alone establish trustworthiness, and absence of reception does not prove fraud. Occupied-house capacity and solar/motion afflictions can qualify ability to act but are not substitutes for the source's honesty test.
+
+A situation/quality inquiry requires no new event aspect. If the actual question asks whether the person will perform a specified undertaking, separately inspect supported occasion and capacity; do not call willingness completed action. Known contract terms or observed conduct remain observations, not overwritten by the chart. Do not invent concealed clauses, theft, sexuality, other partners or private motive.
+
+Return only status, answer, analysis, evidence, unresolved. Give a proportionate answer to the stated trust concern with material eIDs/pages, substantial contrary testimony and unknown calculations; no unqualified factual allegation or invented timing.
+";
+
+const CONCISE_INFORMATION_PROCEDURE: &str = "INFORMATION VERACITY PROCEDURE — Frawley printed pp. 19–32, 44–77, 164–165.
+Preserve the exact claim and distinguish ordinary information/rumour from prediction or prophetic dream. Use the shortest actual topic route: 'is my boyfriend cheating?' is principally relationship, not automatically third-house truth; 'will I get the job?' is not converted to rumour because someone predicted it. This family is the residual genuine veracity inquiry, not a universal answer to every fact question.
+
+For a report or rumour, assess fixed signs on the angles; Lord 1, Lord 3, Moon and Moon's dispositor in fixed signs and angular houses, or at least fixed signs and succedent houses. Angularity and fixity give solidity; the source asks for a majority, not unanimity or a fabricated numeric threshold. With few positive truth testimonies the source default is false, but express uncertainty proportionately to actual supplied contrary evidence and missing calculations.
+
+For a prediction or prophetic dream, use ninth and Lord 9 instead of third and Lord 3 with the same source tests. Conditional third/ninth rows do not select the branch; original question and declared context determine which is relevant. Do not infer a hidden source type from the desired answer. The Moon's dispositor is its actual domicile ruler, not the ruler of whichever sign it will enter next. Assigned angle/house roles differ from bodies' occupied houses.
+
+Third-house affliction may indicate false information, but can also show that truthful information harms the principal; context decides which is more plausible. Do not turn debilitated Saturn into automatic falsehood when the report itself concerns harmful news. A void Moon indicates nothing will come of the matter whether the report is true or false; it does not by itself adjudicate its factual truth.
+
+Use actual supplied signs, house positions, essential condition and afflictions; do not invent absent angle fixity, exact cusp conjunctions, future events or an independent fact-check. Reception direction A→B is A's regard for B and retains all positive AND negative qualities, but personal liking is not the general truth test. A future aspect or delivery date is not universally required to judge information already received.
+
+Genuine relay principal takes first; concerning another person does not. Preserve the understood chart moment and supplied reader place. Missing techniques remain unknown. Return only status, answer, analysis, evidence, unresolved: a direct qualified veracity judgment, material eIDs/pages and both positive/negative testimonies, with no invented real-world confirmation or civil-time prediction.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -1343,7 +1544,8 @@ fn verified_concise_chart(
     let reference = match method {
         "contact" => component_contact_role_reference(consultation, &native)?,
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
-        | "return_to_job" | "job_offer" | "investment" | "business_property" => {
+        | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
+        | "visit" | "trust" | "information" => {
             component_family_role_reference(consultation, &native, method)?
         }
         _ => unreachable!("The concise procedure admits only implemented families"),
@@ -1504,7 +1706,8 @@ pub fn relevant_reader_chart(
     let selected = match method {
         "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
-        | "return_to_job" | "job_offer" | "investment" | "business_property" => {
+        | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
+        | "visit" | "trust" | "information" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -1841,6 +2044,37 @@ fn relevant_family_ids(
                 }
             }
         },
+        "parcel" => {
+            recipient("parcel.recipient");
+            recipient("parcel.pocket");
+            if is_principal("parcel.recipient") {
+                recipient("principal.moon");
+            }
+            target("parcel.message");
+            for row in roles.iter().filter(|row| {
+                row[0]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("declared."))
+            }) {
+                if let Some(p) = row[4].as_str() {
+                    recipients.insert(p.into());
+                }
+            }
+        }
+        "visit" => {
+            recipient("principal.person");
+            recipient("principal.moon");
+            target("target.person");
+        }
+        "trust" => {
+            recipient("target.person");
+        }
+        "information" => {
+            recipient("principal.person");
+            recipient("principal.moon");
+            target("claim.information");
+            target("claim.prediction");
+        }
         "relationship" => {
             recipient("principal.person");
             recipient("principal.moon");
@@ -1887,6 +2121,19 @@ fn relevant_family_ids(
     }
     // These bodies have explicit family-specific ancillary relevance even
     // without an assigned person alias. This does not assign natural roles.
+    if method == "information" {
+        for fact in native {
+            if let Some(edge) = fact.reception.as_ref().filter(|e| {
+                e.guest_planet == "Moon"
+                    && e.qualities.iter().any(|q| {
+                        q.dignity.native_name() == "domicile"
+                            && q.polarity == crate::native_evidence::ReceptionPolarity::Positive
+                    })
+            }) {
+                planets.insert(edge.host_planet.clone());
+            }
+        }
+    }
     if method == "relationship" {
         planets.extend(["Sun", "Venus", "Saturn"].map(str::to_owned));
     }
@@ -2600,6 +2847,56 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_mail_visitor_and_information_roles_follow_actual_declared_fields() {
+        let (input, _) = relevant_family_input(
+            "parcel",
+            json!({"facts":[fact("sender","mother"),fact("people.mother.relationship","mother")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("parcel.sender(mother) = H10/"));
+        assert!(chart.contains("parcel.message(mother) = H12/"));
+        assert!(chart.contains("parcel.recipient(querent) = H1/"));
+        assert!(chart.contains("parcel.pocket(querent) = H2/"));
+        let (input, _) = relevant_family_input(
+            "parcel",
+            json!({"facts":[fact("sender","querent"),fact("people.iris.relationship","mother")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("parcel.message(querent) = H3/"));
+        assert!(chart.contains("parcel.recipient(?) = —/?"));
+        assert!(chart.contains("declared.iris(iris) = H10/"));
+        assert!(chart.contains("declared.iris.pocket(iris) = H11/"));
+        let (input, _) = relevant_family_input(
+            "visit",
+            json!({"facts":[fact("visitor","worker"),fact("people.worker.relationship","employee"),fact("expected","no")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("target.person(worker) = H6/"));
+        assert!(
+            chart.contains("arrival.ascendant(querent) = H1/")
+                && chart.contains("arrival.home(querent) = H4/")
+        );
+        let consultation = input.get("consultation").unwrap().as_str().unwrap();
+        assert!(consultation.contains("expected=no"));
+        let (input, native) = relevant_family_input(
+            "information",
+            json!({"facts":[fact("claim","A reported public event")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        for house in [1, 3, 4, 7, 9, 10] {
+            let fact = native
+                .iter()
+                .find(|f| f.kind == "house" && f.label == format!("House {house}"))
+                .unwrap();
+            assert!(relevant_chart_ids(chart).unwrap().contains(&fact.id));
+        }
+        assert!(
+            chart.contains("claim.information(?) = H3/")
+                && chart.contains("claim.prediction(?) = H9/")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -2607,6 +2904,10 @@ mod concise_projection_tests {
             "job_offer",
             "investment",
             "business_property",
+            "parcel",
+            "visit",
+            "trust",
+            "information",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
