@@ -240,6 +240,9 @@ fn component_family_role_reference(
                 | "existing_job"
                 | "work_person"
                 | "hiring"
+                | "lost_object"
+                | "lost_animal"
+                | "missing_person"
         ),
         "Unsupported role family"
     );
@@ -460,6 +463,95 @@ fn component_family_role_reference(
             "conditional_wages_reference_not_acquisition",
             "The job's wages".into(),
             sources,
+        );
+    } else if method == "lost_object" {
+        let owner = value("subject.owner_id");
+        let house = owner.and_then(person_house);
+        let own = owner.is_some() && (owner == principal || owner == Some("querent"));
+        add(
+            "lost.owner",
+            owner,
+            house,
+            false,
+            "actual_possession_owner_not_speaker",
+            owner.map(label).unwrap_or_else(|| "Unbound owner".into()),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "lost.object_second",
+            owner,
+            house.map(|h| crate::native_evidence::turn(h, 2)),
+            own,
+            "owner_second_choose_against_fourth_only_for_principal_own_object",
+            value("subject.name").unwrap_or("Lost object").into(),
+            vec!["subject.owner_id".into(), "description".into()],
+        );
+        if own {
+            add(
+                "lost.object_fourth",
+                owner,
+                Some(4),
+                true,
+                "conditional_own_object_description_choice_not_second_location",
+                value("subject.name").unwrap_or("Lost object").into(),
+                vec!["description".into()],
+            );
+        }
+        add(
+            "lost.owner_pocket",
+            owner,
+            house.map(|h| crate::native_evidence::turn(h, 2)),
+            true,
+            "recovery_possession_reference_not_automatic_object_choice",
+            "Owner's possession".into(),
+            vec!["subject.owner_id".into()],
+        );
+    } else if method == "lost_animal" {
+        let house = match value("animal_kind") {
+            Some("small_kind") => Some(6),
+            Some("large_kind") => Some(12),
+            _ => None,
+        };
+        add(
+            "lost.animal",
+            None,
+            house,
+            false,
+            "animal_kind_not_measurement_or_owner_turned_second",
+            value("subject.name").unwrap_or("Lost animal").into(),
+            vec!["animal_kind".into()],
+        );
+    } else if method == "missing_person" {
+        let person = value("subject.owner_id");
+        let house = person.and_then(person_house);
+        add(
+            "missing.person",
+            person,
+            house,
+            false,
+            "actual_person_relationship_not_generic_fugitive",
+            person
+                .map(label)
+                .unwrap_or_else(|| "Unbound missing person".into()),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "missing.turned_eighth",
+            None,
+            house.map(|h| crate::native_evidence::turn(h, 8)),
+            true,
+            "conditional_safety_prognosis_not_assumed_death",
+            "Person's eighth if actual safety inquiry".into(),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "missing.radical_eighth",
+            None,
+            Some(8),
+            true,
+            "conditional_safety_prognosis_not_assumed_death",
+            "Radical eighth if actual safety inquiry".into(),
+            vec![],
         );
     } else if method == "hiring" {
         let employer = value("employer").or_else(|| {
@@ -1184,6 +1276,11 @@ fn component_family_role_reference(
     if method == "movable_deal" && facet.is_none() {
         unknowns.push("No facet is declared: object and sale-profit rows are conditional references, not selected roles or additional required inputs.".into());
     }
+    if matches!(method, "lost_object" | "lost_animal") {
+        rows.push(json!({"role_id":"lost.natural_moon","actor_id":null,"label":"Secondary recovery reference, not a second competing location",
+            "significator_house":null,"ruler_planet":"Moon","optional":true,"authority":"stage_scoped_natural_lost_object_reference",
+            "selected_id":null,"cusp_fact_id":null,"position_fact_ids":native.iter().filter(|f|f.kind=="position" && f.planets.iter().any(|p|p=="Moon")).map(|f|f.id.clone()).collect::<Vec<_>>(),"source_fields":[]}));
+    }
     if method == "existing_job" {
         for (role, house) in [
             ("company.reference", 10),
@@ -1497,6 +1594,9 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "existing_job" => Ok(CONCISE_EXISTING_JOB_PROCEDURE),
         "work_person" => Ok(CONCISE_WORK_PERSON_PROCEDURE),
         "hiring" => Ok(CONCISE_HIRING_PROCEDURE),
+        "lost_object" => Ok(CONCISE_LOST_OBJECT_PROCEDURE),
+        "lost_animal" => Ok(CONCISE_LOST_ANIMAL_PROCEDURE),
+        "missing_person" => Ok(CONCISE_MISSING_PERSON_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -1805,6 +1905,44 @@ A situation/quality comparison does not need a future perfection, but an actuall
 Do not convert astronomical hours into promised start dates or claim the worker already accepted. If actual availability is not established, keep that limit instead of pretending a quality answer completes a contract. Return status, answer, analysis, evidence, unresolved: direct proportionate recommendation, material eIDs/pages, contrary evidence, uncertain candidate mapping and calculation limits, without fabricated skill scores or hiring outcomes.
 ";
 
+const CONCISE_LOST_OBJECT_PROCEDURE: &str = "LOST OBJECT PROCEDURE — Frawley printed pp. 19–38, 44–77, 84–101, 127–136, 143–156, 244.
+Preserve actual object, owner, description, search context and any stated theft concern. Principal's OWN inanimate object: compare Lords 2 and 4, choosing whichever best describes the object; losing versus mislaying does not decide. ANOTHER person's object: their turned second only, not a second/fourth contest. A generic natural ruler can exceptionally help when the actual chart strongly and specifically describes the object, not by rubric decree. Object has priority over principal if a ruler collides. Keep one main location significator; Moon can serve a different secondary recovery role, not a competing location.
+
+Recovery is stronger when object joins owner or pocket, or contextual Moon supplies recovery; Moon joining its own dispositor helps. A luminary above horizon, object near an angle or clear usable location can support recovery WITHOUT an aspect. Combust principal cannot see, combust object cannot be seen; actual emergence can favour recovery. Debility does not universally mean damage. Void Moon does not prevent locating an existing object. Don't promise a pointless search when recovery is strongly unsupported, but don't impose an aspect-only veto.
+
+Locate primarily from the MAIN ruler's occupied house and actual context. Home possibilities: 1 entrance/principal room; 2 kitchen/store/wardrobe; 3 communication/corridor; 4 informal room/cellar; 5 child's/play room; 6 utility/kennel; 7 spouse's area; 8 toilet/bathroom; 9 study/shrine/upstairs landing; 10 formal room/home office/attic; 11 guestroom; 12 garage/junkroom. These are alternatives, not invented known rooms. Above/below horizon can indicate upstairs/downstairs. Earth near floor; air high/window; fire heat/wall; water wet/comfortable; mutable can mean inside a container. Cusp/change-of-sign can suggest door; close aspects can refine only contextually.
+
+Outside, prioritize house meaning over distance: angular near, cadent farther, succedent between, all relative to actual scale. Ascendant east, MC south, Descendant west, IC north; directions are outdoor, not indoor GPS. A person's own house can mean their home. If the indicated place is only a category, its dispositor can locate that place; don't add another layer when already specific. A reported failed search is revisable context, not proof against every plausible location; return to this chart with results.
+
+Do not invent theft. Raised suspicion needs past separating contact, close conjunction/antiscion or object in suspect's house; future application cannot prove past theft. Known theft differs. Unknown/calculation omissions remain unknown. Return status, answer, analysis, evidence, unresolved: practical bounded search/recovery judgment, material eIDs/pages, contrary evidence and no guaranteed address or accusation.
+";
+
+const CONCISE_LOST_ANIMAL_PROCEDURE: &str = "LOST ANIMAL PROCEDURE — Frawley printed pp. 1–3, 19–38, 44–77, 84–101, 127–136, 146–153.
+Preserve actual animal kind, identity, relevant principal and search context. Dogs/cats are sixth-house kinds, horses twelfth, regardless of a Great Dane's or pony's measured size. Do not replace this with an inanimate owner's-turned-second recipe or routinely demand owner biography. Genuine relay principal takes first; a concerning-other inquiry does not assert relay. Unknown animal kind stays unknown rather than choosing a desired ruler. Assigned house differs from body's occupied house.
+
+Use the animal's MAIN house ruler for location. Moon is natural secondary lost-object/animate significator and can help time recovery, but do not give two incompatible locations. If animal and principal share a ruler, give priority to locating the animal and use source-supported alternative recovery roles. Moon may signify principal and object at different stages; state which, rather than inventing an aspect between identical roles.
+
+Recovery can be supported by animal joining principal/pocket or secondary Moon joining principal, and Moon joining its own dispositor. Luminary above horizon, angular animal ruler or a clear usable location can justify looking without an aspect. Combustion can conceal, but supplied emergence can help; dignity/debility alone does not diagnose damage or death. Void Moon is not a veto on locating an animal that exists.
+
+Use actual occupied-house meanings with context first: an animal's own house can mean its own home, not automatically its turned fourth; twelfth can mean confinement/pound. Familiar house, stable, kennel, neighbour, child or workplace possibilities are hypotheses, not observed facts. Within a location, earth can mean low/floor, air high/window, fire heat/wall, water wet/comfortable; mutable can indicate enclosure. Cusp positions may suggest doorway. Close aspects/dispositor can refine only where actual context supports that symbolic step.
+
+Outdoors, angular near, cadent farther, succedent intermediate, relative to this animal's plausible range. Natural house meaning has priority over a mechanical miles rule. Direction uses Ascendant east, MC south, Descendant west, IC north; don't mix contradictory sign directions or turn this into indoor compass/GPS instructions. If inside/outside is unresolved, present sensible alternatives and use search feedback without recasting automatically.
+
+Do not invent theft, a thief or fatal injury. Future aspect cannot establish a past theft. Use actual source-bounded event/motion order for recovery; astronomical hours are not civil dates. Missing events, fine order, stations and antiscia remain unknown, not absence. Return status, answer, analysis, evidence, unresolved: useful bounded location/recovery suggestions with eIDs/pages, contrary testimony and honest limits.
+";
+
+const CONCISE_MISSING_PERSON_PROCEDURE: &str = "MISSING PERSON PROCEDURE — Frawley printed pp. 19–38, 44–77, 84–101, 127–136, 146–153, 179–188.
+Preserve the actual missing person, relationship to principal, reported sightings/searches, duration and whether the question concerns whereabouts, return or safety. Use their actual relationship house: child fifth, sibling third, employee sixth, parent appropriate house, partner seventh. Do not call every missing person a seventh-house fugitive. Genuine relay principal takes first; concerning someone else does not. Their own house can mean their home, not automatically their turned fourth. Assigned house differs from occupied house; their ruler is not a transferred principal Moon.
+
+Use the MAIN person ruler for location. House meanings with actual places outrank mechanical distance: ninth might be college/church or far away, tenth workplace, own house home, twelfth confinement where context supports it. Angular tends near/where expected, cadent farther, succedent intermediate, all relative to actual circumstance. Indoors/outdoors may remain unresolved; present plausible alternatives rather than claim a unique address. Outdoor direction uses Ascendant east, MC south, Descendant west, IC north, not an indoor GPS or sign-direction overlay. Actual failed searches/sightings remain reported context; revise plausible interpretations from feedback without automatically recasting.
+
+Return/recovery needs supported contact or other strong testimony, but angularity/clear location can be useful without a new aspect. Void Moon does not prevent locating an existing person. Keep present whereabouts, future return and current life/safety distinct. A naturally helpful planet is not proof of survival, and a debilitated person is not automatically dead.
+
+For actual safety prognosis, use the person as patient: sixth is not automatically illness. Identify the real affliction/dispositor, actual motion away/toward harm, sign-condition change or station. Consider BOTH radical and person's turned eighth if mortality is genuinely material. Person joining death, applying combustion or serious context-dependent deterioration can be adverse; major mutual reception can save while intact. Any death ruler can harm despite its benefic name. A separating contact can support survival in an alert person but differs in a reported coma. No clear substantial death testimony is not permission to fabricate one from a minor detail, a Part or an incidental aspect.
+
+Unknown stations, health, precise order, separating contacts, fixed stars and antiscia stay unknown. Do not invent an assault, custody, diagnosis or verified sighting. Astronomical hours are not civil return/death dates; timing requires actual supported event and contextual units. Return status, answer, analysis, evidence, unresolved: useful proportionate whereabouts/return/safety answer with material eIDs/pages, contrary testimony and explicit limits, not a guaranteed location or fatal claim.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -1874,9 +2012,8 @@ fn verified_concise_chart(
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
         | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
-        | "existing_job" | "work_person" | "hiring" => {
-            component_family_role_reference(consultation, &native, method)?
-        }
+        | "existing_job" | "work_person" | "hiring" | "lost_object" | "lost_animal"
+        | "missing_person" => component_family_role_reference(consultation, &native, method)?,
         _ => unreachable!("The concise procedure admits only implemented families"),
     };
     let supplied = original.get("role_reference");
@@ -2037,7 +2174,8 @@ pub fn relevant_reader_chart(
         "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
         | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
-        | "existing_job" | "work_person" | "hiring" => {
+        | "existing_job" | "work_person" | "hiring" | "lost_object" | "lost_animal"
+        | "missing_person" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -2379,6 +2517,30 @@ fn relevant_family_ids(
                 }
             }
         },
+        "lost_object" => {
+            recipient("lost.owner");
+            recipient("lost.owner_pocket");
+            if is_principal("lost.owner") {
+                recipient("principal.moon");
+            }
+            target("lost.object_second");
+            target("lost.object_fourth");
+            target("lost.natural_moon");
+        }
+        "lost_animal" => {
+            recipient("principal.person");
+            recipient("principal.moon");
+            target("lost.animal");
+            target("lost.natural_moon");
+        }
+        "missing_person" => {
+            recipient("principal.person");
+            recipient("principal.moon");
+            recipient("missing.person");
+            target("missing.person");
+            target("missing.turned_eighth");
+            target("missing.radical_eighth");
+        }
         "hiring" => {
             recipient("hiring.employer");
             if is_principal("hiring.employer") {
@@ -2500,6 +2662,23 @@ fn relevant_family_ids(
     }
     // These bodies have explicit family-specific ancillary relevance even
     // without an assigned person alias. This does not assign natural roles.
+    if matches!(method, "lost_object" | "lost_animal" | "missing_person") {
+        // Location symbolism depends on occupied houses, angles, dignity
+        // hosts and genuinely close neighbours. Preserve their native
+        // alternatives without choosing the object's ruler from its rubric.
+        ids.extend(
+            native
+                .iter()
+                .filter(|f| f.kind == "house")
+                .map(|f| f.id.clone()),
+        );
+        planets.extend(
+            [
+                "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+            ]
+            .map(str::to_owned),
+        );
+    }
     if matches!(method, "hiring" | "work_person" | "existing_job") {
         // Shortlisted candidates, dignity rulers of management, and a
         // conditional company prognosis cannot lose a body merely because
@@ -3481,6 +3660,52 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_lost_roles_preserve_owner_kind_and_main_location_choice() {
+        let (input, _) = relevant_family_input(
+            "lost_object",
+            json!({"facts":[fact("subject.owner_id","querent"),fact("description","keys")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("lost.object_second(querent) = H2/")
+                && chart.contains("lost.object_fourth(querent) = H4/")
+        );
+        assert!(chart.contains("lost.natural_moon(?) = —/Moon optional"));
+        let (input, _) = relevant_family_input(
+            "lost_object",
+            json!({"facts":[fact("subject.owner_id","daughter"),fact("people.daughter.relationship","child")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("lost.object_second(daughter) = H6/"));
+        assert!(!chart.contains("lost.object_fourth("));
+        for (kind, house) in [("small_kind", 6), ("large_kind", 12)] {
+            let (input, _) = relevant_family_input(
+                "lost_animal",
+                json!({"facts":[fact("animal_kind",kind),fact("principal_mode","concerning_other"),fact("subject.owner_id","mother"),fact("people.mother.relationship","mother")],"unknown":[]}),
+            );
+            let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(chart.contains(&format!("lost.animal(?) = H{house}/")));
+            assert!(!chart.contains("lost.object_second("));
+        }
+        let (input, _) = relevant_family_input(
+            "missing_person",
+            json!({"facts":[fact("subject.owner_id","child"),fact("people.child.relationship","child")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("missing.person(child) = H5/"));
+        assert!(
+            chart.contains("missing.turned_eighth(?) = H12/")
+                && chart.contains("missing.radical_eighth(?) = H8/")
+        );
+        assert!(!chart.contains("lost.natural_moon("));
+        assert!(
+            concise_reader_source("missing_person")
+                .unwrap()
+                .contains("not a transferred principal Moon")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -3499,6 +3724,9 @@ mod concise_projection_tests {
             "existing_job",
             "work_person",
             "hiring",
+            "lost_object",
+            "lost_animal",
+            "missing_person",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
