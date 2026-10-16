@@ -1031,6 +1031,9 @@ async fn concise_label(
     inputs.set("source_text", json!(&source));
     let mut writer = author(method, teacher.clone(), None)?;
     writer.signature.instructions.push_str(&format!("\n\nCreate a concise actual worked version of this independently approved TRAIN reference. Keep the original question/parties, decisive native testimony and material limits. Use at most 250 words TOTAL across the five output fields. This is not a rubric or checklist. Do not invent a stronger verdict, drop decisive contrary evidence or copy input fields. APPROVED FULL REFERENCE DATA:\n{}",serde_json::to_string(&reference)?));
+    if method != "contact" {
+        writer.signature.instructions.push_str(" Aim for 180–200 words TOTAL across all five fields so the 250-word bound has headroom. Retain the decisive contrary testimony and actual source-bound calculations; do not fill the budget with repeated citations.");
+    }
     let mut trace = Vec::new();
     let proposed = writer.forward_traced(inputs, &mut trace).await?;
     crate::queue::write_json_atomic(&directory.join("author-trace.json"), &json!(trace.iter().map(|step|json!({"predictor":step.predictor,"inputs":step.inputs.rendered(),"outputs":step.outputs.rendered()})).collect::<Vec<_>>()))?;
@@ -1278,13 +1281,14 @@ fn prepared_consumption(
     ancestry: &Value,
     author_plan_sha: &str,
     codex_path: &Path,
+    method: &str,
 ) -> Result<(usize, usize, Value)> {
     let plan_bytes = fs::read(directory.join("plan.json"))?;
     let plan: Value = serde_json::from_slice(&plan_bytes)?;
     ensure!(
         plan["concise_student"] == true
             && plan["prepare_student_only"] == true
-            && plan["method_order"] == json!(["contact"])
+            && plan["method_order"] == json!([method])
             && plan["author_plan_sha256"] == author_plan_sha
             && plan["book_sha256"] == crate::book::OCR_SHA256
             && plan["executable_sha256"] == google::digest(fs::read(std::env::current_exe()?)?)
@@ -1302,6 +1306,8 @@ fn prepared_consumption(
         result["families"]
             .as_array()
             .is_some_and(|rows| rows.len() == 1)
+            && family["method"] == method
+            && family["result"]["method"] == method
             && family["status"] == "prepared"
             && family["result"]["phase"] == "prepared_concise_student"
             && family["result"]["student_calls"] == 0
@@ -1359,7 +1365,7 @@ fn prepared_consumption(
                 .context("No preparation operation source")?,
         );
         ensure!(
-            path.parent() == Some(directory.join("teacher/contact").as_path()),
+            path.parent() == Some(directory.join("teacher").join(method).as_path()),
             "Prepared operation lies outside its teacher cache"
         );
         for (name, sha) in operation["sealed_files"]
@@ -1842,12 +1848,17 @@ pub async fn optimize_families(
             &json!({"source":source,"keys":imported,"fresh_calls":0,"scores_imported":false,"uncertain_requests_replayed":false}),
         )?;
     }
+    ensure!(
+        student.prepared.is_none() || methods.len() == 1,
+        "A prepared worked demonstration is bound to exactly one selected family"
+    );
     let prepared_receipt = if let Some(prepared) = student.prepared {
         let (prior_student, prior_teacher, receipt) = prepared_consumption(
             prepared,
             &ancestry,
             &google::digest(&author_plan),
             codex_path,
+            selected,
         )?;
         student_spent = prior_student;
         teacher_spent = prior_teacher;
@@ -1972,7 +1983,7 @@ pub async fn optimize_families(
                 for entry in fs::read_dir(source)? {let entry=entry?;ensure!(entry.file_type()?.is_file(),"Old unobserved guard must contain files only");fs::copy(entry.path(),destination.join(entry.file_name()))?;}
                 crate::queue::write_json_atomic(&family.join("unsettled-review-guard.json"),&json!({"source":source,"destination":destination,"resubmission_allowed":false,"semantic_score_imported":false}))?;
             }
-            if *method=="contact" && student.prepared.is_some() {
+            if student.prepared.is_some() {
                 for operation in prepared_receipt["completed_teacher_operations"].as_array().context("No prepared paid operations")? {
                     codex::import_completed(Path::new(operation["source"].as_str().context("No prepared paid operation path")?),&teacher_directory)?;
                 }
@@ -1991,7 +2002,7 @@ pub async fn optimize_families(
                 let demo_teacher:Arc<dyn DynChatModel>=if *method=="contact" && ancestry["completed_cache_only_demo"] == true {
                     Arc::new(codex::Codex::new(codex_path.to_path_buf(),teacher_directory,80)?.with_budget(teacher_budget.clone()).with_completed_cache_only())
                 } else {teacher.clone()};
-                labels=if let Some(prepared)=student.prepared.filter(|_|*method=="contact") {load_concise_label(&fixtures,&book,method,&prepared.join("contact/concise-demo"))?} else {concise_label(&fixtures,method,&book,demo_teacher,&family.join("concise-demo")).await?};
+                labels=if let Some(prepared)=student.prepared {load_concise_label(&fixtures,&book,method,&prepared.join(method).join("concise-demo"))?} else {concise_label(&fixtures,method,&book,demo_teacher,&family.join("concise-demo")).await?};
                 bind_approved_concise_demo(&mut fixtures,&labels,method)?;
             }
             let preflight=count_labeled_inputs(&fixtures,method,&labels,&http,&listing,&family.join("preflight"),&student).await?;
@@ -3003,6 +3014,42 @@ mod depth_tests {
         println!(
             "Exact controls replayed with zero student/teacher reservations: {}",
             result["score"]
+        );
+    }
+}
+
+#[cfg(test)]
+mod family_prepared_tests {
+    use super::*;
+    #[test]
+    fn prepared_worked_answer_is_bound_to_the_declared_noncontact_family() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let executable = dir.join("public-teacher");
+        fs::write(&executable, b"Synthetic identity, no execution").unwrap();
+        let plan = json!({"concise_student":true,"prepare_student_only":true,"method_order":["new_job"],"author_plan_sha256":"source-bound-author","book_sha256":crate::book::OCR_SHA256,"executable_sha256":google::digest(fs::read(std::env::current_exe().unwrap()).unwrap()),"teaching_sources_sha256":optimize::teaching_sources(),"codex_executable_sha256":google::digest(fs::read(&executable).unwrap()),"prior_consumer":null,"per_family_physical_student_cap":64,"per_family_physical_teacher_cap":80});
+        crate::queue::write_json_atomic(&dir.join("plan.json"), &plan).unwrap();
+        let result = json!({"families":[{"method":"new_job","status":"prepared","result":{"method":"new_job","phase":"prepared_concise_student","student_calls":0,"preflight":{"strict_prompt_limit":6000,"counts":(0..20).map(|_|json!({"fits":true,"input_tokens":5000})).collect::<Vec<_>>()},"completed_teacher_operations":[]}}],"student_physical_calls":0,"teacher_physical_calls":0});
+        crate::queue::write_json_atomic(&dir.join("result.json"), &result).unwrap();
+        let (student, teacher, receipt) = prepared_consumption(
+            dir,
+            &Value::Null,
+            "source-bound-author",
+            &executable,
+            "new_job",
+        )
+        .unwrap();
+        assert_eq!((student, teacher), (0, 0));
+        assert_eq!(receipt["scores_imported"], false);
+        assert!(
+            prepared_consumption(
+                dir,
+                &Value::Null,
+                "source-bound-author",
+                &executable,
+                "contact"
+            )
+            .is_err()
         );
     }
 }
