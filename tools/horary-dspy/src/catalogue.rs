@@ -219,7 +219,16 @@ fn component_family_role_reference(
     ensure!(
         matches!(
             method,
-            "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
+            "new_job"
+                | "movable_deal"
+                | "relationship"
+                | "money"
+                | "property"
+                | "rental"
+                | "return_to_job"
+                | "job_offer"
+                | "investment"
+                | "business_property"
         ),
         "Unsupported role family"
     );
@@ -388,11 +397,11 @@ fn component_family_role_reference(
             .unwrap_or_else(|| "Unresolved principal".into()),
         person_sources(principal),
     );
-    if method == "new_job" {
+    if matches!(method, "new_job" | "return_to_job" | "job_offer") {
         let worker = value("subject.owner_id");
         let worker_house = worker.and_then(person_house);
         let job_house = worker_house.map(|h| {
-            if h == 10 {
+            if method == "return_to_job" || h == 10 {
                 crate::native_evidence::turn(h, 10)
             } else {
                 10
@@ -480,6 +489,29 @@ fn component_family_role_reference(
         }
         // Natural Sun/Venus require declared applicable roles; do not infer
         // them from names, voices, or an author's private expected answer.
+    } else if method == "investment" {
+        let owner = value("subject.owner_id");
+        let house = owner.and_then(person_house);
+        add(
+            "investment.owner",
+            owner,
+            house,
+            false,
+            "calculated_reference",
+            owner
+                .map(label)
+                .unwrap_or_else(|| "Unresolved investor".into()),
+            vec!["subject.owner_id".into()],
+        );
+        add(
+            "subject.primary",
+            owner,
+            house.map(|h| crate::native_evidence::turn(h, 2)),
+            false,
+            "calculated_owned_or_potential_asset_reference",
+            value("subject.name").unwrap_or("Investment").into(),
+            vec!["subject.owner_id".into(), "subject.name".into()],
+        );
     } else if method == "money" {
         let recipient = value("subject.owner_id");
         let recipient_house = recipient.and_then(person_house);
@@ -532,7 +564,7 @@ fn component_family_role_reference(
             "Source's money, not merely the source person".into(),
             vec!["money_source".into(), "sender".into()],
         );
-    } else if matches!(method, "property" | "rental") {
+    } else if matches!(method, "property" | "rental" | "business_property") {
         let actor = value("deal_actor");
         let actor_house = actor.and_then(person_house);
         let party = value("deal_party");
@@ -578,10 +610,37 @@ fn component_family_role_reference(
         }
         for (id, offset, name) in [
             ("subject.primary", 4, "Property"),
-            ("property.price", 10, "Property price"),
-            ("property.profit", 5, "Profit from property"),
+            (
+                if method == "business_property" {
+                    "business.profit"
+                } else {
+                    "property.price"
+                },
+                10,
+                if method == "business_property" {
+                    "Profit from working premises"
+                } else {
+                    "Property price"
+                },
+            ),
+            (
+                if method == "business_property" {
+                    "business.residential_profit_reference"
+                } else {
+                    "property.profit"
+                },
+                5,
+                if method == "business_property" {
+                    "Residential letting profit only if actually relevant; not business profit"
+                } else {
+                    "Profit from property"
+                },
+            ),
             ("property.neighbours", 6, "Property's neighbours"),
-        ] {
+        ]
+        .into_iter()
+        .filter(|(_, offset, _)| method != "business_property" || [4, 10].contains(offset))
+        {
             add(
                 id,
                 None,
@@ -797,7 +856,10 @@ fn component_family_role_reference(
             .iter()
             .filter(|r| r["optional"] == false)
             .all(|r| r["ruler_planet"].is_string())
-        && (!matches!(method, "new_job" | "money") || value("subject.owner_id") == principal);
+        && (!matches!(
+            method,
+            "new_job" | "return_to_job" | "job_offer" | "money" | "investment"
+        ) || value("subject.owner_id") == principal);
     if moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
             "label":if method == "new_job" {"The principal as worker"} else {"The principal's contextual Moon"},
@@ -1037,6 +1099,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "money" => Ok(CONCISE_MONEY_PROCEDURE),
         "property" => Ok(CONCISE_PROPERTY_PROCEDURE),
         "rental" => Ok(CONCISE_RENTAL_PROCEDURE),
+        "return_to_job" => Ok(CONCISE_RETURN_JOB_PROCEDURE),
+        "job_offer" => Ok(CONCISE_JOB_OFFER_PROCEDURE),
+        "investment" => Ok(CONCISE_INVESTMENT_PROCEDURE),
+        "business_property" => Ok(CONCISE_BUSINESS_PROPERTY_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -1139,6 +1205,62 @@ A place to work on/in uses the business-property recipe, not ordinary residentia
 Reception A→B is A's regard for B; preserve every positive AND negative quality and distinguish inclination, capacity and occurrence. Use actual event/motion order and sound prevention reasoning. Astronomical hours are not calendar timing. A relevant sign end may bound an explicit timeframe; unknown calculations are not absent events. Return status, answer, analysis, evidence, unresolved: useful judgment first with eIDs/pages, contrary evidence and honest limits.
 ";
 
+const CONCISE_RETURN_JOB_PROCEDURE: &str = "RETURN TO JOB PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 222–226.
+Preserve that this is return to the same former job, not a speculative new application or keeping a current post. Preserve who worked there, departure and actually reported return context. Genuine relay principal takes first; concerning another worker retains their actual relationship house. The worker has that person's ruler; their former job/career uses their turned tenth, not the external-new-job radical tenth exception. Wages are second from that job and the worker's own pocket their second. Assigned houses differ from occupied houses. Keep coincident aliases and let a house ruler claim Moon before any contextual cosignification. The principal's Moon is not transferred to another worker.
+
+A relevant retrograde or supplied recent direction reversal can describe return, not an automatic defect or automatic successful reinstatement. Do not claim recent retrogradation or a future station when not calculated. Actual re-entry of worker ruler into the former job's house, its cusp sign or the other sign ruled by the job ruler is strong return testimony because the prior employment supplies the concrete context. Do not confuse wanting a new job by being in tenth with leaving and actually returning. Native current positions alone do not prove future re-entry.
+
+Job ruler inside first or an applying connection between worker and job can support return. Being exactly on a cusp is distinct from being inside. Examine supported translation/collection, actual candidate order, relevant rivals/intermediaries and prevention without inventing a person or reading every incidental contact as a prohibition. A wage-to-worker connection is payment, not reinstatement. Separate willingness, capacity and occurrence.
+
+Reception A→B means A regards B. Keep every positive AND negative quality: domicile/exaltation major, triplicity moderate, term/face minor. Applicant interest can exaggerate; even minor employer interest can matter, but negative regard and actual ability remain material. Attribute each planet's dignity, house capacity, solar state and motion to its actual role. Avoid unsupported claims about employer finances or the worker's qualifications.
+
+A void Moon supports the actual default of no change unless stronger return testimony outweighs it. Timing comes from an established return and actual applying travel or supplied re-entry, with justified contextual units. Astronomical search hours are not civil dates. Relevant sign-end evidence may bound an explicit timeframe; after-ingress circumstances and receptions cannot be assumed unchanged. Missing stations, ingresses, antiscia or precise order remain unknown, not proof of no possible return.
+
+Return only status, answer, analysis, evidence, unresolved. Answer reinstatement directly, cite material eIDs/pages, retain contrary testimony and calculation limits; no invented offer or exact date.
+";
+
+const CONCISE_JOB_OFFER_PROCEDURE: &str = "AVAILABLE JOB PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 222–230.
+Preserve that the job is actually offered/available and the worker's priorities. 'Should I take it?' differs from 'Will I be offered it?': do not require an acquisition aspect merely to assess an available job. Genuine relay principal takes first; another worker keeps their actual house. For an external offered job use radical tenth, with the tenth-house-worker exception requiring their turned tenth. Their current career/job is their turned tenth. Do not merge an explicitly compared present and future job. Keep worker, job, wages (job's second) and worker's pocket distinct, and do not transfer the principal's Moon to another worker.
+
+Judge the job ruler's essential quality, accidental ability, solar condition and actual motion. A good job can be constrained by external affliction; normal satisfactory work need not be a market leader or show exceptional employer affection. Consider supplied tenth-house occupants/benefits and relevant coworker conflicts. Wages concern their ruler's condition and connection to worker/pocket; wages alone do not prove an unmade offer. A supplied opposition to the job matters even though no aspect is required: regret or short tenure may result.
+
+Reception A→B means A regards B; keep every positive AND negative quality. Exaltation can overrate a job without proving its quality. Ordinary employers need not adore their staff; minor interest can be favourable. Distinguish pay-only priorities from congenial work. Specific descriptive debility may appropriately describe the proposed work rather than harm it; do not ignore unrelated weakness.
+
+The book's hypothetical placement of worker or available emotional Moon just inside the job cusp can assess fit. This is a separate recalculation at that location, not the worker's actual position or a guaranteed angularity bonus. If those hypothetical dignities/solar contacts are not supplied, report that limit instead of inventing them.
+
+For explicit current-versus-next job, the present tenth-cusp sign and next sign may provide references, but actual tenure/circumstances can change which sign represents which job. Do not silently pick a next job from a private expected branch or calculate future dignity mentally as fact. Supplied worker sign change can represent the proposed job change; evaluate its actual new condition. Vocational choice needs actual options and appropriate house/natural roles, not generic tenth for every possible career.
+
+Use native event order and contextual prevention; do not fabricate coworkers, collapse boss/job collisions or infer a company death from weak dignity alone. Astronomical hours are not civil timing. Return status, answer, analysis, evidence, unresolved: decision first with eIDs/pages, contrary evidence, explicit uncomputed hypothetical/alternative-role limits and no invented future offer.
+";
+
+const CONCISE_INVESTMENT_PROCEDURE: &str = "INVESTMENT PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 156–163.
+Preserve the actual investor, holding/commodity, proposed action or alternatives, horizon and whether the question concerns existing value or an unmade switch. Genuine relay principal takes first; concerning another investor retains that person's actual relationship house. Owned stocks, bonds and shares are one's own second-house money in another form, not automatically eighth-house other people's money. A proposed asset can be treated as potential second-house possession without asserting completed title. Use the actual investor's turned second and preserve shared rulers. Do not give another investor the principal's Moon.
+
+Judge the asset/money ruler's essential and accidental condition, supplied benefits/afflictions to its house and actual actions. Present quality does not require a future arrival aspect. Nor does a forecast of an investment's value imply payment into a bank account. Keep acquisition, dividend receipt, amount, profit/loss and quality distinct; a specific payer question needs the appropriate payment recipe instead.
+
+Sign change is often central to a proposed switch: where the money ruler goes can show its future if the change is made. Compare actual present/future dignity and fertility; do not invent next-sign calculations or silently recast a future chart. A supplied node contact may favour/harm a change, but a preceding adverse contact in the current sign can describe staying put if a meaningful change provides the stronger context. Be flexible only with source-supported actual testimony, not to manufacture a desired answer.
+
+Specific commodity natural rulers or Arabian Parts can supplement the actual investment context when their identity/calculation is justified and supplied. A general Sun–Saturn contact is not a universal gold-market forecast; Mercury does not automatically signify every stock. Unknown commodity assignments, Parts, future condition and stations remain unknown. Preserve existing asset role even when a secondary natural ruler is unavailable.
+
+Reception A→B means A regards B. Preserve every positive AND negative quality without inferring reciprocity, market sentiment or independently known corporate facts. Weigh supplied capacity, solar condition, motion and relevant contacts contextually; essential debility can describe the object appropriately. An event endpoint's order is not an applier arrow. Do not chase a long aspect sequence until a gain appears or declare absence from an incomplete bounded search.
+
+Give a proportionate comparison or quality judgment rather than an invented exact price, return percentage or civil deadline. If timing is truly requested, establish the event and use actual travel with justified contextual units; astronomical hours are not calendar time. Return only status, answer, analysis, evidence, unresolved, citing material native eIDs/pages, contrary testimony and limits.
+";
+
+const CONCISE_BUSINESS_PROPERTY_PROCEDURE: &str = "WORKING PREMISES PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 167–172.
+Preserve the actual place to be worked on/in, operator/contracting actor, seller/lessor, title owner, intended use and whose profit matters. Taking a farm, shop, studio or workshop is not the same as buying a passive dwelling investment. Do not merge operator with owner or beneficiary. Genuine relay principal takes first; concerning another operator retains their actual relationship house. Unknown capacity stays unknown. Conditional generic-counterparty rows are alternatives, not invented actor bindings. Assigned houses differ from occupied houses; retain coincident rulers.
+
+This recipe assumes the premises can be obtained if the person chooses them: no obligatory first/seventh acquisition aspect. The operator is first, opposing seller/lessor seventh unless specifically related, tenth prospective profit from working the place, fourth final outcome. Turn a concerning-other operator's context explicitly. Do not label tenth as ordinary residential price or fifth as the operating business profit; passive property letting/investment is a different concern. A financial beneficiary's pocket remains separate.
+
+Judge whether operator ruler in first or in a sign aspecting Ascendant by trine/sextile supports a beneficial deal; closeness and essential strength add weight. Distinguish actual degrees from mere same-house placement. Strong occupants of first can benefit, debilitated occupants harm, with the source's exception: opposing-party ruler in the Ascendant sign is necessarily debilitated there, so do not automatically count that as harm to the deal. On the Ascendant cusp it can show pressure to transact; just inside it can put the other party in the operator's power.
+
+Assess seller/lessor trustworthiness through actual condition; severe debility or twelfth-house concealment is reason to inspect terms, not an independently proven fraud. Seventh-house affliction can warn about the contract. Consider tenth/profit condition and supplied benefits/afflictions to that house. Fourth/outcome describes eventual satisfaction or regret through its ruler and occupants; a benefic with dignity can help and a debilitated planet harm. Fit must respect actual use: descriptive conditions are not automatically defects.
+
+Reception A→B means A regards B; retain every positive AND negative quality. Separate willingness, capacity, prospective benefit and completion. Existing property/price dealings can provide context but are not a forced first/seventh event test for an available working place. Do not fabricate future profit, exact price or occupant testimony that is not supplied.
+
+Use actual motion/event order for material changes and impediments; no automatic applier/caller direction, no incidental-contact prohibition. Astronomical hours are not civil timing. Missing calculations, future dignity, Parts or precise order remain unknown. Return status, answer, analysis, evidence, unresolved: practical judgment first with material eIDs/pages, contrary evidence and explicit limits.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -1205,7 +1327,8 @@ fn verified_concise_chart(
     );
     let reference = match method {
         "contact" => component_contact_role_reference(consultation, &native)?,
-        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental" => {
+        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
+        | "return_to_job" | "job_offer" | "investment" | "business_property" => {
             component_family_role_reference(consultation, &native, method)?
         }
         _ => unreachable!("The concise procedure admits only implemented families"),
@@ -1365,7 +1488,8 @@ pub fn relevant_reader_chart(
     let (table, native) = verified_concise_chart(original, consultation, method)?;
     let selected = match method {
         "contact" => relevant_contact_ids(&table, &native, extra_demo_ids)?,
-        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental" => {
+        "new_job" | "movable_deal" | "relationship" | "money" | "property" | "rental"
+        | "return_to_job" | "job_offer" | "investment" | "business_property" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -1614,7 +1738,7 @@ fn relevant_family_ids(
         }
     };
     match method {
-        "new_job" => {
+        "new_job" | "return_to_job" | "job_offer" => {
             recipient("worker.person");
             if is_principal("worker.person") {
                 recipient("principal.moon");
@@ -1716,6 +1840,9 @@ fn relevant_family_ids(
                 }
             }
         }
+        "investment" => {
+            recipient("subject.primary");
+        }
         "money" => {
             recipient("money.recipient");
             recipient("money.pocket");
@@ -1724,7 +1851,7 @@ fn relevant_family_ids(
             }
             target("money.incoming");
         }
-        "property" | "rental" => {
+        "property" | "rental" | "business_property" => {
             recipient("deal.actor");
             if is_principal("deal.actor") {
                 recipient("principal.moon");
@@ -1736,6 +1863,7 @@ fn relevant_family_ids(
                 "property.price",
                 "property.profit",
                 "property.neighbours",
+                "business.profit",
             ] {
                 target(id);
             }
@@ -1747,7 +1875,10 @@ fn relevant_family_ids(
     if method == "relationship" {
         planets.extend(["Sun", "Venus", "Saturn"].map(str::to_owned));
     }
-    if matches!(method, "property" | "rental" | "money") {
+    if matches!(
+        method,
+        "property" | "rental" | "business_property" | "money" | "investment"
+    ) {
         let relevant_houses: BTreeSet<_> = roles.iter().filter_map(|r| r[3].as_u64()).collect();
         for fact in native.iter().filter(|f| f.kind == "position") {
             // Match only the verified calculator display grammar, never user
@@ -2451,6 +2582,91 @@ mod concise_projection_tests {
         let relevant = relevant_reader_inputs(&input, method).unwrap();
         assert_eq!(relevant.get("question"), input.get("question"));
         (relevant, native)
+    }
+
+    #[test]
+    fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for method in [
+            "return_to_job",
+            "job_offer",
+            "investment",
+            "business_property",
+        ] {
+            let bank = cases(&base.join("examples"), method).unwrap();
+            let mut max_bytes = 0;
+            let mut unknown = Vec::new();
+            for case in bank {
+                // Standard authored component assembly, not an extraction
+                // journey: only its declared consultation reaches projection.
+                let original = example(&case, "reading", &Book::fixture()).unwrap();
+                let original_chart: Value =
+                    serde_json::from_str(original.get("chart_evidence").unwrap().as_str().unwrap())
+                        .unwrap();
+                let compact = relevant_reader_inputs(&original, method)
+                    .unwrap_or_else(|e| panic!("{}: {e:#}", case.id));
+                assert_eq!(compact.get("question"), original.get("question"));
+                let chart = compact.get("chart_evidence").unwrap().as_str().unwrap();
+                let canonical = original_chart["facts"].as_str().unwrap();
+                let ids = relevant_chart_ids(chart).unwrap();
+                assert!(!ids.is_empty());
+                assert!(
+                    ids.iter()
+                        .all(|id| canonical.lines().any(|l| l.starts_with(&format!("{id}\t"))))
+                );
+                assert!(!chart.contains("source_identity") && !chart.contains("expected"));
+                if chart.contains("UNKNOWN") {
+                    unknown.push(case.id);
+                }
+                max_bytes = max_bytes.max(chart.len());
+            }
+            assert!(
+                concise_reader_source(method)
+                    .unwrap()
+                    .split_whitespace()
+                    .count()
+                    <= 450
+            );
+            eprintln!(
+                "{method}: twenty authored components native-verified; max chart {max_bytes} bytes; unresolved {unknown:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compact_return_job_turns_former_career_and_business_profit_is_tenth() {
+        let consultation = json!({"facts":[fact("subject.owner_id","child"),fact("people.child.relationship","child")],"unknown":[]});
+        let (input, _) = relevant_family_input("return_to_job", consultation.clone());
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("worker.person(child) = H5/"));
+        assert!(chart.contains("subject.primary(?) = H2/"));
+        let (input, _) = relevant_family_input("job_offer", consultation);
+        assert!(
+            input
+                .get("chart_evidence")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("subject.primary(?) = H10/")
+        );
+        let (input, _) = relevant_family_input(
+            "business_property",
+            json!({"facts":[fact("deal_actor","querent"),fact("deal_beneficiary","querent")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("business.profit(?) = H10/"));
+        assert!(chart.contains("subject.primary(?) = H4/"));
+        assert!(
+            !chart.contains("property.price(") && !chart.contains("residential_profit_reference(")
+        );
+        let (input, _) = relevant_family_input(
+            "investment",
+            json!({"facts":[fact("subject.owner_id","sister"),fact("people.sister.relationship","sibling")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("investment.owner(sister) = H3/"));
+        assert!(chart.contains("subject.primary(sister) = H4/"));
+        assert!(!chart.contains("principal.moon("));
     }
 
     #[test]
