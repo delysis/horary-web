@@ -1,5 +1,10 @@
 # Horary DSPy experiment
 
+For Eileen's review, [full questions and saved worked answers](review/README.md)
+are published separately from their rubrics, with exact coverage and missing
+answers listed. These are generated reference readings, not qualified application
+outputs.
+
 `--teacher codex generate-gold-readings --prepare-only --output /fresh/plan`
 binds all 42 original twenty-case banks, their unchanged splits, actual native
 inputs, complete salient primary teacher source, executable and shared 3360-call

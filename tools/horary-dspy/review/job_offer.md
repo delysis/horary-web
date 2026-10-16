@@ -1,0 +1,1902 @@
+# job_offer: full questions and worked answers
+
+Generated reference answers for expert review; rubrics remain separate from answers. Original splits are retained. These are reading-component examples, not observed first-message application journeys.
+
+## dspy-job_offer-first-001 (train)
+
+### Question
+
+I have an actual offer for the Alder accounts job. Should I take it if my priority is reliable pay rather than prestige?
+
+### Worked answer
+
+**Status:** answer
+
+I would lean against taking the Alder offer if reliable pay is your priority. The pay’s significator is weak and predominantly adverse toward you and your finances; the job itself also looks troubled. This supports caution about dependable earnings, but does not establish that Alder will miss a particular payroll or fail.
+
+### Reasoning
+
+This is an available-offer assessment, not a question about winning a job. Acceptance is already possible, so an applying aspect is not required to judge whether the offer suits your priorities.
+
+Capricorn on the first cusp makes Saturn your significator. Aquarius on the second also makes Saturn your bank balance: that shared ruler is appropriate here and needs no replacement. Libra on the tenth gives Venus the job; Scorpio on the eleventh, the job’s money, gives Mars the wages. These are role assignments: Mars is physically in the eighth, not the eleventh. Although Cancer on the seventh makes the Moon ruler of colleagues, no particular colleague is being asked about; its relevant use here remains your emotional cosignificator. Mercury’s natural association with accountancy does not replace Venus as the job’s ruler.
+
+Venus is in detriment and retrograde. No return to a former job is stated, so there is no contextual reason to excuse the retrogradation. Its angular tenth-house placement gives it capacity to act, but does not make the job good; its different sign from the tenth cusp somewhat reduces that angular reinforcement. It is clear of solar affliction.
+
+The decisive consideration is Mars as wages. It is peregrine, rather than essentially dignified, and accidentally weak in the eighth. Its position approximately one degree before that cusp counts as eighth-house placement under the same-sign cusp rule. Direct motion and freedom from solar affliction avoid further problems but do not supply positive strength. This is poor support for dependable pay.
+
+The directed receptions sharpen that concern. Saturn in Aries strongly values Mars: you and your finances are focused on the wages. Mars in Leo regards Saturn adversely by detriment, despite minor positive reception by term and face. Those small positives qualify, but do not cancel, the dominant negative testimony. This is not a strong, mutually supportive relationship between wages and bank balance.
+
+Your attitude toward the job is also mixed but predominantly negative: Saturn regards Venus by minor term reception and major detriment; the Moon regards Venus by triplicity and fall. Venus in turn is in the Moon’s fall and has no listed positive reception toward Saturn. Employer enthusiasm is not ordinarily required, but these testimonies offer little reassurance. Saturn itself is fallen, retrograde and near opposition to the Sun, suggesting a compromised position in this decision, not a moral judgment about you.
+
+The Moon is peregrine, in a neutral-capacity ninth house, clear of the Sun but waning toward conjunction. Its calculated void of course suggests little immediate development, not that the existing offer disappears. Its next listed contact with wages occurs only after ingress and cannot establish reliable payment. The nearer Venus–Mars square candidate connects job and wages, not wages and you; it provides no guarantee of receipt. There is no reason to pursue the later lunar chain or derive a payment date.
+
+### Evidence
+
+Roles: e7–e8, e13, e16–e17; printed pp. 18, 23–24, 30–32, 225–227.
+
+Job condition: e3, e27–e30; printed pp. 45–50, 54–57, 226–227.
+
+Pay condition and cusp treatment: e4, e31–e34; printed pp. 17, 51, 56, 223, 227.
+
+Directed receptions: e45, e53–e57, e63–e64; printed pp. 71–77, 223.
+
+Querent and Moon condition: e1, e6, e21–e23, e38–e41, e77; printed pp. 57, 61, 64–66.
+
+Event limits: e65–e68, e70–e78; printed pp. 90–97, 127–131. Available-offer procedure: printed pp. 226–227; default context: p. 140.
+
+### Unresolved
+
+The supplied astronomy is approximate; exact speeds, intervening stations, fine event order, antiscia and fixed-star contacts are not certified. These limit confidence and timing precision but do not prevent a provisional suitability judgment. The evidence does not establish actual payroll terms, a specific missed payment, or insolvency.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "choice",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Alder accounts offer",
+      "quote": "Alder accounts job"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I have an actual offer"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "actual offer"
+    },
+    {
+      "field": "priorities",
+      "value": "reliable pay over prestige",
+      "quote": "reliable pay rather than prestige"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Assess wages separately from job quality; no acquisition aspect is needed for an available offer."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-002 (train)
+
+### Question
+
+The Bracken teaching post has already been offered to me. I care most about whether the work itself suits me, not salary. Would taking it be sensible?
+
+### Worked answer
+
+**Status:** answer
+
+On this reading, I would lean against accepting Bracken if enjoying the work is your main priority. There is a real indication that you could function better in the role than you feel now, but the job itself looks troubled, and your mixed feelings lean more toward dissatisfaction than enjoyment. This is a qualified recommendation, not a claim that you could not succeed there.
+
+### Reasoning
+
+This is an available-offer suitability question, not a prediction of getting hired. No new aspect is required to justify acceptance or rejection.
+
+Capricorn on the Ascendant gives you Saturn; Libra on the tenth cusp gives the job Venus. Teaching does not replace the job’s tenth-house ruler with Jupiter or the ninth-house ruler. The Moon remains your emotional cosignificator. Although it also rules the seventh, there is no declared colleague dispute or competition requiring that additional role here. Venus’s physical placement in Scorpio does not make Mars the job’s ruler.
+
+Venus is in detriment: the work has substantial drawbacks within this question’s context. Its angular tenth-house placement gives it capacity to act, rather than making its essential quality good; being in a different sign from the cusp somewhat reduces that angular reinforcement. Venus is clear of the Sun but retrograde. No return to a former post is supplied that would explain away the retrogradation. These conditions suggest a problematic job with additional impediments, without identifying a particular institutional failure.
+
+Your Saturn is in fall, retrograde and severely afflicted by proximity to opposition with the Sun. Its third-house capacity is neutral rather than strongly cadent. These describe your present condition in relation to the decision, not a verdict on your teaching competence. Neither the circumstances nor the supplied evidence establishes a benign return explanation.
+
+The directed receptions reinforce reservations. Saturn regards Venus through minor term reception but major detriment: a little attraction alongside much stronger aversion. Your Moon regards Venus through triplicity and fall: some comfort or appeal, outweighed by dissatisfaction. Venus, in turn, is in the Moon’s fall, an adverse indication for emotional compatibility. Venus has no listed reception toward Saturn; ordinary jobs need not positively favour their applicants, so that neutrality alone would not condemn the offer.
+
+The strongest contrary testimony comes from the chapter’s “send yourself to work” exercise. Placing Saturn just inside the Libra tenth cusp puts it in exaltation: the role could improve your functioning and bring out your strengths. This is hypothetical placement, not a forecast Saturn ingress. Placing the Moon there, however, leaves it without essential dignity and inside the via combusta, suggesting emotional discomfort. Given your stated priority, improved capability does not outweigh the concerns about enjoyment and the job’s condition.
+
+The Moon’s current ninth-house placement fits an interest in teaching, but descriptive fit is not essential strength. Its calculated void course suggests limited development; it does not automatically negate an already available offer. Venus’s next listed contact is a square to Mars, the pay ruler. Mars is weak and peregrine, with predominantly adverse reception toward Saturn despite minor positives. This adds a secondary reservation about remuneration, without making salary your motive or the deciding issue. Later lunar contacts are unnecessary to this state judgment. No event timing is warranted.
+
+### Evidence
+
+Roles: e7, e13, e15–e17; Frawley printed pp. 23–24, 30–32, 226–227.
+
+Job and querent condition: e3, e6, e28–e31, e39–e42; printed pp. 45–50, 54–61. Directed attitudes: e55, e58, e65; printed pp. 71–77, 223, 227.
+
+Hypothetical work placement: e16 with the dignity table, printed p. 47; via combusta, p. 66; the suitability exercise, p. 227.
+
+Moon and supplementary pay evidence: e1, e21–e24, e32–e35, e46, e69, e78; printed pp. 17, 64–66, 226–227. Available-offer procedure and default: printed pp. 140, 226. Calculation limits: e79.
+
+### Unresolved
+
+The specific workplace conditions behind the adverse indications are unidentified. The astronomy is approximate; exact speeds, intervening stations, fine contact order, antiscia and fixed-star contacts are not certified. These limit confidence but do not prevent a provisional suitability judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "choice",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Bracken teaching offer",
+      "quote": "Bracken teaching post"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "offered to me"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "already been offered"
+    },
+    {
+      "field": "priorities",
+      "value": "work fit rather than salary",
+      "quote": "work itself suits me, not salary"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Keep actual work-quality scope and do not make wages the only testimony."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-003 (train)
+
+### Question
+
+My daughter Asha has a firm nursing offer at Cedar. This is my own question about whether it will be good for her; her priority is pay.
+
+### Worked answer
+
+**Not available:** no approved saved answer was completed for this case. The rubric below is not an answer.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Asha Cedar nursing offer",
+      "quote": "nursing offer at Cedar"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "asha",
+      "quote": "My daughter Asha"
+    },
+    {
+      "field": "people.asha.relationship",
+      "value": "child",
+      "quote": "My daughter"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "my own question"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "firm nursing offer"
+    },
+    {
+      "field": "priorities",
+      "value": "pay",
+      "quote": "priority is pay"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Use the external-job rule and its wages frame while preserving non-principal worker."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-004 (train)
+
+### Question
+
+Drift’s logistics job is available to me now; I can say yes. I mainly want a calmer workplace. Is it a good job for that purpose?
+
+### Worked answer
+
+**Status:** answer
+
+I would not recommend Drift’s offer specifically for a calmer workplace. The chart suggests a troubled job and an uncomfortable working atmosphere. There is some testimony that you could feel better placed there, but it does not outweigh the warnings about the workplace itself.
+
+### Reasoning
+
+This is an available-offer quality question, not a prediction of whether you will get hired. No new aspect is required; the relevant procedure is “What will the job be like?”
+
+Capricorn rising makes Saturn your main significator. The MC remains in Libra, even at 29.964°, so Venus signifies this offered job; Mars does not replace it merely because Scorpio follows. There is no established current-job comparison requiring a second job ruler. The Moon ordinarily represents your emotions, but also rules the Cancer seventh cusp, identifying colleagues. Those roles must be distinguished rather than counted as independent testimonies.
+
+Venus is in detriment in Scorpio, retrograde and physically in the angular tenth. This describes a job with substantial capacity to affect your life but poor essential condition. Angularity does not make it a good job; being in a different sign from the MC somewhat moderates its angular strength. There is no supplied return-to-an-old-job context to explain away retrogradation, nor a descriptive reason why a debilitated Venus should signify calm logistics work. Freedom from combustion is helpful only in removing that particular affliction.
+
+Your Saturn is in fall, retrograde and severely afflicted by proximity to opposition with the Sun. Its third-house placement is neutral for capacity. This suggests you approach the decision from a strained position, rather than proving anything about your professional competence. Saturn’s reception toward Venus combines a little interest by term with much stronger rejection by detriment. The Moon’s attitude toward Venus likewise combines comfort by triplicity with stronger aversion by fall. These mixed receptions support reservations, not uncomplicated enthusiasm.
+
+For workplace relations, seventh-ruler Moon and job-ruler Venus are in each other’s fall: the colleagues dislike the company, and the company dislikes the colleagues. The Moon also has a lesser positive reception toward Venus, so this is mixed rather than uniformly hostile. Nevertheless, the dominant mutual negative reception is particularly relevant to your wish for calm. Venus’s lack of reception toward Saturn is not independently damning: ordinary jobs need not show personal enthusiasm for their prospective employee.
+
+Pay is Mars, from the Scorpio eleventh cusp. Mars is peregrine, angular and clear of solar affliction: capable, but without essential testimony of especially good pay. Saturn strongly values Mars, while Mars’s regard for Saturn combines minor positives by term and face with major rejection by detriment. This does not establish satisfactory compensation. Mars also disposes Venus and could represent management if needed; that shared role does not justify inventing a particular troublesome manager. Venus’s first supplied contact is a close applying square to Mars, reinforcing difficulty around the job’s dependencies without identifying a specific incident.
+
+The optional “send you to work” test supplies contrary evidence: placed at the Libra end of the tenth cusp, Saturn would be exalted, suggesting improved personal standing or comfort. However, the cusp is almost exactly at the sign boundary, so this hypothetical placement is unusually sensitive and deserves little weight without precision. It cannot cancel Venus’s actual condition or the company–colleague receptions.
+
+The Moon is peregrine, weak by its supplied eighth-house placement, waning and void of course within the calculation. That does not deny an offer already available, nor prove a peaceful workplace. Later lunar contacts after ingress are unnecessary to answer this quality question. No event timing is warranted.
+
+### Evidence
+
+- Roles and procedure: e7, e13, e16–e17; Frawley printed pp. 30–32, 225–227.
+- Job quality and capacity: e3, e27–e30; printed pp. 45–46, 50, 56–60, 226–227.
+- Your condition and directed attitudes: e6, e37–e40, e53, e56, e63; printed pp. 50, 57, 61, 71–77.
+- Workplace tension: e13, e53, e63; printed pp. 225, 227.
+- Pay, disposition and square: e4, e17, e31–e33, e44, e54, e62, e67; printed pp. 52, 88, 223–224, 227.
+- Hypothetical placement and its boundary sensitivity: e16, e77; printed pp. 47, 227.
+- Moon and calculation limits: e0–e1, e21–e23, e64–e76, e77; printed pp. 64–65, 97, 127–131.
+
+### Unresolved
+
+The evidence does not identify the concrete source of workplace strain or provide actual pay terms. Approximate positions make the almost-boundary MC and hypothetical placement test sensitive; speeds, precise stations, antiscia and fixed-star contacts are unverified. These limit refinement, but do not prevent a qualified judgment on suitability for calm.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Drift logistics offer",
+      "quote": "Drift’s logistics job"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "available to me"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "I can say yes"
+    },
+    {
+      "field": "priorities",
+      "value": "calmer workplace",
+      "quote": "calmer workplace"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Infer a present offer without interpreting it as a hoped-for vacancy; answer the stated purpose."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-005 (train)
+
+### Question
+
+I already have the Elm warehouse offer. Would accepting it be financially worthwhile for me?
+
+### Worked answer
+
+**Status:** answer
+
+On this reading, I would lean against accepting the Elm warehouse offer for its financial benefit. The pay has some capacity to deliver, but the stronger testimony suggests it would do less for your finances than you hope. This is a qualified judgment, not a calculation of your actual take-home gain.
+
+### Reasoning
+
+This is an available-offer quality question, specifically about financial worthwhile­ness—not whether you will obtain the job. An applying aspect is therefore unnecessary.
+
+Capricorn on the first cusp makes Saturn your significator; Aquarius on the second also makes Saturn your bank balance. Scorpio on both the tenth and eleventh makes Mars the job and its wages. These shared roles can remain together because no separate event connection is needed. The Moon remains your emotional cosignificator; its seventh-house rulership does not require introducing competitors into an already available offer.
+
+Mars is peregrine: the job and wages lack substantial essential quality, although this does not by itself mean dreadful pay. Mars is direct, clear of the Sun and physically angular in the seventh, giving it capacity to act. Its different sign from the seventh cusp moderates that angular strength. These are the principal favorable considerations: the wages are not shown as powerless to deliver.
+
+The decisive concern is their relationship to you and your money. Mars in Leo is in Saturn’s detriment, but also Saturn’s term and face. Thus the job/pay has minor favorable regard for you and your bank balance alongside a much stronger adverse disposition. These mixed receptions should not be flattened into complete hostility, but the small positives do not outweigh the major negative. Conversely, Saturn in Aries is in Mars’s domicile: you strongly value the job/pay. Your enthusiasm is not reciprocated to the same degree.
+
+Saturn is in fall, retrograde and within the supplied severe Sun-opposition region. Its third-house placement is neutral in capacity. There is no stated return-to-an-old-job circumstance to explain away retrogradation. Together these show a strained position for you and your finances, without establishing any particular debt, expense or loss amount.
+
+Venus, debilitated and retrograde in the tenth, adds a warning about the job environment. Its approaching square to Mars reinforces that concern, but does not identify a specific financial problem or prove business failure.
+
+The Moon is peregrine, in the weak eighth and void of course within the supplied calculation. Its placement can describe financial anxiety; its voidness does not veto acceptance or determine pay quality. As a supplementary suitability check, mentally placing the Moon just inside the Scorpio tenth cusp puts it in fall, suggesting discomfort with taking the job. This is secondary to the financial testimony.
+
+Overall, practical capacity to pay is outweighed by mediocre essential quality, adverse reception toward your bank balance and your own afflicted significator. No event timing is needed.
+
+### Evidence
+
+Roles: e7–e8, e13, e16–e17; printed pp. 18, 24, 30–32, 226–227.
+
+Job/pay quality and capacity: e4, e13, e31–e33; printed pp. 51, 54–57, 223, 227.
+
+Directed mixed receptions: e44 and e54; printed pp. 71–77, 223.
+
+Your condition and finances: e6, e37–e40; printed pp. 50, 56–57, 61.
+
+Contrary workplace testimony: e3, e27–e30, e67; printed pp. 62–63, 226–227.
+
+Moon and supplementary placement: e1, e21–e23, e76, e16; printed pp. 47, 65, 227.
+
+Calculation limits: e77; printed p. 244 supports stating uncertainty honestly.
+
+### Unresolved
+
+Salary, deductions, commuting costs and alternative income are not supplied, so an actual net financial comparison cannot be made. The approximate chart does not certify exact motion, intervening stations, antiscia or fixed-star contacts. These limit confidence but do not prevent this provisional quality judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Elm warehouse offer",
+      "quote": "Elm warehouse offer"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I already have"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "offer"
+    },
+    {
+      "field": "priorities",
+      "value": "financial benefit",
+      "quote": "financially worthwhile"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Job wages are distinct from job itself and worker’s own pocket."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-006 (train)
+
+### Question
+
+My mother Bina can accept a new archivist position immediately. I am asking myself if the pay makes it worthwhile for her.
+
+### Worked answer
+
+**Status:** answer
+
+On this chart, I would not recommend Bina accepting chiefly for the pay. The wages look disappointing and unlikely to benefit her enough to justify the position on financial grounds. She may value the income highly, but that enthusiasm is stronger than the chart’s indication of its worth.
+
+### Reasoning
+
+You are asking your own question about your mother, rather than relaying hers. Bina therefore takes the radical 10th: Scorpio on its cusp gives Mars. Because she already occupies the 10th-house role, her offered job takes her turned 10th, the radical 7th: Cancer gives the Moon. Its wages are the second from that job, the radical 8th: Leo gives the Sun. Saturn, ruler of the Capricorn Ascendant, represents you. The Moon belongs to the job and cannot also represent your emotions or be transferred to Bina.
+
+The position is available, so this is a judgment of its financial worth, not whether she will obtain it. No applying aspect is required. The decisive testimony is the Sun in Libra, its fall: the wages are poor or disappointing relative to expectations. Its physical placement in the radical 9th gives neutral capacity, rather than rescuing its essential weakness. The Sun is direct; combustion is inapplicable to the Sun itself.
+
+Reception reinforces the financial concern. Mars in Leo values the Sun by domicile and triplicity: Bina strongly values the pay. Conversely, the Sun in Libra is in Mars’s detriment: the wages do not favour her. This is an unequal relationship, not mutual financial support. Her own money is the radical 11th, Scorpio, also ruled by Mars. That shared ruler needs no replacement for this state question; it reinforces the same adverse relationship between wages and her finances rather than providing an independent favourable testimony.
+
+Mars is peregrine but angular in the radical 7th, direct and clear of the Sun: Bina has capacity to act, without strong essential testimony that makes this an especially advantageous situation. Its different sign from the Cancer cusp moderates the angular strengthening. The job’s Moon is peregrine, physically in the weak radical 8th and clear of the Sun. Its placement in the wages house fits the financial focus, but supplies no evidence of generous pay. It is also waning toward conjunction with the Sun. No occupational description of an archivist overrides these financial conditions.
+
+As a supplementary suitability check, placing Bina’s Mars just inside the job’s Cancer cusp puts it in fall, although also in its triplicity: some comfort is possible, but the stronger testimony is dissatisfaction. The Moon is reserved for the job, so it is not separately “sent to work” as Bina’s emotions.
+
+The Moon’s calculated void course does not veto accepting an available offer. Nor do its later, after-ingress contacts establish financial benefit. No event timing is needed for the question asked.
+
+### Evidence
+
+Roles: e7, e13, e14, e16, e17; printed pp. 23–27, 30–32, 138, 224.
+Pay and directed reception: e0, e19–e20, e45, e58; printed pp. 50, 71–77, 223, 226–227.
+Bina’s ability and the job’s condition: e1, e4, e21–e23, e31–e33; printed pp. 46, 51, 54–60, 64–65.
+Hypothetical placement of Mars at the Cancer job cusp: e13; dignity table printed p. 47 and suitability procedure p. 227.
+State judgment and lunar limits: e64–e76; printed pp. 65, 84, 97, 226–227.
+Calculation limits: e77.
+
+### Unresolved
+
+The evidence does not quantify salary, benefits or work-related costs, so it cannot establish an actual net financial return. Positions and event brackets are approximate; speeds, exact stations, antiscia and fixed-star testimony are not certified. These limit completeness but do not prevent the provisional pay judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Bina archivist offer",
+      "quote": "archivist position"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "bina",
+      "quote": "My mother Bina"
+    },
+    {
+      "field": "people.bina.relationship",
+      "value": "mother",
+      "quote": "My mother"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "asking myself"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "can accept"
+    },
+    {
+      "field": "priorities",
+      "value": "pay",
+      "quote": "pay"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Mother occupies tenth, so external job and second-from-job wages need the book’s exception rather than routine tenth/eleventh."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-007 (train)
+
+### Question
+
+I hold an offer for Fern’s laboratory post. I care about meaningful research work and am not asking whether they will hire me. Is the role suitable?
+
+### Worked answer
+
+**Status:** answer
+
+I would lean against accepting Fern’s laboratory role for the meaningful research you want. The chart suggests a functioning post, but a poor fit for you, with particular concerns around its research promise and your satisfaction in the work. This is a qualified judgment of suitability, not a prediction about whether they will hire you.
+
+### Reasoning
+
+This is an available-offer assessment: the appropriate procedure is “What will the job be like?”, without requiring an applying aspect.
+
+Capricorn on the Ascendant gives you Saturn; Scorpio on the tenth gives the role Mars. Mars’s physical placement in the seventh does not make it a rival. The Moon remains your emotional cosignificator; its additional seventh-house rulership does not justify inventing a particular colleague or competitor. Scorpio also rules the eleventh, so Mars signifies the pay as well: these facets cannot be independently distinguished here. For your stated research priority, ninth-house higher knowledge supplies supplementary testimony through Venus, ruler of its Libra cusp.
+
+Mars is peregrine, but angular, direct and clear of the Sun: the job has capacity to function, without strong essential testimony of excellence. Peregrine does not itself mean worthless. More decisively, Mars regards Saturn through detriment, despite minor positives by term and face. The role offers some accommodation but is predominantly unsuitable for you. Saturn, conversely, occupies Mars’s domicile: you strongly want the role. Your enthusiasm is not evidence of reciprocal benefit.
+
+Saturn is in fall, retrograde and severely afflicted by proximity to solar opposition. Its third-house placement is neutral for capacity. No return-to-an-old-job circumstance explains away the retrogradation. These describe your position in this decision, not your moral worth or a demonstrated lack of research ability.
+
+Venus, the supplementary research significator, is in detriment and retrograde, strongly placed just inside the tenth cusp. Its close applying square to Mars reinforces friction within the role. Venus strongly regards Mars by domicile and triplicity, with minor face reception, but that attachment does not repair Venus’s own debility. This is concerning for the research component, although it cannot identify a specific institutional problem.
+
+The chapter’s “send yourself to work” test reinforces the mismatch: placing Saturn just inside the Scorpio tenth cusp removes its present fall but gives it no essential dignity; placing the Moon there puts it in fall. There is some relative improvement for your practical position, but poor emotional satisfaction. The actual Moon is also peregrine, weak in the eighth and waning, though clear of solar affliction. Its void condition does not veto an already available offer or establish suitability. The later after-ingress contacts do not change this into a hiring question, and no event timing is warranted.
+
+### Evidence
+
+Roles and procedure: e7, e13, e15–e17; Frawley printed pp. 23–24, 30–32, 226–227.
+
+Job quality, capacity and directed fit: e4, e31–e33, e44, e54; pp. 44–56, 71–77, 223, 226–227.
+
+Your condition: e6, e37–e40; pp. 56–61.
+
+Research testimony and close square: e3, e15–e16, e27–e30, e62, e67; pp. 23, 57, 62–63, 88, 227.
+
+Projected workplace dignity and Moon: e0–e1, e16, e21–e23, e64, e76; dignity table p. 47; pp. 64–65, 227.
+
+Calculation limits: e77; pp. 85–86, 127–131.
+
+### Unresolved
+
+The chart does not establish the actual research duties, scientific autonomy or resources available in Fern’s laboratory. Shared job/pay rulership prevents a distinct salary assessment. Approximate positions and hourly sampling leave precise motion, stations, antiscia and fixed-star testimony uncertified; these qualify confidence without preventing this suitability judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Fern laboratory offer",
+      "quote": "Fern’s laboratory post"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I hold an offer"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "not asking whether they will hire me"
+    },
+    {
+      "field": "priorities",
+      "value": "meaningful research",
+      "quote": "meaningful research work"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Use the quality/purpose question rather than manufacture an acquisition hurdle."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-008 (train)
+
+### Question
+
+I am relaying Ceri’s own words: I have the Grove office offer already. Should I take it for better income?
+
+### Worked answer
+
+**Status:** answer
+
+Ceri, I would lean against taking the Grove offer specifically for better income. The chart gives little support for a worthwhile financial improvement and shows substantial drawbacks around the job. This is a qualified judgment: it does not establish that the offered salary is numerically lower than your current income.
+
+### Reasoning
+
+Because your own question is being relayed, you receive the radical 1st house, not a house assigned through the messenger. Capricorn rises, making Saturn your significator; the Moon also signifies you. Scorpio on both the 10th and 11th cusps makes Mars signify the offered job and its wages. Aquarius on the 2nd makes Saturn signify your finances as well. These shared roles need no substitute planets: we are assessing an available offer’s quality and financial benefit, not trying to connect separate parties to obtain it. No current job is declared, so a present-versus-next-job assignment would be unwarranted.
+
+Mars is peregrine: the job and wages have no essential dignity promising particular quality or generosity. Mars is physically angular in the 7th, direct and clear of the Sun, so it has capacity to act; its different sign from that house’s cusp somewhat reduces the angular advantage. Capacity is not the same as financial benefit.
+
+The decisive reception is mixed and unequal. Saturn in Aries strongly values Mars: you want what the offer and its income represent. Mars in Leo has minor regard for Saturn through term and face, but is also in Saturn’s detriment. That stronger negative outweighs the small positives. Applied to wages and your bank balance, this is poor testimony for the offer benefiting your finances; it is not proof of a particular salary or of personal hostility.
+
+Saturn is in fall, retrograde and within the severe-affliction region opposite the Sun. Its 3rd-house placement gives neutral capacity. No return-to-an-old-job circumstance explains away retrogradation. These conditions describe vulnerability in your position and finances, not a defect in your character.
+
+There is a further substantial warning: detrimented, retrograde Venus lies almost exactly on the 10th cusp. It affects the job without replacing Mars as its ruler. Its angular strength gives this adverse influence capacity, and the approaching Venus–Mars square reinforces concern. Its concrete identity is unestablished.
+
+The Moon is peregrine, waning and physically in the weak 8th house, although clear of solar affliction. Its void-of-course condition suggests little immediate movement, but does not decide whether an already available offer is good. As a supplementary suitability check, placing your significators just inside the Scorpio 10th cusp leaves Saturn peregrine and puts the Moon in fall: this offers no reassurance about feeling better in the role.
+
+An acquisition aspect is unnecessary here. The later lunar contacts after ingress neither establish financial improvement nor justify a date. The judgment rests on the job, wages and their relationship to your finances.
+
+### Evidence
+
+- e7, e8, e13, e16, e17: principal and role assignments; printed pp. 24, 30–32, 138.
+- e4, e31–e33: Mars’s quality and capacity; printed pp. 51, 54–56, 226–227.
+- e45, e55: directed, mixed receptions between wages/job and querent/finances; printed pp. 71–77, 223.
+- e6, e38–e41: Saturn’s fall, capacity, retrogradation and solar opposition; printed pp. 50, 56–57, 61.
+- e3, e16, e27–e30, e68: afflicted Venus at the job cusp and approaching square; printed pp. 32, 57, 227.
+- e0–e1, e21–e23, e77: lunar condition and void testimony; printed pp. 64–65. Scorpio placement exercise: e16 and dignity table, printed pp. 47, 227.
+- e65–e78: conditional event evidence and calculation limits; printed pp. 90–97, 127–131. Available-offer procedure: printed pp. 226–227.
+
+### Unresolved
+
+Actual offered compensation, costs and an income baseline are not supplied, so a numerical comparison is unavailable. Venus’s concrete significance is unidentified. Planetary speeds, exact perfections, intervening stations, antiscia and fixed-star contacts are not certified by the supplied approximate calculation; no precise event timing is claimed.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "choice",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Ceri Grove office offer",
+      "quote": "Grove office offer"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "ceri",
+      "quote": "Ceri’s own words"
+    },
+    {
+      "field": "principal_mode",
+      "value": "relay",
+      "quote": "relaying"
+    },
+    {
+      "field": "principal_id",
+      "value": "ceri",
+      "quote": "Ceri"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "already"
+    },
+    {
+      "field": "priorities",
+      "value": "income",
+      "quote": "better income"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Retain the effective worker and pay criterion; do not assign the messenger the job."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-009 (train)
+
+### Question
+
+My wife Della has a written offer for the Harbor library job. I ask myself about its work quality for her, without comparing salaries.
+
+### Worked answer
+
+**Status:** answer
+
+For Della, I would judge the Harbor library offer as a rather poor prospect for satisfying work. The job has practical substance, but the chart gives stronger warnings about her comfort and the working environment than indications of good work quality. This is a qualified judgment about the offered work, without comparing salaries or questioning whether she will receive the offer.
+
+### Reasoning
+
+You are asking your own question about your wife, not relaying hers. Cancer on the seventh cusp makes the Moon Della’s significator; Saturn, ruler of the Capricorn Ascendant, represents you. The Moon’s primary role as Della takes precedence over its usual role as your cosignificator.
+
+The offered position remains external to Della: she has an offer, not an established job. I therefore use the radical tenth, Scorpio ruled by Mars. The turned tenth, radical fourth ruled by Venus, would describe her existing job, career or boss; it does not replace Mars here. Neither the library’s natural association with Mercury nor a planet’s presence in the tenth changes its ruler.
+
+Mars is peregrine: there is no substantial essential dignity indicating particularly good work. Its angular placement in the radical seventh gives it capacity to act, although occupying Leo rather than the cusp’s Cancer moderates that strength. It is direct and clear of the Sun. Thus the job is practically viable, but capacity is not the same as quality. No supplied circumstance makes peregrinity a specifically favorable description of this work.
+
+The working environment supplies stronger contrary testimony. Venus, within about 1.5° before the tenth cusp in the same sign, belongs to the tenth under the cusp rule. It is angular but in detriment and retrograde, with no declared return context to explain away the retrogradation. Mercury is also close to the tenth cusp, angular and peregrine. Both planets are clear of solar affliction. Venus’s approaching square to Mars adds difficulty to the job’s already mixed condition; it does not establish a particular workplace incident.
+
+Directed receptions must remain distinct: neither Mars in Leo nor the Moon in Virgo has reception toward the other. The job’s indifference is ordinary, rather than evidence of rejection. Della’s Moon regards Venus with some comfort by triplicity but stronger aversion by fall. Venus regards Della adversely by fall. Della strongly values and exalts Mercury, while Mercury regards her adversely by fall. These are unfavorable, unequal relationships with planets prominently affecting the job; their human identities are not established.
+
+The chapter’s “send her to work” test reinforces the concern: placing Della’s Moon just inside the Scorpio tenth cusp puts it in its fall. That suggests poor comfort in the role, without claiming artificial strength merely because the relocated Moon is angular.
+
+Della’s actual Moon is peregrine, weak by radical eighth-house placement, clear of the Sun and waning with little light. The sampled void Moon supplies no promise of improvement, but cannot veto an already available offer. This is a quality question: no applying aspect is required. Later lunar contacts after sign changes are not needed to manufacture either acceptance or a favorable outcome. No event timing is warranted.
+
+### Evidence
+
+Roles: e7, e10, e13, e16; printed pp. 21, 30–32, 138, 224.
+Job quality and capacity: e4, e32–e34; printed pp. 44–56, 226–227.
+Tenth-house influences: e2–e3, e24–e31, e69; printed pp. 17, 57, 62–63, 88, 227.
+Directed receptions: e50–e51, e53, e55, e64–e65, with e1 and e4 and the dignity table for Moon–Mars indifference; printed pp. 47, 71–77, 223.
+Della’s condition and placement test: e0–e1, e16, e21–e23, e78; printed pp. 50, 56, 64–65, 227.
+State rather than acquisition judgment: printed pp. 84, 226–227. Calculation limits: e79.
+
+### Unresolved
+
+The people or circumstances represented by Mercury and Venus are unidentified, so the chart does not justify naming a troublesome colleague or a specific management problem. Daily speeds, precise stations, antiscia and fixed-star contacts are unverified; the approximate seven-day event brackets cannot support precise developments or dates.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Della Harbor library offer",
+      "quote": "Harbor library job"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "della",
+      "quote": "My wife Della"
+    },
+    {
+      "field": "people.della.relationship",
+      "value": "partner",
+      "quote": "My wife"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "ask myself"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "written offer"
+    },
+    {
+      "field": "priorities",
+      "value": "work quality",
+      "quote": "work quality"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Separate supplied offer quality from hypothetical appointment and preserve worker."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-010 (train)
+
+### Question
+
+The Indigo repair post is mine to accept. I want a role where I can use technical skill rather than chase status. Would it suit me?
+
+### Worked answer
+
+**Status:** answer
+
+I would lean against accepting Indigo as a good fit for you. It offers a credible outlet for technical skill, but the stronger indications suggest that doing the work would be less satisfying than its appeal now suggests. The pay also offers little reassurance. This is a qualified judgment about suitability, not a prediction that the offer will disappear.
+
+### Reasoning
+
+The offer is already yours to accept, so this is “What will the job be like?”, not “Will I get it?” No new aspect is required.
+
+Capricorn on the first cusp makes Saturn your significator; the Moon represents your emotions. Scorpio on the tenth makes Mars the job, although Mars physically occupies the seventh. Sagittarius on the eleventh makes Jupiter the pay. There is no shared-ruler collision between you and the job. The Moon also rules the seventh, but no separate colleague or rival is identified here; I would not turn its contacts into an invented personnel story.
+
+Mars is peregrine, angular and clear of the Sun: the job has capacity to function, but lacks essential testimony of substantial quality. Mercury, within one degree before the tenth cusp, belongs to the tenth and aptly describes technical knowledge and dexterity. That supports your stated preference, but Mercury does not replace Mars as the job’s ruler, and descriptive relevance does not make the whole job good. Venus, also counted in the tenth, is detrimented and retrograde: a material warning about the working environment. No declared return or reworking circumstance clearly neutralizes that retrogradation.
+
+Reception is unequal. Saturn in Aries strongly values Mars: you want the work. Mars in Leo has minor regard for Saturn by term and face, but its major reception is Saturn’s detriment. There is some appreciation, outweighed by incompatibility. Your Moon strongly values Mercury by domicile and exaltation, fitting your enthusiasm for technical skill, with some possibility of idealizing that feature.
+
+Saturn itself is fallen, retrograde and near opposition to the Sun; its third-house placement is neutral in capacity. This describes a compromised position in this decision, not a verdict on your technical competence. There is no stated return context to excuse its retrogradation.
+
+The chapter’s “send yourself to work” test is particularly telling. Placing Saturn just inside the Scorpio tenth cusp removes its fall but gives it no essential dignity: some improvement, without clear flourishing. Placing the Moon there puts it in fall, suggesting emotional dissatisfaction. Neither gains meaningful additional testimony merely from being hypothetically placed in the tenth.
+
+Jupiter has minor dignity by term, angular capacity and solar clearance, so the pay is not simply powerless or worthless. But Jupiter is in Saturn’s detriment, while the Moon is in Jupiter’s detriment: weak support for financial suitability and satisfaction, without grounds to invent a salary or payment delay.
+
+The Moon is currently void and waning. This may describe inertia over accepting, but does not decide suitability. The early Venus–Mars square candidate reinforces the existing warning about the job; its approximate status does not establish a particular incident. Later lunar contacts cannot be chained into a promised improvement. No event timing is warranted.
+
+### Evidence
+
+Roles: e7, e13, e16–e17, e4; printed pp. 23–24, 30–32, 226–227.
+
+Technical fit and workplace warnings: e2–e3, e24–e35, e70; printed pp. 17, 32, 37, 45–46, 56–57, 227.
+
+Directed attitudes: e47, e54, e57; printed pp. 71–77, 223. Saturn’s condition: e6, e39–e43; printed pp. 50, 56–61.
+
+Hypothetical placement at work: e16 and the dignity table, printed p. 47; procedure, p. 227. Pay: e5, e17, e36–e38, e45, e53; printed pp. 223, 227.
+
+Moon and limits: e0–e1, e21–e23, e67–e80; printed pp. 64–65, 91, 97, 127–131.
+
+### Unresolved
+
+The concrete source of the workplace difficulty is unidentified. Exact speeds, stations, antiscia and fixed-star contacts are not certified. Approximate seven-day event brackets cannot establish precise future developments or dates; these limits qualify the suitability judgment without preventing it.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Indigo repair offer",
+      "quote": "Indigo repair post"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "mine to accept"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "mine to accept"
+    },
+    {
+      "field": "priorities",
+      "value": "use technical skill",
+      "quote": "use technical skill"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Infer actual availability and judge role-purpose context, not projected angular strength alone."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-011 (train)
+
+### Question
+
+I have a firm offer at Juniper. Is its advertised pay a good financial prospect for me, regardless of whether the title is impressive?
+
+### Worked answer
+
+**Status:** answer
+
+I would not rate Juniper’s advertised pay as a good financial prospect for you. The chart shows some substance behind the pay, but stronger testimony that it will not benefit you as much as you hope. This is a judgment about its financial value to you, not a prediction that the firm offer will disappear or that the employer will fail to pay.
+
+### Reasoning
+
+This is an available-offer quality question, specifically about pay, so no new aspect is required to establish that you can get the job.
+
+Capricorn rising gives you Saturn. Aquarius on the second cusp also gives Saturn your bank balance; that shared ruler is appropriate here and needs no replacement. Scorpio on the tenth gives Mars the job. Sagittarius on the eleventh—the job’s second house—gives Jupiter the wages. The Moon remains your emotional cosignificator; its rulership of colleagues through the seventh does not require introducing colleagues into this enquiry. No natural ruler replaces these cusp-derived roles.
+
+Jupiter provides the main positive testimony: it has minor essential dignity by term, is angular in the seventh, direct and clear of solar affliction. Thus the pay has some quality and capacity to deliver, although term dignity alone does not describe exceptionally good pay. Its physical seventh-house placement does not turn it into a rival.
+
+The decisive contrary testimony is Jupiter’s placement in Saturn’s detriment: the wages are adversely disposed toward both you and your bank balance. This is not a literal emotion, but an indication that the remuneration is poorly suited to benefiting you. Saturn in Aries has no corresponding reception toward Jupiter; there is no supportive mutual reception to offset that testimony.
+
+Saturn is in fall, retrograde and within the supplied severe solar-opposition region. Its third-house placement is neutral in capacity, including the same-sign cusp adjustment. No return-to-an-old-job circumstance explains away its retrogradation. These conditions reinforce financial vulnerability without establishing that you are actually broke.
+
+The job itself, Mars, is peregrine but angular, direct and clear of the Sun. Its reception toward Saturn is mixed: minor regard by term and face, outweighed by major aversion through detriment. Conversely, Saturn in Mars’s domicile shows your strong interest in the job; that interest does not establish its financial merits.
+
+The Moon is peregrine, weak by house and waning, though clear of solar affliction. Its placement in Jupiter’s detriment adds emotional dissatisfaction with the pay. Its calculated void-of-course condition does not invalidate an existing offer or answer this quality question negatively by itself. The later lunar contacts require sign changes and do not establish better pay. No payment event or date is being predicted.
+
+### Evidence
+
+Roles: e7–e8, e13, e16–e17; Frawley printed pp. 24, 30–32, 226–227.
+
+Pay quality and capacity: e5, e35–e37; printed pp. 49, 54–56, 223, 227. Wages’ adverse reception toward you and your money: e44; printed pp. 71–77, 223.
+
+Your condition: e6, e38–e42; printed pp. 17, 50, 56–61. Job condition and asymmetric mixed receptions: e4, e32–e34, e46, e56; printed pp. 75–77, 226–227.
+
+Moon: e0–e1, e21–e23, e52, e66–e78; printed pp. 64–65, 90–97. Calculation limits: e79.
+
+### Unresolved
+
+The chart does not quantify take-home pay or establish which compensation terms cause the poor financial fit. Positions and event searches are approximate; exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. The judgment is therefore qualified, not a precise forecast of monetary loss.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Juniper offer",
+      "quote": "offer at Juniper"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I have"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "firm offer"
+    },
+    {
+      "field": "priorities",
+      "value": "pay over title",
+      "quote": "advertised pay"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "An impressive job condition does not substitute for money testimony."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-012 (train)
+
+### Question
+
+I have held Harbor’s dispatch job for nine years, and Indigo has already offered me a different post I can accept. Should I leave the present role for the offered one if my priority is work satisfaction?
+
+### Worked answer
+
+**Status:** answer
+
+I lean toward accepting Indigo for a modest improvement in work satisfaction, rather than expecting a transformation. Harbor looks particularly uncomfortable emotionally; Indigo offers some relief, but neither role looks strongly supportive of you.
+
+### Reasoning
+
+This is a comparison with an available offer, not a question about securing employment. Capricorn rising gives you Saturn; the Moon also signifies your emotions. Scorpio on the tenth cusp gives Harbor Mars; the next sign, Sagittarius, gives Indigo Jupiter. Nine years in Harbor does not require the early-cusp exception: this MC is midway through Scorpio. The Moon’s seventh-house rulership does not displace its emotional role here; no particular colleague or rival is the subject.
+
+Harbor’s Mars is peregrine, whereas Indigo’s Jupiter has minor dignity by term: a modest improvement in intrinsic quality, not a wonderful job. Both occupy the angular seventh house and are clear of solar affliction, giving them capacity to act. Their physical placement does not turn them into colleagues. Saturn is fallen, retrograde and near solar opposition, suggesting you are poorly placed and uncomfortable. No declared return circumstance explains away its retrogradation. Exact speeds and stations remain unobserved.
+
+Reception qualifies the comparison. Saturn in Mars’s domicile shows your strong attachment to Harbor. Mars regards Saturn with minor positives by term and face but the much stronger negative of detriment: some appreciation does not cancel the underlying incompatibility. Jupiter likewise regards Saturn negatively by detriment; Indigo is not especially welcoming to you. Conversely, your Moon in Virgo regards Jupiter negatively by detriment, showing present emotional resistance to Indigo. These directions are distinct; your attachment to Harbor is not proof that Harbor supports you.
+
+For satisfaction, the chapter’s hypothetical “send yourself to work” comparison is especially useful. At Harbor’s Scorpio cusp, Saturn gains no essential dignity and the Moon is in fall. In the proposed Sagittarius setting, Saturn still gains no major dignity, but the Moon escapes its fall. This supports emotional relief from moving, rather than strong fulfillment. The hypothetical placement does not itself confer angular strength or prove an actual future ingress.
+
+Jupiter also rules the radical eleventh, the ordinary wages indicator. Its minor dignity provides no compelling financial argument, and it cannot independently distinguish both salary packages. Your declared priority remains satisfaction.
+
+The Moon is peregrine, weak in the eighth and waning toward the Sun. Its calculated void-of-course condition suggests inertia or remaining where you are—the default if you do not accept Indigo. It does not establish that the offered job is bad. No acquisition aspect is required for this comparison, and the later post-ingress candidates do not warrant predicting acceptance or assigning a date. Overall, the relief shown by the emotional comparison gives Indigo a narrow advantage, tempered by both jobs’ adverse reception of Saturn.
+
+### Evidence
+
+Roles and comparison: e7, e13, e16–e17; printed pp. 30–32, 226–228. The long-tenure/early-MC exception is on p. 228.
+
+Quality and capacity: e4–e6, e33–e42; printed pp. 44–54, 56–61. Directed attitudes: e44, e46, e52, e56; printed pp. 71–77 and 223.
+
+Hypothetical workplace comparison derives from e7 and e16, Scorpio followed by Sagittarius, and the dignity table on printed p. 47; the satisfaction procedure is on pp. 226–228. Wages: e17, e36–e38; printed pp. 223 and 227.
+
+Moon and limits: e0–e1, e22–e24, e66–e78; printed pp. 64–66, 84, 97 and 140. Calculation boundary: e79; timing requirements: printed pp. 127–131.
+
+### Unresolved
+
+Planetary positions and event brackets are approximate. Exact speeds, intervening stations, fixed-star contacts and antiscia are not certified. Separate comparative pay conditions are not established. These limits leave a qualified satisfaction judgment; they do not support an acceptance date or a claim that you will actually move.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "choice",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Indigo available offer",
+      "quote": "Indigo"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I can accept"
+    },
+    {
+      "field": "job_context",
+      "value": "current Harbor role versus available Indigo offer",
+      "quote": "already offered me a different post"
+    },
+    {
+      "field": "context",
+      "value": "held current job nine years",
+      "quote": "nine years"
+    },
+    {
+      "field": "priorities",
+      "value": "work satisfaction",
+      "quote": "work satisfaction"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Distinguish current and next job through source-specific signs/rulers with actual tenure context; a routine next-sign rule can require qualification. No acquisition aspect is needed for the offer."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    223,
+    224,
+    225,
+    226,
+    227,
+    228
+  ]
+}
+```
+
+## dspy-job_offer-first-013 (development)
+
+### Question
+
+I have been offered the Larch sales job. Should I accept if my deciding factor is stable income?
+
+### Worked answer
+
+**Status:** answer
+
+I would lean against accepting the Larch offer if stable income is your deciding factor. The pay has some supporting testimony for continuity, but stronger indications suggest it would not serve you comfortably or reliably enough to make this a confident choice. This does not establish missed wages or a commission-only arrangement.
+
+### Reasoning
+
+This is an available offer being assessed for income suitability, not a question about obtaining a job. An applying aspect is therefore not required.
+
+Capricorn on the Ascendant gives you Saturn; Scorpio on the tenth gives the job Mars. Sagittarius on the eleventh gives its wages Jupiter. Pisces on the second also gives Jupiter your bank balance: these financial roles share a planet, so there are not two independent planets in mutual reception. No replacement is necessary for this quality judgment. The Moon describes your emotional response. Although it also rules the seventh, no separate colleague or rival needs to be introduced into this enquiry.
+
+The strongest financial support is Jupiter in fixed Leo, angular in the seventh, direct and clear of the Sun. Fixity supports continuity, and angularity gives the wages capacity to operate. However, Jupiter has only its own term: modest essential support, not testimony of exceptional pay. Crucially, Jupiter is in Saturn’s detriment: the wages are poorly disposed toward you. This qualifies the promise of continuity; something can persist without providing income that suits its recipient. Jupiter’s minor regard for Mars by face does not outweigh this adverse relation to you.
+
+Mars is also in fixed Leo, angular, direct and clear of the Sun, but peregrine. The job has capacity and some steadiness, without strong essential quality. Its reception toward Saturn is mixed: term and face show limited positives, while detriment supplies the much stronger negative. Saturn in Aries, conversely, is in Mars’s domicile: you want the job considerably more than its conditions favour you. The sales label alone does not turn Mars’s peregrine condition into a favourable descriptive exception.
+
+Saturn is fallen, retrograde and within the supplied region of severe affliction around opposition to the Sun. There is no return-to-an-old-job context to explain away retrogradation. Its second-house placement fits your financial concern but does not itself promise financial improvement. These conditions suggest a disadvantaged position in making this choice, not a judgment about your personal worth.
+
+The Moon is peregrine, weak in the eighth and waning toward the Sun. Its placement can describe financial anxiety; it is also in Jupiter’s detriment, suggesting discomfort with the financial proposition. Sending the Moon mentally just inside the Scorpio tenth cusp, as the job-quality procedure permits, puts it in fall: further testimony against feeling comfortable there. This hypothetical placement earns no automatic angular strength.
+
+The void Moon does not prove either refusal or secure income. Nor should its later, after-ingress contacts be promoted into a promise of payment. The near Venus–Mars square adds a secondary concern because Venus is debilitated and retrograde, but its concrete meaning is unidentified. The judgment rests on financial and job condition and reception, not an invented obstruction or payment event. No timing is warranted.
+
+### Evidence
+
+- Roles: e7, e8, e13, e16, e17; Frawley printed pp. 24, 30–32, 226–227.
+- Wages’ continuity, capacity and modest quality: e5, e35–e37; printed pp. 41, 49, 56, 223, 227.
+- Directed financial and job receptions: e42, e43, e45, e51, e55; printed pp. 71–77, 223.
+- Job condition: e4, e32–e34; printed pp. 44–46, 51, 54–56, 226–227.
+- Your condition: e6, e38–e41; printed pp. 50, 57, 61.
+- Moon and hypothetical workplace placement: e0, e1, e22–e24, e16, e77; printed pp. 47, 64–66, 227.
+- Secondary affliction and event limits: e3, e28–e31, e65–e69, e78; printed pp. 62–63, 90–97, 127–131.
+
+### Unresolved
+
+The evidence does not specify guaranteed salary, commission structure, income variability or payment history, so it cannot establish the practical mechanism of financial difficulty. Exact speeds, stations, antiscia and fixed-star contacts are not certified. The approximate seven-day event window cannot establish long-term payment events or precise dates.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "choice",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Larch sales offer",
+      "quote": "Larch sales job"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I have been offered"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "offered"
+    },
+    {
+      "field": "priorities",
+      "value": "stable income",
+      "quote": "stable income"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Use wages and contextual stability, without confusing money-to-worker contact with proof of getting an offered job."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-014 (development)
+
+### Question
+
+They have given me the Meadow assistant post to accept or refuse. I mostly care about fitting the daily work. How does it look?
+
+### Worked answer
+
+**Status:** answer
+
+For your priority of fitting the daily work, I would lean against accepting. The chart suggests you want the post more than it suits you: there is some accommodation, but stronger testimony of discomfort, especially emotionally. This is a qualified judgment about fit, not a prediction that the offer will disappear.
+
+### Reasoning
+
+This is an available offer, so the relevant procedure is “What will the job be like?”, not “Will I get it?” Capricorn on the first cusp makes Saturn your significator; Scorpio on the tenth makes Mars the job. Being an assistant does not make your work a sixth-house matter. The Moon remains your emotional cosignificator: its seventh-house rulership need not introduce colleagues when none are independently implicated.
+
+Mars is peregrine, giving no strong essential testimony of a good job, but not making it intrinsically dreadful. It is angular in the seventh, direct and clear of solar affliction: the job has capacity to operate. Its different sign from the seventh cusp moderates that angular strength. No supplied description of the duties justifies replacing these quality judgments with a descriptive exception.
+
+The receptions are unequal. Saturn in Aries strongly values Mars: you want the job. Mars in Leo is in Saturn’s term and face but also its detriment. The job therefore offers minor accommodation alongside a much stronger indication of incompatibility with you. Your enthusiasm does not establish reciprocal suitability.
+
+The chapter’s specific fit test reinforces this. Mentally placing Saturn just inside the tenth cusp, at about 18° Scorpio, leaves it peregrine: there is no clear essential comfort there, although this is an improvement from its actual fall in Aries. More decisively, placing the Moon there puts it in its fall. That points to emotional discomfort in the work. These are hypothetical placements prescribed for assessing fit, not predicted planetary movements; their imposed angularity supplies no additional positive testimony.
+
+Your actual Saturn is fallen, retrograde and close to opposition with the Sun, suggesting a strained present position rather than personal inadequacy. There is no stated return to an old job to explain away retrogradation. The actual Moon is peregrine, weak in the eighth, waning toward the Sun and void within the supplied calculation. These qualify your present ease and agency; the void Moon does not veto an already available offer.
+
+Pay is secondary to your stated priority. Sagittarius on the eleventh makes Jupiter the wages. Jupiter has minor essential dignity by term and angular capacity, but its placement in Saturn’s detriment gives no strong reassurance that the remuneration serves you well. Jupiter also rules your second house; that shared ruler is not an independent mutual reception between wages and savings.
+
+No new perfection is required to assess this offer’s quality. The first lunar contact listed requires a sign change, and later contacts cannot be chained into a promise of improvement. Venus’s approaching square to Mars adds a possible strain to the job, but the evidence does not identify its concrete cause. The principal judgment rests on the unequal receptions and the emotional fit test, balanced against the job’s operational strength and Saturn’s hypothetical release from fall.
+
+### Evidence
+
+- Roles and branch: e7, e12, e13, e16; Frawley printed pp. 20, 23, 30–32, 226–227.
+- Job quality and capacity: e4, e13, e32–e34; printed pp. 44–46, 51, 54–56.
+- Unequal, mixed receptions: e45 and e55; printed pp. 71–77, 223, 227.
+- Fit test: hypothetical placements derived from e16 using the dignity table on printed p. 47 and the explicit procedure on p. 227. Saturn is peregrine and the Moon fallen at this Scorpio degree.
+- Your present condition: e0–e1, e6, e22–e24, e38–e41, e77; printed pp. 50–51, 56–57, 61, 64–66.
+- Wages: e5, e8, e17, e35–e37, e43; printed pp. 24, 49, 223, 227.
+- Contact qualifications: e65–e68, e77–e78; printed pp. 84, 90–91, 97, 226.
+
+### Unresolved
+
+The evidence does not establish which specific duties or working conditions would cause discomfort. Planetary speeds, exact moving perfections, intervening stations, antiscia and fixed-star contacts are not certified by the approximate calculations. No event date is needed or justified for this fit judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Meadow assistant offer",
+      "quote": "Meadow assistant post"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "given me"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "accept or refuse"
+    },
+    {
+      "field": "priorities",
+      "value": "fit daily work",
+      "quote": "fitting the daily work"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Infer offer availability and requested suitability from ordinary phrasing."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-015 (development)
+
+### Question
+
+My sister Fara has a firm engineering offer at North. This is my own concern about whether the pay is worthwhile for her.
+
+### Worked answer
+
+**Status:** answer
+
+The pay looks disappointing for Fara rather than particularly worthwhile. The job itself looks more serviceable than its compensation: there is some indication of money benefiting her, but stronger testimony that the financial terms fall short. I would be cautious about recommending this offer on pay alone.
+
+### Reasoning
+
+This is your own question about your sister’s available offer, specifically its pay—not whether she will win the position. Fara therefore takes the third house: Aries on its cusp makes Mars her significator. For assessing this job as hers, its turned tenth is radical house 12, Sagittarius, ruled by Jupiter. Its wages are second from that house: radical house 1, Capricorn, ruled by Saturn. Fara’s own money is her second, radical house 4, Taurus, ruled by Venus. The radical tenth would be appropriate to an external position she was competing to obtain; that is not the enquiry here.
+
+Saturn also ordinarily signifies you as Lord 1. Here its concrete role as Fara’s wages takes priority; your planet need not participate separately in a third-party judgment. The Moon remains your cosignificator, not Fara’s. No natural significator needs to replace these cusp rulers.
+
+Jupiter, the job, has modest essential dignity by term, is direct, angular in physical house 7 and clear of the Sun. This supports a serviceable job with capacity to function, without promising an exceptional one. Its different sign from the seventh cusp moderates, but does not remove, angular strength. Fara’s Mars is also angular, direct and clear of the Sun, although peregrine: she has capacity to act, but the chart supplies no exceptional essential strength.
+
+The wages are much less satisfactory. Saturn is in fall, retrograde and within approximately five degrees of opposition to the Sun—a serious accidental affliction. Its physical second-house placement gives neutral capacity, not the strength of the first house it rules. Nothing in the stated circumstances supplies a returning-payment context that would excuse retrogradation. Fara’s bank balance, Venus, is itself in detriment and retrograde, with neutral house capacity and no solar affliction. This reinforces concern about financial benefit without establishing her actual balance or debts.
+
+Reception gives qualified support: Saturn in Aries strongly regards Fara’s Mars by domicile, suggesting that the wages are directed toward benefiting her. But willingness does not repair their poor condition. Saturn regards her money, Venus, negatively by detriment despite minor regard by term; the stronger negative outweighs that small positive. Venus has strong regard for Mars, but that does not make Venus essentially sound. Jupiter’s minor regard for Mars is a small bonus, while its major negative reception toward Saturn adds tension between the job and its compensation. None of these directions implies reciprocity.
+
+This is a quality judgment, so no future aspect is required. The void Moon describes little immediate development; it does not invalidate an existing offer or decide whether its pay is good. Its condition concerns your involvement, not Fara’s emotions. No payment event or timing is established, and the later contact candidates are unnecessary to this judgment.
+
+### Evidence
+
+Roles: e7, e9, e10, e18; Frawley printed pp. 19, 24–27, 30–32, 224, 226–227.
+
+Job and Fara’s capacity: e4–e5, e13, e31–e36; printed pp. 49, 51, 54–56.
+
+Wages and personal finances: e3, e6, e27–e30, e37–e40; printed pp. 50, 57, 61, 223, 227.
+
+Directed receptions: e41–e42, e54, e56, e62; printed pp. 71–77, 223.
+
+State judgment, Moon and calculation limits: e76–e77; printed pp. 32, 65, 84, 226–227.
+
+### Unresolved
+
+The offer’s monetary amount and Fara’s financial requirements are not supplied, so practical affordability cannot be quantified. Positions and contact calculations are approximate; exact speeds, stations, antiscia and fixed-star contacts are not certified. The judgment is qualitative and provisional, not a prediction of a specific payment failure or date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Fara North engineering offer",
+      "quote": "engineering offer at North"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "fara",
+      "quote": "My sister Fara"
+    },
+    {
+      "field": "people.fara.relationship",
+      "value": "sibling",
+      "quote": "My sister"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "my own concern"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "firm"
+    },
+    {
+      "field": "priorities",
+      "value": "pay",
+      "quote": "pay"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Retain worker, offered role and its distinct wages testimony."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-016 (development)
+
+### Question
+
+I can start the Orchard post if I accept today. I want to know its quality as a job, not whether an application succeeds.
+
+### Worked answer
+
+**Status:** answer
+
+Orchard looks functional but unremarkable, with stronger indications of dissatisfaction for you than of a genuinely good fit. The pay has some support, but the job itself offers little evidence of quality and shows a predominantly adverse relationship with you. Since you can already accept it, my reservation concerns what working there would be like—not whether you can get it.
+
+### Reasoning
+
+This is an available-offer quality question. No new aspect is required to establish access to the job. Capricorn on the first cusp gives you Saturn; Scorpio on the tenth gives Orchard Mars; Sagittarius on the eleventh gives its pay Jupiter. Jupiter also rules your second-house finances: this is one planet carrying both money roles, not independent testimony of mutual reception. Mars’s physical seventh-house placement does not make it a colleague or rival.
+
+Mars is peregrine, offering little essential assurance of job quality, but angular, direct and clear of the Sun: the job has capacity to function. Its different sign from the seventh cusp somewhat reduces the angular reinforcement. This is a distinction between operational strength and intrinsic goodness, not proof of a disastrous job. Nothing supplied gives peregrination a specific descriptive exemption here.
+
+Your Saturn is in fall, retrograde and within the severe solar-opposition region. Its second-house placement gives neutral capacity. No return-to-an-old-job circumstance explains away retrogradation. These conditions describe your compromised position in this decision, not your moral character or established professional incompetence.
+
+Reception is uneven. Saturn in Aries strongly values Mars: you want the job. Mars in Leo has minor regard for Saturn by both term and face, but is also in Saturn’s detriment. The major adverse reception outweighs those small positives. Your interest therefore does not demonstrate that Orchard will suit or support you.
+
+Jupiter, the pay, has minor essential dignity by term, angular capacity and freedom from solar affliction. That supports some financial adequacy, not exceptional remuneration. Jupiter is in Saturn’s detriment, while the Moon is in Jupiter’s detriment: the financial relationship gives cause for dissatisfaction despite the pay’s capacity. Jupiter’s minor regard for Mars does not establish generosity toward you.
+
+For the optional boss assessment, the seventh is already the colleagues’ house, so Mars’s dispositor, the Sun, supplies the boss. The Sun strongly favours Saturn by exaltation, triplicity and face, a useful counterweight. However, it is fallen and weak in the eighth, limiting that support; its adverse reception toward Mars further complicates the picture. This does not identify a particular workplace dispute.
+
+The Moon remains your emotional cosignificator, although it also rules the colleagues’ seventh and subordinates’ sixth; these overlapping roles cannot establish independent stories about staff. It is peregrine, weak in the eighth, waning and void before sign exit. That does not make an available job unavailable. More directly relevant is Frawley’s “send yourself to work” test: just inside the Scorpio tenth cusp, Saturn gains no essential dignity, while the Moon enters its fall. This reinforces the concern about your satisfaction without claiming that hypothetical tenth-house angularity automatically strengthens you.
+
+The later lunar contacts require a sign change and do not establish acceptance or override this quality assessment. No event date is warranted or needed.
+
+### Evidence
+
+- Roles and available-offer procedure: e7, e8, e13, e16, e17; printed pp. 23–24, 30–32, 224–227.
+- Job capacity versus quality: e4, e31–e33; printed pp. 51, 54, 56, 226–227.
+- Your condition and unequal reception: e6, e37–e40, e44, e54; printed pp. 50, 57, 61, 71–77.
+- Pay: e5, e34–e36, e41–e42, e50; printed pp. 49, 223, 227.
+- Boss countertestimony: e0, e19–e20, e45, e58–e59; printed pp. 224–225.
+- Moon and hypothetical workplace placement: e0–e1, e16, e21–e23, e64–e76; dignity table printed p. 47; pp. 64–65, 90–91, 227.
+- Calculation limits: e77; timing requires an established event, printed pp. 127–131.
+
+### Unresolved
+
+Exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. The supplied approximate positions and seven-day contact window support a qualified quality judgment, not precise future events. Concrete salary figures and the real-world causes of the adverse testimonies are not supplied.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Orchard offer",
+      "quote": "Orchard post"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I can start"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "if I accept today"
+    },
+    {
+      "field": "priorities",
+      "value": "job quality",
+      "quote": "quality as a job"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Current availability is enough to select assessment; no redundant application interview is needed."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-017 (test)
+
+### Question
+
+I have the Pine receptionist offer in writing. Would it improve my financial position?
+
+### Worked answer
+
+**Status:** answer
+
+I would not count on the Pine offer substantially improving your financial position. The chart suggests usable but modest pay, with stronger indications that the arrangement would not benefit you as much as you hope. This is a qualified judgment, not a calculation that you would lose money.
+
+### Reasoning
+
+This is a question about the financial value of an existing written offer, not whether you will obtain the job. An applying aspect is therefore not a prerequisite.
+
+Aquarius on the first cusp gives you Saturn; the Moon remains your cosignificator. Scorpio on the tenth gives the job Mars, regardless of its receptionist duties. Sagittarius on the eleventh gives the wages Jupiter; Pisces on the second also gives your finances Jupiter. This shared ruler is appropriate to assessing wages and financial condition together. It does not establish improvement or constitute mutual reception between two distinct planets. No substitute ruler is needed for this state question.
+
+Jupiter has minor essential dignity by term, strong angular capacity in the seventh, direct motion and freedom from solar affliction. These are real positives: the pay is not shown as intrinsically disastrous or powerless to help. Nevertheless, term is only a small dignity, not evidence of generous remuneration. Jupiter occupies Saturn’s detriment: the wages are poorly disposed toward you. Conversely, the Moon occupies Jupiter’s detriment, suggesting dissatisfaction with the financial side. These are separate directions of reception, not an assumed reciprocal attitude.
+
+Saturn is in fall, retrograde and within the severe solar-opposition region. Its physical placement in the second emphasizes your financial concern; that house gives neutral capacity, not additional weakness. No return-to-an-old-job circumstance explains away retrogradation. Your condition suggests vulnerability in this decision, rather than proving that the offer causes your difficulties.
+
+Mars is peregrine but angular, direct and clear of the Sun: the job has capacity without strong essential quality. Saturn in Mars’s domicile shows your interest in it. Mars’s regard for Saturn is mixed—minor term and face interest, outweighed by major detriment reception. Your enthusiasm is therefore not matched by comparable benefit from the job.
+
+The Moon is peregrine, weak in the eighth and waning, though clear of the Sun. Its void-of-course condition supports limited change, but does not cancel the written offer or independently prove financial harm. The later, after-ingress contacts are not needed to decide this quality question and do not establish a pay rise. On balance, modest positive wage testimony is outweighed by adverse reception and your vulnerable condition. No event or timing is established.
+
+### Evidence
+
+Roles: e7, e8, e16, e17; Frawley printed pp. 18, 23–24, 30–32, 226–227.
+Wages and shared financial ruler: e5, e34–e36, e42, e50; pp. 49, 71–77, 223, 227.
+Your condition and interest: e6, e37–e40, e54; pp. 50, 54–61, 223.
+Job quality and mixed regard: e4, e31–e33, e44; pp. 51, 56, 75–77, 226–227.
+Moon and limits: e0–e1, e21–e23, e64–e76, e77; pp. 64–65, 90–97, 127–131.
+
+### Unresolved
+
+The supplied inputs do not quantify current income, offered net pay, benefits or additional work costs, so the size or sign of the actual financial difference cannot be calculated. Positions and event brackets are approximate; speeds, intervening stations, antiscia and fixed-star contacts are not certified.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Pine receptionist offer",
+      "quote": "Pine receptionist offer"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I have"
+    },
+    {
+      "field": "job_context",
+      "value": "available written offer",
+      "quote": "in writing"
+    },
+    {
+      "field": "priorities",
+      "value": "financial position",
+      "quote": "financial position"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Money amount and capacity remain separate from whether the job’s name appears prestigious."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-018 (test)
+
+### Question
+
+My friend Geraint received the Reed maintenance offer and can accept it. I ask myself if the everyday work would suit him.
+
+### Worked answer
+
+**Status:** answer
+
+The reading suggests the everyday work could suit Geraint adequately, but offers little support for an especially good fit. His interest looks modest, and there is some indication of friction around the job. Pay has modestly favorable testimony, though that does not establish whether he would enjoy the daily duties.
+
+### Reasoning
+
+You are asking your own question about a friend, so Geraint is Jupiter, ruler of the Sagittarius eleventh cusp. The Moon remains your cosignificator; it does not become his emotional significator.
+
+Mars, ruler of the Scorpio radical tenth, signifies this external prospective position. An available offer does not establish that Geraint already holds the job. His turned tenth is radical eighth, whose Virgo cusp gives Mercury, appropriate for his existing job, career or boss. Maintenance duties do not make the position a sixth-house matter.
+
+This is a question about the suitability of an available offer, so an applying aspect is not required. Mars is peregrine: there is little essential testimony of outstanding job quality. Its physical placement in the angular seventh gives substantial capacity to function. It is direct and clear of the Sun; these remove particular afflictions rather than adding exceptional merit. No supplied detail makes its peregrine condition a specific descriptive fit for maintenance work. Jupiter has minor dignity by term, is angular in the seventh, direct and clear of the Sun, leaving Geraint reasonably placed to participate.
+
+Jupiter is in Mars’s face, showing Geraint’s slight interest in the work. Conversely, Mars at this degree of Leo in a daytime chart occupies none of Jupiter’s dignities or debilities: the job is indifferent to him, which the employment chapter treats as ordinary. These receptions are not reciprocal.
+
+For the separate wages assessment, the radical eleventh is second from the job’s tenth: its Sagittarius cusp again gives Jupiter. Jupiter’s term dignity supplies a small positive for pay quality, while its angular capacity supports the money’s ability to function as remuneration. This is modestly favorable pay testimony, not evidence of a generous salary, bonuses or a particular payment schedule. Jupiter can signify both Geraint and wages for this qualitative assessment; no replacement planet or self-aspect is needed. Pay does not establish daily-work suitability.
+
+Mentally placing Geraint’s Jupiter just inside the tenth cusp at 24.799° Scorpio leaves it without essential dignity or debility. This supports an ordinary, potentially tolerable fit rather than marked fulfillment or unhappiness. The hypothetical tenth-house placement cannot itself count as strength, and your Moon cannot substitute for his feelings.
+
+The close applying Venus–Mars square provides contrary testimony. Venus is in detriment and retrograde, with no supplied return context explaining the retrogradation favorably. This suggests difficulty affecting the job, but does not identify its practical cause. Venus’s strong regard for Mars qualifies the affliction: it is not simple hostility. The void Moon does not veto a suitability judgment. No event or civil timing is established or required.
+
+### Evidence
+
+e17, e5, e34–e36: Geraint’s rulership, minor essential dignity and angular capacity; printed pp. 24, 30, 49, 54–60, 138. Moon assignment: printed p. 32.
+
+e16, e14: radical job and alternative turned tenth rulerships; printed pp. 20, 224, 226–227.
+
+e4, e31–e33: Mars’s peregrine condition, angular placement and freedom from solar affliction; printed pp. 44–56, 57, 60–61.
+
+e41, e4 and the daytime Leo dignity table: Geraint’s slight interest and the job’s lack of reciprocal reception; printed pp. 47–48, 71–76, 223.
+
+e17, e5, e34–e36: Jupiter also rules wages as second from the radical tenth; minor dignity and angular capacity give modestly favorable pay testimony. Printed pp. 24, 31, 49, 54–56, 223, 227.
+
+e16 and the Scorpio dignity table: projected Jupiter lacks essential dignity or debility just inside the job cusp; printed pp. 47, 227.
+
+e3, e27–e30, e62, e67: qualified testimony of friction from debilitated, retrograde Venus closely applying to square Mars, while strongly regarding Mars; printed pp. 57, 62–63, 87–88, 226–227.
+
+e76–e77: void Moon and approximate calculation limits; printed pp. 65, 84, 127.
+
+### Unresolved
+
+The practical source of the Venus-related difficulty is unidentified. Specific duties, Geraint’s work preferences and salary terms are not supplied. Exact speeds, stations, antiscia and fixed-star contacts are not certified by the approximate calculations.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Geraint Reed maintenance offer",
+      "quote": "Reed maintenance offer"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "geraint",
+      "quote": "My friend Geraint"
+    },
+    {
+      "field": "people.geraint.relationship",
+      "value": "friend",
+      "quote": "My friend"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "ask myself"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "can accept it"
+    },
+    {
+      "field": "priorities",
+      "value": "daily work fit",
+      "quote": "everyday work would suit him"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Do not silently make friend a relayed first-house querent or confuse offered job with friend’s existing career."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+
+## dspy-job_offer-first-019 (test)
+
+### Question
+
+I currently hold the Stone research post and have a firm available offer at Tide. Should I move to Tide if I care chiefly about reliable wages rather than prestige?
+
+### Worked answer
+
+**Status:** answer
+
+On this chart, I would stay at Stone if dependable wages are your main priority. Tide looks somewhat better as a job, but its corresponding pay indication is substantially more troubled. Stone is not an entirely comfortable option either; this is a qualified preference for staying, not a promise that its wages are secure.
+
+### Reasoning
+
+Aquarius rising gives you Saturn, with the Moon describing your emotions. Scorpio on the tenth gives Mars to your existing Stone post; the following sign, Sagittarius, gives Jupiter to the offered Tide post. This is a comparison of an existing job and an available alternative, not a question about winning an offer. No applying aspect is required.
+
+For the corresponding wage comparison, Sagittarius on the eleventh gives Jupiter to Stone’s pay; the following sign, Capricorn, gives Saturn to Tide’s pay. Extending the chapter’s next-sign comparison to wages is an interpretive step. Jupiter consequently represents both Tide’s job and Stone’s wages, while Saturn represents both you and Tide’s wages. These roles must remain distinct in interpretation; their shared rulers do not establish payment or mutual affection. No substitute significators are needed for this quality comparison.
+
+Stone’s Mars is peregrine but angular, immediately before the seventh cusp in the same sign, direct and clear of the Sun: capable, but without essential quality to recommend it strongly. Tide’s Jupiter is also angular, direct and clear, and has the modest advantage of dignity by term. This supports a somewhat better job, not an exceptional one.
+
+The wage comparison points the other way. Stone’s Jupiter has modest essential dignity and substantial capacity. Tide’s Saturn is in fall, retrograde and severely afflicted by proximity to opposition with the Sun. Its second-house placement fits your financial concern but does not remove those other problems. Moving to a new employer supplies no clear return context that would excuse retrogradation. Saturn’s fall is a contextual difficulty, not a judgment of your character.
+
+Reception qualifies the preference. Saturn in Mars’s sign shows your attachment to Stone. Mars’s regard for Saturn is mixed: minor term and face favour are outweighed by detriment. Jupiter also regards Saturn by detriment, so neither Stone’s pay nor Tide’s job gives an uncomplicated indication of benefiting you. The Moon’s negative reception toward Jupiter adds emotional dissatisfaction; it does not itself establish missed wages.
+
+As a supplementary fit test, placing the Moon just inside Stone’s Scorpio tenth puts it in fall, whereas placing it in the corresponding Sagittarius setting for Tide removes that fall. Tide could therefore feel better despite the financial objection. Saturn gains no essential dignity in either setting.
+
+The Moon is currently peregrine, in the eighth, waning and void of course within the supplied calculation. This supports inertia, but does not veto an available choice. Later lunar contacts after ingress are not needed to manufacture an acquisition event. There is no established payment event to time.
+
+### Evidence
+
+Roles and comparison: e7, e16–e18; Frawley printed pp. 24, 30–32, 226–228. Corresponding wage-sign comparison is an extension of pp. 227–228, not an explicitly stated separate wage rule.
+
+Job and wage condition: e4–e6, e31–e41; printed pp. 47–54, 56–61, 223, 227.
+
+Directed receptions: e43, e45, e51, e55; printed pp. 71–77, 223. Supplementary emotional fit: e16 and the dignity table, printed pp. 47, 227.
+
+Moon and limits: e0–e1, e21–e23, e65–e77, e78; printed pp. 64–65, 90–97, 127–131.
+
+### Unresolved
+
+The separate Tide wage assignment relies on extending the next-sign comparison to the eleventh house. Actual payroll history and contractual payment protections are not supplied. Planetary positions are approximate; exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. The evidence supports a comparative recommendation, not certainty about either employer’s payment performance.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "choice",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Tide available offer",
+      "quote": "Tide"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I currently hold"
+    },
+    {
+      "field": "job_context",
+      "value": "held Stone role versus offered Tide role",
+      "quote": "firm available offer at Tide"
+    },
+    {
+      "field": "priorities",
+      "value": "reliable wages over prestige",
+      "quote": "reliable wages rather than prestige"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Keep current/next job and their distinct wages roles. Proposed sign changes are contextual future testimony, not a forced universal job assignment."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    223,
+    224,
+    225,
+    226,
+    227,
+    228
+  ]
+}
+```
+
+## dspy-job_offer-first-020 (test)
+
+### Question
+
+The printing offer at Springfield is already mine to accept; I mean the nearby Virginia branch. Does it look financially worthwhile?
+
+### Worked answer
+
+**Status:** answer
+
+The Springfield, Virginia offer looks financially underwhelming rather than clearly worthwhile. The pay has some substance, but the chart gives stronger reasons for caution about how much you would benefit personally. I would not treat it as a clear financial step forward; this does not establish that you would lose money.
+
+### Reasoning
+
+This is an available offer assessed for financial benefit, not a question about winning the position. Acceptance is already possible, so no new aspect is required to establish that opportunity.
+
+Aquarius on the first cusp makes Saturn your significator, with the Moon as your cosignificator. Scorpio on the tenth makes Mars the job. Sagittarius on the eleventh makes Jupiter the wages; Pisces on the second also makes Jupiter your finances. This shared ruler is appropriate to the financial question: it connects the two subjects without constituting mutual reception or independently proving profit. No turned houses or natural ruler for printing should replace these cusp rulers.
+
+Jupiter is direct, clear of the Sun and angular in the seventh, so the wages have capacity to deliver. Its own term gives a small essential positive, however, not the strength that would describe exceptional remuneration. Its physical seventh-house placement does not make it a rival or change its role as pay.
+
+The decisive contrary testimony is Jupiter in Leo, Saturn’s detriment: the wages are adversely disposed toward you. This qualifies the favourable capacity and modest dignity; it does not by itself establish nonpayment or a monetary loss. The Moon in Virgo likewise dislikes Jupiter by detriment, suggesting emotional dissatisfaction with the financial side. These are distinct directed receptions, not reciprocal hostility between Jupiter and Saturn.
+
+Saturn in Aries strongly wants Mars, the job. Mars in Leo has minor regard for Saturn by both term and face, but its major negative reception by detriment outweighs those small positives. Your attraction to the job therefore exceeds the job’s support for you. Mars is peregrine but angular, direct and clear of the Sun: an effective operation is indicated more strongly than an intrinsically excellent opportunity. No supplied circumstance makes its peregrinity a specific description of printing that would override this assessment.
+
+Your Saturn is in fall, retrograde and within the severe solar-opposition region. Its second-house placement appropriately emphasizes finances, but does not cancel those other difficulties. No return-to-an-old-job context explains away the retrogradation. These testimonies describe a compromised position in this matter, not your character.
+
+The Moon belongs in the eighth under the same-sign cusp rule. It is peregrine, waning and void of course in the supplied calculation. That adds little momentum, but cannot veto the value of an offer already available. The later lunar contacts require sign changes and do not establish financial improvement. No event or payment date needs to be timed here.
+
+### Evidence
+
+Roles and shared financial ruler: e7, e8, e16, e17; Frawley printed pp. 23–24, 30–32, 226–227.
+
+Pay’s modest quality, strong capacity and adverse reception: e5, e36–e38, e44, e52; pp. 49, 54–56, 71–77, 223, 227.
+
+Job condition and unequal regard: e4, e32–e35, e46, e56; pp. 17, 51, 75–77, 226–227.
+
+Querent’s financial placement and afflictions: e6, e39–e42; pp. 50, 56–61.
+
+Moon and limits on event inference: e0–e1, e21–e24, e66–e78; pp. 64–65, 90–91, 97. Calculation limitations: e79.
+
+### Unresolved
+
+The supplied chart cannot quantify the net financial gain. Actual pay, benefits and work-related costs are not supplied. Positions and event brackets are approximate; planetary speeds, exact stations, antiscia and fixed-star contacts are not certified. These limit confidence but do not prevent the provisional financial judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Springfield printing offer",
+      "quote": "printing offer at Springfield"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "mine to accept"
+    },
+    {
+      "field": "job_context",
+      "value": "available offer",
+      "quote": "already"
+    },
+    {
+      "field": "priorities",
+      "value": "financial benefit",
+      "quote": "financially worthwhile"
+    },
+    {
+      "field": "event_place",
+      "value": "Springfield, Virginia",
+      "quote": "Springfield"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Assess an actually available role against sourced priorities using job and separate wages testimony; acquisition is not a universal prerequisite.",
+    "Job geography is context, not a replacement for the reader’s current chart location."
+  ],
+  "must_not": [
+    "Do not guess priorities, award a good salary from job dignity alone, or infer suitability from automatic house-projection angularity."
+  ],
+  "source_pages": [
+    137,
+    138,
+    223,
+    224,
+    225,
+    226,
+    227
+  ]
+}
+```
+

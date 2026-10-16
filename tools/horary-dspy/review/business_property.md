@@ -1,0 +1,1834 @@
+# business_property: full questions and worked answers
+
+Generated reference answers for expert review; rubrics remain separate from answers. Original splits are retained. These are reading-component examples, not observed first-message application journeys.
+
+## dspy-business_property-first-001 (train)
+
+### Question
+
+I would rent Alder’s available workshop to run my furniture business, keeping the operating profit. Would working there profit me?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against renting Alder’s workshop for your furniture business on the proposed basis. The chart gives poor support for operating profit benefiting you and stronger testimony of an unsatisfactory eventual outcome. This is a qualified judgment against the venture, not a calculation of how much you would lose.
+
+### Reasoning
+
+This is the available-workplace question on printed p. 171: you would rent the workshop, work there yourself and retain the operating profit. Availability is accepted, so the issue is whether taking it benefits you, not whether you and Alder will conclude a lease. No buyer–seller aspect is required.
+
+Capricorn on the 1st gives you Saturn; Cancer on the 7th gives Alder the Moon. The Moon therefore belongs to the lessor and is not also your cosignificator. Scorpio on the 10th gives operating profit to Mars. Taurus on the 4th gives the final outcome to Venus. Lord 5 is not the profit significator here: that procedure concerns profit from property investment or letting, whereas you would operate your furniture business there. Natural associations with furniture do not replace these cusp-derived roles.
+
+Your Saturn is in fall, retrograde and physically in the 3rd, which is neutral for capacity. Nothing supplied makes this a return to an earlier arrangement, so retrogradation has no contextual exemption. Saturn is also within about five degrees of opposition to the Sun, a serious affliction. It is neither in the 1st nor in a sign trining or sextiling Capricorn, so the chapter’s specific favorable placement testimony is absent.
+
+Profit’s ruler Mars is peregrine: there is no essential strength promising a sound return. Its angular placement in the 7th gives it capacity to act, though being in a different sign from the cusp moderates that strength. Direct motion and freedom from solar affliction are ordinary conditions, not compensating essential dignity. Crucially, Mars is in Saturn’s detriment, although also Saturn’s term and face: profit has small favorable connections to you, but the major negative reception predominates. Saturn in Mars’s domicile shows your strong interest in the profit; it does not make that interest reciprocated.
+
+The outcome is more clearly adverse. Venus is in detriment and retrograde, with no supplied descriptive circumstance explaining those debilities away. It is angular in the 10th, the house of operating profit, so its poor condition has scope to matter. Venus strongly regards Mars by domicile, triplicity and face, linking the outcome to profit, but this does not repair Venus’s own debility. Saturn’s reception toward Venus is likewise mixed: minor term interest is outweighed by detriment.
+
+Alder’s Moon is peregrine and weak in the 8th, though clear of solar affliction. Its term reception toward Saturn gives only slight goodwill. Toward Venus it combines triplicity with the stronger negative reception of fall; Venus also regards the Moon negatively by fall. These do not prove dishonesty, but offer little reassurance about the arrangement.
+
+The calculated void Moon adds stagnation testimony, not an automatic refusal of profit. The approaching Venus–Mars square reinforces the concern connecting a damaged outcome with operating profit; it is not needed to establish this state judgment. Later lunar contacts after ingress do not establish a lease or rescue the venture. No event has been established that warrants timing.
+
+### Evidence
+
+Roles and branch: e7, e10, e13, e16; Frawley printed pp. 30–32, 170–171.
+
+Querent’s condition and placement: e6, e37–e40; printed pp. 50, 56–61, 171.
+
+Profit, capacity and directed mixed reception: e4, e31–e33, e44, e54; printed pp. 51, 56, 71–77, 171.
+
+Final outcome and its connection to profit: e3, e27–e30, e56, e62–e63, e67; printed pp. 45–46, 57, 62–63, 75–77, 171.
+
+Lessor and Moon: e1, e21–e23, e52–e53, e76; printed pp. 32, 56, 65, 171.
+
+Event and timing limits: e64–e77; printed pp. 84, 90–97, 127–133.
+
+### Unresolved
+
+The supplied astronomy is approximate. Exact perfection, intervening stations, antiscia and fixed-star testimony are not certified. Daily speeds are unavailable for an independent speed assessment. These limit refinement without preventing the adverse provisional judgment; no monetary amount or dated outcome can be established.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Alder workshop",
+      "quote": "Alder’s available workshop"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "run my furniture business"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "keeping the operating profit"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Use workplace profit tenth and final outcome fourth, not residential rent income fifth."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-002 (train)
+
+### Question
+
+The shop is available for me to buy and operate as my bakery, not let to tenants. Would the business there benefit me?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against buying this shop to operate your bakery. On the supplied chart, the prospective profit offers little reassurance, and the eventual outcome looks unfavorable. There is some capacity to generate business, but that is outweighed by indications that the venture would not benefit you sufficiently.
+
+### Reasoning
+
+This is the “take the farm or business” branch: the shop is available, and you would work in it yourself. The question concerns benefit, not whether a purchase can be completed. An applying buyer–seller aspect is therefore unnecessary.
+
+Capricorn on the 1st gives you Saturn; Cancer on the 7th gives the seller the Moon. The Moon consequently cannot also serve as your cosignificator. Scorpio on the 10th gives the prospective operating profit to Mars. Taurus on the 4th gives the final outcome to Venus. Although Venus also rules the 5th, rental income is not the appropriate profit measure here. No natural significator needs to replace these cusp rulers.
+
+Your Saturn is in fall and retrograde in Aries, physically in the 3rd. That house provides neutral capacity under Frawley’s rule, but the fall, retrogradation and proximity to solar opposition are substantial difficulties. Nothing supplied describes a return or reconsideration that would explain away the retrogradation. Saturn is neither in the 1st nor in a sign trine or sextile the Capricorn Ascendant, so the chapter’s particular favorable placement testimony is absent.
+
+Profit-significator Mars is direct, clear of the Sun and angular in the 7th: it has capacity to act. However, it is peregrine, giving little assurance of good profit. More decisively, Mars is in Saturn’s detriment. Its minor reception of Saturn by term and face qualifies, but does not outweigh, that major adverse reception. You, Saturn, strongly favor Mars by domicile; the prospective profit does not favor you comparably. This distinguishes your attraction to the earning opportunity from its benefit to you.
+
+The outcome-significator Venus is angular in the 10th, but in detriment and retrograde. Its capacity makes the adverse condition consequential rather than harmless. Venus strongly favors Mars, linking the outcome to profit, without making either intrinsically sound. Saturn’s reception of Venus is predominantly negative by detriment, despite a minor positive by term. Venus’s close square with Mars further connects an impaired outcome with the profit question; the difficulty comes from condition and reception, not merely from the square.
+
+The seller’s Moon is peregrine and physically in the weak 8th, though its location in the seller’s money house has contextual relevance. Its minor term reception toward Saturn supplies only limited goodwill. Its mixed reception toward Venus—triplicity but fall—does not reassure about the outcome. This warrants scrutiny of terms, not an invented allegation of fraud.
+
+The Moon is void of course in the supplied calculation and waning toward the Sun. That adds limited impetus, but does not determine whether the bakery would be beneficial. The later, after-ingress contacts do not rescue the unfavorable state judgment. No event date is warranted.
+
+### Evidence
+
+- Roles and business-property procedure: e7, e10, e13, e16; Frawley printed pp. 30–32, 171.
+- Your condition and placement: e6, e37–e40; printed pp. 50, 56–61, 171.
+- Profit’s capacity, quality and directed mixed reception: e4, e31–e33, e44, e54; printed pp. 51, 54–56, 71–77, 171.
+- Unfavorable outcome and its connection to profit: e3, e27–e30, e56, e62, e67; printed pp. 57, 62–63, 75–77, 88, 171.
+- Seller and Moon: e1, e21–e23, e52–e53, e76; printed pp. 32, 56, 64–65, 171. Waning phase follows from the supplied Sun and Moon positions, e0–e1.
+- Calculation and timing boundaries: e64–e77; printed pp. 84, 90–97, 127–133.
+
+### Unresolved
+
+The astronomy is approximate. Exact speeds, station behavior, antiscia and fixed-star contacts are not certified; the event search covers only seven days. These limit confidence and precision but do not prevent the provisional benefit judgment. The evidence does not establish a monetary profit figure or specific contractual defect.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "bakery shop",
+      "quote": "shop"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "operate as my bakery"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "buy",
+      "quote": "buy"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "benefit me"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Infer operating workplace, not passive rental investment."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-003 (train)
+
+### Question
+
+My daughter Amelie would rent Bracken’s pottery studio and keep her business profit. I ask myself whether working there profits her.
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against Amelie taking Bracken’s studio for its profit prospects. The chart’s main financial indication is poor, and the eventual outcome also looks disappointing. Her strong interest in the arrangement does not outweigh those warnings. This is a qualitative judgment, not a calculation of how much she would earn or lose.
+
+### Reasoning
+
+You are asking your own question about your daughter, rather than relaying her question. Amelie therefore takes the radical 5th: its Taurus cusp gives her Venus. For premises she would rent and work in, the relevant procedure is “Should I take the farm, or the business?” Availability is assumed; the question is whether operating there benefits her, not whether a tenancy will be signed.
+
+Turning from Amelie’s 5th house, her 7th is radical 11, whose Scorpio cusp gives Mars to the lessor; her 10th is radical 2, whose Aquarius cusp gives Saturn to her business profit; her 4th is radical 8, whose Leo cusp gives the Sun to the final outcome. This uses her operating profit, not the ordinary rental-property income assignment. Saturn also rules your Capricorn Ascendant, but the financial role takes priority in this judgment; no separate planet is needed to manufacture an aspect. Venus’s additional rulership of radical 4 does not make that house Amelie’s outcome.
+
+Profit is the decisive weakness: Saturn is in fall, retrograde, and within about five degrees of opposition to the Sun, a severe accidental affliction. Its physical radical 3rd-house placement gives neutral capacity, not angular strength merely because it rules her profit house. No accepted circumstance involving return explains away its retrogradation. Saturn’s reception toward Venus is mixed: minor interest by term but major rejection by detriment. Symbolically, the profit is poorly disposed toward Amelie.
+
+The outcome ruler, the Sun, is also in fall, with neutral radical 9th-house capacity. Its position in Venus’s domicile is supportive toward Amelie, but that favourable reception does not remove its own debility. Both principal financial and outcome indicators therefore weigh against taking the studio.
+
+Amelie’s Venus is in detriment and retrograde, although physically angular in radical 10 and clear of the Sun’s beams. She has capacity to act, but is poorly placed to benefit; no supplied circumstance makes these debilities merely descriptive. Venus strongly favours Mars by domicile, triplicity and face. Mars is peregrine, physically angular and solar-clear; its position supplies no reciprocal dignity-based regard for Venus. This shows unequal enthusiasm, not proof of dishonesty.
+
+The approaching Venus–Mars square may offer an occasion for the rental agreement, but signing is not evidence of profitability. No aspect is required to judge this venture’s quality. The Moon remains your cosignificator, not Amelie’s; its supplied void-of-course condition adds a background indication of inactivity, without deciding the financial question. No event date is warranted.
+
+### Evidence
+
+Role derivation: e7–e8, e11, e14, e17; Frawley printed pp. 25–32, 137–138. Working-premises procedure, profit and outcome: printed p. 171.
+
+Profit: e6, e38–e41, e57; printed pp. 50, 56–61, 74–77. Outcome and its favourable reception: e0, e19–e20, e61; printed pp. 50, 72, 171.
+
+Amelie and lessor: e3–e4, e27–e33, e63; reception table on printed p. 72; contextual dignity and motion on pp. 46, 54–57. Role houses are distinct from physical placement: pp. 30, 56.
+
+Agreement candidate and lunar limits: e68, e77–e78; printed pp. 32, 65, 84, 127–133, 171.
+
+### Unresolved
+
+The supplied astronomy is approximate; exact event order, intervening stations, antiscia and fixed-star contacts are uncertified. These limit completeness but do not prevent the qualified financial judgment. The evidence does not establish a monetary amount or a dated profit/loss forecast.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Bracken studio",
+      "quote": "Bracken’s pottery studio"
+    },
+    {
+      "field": "deal_actor",
+      "value": "amelie",
+      "quote": "Amelie would rent"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "amelie",
+      "quote": "keep her business profit"
+    },
+    {
+      "field": "people.amelie.relationship",
+      "value": "child",
+      "quote": "My daughter"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "I ask myself"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Turn actual operator without claiming deed ownership."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-004 (train)
+
+### Question
+
+The available farm is for me to cultivate myself; its harvest income would be mine. Is working this land worthwhile?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against taking this farm to cultivate yourself. The chart gives poor support for worthwhile earnings and a stronger warning that you would regret the undertaking. Availability is not the problem; whether working it benefits you is.
+
+### Reasoning
+
+This is the working-farm procedure, because the land is available and you would cultivate it for your own income. You are Lord 1, Saturn, from Capricorn rising; the seller or lessor is Lord 7, the Moon, from Cancer. Scorpio on the 10th makes Mars your prospective operating profit; Taurus on the 4th makes Venus the final outcome. Lord 5 is not the profit significator in this branch. The Moon belongs to the counterparty and cannot also serve as your cosignificator.
+
+Saturn is in Aries in the 3rd: neutral in house capacity, but in fall, retrograde and within the supplied severe solar-opposition region. No stated circumstance of returning or revisiting explains away the retrogradation. Saturn is neither in the 1st nor in a sign trining or sextiling the Capricorn Ascendant. Its natural association with agriculture fits the subject but does not cancel these contextual weaknesses.
+
+Profit-significator Mars is angular in the 7th, direct and clear of the Sun, so it has capacity to act. However, it is peregrine: capacity does not establish good returns. Saturn’s placement in Mars’s domicile shows your strong investment in the hoped-for earnings. In the reverse direction, Mars occupies Saturn’s detriment, despite minor positive term and face receptions. Those small positives do not outweigh the major adverse reception: the profit is poorly disposed toward benefiting you.
+
+The final outcome is more clearly adverse. Venus is in detriment and retrograde, with no stated return context to make that motion appropriate. Its position 1.77° before the Scorpio 10th cusp counts as angular in the 10th. Thus its strong house capacity makes the poor condition consequential rather than correcting it. Venus’s close square with Mars, with a same-sign perfection candidate, links the troubled outcome with earnings. Venus strongly regards Mars by domicile and triplicity, with face support; Mars offers no corresponding reception to Venus. This does not establish mutual support. Saturn also regards Venus predominantly negatively: detriment outweighs its minor term reception.
+
+The Moon is peregrine, weak in the 8th and clear of the Sun. It has only minor term regard for Saturn; toward Venus its triplicity regard is outweighed by fall. This gives little reassurance from the counterparty, without establishing dishonesty. The calculated void Moon adds a secondary indication of inactivity; its later contacts require a sign change and do not rescue this judgment.
+
+No buyer–seller aspect is required here: availability is already assumed, and the question concerns benefit, not completion. The adverse profit reception and debilitated final-outcome ruler outweigh Mars’s angular strength. No event date or harvest-income amount is established.
+
+### Evidence
+
+- Roles and procedure: e7, e10, e13, e16; Frawley printed p. 171. Cusp rulership and Moon priority: pp. 30–32.
+- Your condition: e6, e39–e42; agricultural symbolism p. 35; contextual dignity pp. 45–46; house capacity, retrogradation and solar opposition pp. 56–61.
+- Profit and directed reception: e4, e32–e34, e46, e56; printed pp. 71–77, 171.
+- Final outcome and its connection to profit: e3, e27–e31, e58, e64, e69; printed pp. 17, 50, 54–57, 62–63, 171.
+- Counterparty and Moon: e1, e21–e23, e54–e55, e66–e68, e78; printed pp. 32, 65, 90–91.
+- Calculation limits: e79; event timing requires established occurrence and moving perfection, printed pp. 127–133.
+
+### Unresolved
+
+Positions and event brackets are approximate. Exact speeds, intervening stations, fine event order, fixed-star contacts and antiscia are not certified. These limit precision and completeness, but do not prevent the qualified judgment above. The supplied evidence does not quantify harvest yield or net income.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "available farm",
+      "quote": "farm"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "cultivate myself"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "income would be mine"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Buy/rent is not a universal gap for the same available-workplace recipe."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-005 (train)
+
+### Question
+
+I would buy Cedar’s workshop from an unrelated owner to run my repair business. Is it suitable for that work?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against buying Cedar’s workshop for your repair business on this chart. The main concerns are weak profit prospects and an unfavourable eventual outcome. Your interest in making the business work is clear, but the chart gives little reassurance that this purchase would serve you well. This is a qualified judgment of the business premises, not proof of a particular physical defect or technical incompatibility.
+
+### Reasoning
+
+This is the “Should I take the farm, or the business?” procedure: you would buy premises to work in, and ask whether they are suitable, rather than whether the owner will complete a sale. Under this branch, availability is assumed and an applying buyer–seller aspect is not required.
+
+Capricorn on the 1st gives you Saturn; Cancer on the 7th gives the unrelated owner the Moon. “Cedar” names the workshop and does not establish a personal relationship requiring a turned house. Scorpio on the 10th gives Mars as the profit from operating there; Taurus on the 4th gives Venus as the eventual outcome. Profit here is the 10th, not the 5th used for letting or reselling an investment property. The Moon belongs to the owner and cannot also be your cosignificator.
+
+Saturn is in Aries, in fall and retrograde, with no stated return or reconsideration context that would make retrogradation favourable. Its physical placement is the 3rd, within the same-sign cusp allowance: neutral capacity rather than the weakness usually associated with cadency. Nevertheless, its proximity to opposition with the Sun is a serious additional affliction. Saturn is neither in the 1st nor in a sign trining or sextiling the Capricorn Ascendant, so the branch’s particular positive testimony is absent.
+
+Mars, the profit, is angular in the 7th and clear of the Sun, giving it capacity to act. But it is peregrine: there is no essential strength promising good returns. Venus, the eventual outcome, is angular in the 10th by the cusp rule, but in detriment and retrograde. Its strength by placement enables an unfavourable influence; it does not make the outcome good. Venus also occupies the profit house and is close to an applying square with Mars, reinforcing concern about the venture’s returns. The repair-business context does not itself explain away these debilities.
+
+The receptions distinguish your hopes from what the venture offers. Saturn in Mars’s domicile shows your strong interest in the profit. Mars, however, is in Saturn’s detriment, despite minor reception by term and face: the predominant indication is that the returns do not favour you. Saturn’s reception toward Venus is also mixed, with major detriment outweighing minor term interest. Venus strongly regards Mars by domicile, triplicity and face, linking the outcome closely to the business returns without improving Venus’s own condition.
+
+The owner’s Moon is peregrine, weak in the 8th and clear of solar affliction. It has only minor term regard for you. Its regard for Venus combines moderate triplicity with stronger negative reception by fall; Venus likewise regards the Moon negatively by fall. These do not establish fraud, but offer little reassurance about the owner’s relationship to the property/outcome.
+
+The Moon is waning and, within the supplied calculation, void of course. That suggests limited movement but does not decide suitability. The later lunar contacts require sign changes and are unnecessary to this judgment. No purchase event or date is established or needed.
+
+### Evidence
+
+- Roles and procedure: e7, e10, e13, e16; Frawley printed pp. 30–32, 170–171.
+- Your condition and placement: e6, e39–e43; printed pp. 17, 50, 56–61, 171.
+- Profit and outcome: e3–e4, e28–e35, e70; printed pp. 44–46, 51, 54–57, 62–63, 171.
+- Directed receptions: e47, e55–e57, e59, e65–e66; printed pp. 71–77.
+- Owner and Moon: e0–e1, e21–e23, e67–e69, e79; printed pp. 32, 64–65, 90–91.
+- Calculation limits: e80; timing principles, printed pp. 127–133.
+
+### Unresolved
+
+The supplied evidence does not establish workshop specifications, compliance, or particular physical defects. Planetary positions and event brackets are approximate; exact stations, antiscia and fixed-star contacts are uncertified. These limit confidence and additional detail but do not prevent this provisional suitability judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Cedar workshop",
+      "quote": "Cedar’s workshop"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "run my repair business"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "buy",
+      "quote": "buy"
+    },
+    {
+      "field": "deal_party",
+      "value": "unrelated owner",
+      "quote": "unrelated owner"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Workplace suitability differs from purely residential price assessment."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-006 (train)
+
+### Question
+
+My brother Ben owns the unit; I would rent it for my own print business and keep its earnings. Will it profit me?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against renting Ben’s unit on the expectation that it will profit you. The chart offers some capacity to generate earnings, but stronger indications that the arrangement will not benefit you sufficiently and may leave you regretting it. This is a qualified negative judgment, not a calculation of the likely financial loss.
+
+### Reasoning
+
+This is taking premises for your own working business, so the procedure on printed p. 171 applies. You remain the principal and beneficiary: Capricorn on the 1st gives you Saturn; Scorpio on the radical 10th gives your prospective profit Mars; Taurus on the radical 4th gives the final outcome Venus. The profit is not Ben’s income and is not judged from a house turned from his.
+
+Ben, as your brother and lessor, belongs to the 3rd: Aries makes him Mars too. This shared rulership does not require a substitute because the question concerns benefit, not an aspect proving that a lease will occur. Mars carries both roles without making Ben and your earnings literally identical. The Moon remains your cosignificator; its rulership of the ordinary 7th does not displace the specifically identified brother.
+
+Your Saturn is in fall, retrograde and within the severe solar-opposition region. There is no stated return to an old arrangement that would explain away retrogradation. Saturn counts in the 3rd, being approximately 3.20° before that cusp in the same sign: neutral house capacity, not angular strength. Its placement fits your involvement with your brother, but does not cancel its afflictions. Saturn is neither in the 1st nor in a sign trining or sextiling the Capricorn Ascendant, so the chapter’s particular favorable testimony is absent.
+
+Profit’s Mars is angular in the 7th, direct and clear of the Sun: it has capacity to act. But it is peregrine, offering no essential assurance of good profit. Crucially, Mars regards your Saturn through major detriment alongside minor term and face reception. Those small positives qualify, but do not outweigh, the adverse relationship: earnings may be possible without being sufficiently beneficial to you. Conversely, Saturn is in Mars’s domicile, showing your strong investment in the business prospect and/or Ben’s arrangement. That direction must not be mistaken for reciprocal support. The shared role does not justify accusing Ben of personal hostility or dishonesty.
+
+The outcome is more decisively unfavorable: Venus is in detriment, retrograde, and only neutral by house, although clear of the Sun. No supplied circumstance makes these debilities an apt benign description. Venus strongly regards Mars by domicile, triplicity and face, tying the outcome to the brother/profit significator, but reception does not restore Venus’s own quality. Its close applying square to Mars adds difficulty; it does not promise profitable completion. Saturn’s reception toward Venus is also predominantly negative, despite a minor term interest.
+
+The Moon is peregrine, weak in the 8th and waning, with no major contact before leaving Virgo in the supplied calculation. This reinforces limited momentum, but is not the reason for rejecting profitability. This branch assumes the premises can be taken if you choose: no buyer–seller aspect is required. Its later, after-ingress contacts do not rescue the poor profit/outcome testimony. No event has been established requiring timing.
+
+### Evidence
+
+- Roles and branch: e7, e9, e10, e16; Frawley printed pp. 19, 30–32, 167, 171.
+- Your condition and house placement: e6, e38–e42; printed pp. 17, 46, 50, 54–61.
+- Profit’s capacity and mixed reception: e4, e32–e34, e46, e56; printed pp. 51, 71–77, 171.
+- Outcome and its connection with profit: e3, e28–e31, e58, e64, e69; printed pp. 50, 57, 62–63, 88, 171.
+- Moon: e0–e1, e21–e23, e66–e68, e78; printed pp. 32, 64–65, 90–91, 97.
+- Calculation and timing limits: e79; printed pp. 127–133.
+
+### Unresolved
+
+Exact profit or loss is not established. Planetary speeds, precise stations, antiscia and fixed-star contacts are not certified by the supplied evidence. The approximate seven-day event search cannot establish long-term event absence or an exact date; these limits qualify, but do not prevent, the condition-based judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "print-business unit",
+      "quote": "unit"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "ben",
+      "quote": "Ben owns"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "my own print business"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_party",
+      "value": "ben",
+      "quote": "My brother Ben"
+    },
+    {
+      "field": "people.ben.relationship",
+      "value": "sibling",
+      "quote": "My brother"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "keep its earnings"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Preserve known title and relative separately from operator benefit."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-007 (train)
+
+### Question
+
+I would buy Drift’s café and work there as proprietor. I ask about my operating profit, not resale of the building.
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against buying Drift’s café for your operating profit on this chart. The profit testimony is unpromising, and the final outcome looks more troublesome than rewarding. There is some capacity to operate the business, but that does not establish that its earnings would benefit you. This is a qualitative judgment, not a forecast of a particular loss or profit amount.
+
+### Reasoning
+
+This is the working-business branch: you would buy the café and work there yourself. Under printed p. 171, the 10th signifies your operating profit and the 4th the final outcome. The 5th-house rule for returns from property is not the appropriate rule here. Availability is assumed for this decision; an aspect between buyer and seller is therefore unnecessary.
+
+Capricorn on the Ascendant gives you Saturn; Cancer on the 7th gives the seller the Moon; Scorpio on the 10th gives operating profit Mars; Taurus on the 4th gives the outcome Venus. The Moon belongs to the seller and cannot also serve as your cosignificator. These are role assignments: Mars physically occupies the 7th, not the 10th.
+
+Mars is peregrine, offering no essential assurance of good profit. Its angular placement gives capacity to act, although being in Leo rather than the Cancer cusp sign moderates that strength. It is direct and clear of the Sun. These are materially better circumstances than a powerless profit significator, but capacity is not profitability. Mars regards your Saturn through minor term and face reception alongside major detriment reception: limited benefit is outweighed by the stronger adverse testimony. Conversely, Saturn in Aries strongly values Mars. Your interest in the earnings is not reciprocated on equally favourable terms. Mars also depends on the Sun, which is in fall; this adds no reassurance.
+
+Saturn is in fall, retrograde and within the supplied severe solar-opposition region. Its 2nd-house placement is neutral in capacity and fits your financial concern. Nothing supplied describes a return that would explain away retrogradation. Your position therefore looks strained, rather than well equipped to absorb a disappointing venture.
+
+The outcome ruler Venus is in detriment and retrograde, with neutral house capacity and no current solar affliction. There is no stated descriptive circumstance that neutralizes those debilities. Its close square to Mars, with a same-sign perfection candidate, ties the troubled outcome directly to operating profit. Venus strongly regards Mars by sign, triplicity and face: the outcome depends heavily on earnings, but that reception does not make Venus sound. Your Saturn’s reception toward Venus combines minor term interest with major detriment, reinforcing dissatisfaction with the outcome.
+
+The seller’s Moon is peregrine and physically in the 8th, the seller’s own money house; that context cautions against treating its weak house placement mechanically. It has minor positive regard for you, while its attitude toward Venus combines triplicity with stronger fall reception. This does not establish dishonesty. The Moon is waning and calculated void of course, suggesting little immediate development, but neither lunar inactivity nor the absence of a buyer–seller aspect decides this profit-quality question.
+
+The balance is adverse: angular profit capacity supplies some support, but poor essential quality, adverse reception toward you and a debilitated outcome outweigh it. No event timing is warranted.
+
+### Evidence
+
+Roles and business procedure: e7, e10, e13, e16; printed pp. 30–32, 170–171.
+Profit condition and direction of reception: e4, e33–e35, e46–e47, e56; printed pp. 44, 51, 54–56, 71–77.
+Your condition: e6, e39–e42; printed pp. 50, 56–61.
+Outcome and its connection to profit: e3, e29–e32, e58, e64, e69; printed pp. 57, 62–63, 75, 171.
+Seller and lunar testimony: e0–e1, e22–e24, e54–e55, e78; printed pp. 22, 32, 56, 64–65.
+Calculation and timing limits: e79; printed pp. 85–86, 127–133.
+
+### Unresolved
+
+Exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. The seven-day approximate event search cannot establish precise perfection or long-term absence of events. No quantitative operating-profit amount or reliable calendar timing follows from the supplied evidence.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Drift café",
+      "quote": "Drift’s café"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "work there as proprietor"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "buy",
+      "quote": "buy"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "my operating profit"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Business earnings and resale value are separate scopes."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-008 (train)
+
+### Question
+
+The studio is available for my wife Celine’s own weaving business; she would run it and retain earnings. I ask about suitability myself.
+
+### Worked answer
+
+**Status:** answer
+
+I would advise Celine against taking this studio on the present indications. There is some support for her negotiating position, but the earnings look troubled and the eventual outcome lacks convincing strength. This is a qualified judgment about suitability for her weaving business, not a prediction that the studio will be unavailable.
+
+### Reasoning
+
+You are asking your own question about your wife, not relaying hers. Celine therefore takes the radical 7th: Cancer gives her the Moon. Because she would operate the business and retain its earnings, the working-property recipe must be turned from her house. Her profit is her 10th, radical 4th, Taurus ruled by Venus; her final outcome is her 4th, radical 10th, Scorpio ruled by Mars. Her counterparty is her 7th, radical 1st, Capricorn ruled by Saturn. Saturn also signifies you as querent, but that overlap does not identify you as the lessor. The Moon belongs primarily to Celine here and cannot simultaneously serve as your usual cosignificator.
+
+The studio is already available: this is the “Should I take the business?” procedure, not a search for an aspect establishing a deal. Celine’s Moon at 22.609° Virgo is near the sextile degree of her Cancer Ascendant, a positive placement under this recipe. However, it is peregrine, so this testimony lacks essential strength. Its physical placement is radical 8th, her own 2nd: the supplied weak-house flag needs qualification because her earnings and resources are directly relevant. The Moon is direct and clear of solar affliction, but waning and approaching the new Moon.
+
+The decisive concern is Venus, her profit ruler: in detriment, retrograde, and physically in radical 9th, her 3rd. Neutral house capacity and freedom from combustion do not repair its poor essential condition. No return or resumption is stated to explain away retrogradation. Weaving’s association with Venus does not itself excuse detriment.
+
+Mars, the final outcome, is peregrine but angular in Celine’s 1st. It has capacity to act without showing a particularly good outcome. Jupiter also occupies her 1st and has its own term: modest contrary support, not a powerful benefic guarantee.
+
+Receptions reinforce the concern. The Moon regards Venus through triplicity and fall: some attraction to the earnings, outweighed by substantial dissatisfaction. Venus occupies the Moon’s fall, indicating profit poorly disposed toward Celine. Venus strongly regards Mars by domicile, triplicity and face; this connects profit with the outcome but does not establish reciprocal support or make either condition good. The approaching Venus–Mars square adds difficulty between troubled profit and the outcome.
+
+Saturn’s fall, retrogradation and proximity to solar opposition raise concerns about the counterparty’s condition and terms, without proving dishonesty. Celine’s minor regard for Saturn by term does not overcome these weaknesses.
+
+The Moon’s calculated void reinforces inactivity, but is not the reason for rejecting suitability. Its later, after-ingress contacts do not establish a successful venture. No event has been established that warrants timing.
+
+### Evidence
+
+Roles and turning: e7, e10, e13, e16; Frawley printed pp. 25–32, 138, 171.
+
+Celine’s placement and condition: e1, e13, e22–24; printed pp. 46, 51, 56, 64–65, 171. The near sextile to her Ascendant follows from the supplied degrees.
+
+Profit and outcome: e3–5, e28–37, e68; printed pp. 44–54, 57, 62–63, 88, 171.
+
+Directed receptions: e52–54, e63–64; printed pp. 71–77. Counterparty concerns: e6, e38–41; printed pp. 57, 61, 171.
+
+Lunar and calculation limits: e65–77, e78; printed pp. 65, 90–97, 127–133.
+
+### Unresolved
+
+Positions and event brackets are approximate; exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. These limit confidence in the reading, especially its secondary aspect testimony. The evidence does not establish a profit amount, a specific contractual defect, or a date for an outcome.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "weaving studio",
+      "quote": "studio"
+    },
+    {
+      "field": "deal_actor",
+      "value": "celine",
+      "quote": "she would run it"
+    },
+    {
+      "field": "people.celine.relationship",
+      "value": "partner",
+      "quote": "my wife"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "myself"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Operator is wife, not speaker or inferred deed owner."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-009 (train)
+
+### Question
+
+I would rent Elm’s workshop from an unrelated lessor to run my company. Will we agree on its lease terms?
+
+### Worked answer
+
+**Status:** answer
+
+On this chart, I would judge that you are unlikely to agree on the workshop’s lease terms as matters stand. There is little testimony of negotiations reaching agreement, and your position looks strained. This is a qualified judgment about the present proposal, not a claim that agreement could never become possible.
+
+### Reasoning
+
+The question is whether you and the unrelated lessor will agree, not whether operating your company from this workshop would be profitable. The letting/deal procedure therefore applies. The business-premises procedure assumes availability on acceptable terms, which has not been established here.
+
+Capricorn on the 1st gives you Saturn; Cancer on the 7th gives the lessor the Moon. The Moon belongs to the lessor and cannot also serve as your cosignificator. Taurus on the 4th gives Venus to the workshop. Your money is Jupiter, ruler of the Pisces 2nd; the lessor’s money is Mercury, ruler of the Virgo 8th, their turned 2nd. Physical placements do not change those roles.
+
+Saturn is in fall, retrograde and physically in the neutral 2nd house. Nothing supplied establishes a return or renegotiation that would explain away its retrogradation. Its proximity to opposition with the Sun adds serious affliction. These factors suggest difficulty securing terms, rather than strong negotiating capacity. The lessor’s Moon is peregrine, clear of the Sun’s beams but waning with little light. Its radical 8th-house placement ordinarily weakens it, although the financial subject and its placement in the lessor’s own money house provide a contextual explanation; this should not be counted mechanically as incapacity.
+
+The lessor has a minor positive regard for you: Moon is in Saturn’s term. Saturn has no corresponding reception toward the Moon. Absence of mutual enthusiasm is not itself fatal to a property deal, but the slight positive reception offers little help against the other difficulties. The lessor strongly values their money or financial interests, Moon being in Mercury’s domicile and exaltation, while Moon in Jupiter’s detriment gives negative testimony toward your money. Mercury’s negative reception toward the Moon does not reciprocate that enthusiasm. These indicate financial tension without proving a particular funding failure.
+
+Both parties have mixed but predominantly negative reception toward the premises: Saturn is in Venus’s term and detriment; Moon is in Venus’s triplicity and fall. Venus itself is in detriment and retrograde, providing additional concern about the property, without identifying a specific defect.
+
+With no agreement already established, the default is no agreement unless a convincing connection supplies it. The Moon makes no major contact before leaving Virgo. Its first subsequent candidate is a sextile to Mars, followed by opposition to Saturn. The latter is not an immediate connection just inside the next sign: it would require reaching roughly Saturn’s degree, around 10° Libra, beyond the source’s allowance of three or four degrees. It therefore does not establish agreement. Mars’s earlier contact also prevents treating the sequence as an uncomplicated direct application, but its identity and practical effect are unestablished. No intermediary story is warranted.
+
+The void Moon, strained Saturn and lack of a persuasive immediate connection outweigh the lessor’s minor interest. An opposition would also carry regret in a tenancy if it validly established the agreement. No event is sufficiently established to time.
+
+### Evidence
+
+- Roles and branch: e7, e8, e10, e13, e14; printed pp. 30–32, 167–171.
+- Capacity and condition: e0, e1, e3, e6, e22–e24, e28–e31, e38–e41; printed pp. 46, 50–51, 54–61, 64–65.
+- Directed receptions: e49, e51–e54, e57; printed pp. 71–77, 167.
+- Contact order and void Moon: e65, e66, e77; printed pp. 65, 90–97. Tenancy opposition: printed p. 170.
+- Default and timing restraint: printed pp. 127–133, 140; calculation limitations: e78.
+
+### Unresolved
+
+Exact moving perfections, intervening stations and antiscia are not certified by the supplied approximate calculation. Mars’s real-world significance is unknown. These limit confidence but do not prevent the provisional judgment. The seven-day search window cannot establish permanent failure, and its astronomical hours do not supply a lease-agreement date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "event",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Elm workshop",
+      "quote": "Elm’s workshop"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "I would rent"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_party",
+      "value": "unrelated lessor",
+      "quote": "unrelated lessor"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use source-bound actual operator and counterpart for this requested workplace lease agreement. Apply profit-tenth/final-outcome-fourth testimony only when that financial outcome is asked; it is not required for this event-only agreement.",
+    "Judge whether the stated actual parties agree on the workplace lease terms; retain ordinary rental-regret context without answering an unasked operating-profit question or treating current software coverage as a textbook limit."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    167,
+    168,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-010 (train)
+
+### Question
+
+The available field would be my market garden; I would grow and sell the crop for my income, not collect tenant rent. Is it profitable?
+
+### Worked answer
+
+**Status:** answer
+
+I would judge against taking this field as a profitable livelihood. The chart gives weak support for worthwhile earnings and stronger indications that you would regret the arrangement. This is a qualified adverse judgment, not a prediction of a specific financial loss.
+
+### Reasoning
+
+Your correction determines the procedure: you would work the available land yourself and sell its produce. This is the “take the farm or business” question, not passive property income or whether a purchase will complete. Profit therefore belongs to the 10th, not the 5th; availability is already assumed, so an applying buyer–seller aspect is unnecessary.
+
+Capricorn on the 1st gives you Saturn; Cancer on the 7th gives the seller or lessor the Moon; Scorpio on the 10th gives operating profit Mars; Taurus on the 4th gives the final outcome Venus. These are roles derived from cusps, distinct from the planets’ physical houses. The Moon belongs to the other party and cannot also serve as your cosignificator. No substitute ruler or natural significator is needed.
+
+Profit: Mars is peregrine in Leo, offering little essential support for good earnings. It is direct, clear of the Sun and angular in the 7th, so it has capacity to act; its different sign from the Cancer cusp somewhat moderates that angular strength. Capacity does not establish profitable quality. Mars regards Saturn through minor term and face receptions but, more strongly, through detriment: there is some limited benefit, outweighed by testimony adverse to you. Conversely, Saturn occupies Mars’s domicile, showing your strong interest in the income. That interest is not evidence that the income will reward you.
+
+Your position is also difficult: Saturn is fallen, retrograde and within the severe Sun-opposition region. Its physical 2nd-house placement appropriately emphasizes your livelihood, but supplies no angular strength. There is no declared return or resumption that would explain away retrogradation. Saturn is neither in the 1st nor in a sign trine or sextile the Capricorn Ascendant, so the chapter’s particular favorable placement testimony is absent.
+
+Outcome: Venus is in detriment, retrograde, physically in the neutral-strength 9th and clear of the Sun. No stated circumstance makes those debilities merely descriptive. This is the strongest indication of looking back with regret. Venus strongly regards Mars by domicile, triplicity and face, linking the outcome to the hoped-for earnings without improving Venus’s own condition. Venus’s close applying square to Mars adds difficulty between outcome and profit; a square alone would not condemn the venture, but these conditions make it unfavorable.
+
+The Moon, representing the other party, is peregrine and physically weak in the 8th, although its placement in that party’s turned 2nd appropriately concerns their money. It is clear of the Sun but waning toward new. Its minor term reception toward Saturn suggests limited regard for you; toward Venus it combines triplicity with the stronger negative fall reception. This does not establish dishonesty, but provides little reassurance about the arrangement.
+
+The Moon is void before sign exit. That suggests limited immediate development, not an automatic denial of profitability. Its first listed contact requires a sign change and does not establish a beneficial deal. The near-term Venus–Mars square is relevant corroboration; later lunar contacts need not be pursued. This is a suitability and profit judgment, so no event or calendar timing is asserted.
+
+### Evidence
+
+- Roles and branch: e7, e10, e13, e16; Frawley printed pp. 30–32, 170–171. Worked land uses the 10th for profit and 4th for outcome.
+- Profit quality, capacity and directed reception: e4, e31–e33, e44, e54; printed pp. 44–52, 56, 71–77.
+- Querent’s condition and placement: e6–e7, e37–e40; printed pp. 56–61, 171.
+- Adverse outcome and connection to profit: e3, e27–e30, e62, e67; printed pp. 50, 57, 62–63, 88, 171.
+- Other party and Moon: e0–e1, e21–e23, e52–e53, e64, e76; printed pp. 32, 56, 64–65, 75, 90–91.
+- State judgment and calculation limits: e77; printed pp. 84, 97, 127–133.
+
+### Unresolved
+
+No essential situational clarification remains. Monetary returns cannot be quantified from the supplied evidence. Positions and contact brackets are approximate; precise speeds, intervening stations, antiscia and fixed-star contacts are not certified. The adverse judgment rests on the supplied principal testimonies rather than a complete certified calculation.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "market-garden field",
+      "quote": "field"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "I would grow"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "my income"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Infer active farming rather than passive landlord profit."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-011 (train)
+
+### Question
+
+My father Dorian owns Fern’s warehouse. I would buy it from him for my delivery business. Is the workplace suitable?
+
+### Worked answer
+
+**Status:** answer
+
+I would lean against buying this warehouse for your delivery business. The chart gives weak support for profitable use and an unfavourable indication of how you would look back on the purchase. Buying from your father does not remove those concerns. This is a qualified judgment of suitability, not evidence of a specific physical defect.
+
+### Reasoning
+
+This is the “take the farm or business” branch: you are considering premises you would put to work, rather than asking whether a sale will complete. Its principal tests are your position, operating profit and final outcome; an applying buyer–seller aspect is not required.
+
+Capricorn on the Ascendant gives you Saturn. Your father is the specific seller, so Taurus on the radical 4th gives him Venus, replacing the generic 7th-house seller. Under the workplace recipe, Scorpio on the radical 10th gives Mars the profit, while radical Lord 4, Venus, also describes the final outcome. That shared role need not be reassigned: this is a suitability judgment, not an attempt to manufacture an aspect between two distinct parties.
+
+For a supplementary assessment of the building as your father’s property, his 4th is the radical 7th: Cancer gives the Moon. This makes the Moon the property significator for that assessment, rather than an independent second vote for you. Fern’s name does not override the explicitly stated ownership.
+
+Saturn is in fall, retrograde and in the neutral 2nd house, with the additional severe affliction of proximity to opposition with the Sun. Nothing supplied makes this a return or recovery that would explain away retrogradation. Saturn is neither in the 1st nor in a sign trine or sextile to the Capricorn Ascendant. Your position therefore supplies little of the branch’s positive testimony.
+
+Profit-significator Mars is angular and direct, so it has capacity to act, but it is peregrine rather than essentially sound. Its reception toward Saturn is predominantly negative by detriment, despite minor positives by term and face: the prospective profit is not strongly favourable to you. Conversely, Saturn is in Mars’s domicile, showing your strong investment in the business benefit; that desire does not establish its quality.
+
+Venus, describing both your father in this transaction and the outcome, is in detriment and retrograde, with neutral house capacity and clear of the Sun. This weighs against a satisfactory deal. It warrants examining the terms, not accusing your father of dishonesty. Venus strongly favours Mars, but this connection to profit does not repair either planet’s essential condition. Saturn’s regard for Venus is mixed but predominantly adverse: detriment outweighs its minor term reception.
+
+The warehouse’s Moon is peregrine and weak in the 8th, although direct and solar-clear. Peregrination offers no assurance of sound condition, and no mobile-property exception is supplied. Its mixed regard for Venus—triplicity alongside the stronger fall—also fails to supply reassuring support. No particular structural problem can be established.
+
+The calculated void Moon supports inactivity, but it does not decide suitability. The approaching Venus–Mars square adds difficulty between the outcome and profit; it is not proof that a purchase occurs. No event timing is justified.
+
+### Evidence
+
+Roles and branch: e7, e10, e13, e16; printed pp. 25–27, 30–32, 167, 171.
+
+Your condition: e6, e37–e40; printed pp. 50, 56–61, 171.
+
+Profit and directed receptions: e4, e31–e33, e44, e54; printed pp. 51, 71–77, 171.
+
+Seller and outcome: e3, e27–e30, e56, e62, e67; printed pp. 57, 75–77, 88, 171.
+
+Property and Moon: e1, e21–e23, e53, e76; printed pp. 32, 56, 65, 168. Calculation and timing limits: e77; printed pp. 127–133.
+
+### Unresolved
+
+The evidence does not establish loading access, vehicle clearance, storage capacity, physical defects or actual operating returns. Planetary positions and event brackets are approximate; exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. These limit confidence without preventing the provisional suitability judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Fern warehouse",
+      "quote": "Fern’s warehouse"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "dorian",
+      "quote": "Dorian owns"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "I would buy"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "buy",
+      "quote": "buy"
+    },
+    {
+      "field": "deal_party",
+      "value": "dorian",
+      "quote": "My father Dorian"
+    },
+    {
+      "field": "people.dorian.relationship",
+      "value": "father",
+      "quote": "My father"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Keep sourced seller capacity and prospective operating role separate."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-012 (train)
+
+### Question
+
+My mother Eleri would run her tailoring business in the rented studio and keep the profits. I ask myself if it is worthwhile for her.
+
+### Worked answer
+
+**Status:** answer
+
+I would advise Eleri against renting this studio for her tailoring business on the present indications. She appears capable of putting it to work, but the profit and eventual outcome look unfavourable. The lessor’s condition also raises concerns about the terms. This is a qualified judgment about whether it is worthwhile for her, not a prediction that she cannot secure the lease.
+
+### Reasoning
+
+You are asking your own question about your mother, rather than relaying her question. Eleri therefore takes the radical 10th: its Scorpio cusp gives Mars. Applying the working-premises procedure from her house, her lessor is her 7th, radical 4th, ruled by Venus from Taurus; her profit is her 10th, radical 7th, ruled by the Sun from Leo; the final outcome is her 4th, radical 1st, ruled by Saturn from Aquarius. Saturn also signifies you, but its outcome role is needed here; no separate contact with you is required. The Moon remains your cosignificator, not Eleri’s. Mars’s natural association with tailoring is descriptive corroboration, not essential strength.
+
+Mars is peregrine but direct, clear of the Sun and angular in radical 7th, Eleri’s 10th. This gives capacity to act without strong testimony of a beneficial undertaking. Mars is neither in Eleri’s first house nor in a sign trine or sextile to her Scorpio ascendant.
+
+The decisive profit testimony is the Sun in fall, physically in radical 8th with weak supplied house capacity. Its placement is Eleri’s turned 11th, but that does not change its assigned role as ruler of her profit. Mars values the Sun by domicile and triplicity: she wants the earnings. The Sun, however, is in Mars’s detriment: the profit testimony is adverse to her, not reciprocally supportive.
+
+Venus, the lessor, is in detriment and retrograde, clear of the Sun but situated in Eleri’s turned 12th. This closely matches the chapter’s warning about an unreliable counterparty or disadvantageous contract. No return or renegotiation circumstance is supplied to explain away retrogradation. Venus strongly favours Mars by domicile, triplicity and face, but willingness to deal does not establish trustworthiness.
+
+Saturn, the outcome, is in fall, retrograde and within the severe Sun-opposition region. Its neutral radical 2nd-house capacity does not remedy this. Saturn favours Mars by domicile; Mars’s response is mixed, with minor term and face reception outweighed by detriment. These favourable fragments do not outweigh the damaged outcome significator.
+
+This is a suitability judgment about premises she would operate, so an applying tenant–lessor aspect is not a prerequisite. The Venus–Mars square candidate supplies no rescue for poor profitability. The Moon is waning and calculated void before leaving Virgo, suggesting little immediate movement; its later contacts cannot be chained into a promised improvement. No event or timing is established.
+
+### Evidence
+
+Roles: e7, e10, e13, e16; Frawley printed pp. 23, 25–27, 30–32, 137–138. Working-premises procedure and lessor warnings: p. 171; distinct from ordinary rental completion on p. 170.
+
+Eleri’s capacity: e4, e31–e33; pp. 36, 46, 51, 54–56. Profit and directed reception: e0, e19–e20, e45, e58; pp. 50, 71–77, 171.
+
+Lessor: e3, e27–e30, e62; pp. 57, 75–77, 171. Outcome: e6, e37–e40, e44, e54; pp. 50, 57, 61, 171.
+
+Moon and contact limits: e0–e1, e64, e67, e76–e77; pp. 64–65, 84, 91, 97, 127–133.
+
+### Unresolved
+
+The astronomy is approximate. Daily speeds, precise stations, antiscia and fixed-star contacts are not certified. The seven-day contact search cannot establish longer-term absence of events. These limits qualify confidence but do not prevent the present suitability judgment.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "tailoring studio",
+      "quote": "studio"
+    },
+    {
+      "field": "deal_actor",
+      "value": "eleri",
+      "quote": "Eleri would run"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rented"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "eleri",
+      "quote": "keep the profits"
+    },
+    {
+      "field": "people.eleri.relationship",
+      "value": "mother",
+      "quote": "My mother"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "I ask myself"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Do not invent querent ownership from work-premises context."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-013 (development)
+
+### Question
+
+I am relaying Fenn’s own question: I would rent Grove’s metalworking unit, run my workshop and retain profit. Will it benefit me?
+
+### Worked answer
+
+**Status:** answer
+
+Fenn, I would advise against renting Grove’s unit on the proposed basis. The chart’s stronger indications favour disappointing profit and an unsatisfactory eventual outcome. There is some support for your position, and apparent willingness on both sides, but these do not outweigh the financial and contractual concerns. This is a qualified judgment, not a prediction of a specific loss.
+
+### Reasoning
+
+Because this is explicitly Fenn’s own question relayed by someone else, Fenn receives the radical 1st house, not a turned house. Aquarius rises, making Saturn Fenn’s significator; the Moon remains Fenn’s cosignificator. Leo on the 7th makes the Sun Grove, the lessor. Under the working-premises procedure, Scorpio on the 10th gives Mars the prospective operating profit, while Taurus on the 4th gives Venus the final outcome. These roles are distinct; no replacement significator is needed. Mars’s natural association with metalworking does not replace its cusp-derived role or turn its condition into a favourable testimony.
+
+This is “Should I take this place to work in?”, not “Will the tenancy be concluded?” The appropriate procedure assumes availability if Fenn chooses to proceed. It therefore requires no applying Saturn–Sun aspect. Profit belongs to the 10th here, rather than the 5th used for income from letting an investment property.
+
+Saturn in Aries occupies a sign sextile the Aquarius Ascendant, a favourable indication in this procedure, though not a close degree contact. Against that, Saturn is in fall, retrograde and severely afflicted by proximity to opposition with the Sun. Its physical 2nd-house placement gives middling capacity. Nothing supplied establishes a return or reconsideration that would explain away retrogradation. These conditions weaken Fenn’s ability to benefit.
+
+Mars, the profit, is angular and just inside the 7th cusp: it has capacity to act, but is peregrine rather than essentially sound. Its reception toward Saturn is mixed: minor term and face support coexist with major detriment reception. Thus the profit offers limited positives but is predominantly adverse to Fenn. Saturn, conversely, strongly values Mars by domicile: Fenn’s desire for profit does not demonstrate profitable results. Mars strongly favours the Sun, while the Sun regards Mars adversely by detriment—another concern about the arrangement’s financial benefit.
+
+Grove’s Sun is in fall and physically in the weak 8th house. Saturn and the Sun mutually exalt one another, with additional triplicity and face reception: there is willingness or favourable estimation on both sides, potentially inflated. Their debilities limit what that goodwill can accomplish. The lessor’s poor condition warrants scrutiny of contractual terms; it does not establish dishonesty.
+
+Venus, the final outcome, is in detriment and retrograde, with neutral 9th-house capacity and clear of the Sun. That is the decisive adverse outcome testimony. Its close square with Mars, with an approximate approaching perfection supplied, further connects the troubled outcome with the profit. Venus’s strong reception toward Mars does not repair Venus’s own debility.
+
+The Moon is peregrine, physically in the weak 8th, waning and reported void before sign exit. This supports limited momentum, not an automatic refusal of benefit. Its mixed reception toward Venus combines some triplicity support with stronger fall reception. Later lunar contacts after ingress do not justify constructing a recovery narrative. No event needs to be established or timed to answer this benefit question.
+
+### Evidence
+
+Roles and procedure: e7, e10, e13, e16; Frawley printed pp. 30–32, 137–138, 170–171.
+
+Fenn’s condition and favourable sign relationship to the Ascendant: e6–e7, e37–e40; printed pp. 50, 56–61, 171.
+
+Profit and directed receptions: e4, e31–e33, e44–e45, e54, e58; printed pp. 51, 54, 71–77, 171.
+
+Lessor and mutual regard: e0, e19–e20, e55, e59; printed pp. 73–77, 171.
+
+Outcome and close profit contact: e3–e4, e27–e30, e62, e67; printed pp. 50, 57, 62–63, 171.
+
+Moon and calculation limits: e0–e1, e21–e23, e53, e64–e76, e77; printed pp. 64–66, 84, 90–97, 127–133.
+
+### Unresolved
+
+Positions and event brackets are approximate. Exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. These limit refinement but do not prevent this qualified benefit judgment. The evidence does not establish a monetary amount, a specific contractual defect or a calendar date.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Grove unit",
+      "quote": "Grove’s metalworking unit"
+    },
+    {
+      "field": "deal_actor",
+      "value": "fenn",
+      "quote": "Fenn’s own question"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "fenn",
+      "quote": "retain profit"
+    },
+    {
+      "field": "principal_mode",
+      "value": "relay",
+      "quote": "relaying"
+    },
+    {
+      "field": "principal_id",
+      "value": "fenn",
+      "quote": "Fenn"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Actual relayed operator, not messenger, is the principal."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-014 (development)
+
+### Question
+
+Harbor’s shop is available for my floristry business. I would earn by working there, not receive rent from another operator. Does it profit me?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against taking Harbor’s shop for your floristry business on the present indications. The chart does not show a reliably beneficial profit for you, and the eventual outcome looks disappointing. There is some capacity to generate earnings and goodwill between you and the other party, but these positives do not outweigh the adverse indications for your benefit and the final result.
+
+### Reasoning
+
+Because the shop is available and you would earn by working there, this is Frawley’s “take the farm or business” question. The issue is whether taking it benefits you, not whether a transaction can occur. Profit therefore belongs to the 10th, not the 5th used for income from letting or reselling property. No buyer–seller aspect is required.
+
+Aquarius on the Ascendant gives you Saturn; Leo on the 7th gives the seller or lessor the Sun. Scorpio on the 10th gives the working profit Mars; Taurus on the 4th gives the final outcome Venus. These are role assignments, distinct from the planets’ physical houses. The Moon remains your cosignificator; its rulership of the 6th does not displace that role here. There is no shared-ruler collision. Floristry’s natural association with Venus does not replace these cusp-derived significators.
+
+Saturn in Aries occupies a sign sextile the ascending sign, a positive under this branch’s specific recipe. However, Saturn is in fall, retrograde, and severely afflicted by proximity to opposition with the Sun. Its physical 2nd-house placement gives neutral capacity. No return or resumption is stated to explain the retrogradation favourably. These qualifications substantially weaken the positive sign relationship.
+
+Mars, the profit, is peregrine: it has no essential dignity promising good earnings. It is nevertheless angular, only about 0.58° before the 7th cusp in the same sign, and therefore capable of acting. It is direct and clear of the Sun. This is material contrary evidence to an absolute “nothing can be earned,” but capacity is not the same as benefit. Mars is in Saturn’s detriment, with minor term and face reception toward Saturn: the profit has a little affinity with you, but the major adverse reception dominates. Conversely, Saturn is in Mars’s domicile: you strongly value the earning opportunity. Your enthusiasm is not reciprocated on equally favourable terms.
+
+Mars is also in the Sun’s domicile and triplicity, placing the profit under the other party’s influence. The Sun, however, is in Mars’s detriment; that is not reciprocal support for the profit. You and the other party show mutual exaltation and lesser positive receptions, encouraging willingness to engage but potentially inflated expectations. The Sun itself is fallen and physically in the weak 8th house. That warrants scrutiny of the terms, without inventing dishonesty or a financing failure.
+
+The final outcome is the clearest negative: Venus is in detriment and retrograde, with neutral 9th-house capacity and no solar affliction to explain away the problem. Its association with flowers does not make its debility merely descriptive. Venus strongly regards Mars, connecting the outcome with earnings, but this does not restore Venus’s own quality. Saturn’s reception toward Venus is predominantly adverse despite minor term interest; the Moon likewise combines some liking by triplicity with stronger aversion by fall.
+
+The Moon is peregrine, physically weak in the 8th, and waning with little light. Its calculated void-of-course condition suggests limited momentum, but is not the reason to reject an available business opportunity. Its next listed contact requires a sign change and cannot supply an immediate affirmative judgment. The nearby Venus–Mars square candidate reinforces concern about the relationship between outcome and profit; a square alone is not inherently bad. No event date or quantified return is established.
+
+### Evidence
+
+- Roles and branch: e7, e10, e13, e16; Frawley printed p. 171, contrasted with p. 170; cusp rulership and Moon allocation pp. 30–32.
+- Your condition and limited positive testimony: e6–e7, e38–e41; printed pp. 50, 56–61, 171.
+- Profit’s quality and capacity: e4, e31–e34; printed pp. 17, 51, 54–56, 171.
+- Directed receptions: e45–e46, e55–e60, e63; printed pp. 71–77.
+- Final outcome and mixed attitudes toward it: e3, e27–e30, e54, e57, e63–e64; printed pp. 45–46, 52–53, 57, 171.
+- Moon and contact limits: e0–e1, e21–e23, e65–e68, e77–e78; printed pp. 64–65, 88, 90–97, 127–133.
+
+### Unresolved
+
+Exact profit amounts are not established. Daily speeds, station history, antiscia and fixed-star contacts are not certified in the supplied evidence. Approximate seven-day contact brackets cannot establish precise event timing or longer-term absence of opportunity; these limits do not prevent the qualified judgment of benefit above.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Harbor shop",
+      "quote": "Harbor’s shop"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "my floristry business"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "earn by working there"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Do not demand a buy/rent label when operator and available-workplace profit are already understood."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-015 (development)
+
+### Question
+
+I would rent Indigo’s repair premises and operate the business, but under our agreement its earnings belong to my father Glyn. Will it profit him?
+
+### Worked answer
+
+**Status:** answer
+
+I would not expect this arrangement to profit Glyn reliably. The chart favours caution: the earnings assigned to him look weak and adverse to his interests, while the venture’s profit and eventual outcome offer little reassurance. This is a qualified negative judgment, not a prediction of a specific financial loss.
+
+### Reasoning
+
+You remain the principal taking and operating the premises: Aquarius on the 1st gives you Saturn. Indigo, as lessor, is the 7th-house Sun from Leo. Because this is premises you would put to work, the applicable procedure is the business-premises assessment on p. 171, rather than requiring a buyer–seller aspect to establish a deal.
+
+The radical 10th, Scorpio, gives Mars for the operating profit. But the earnings explicitly belong to your father: Glyn is Venus, ruler of the Taurus 4th, and his money is his turned 2nd—the radical 5th, Gemini, ruled by Mercury. Thus Mercury’s condition and relation to Venus are central to whether this benefits him. The 5th is used here as your father’s money, not automatically as rental income from property. Glyn does not replace you as operator. Venus also signifies the final outcome under this chapter’s recipe; this shared role needs no substitute because we are assessing benefit, not seeking an aspect between father and outcome.
+
+Mercury is peregrine, direct, clear of the Sun and in the neutral-capacity 9th. It offers no substantial essential strength for Glyn’s earnings. Crucially, Mercury is in Venus’s detriment: the money is adverse to its intended beneficiary. Mercury strongly favours Mars, linking the earnings to the operation, but that does not make them beneficial to Glyn. Venus strongly favours Mars too; neither reception establishes reciprocal benefit from Mars.
+
+Mars is peregrine but angular, counted in the 7th through the same-sign cusp rule. It has capacity to act, without corresponding testimony of good profit. It strongly favours the lessor’s Sun. Toward you, Mars combines minor term and face reception with major detriment: the adverse testimony predominates. Conversely, Saturn strongly favours Mars. Your commitment to the operation therefore exceeds its indicated benefit to you.
+
+There is one supporting placement: Saturn in Aries beholds the Aquarius Ascendant by sextile. Nevertheless, Saturn is fallen, retrograde and afflicted by proximity to opposition with the Sun. No return circumstance explains away its retrogradation. Venus, representing Glyn and the outcome, is likewise retrograde and in detriment, although clear of the Sun and neutral by house. These are substantial contrary indications. The lessor’s Sun is fallen, warranting scrutiny of contractual terms; its favourable reception toward Saturn does not establish sound terms or profitable earnings.
+
+The Moon remains your cosignificator. It is peregrine and judged in the weak 8th. Its strong reception toward Mercury shows concern with the earnings; toward Venus it combines triplicity with the stronger negative fall reception. Its present void condition supports stagnation, but is not the foundation of the judgment.
+
+The first supplied Venus contact is a square with Mars. That can connect Glyn with the operation’s profit, but cannot turn poorly conditioned significators into a good financial outcome. Later lunar contacts require sign changes and are not a chain proving eventual success. No event timing is needed for this benefit assessment.
+
+### Evidence
+
+Roles and procedure: e7, e10–e11, e13, e16; Frawley printed pp. 19, 25–27, 30–32, 171.
+
+Glyn’s money and directed receptions: e2–e3, e25–e31, e49, e51, e64; printed pp. 44–52, 71–77.
+
+Operating profit and your position: e4, e6, e32–e35, e39–e42, e46–e47, e56; printed pp. 17, 54–61, 171.
+
+Lessor and terms: e0, e19–e20, e61; printed p. 171.
+
+Moon and event limits: e21–e24, e53–e55, e66–e78; printed pp. 65, 84, 91, 95–97, 127–133. Calculation limitations: e79.
+
+### Unresolved
+
+Exact profit or loss cannot be quantified from this evidence. Daily speeds, precise stations, antiscia and fine event order are not certified. The approximate seven-day contact window cannot establish longer-term absence of profit or justify a calendar prediction.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Indigo premises",
+      "quote": "Indigo’s repair premises"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "operate the business"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "glyn",
+      "quote": "earnings belong to my father Glyn"
+    },
+    {
+      "field": "people.glyn.relationship",
+      "value": "father",
+      "quote": "my father"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Source-distinct operator and beneficiary cannot be collapsed."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-016 (development)
+
+### Question
+
+Juniper’s available workshop would be mine to buy and use for cabinetmaking. Does it suit that work, rather than promise exact takings?
+
+### Worked answer
+
+**Status:** answer
+
+I would be cautious about buying Juniper’s workshop for your cabinetmaking. There is some support for a beneficial purchase, but the chart gives no strong endorsement of the premises or the eventual outcome. Your enthusiasm for the workshop appears stronger than its demonstrated quality. I would make suitability depend on checking the actual workspace and contract, rather than treating this as a clear “yes.” This is not a prediction of exact takings.
+
+### Reasoning
+
+This is the available-place-to-work branch: the workshop is yours to take if you choose. Frawley’s p. 171 procedure therefore applies, without requiring a buyer–seller aspect. You are Saturn, from Aquarius on the 1st cusp; Juniper as seller is the Sun, from Leo on the 7th. Sagittarius on the 10th gives Jupiter for the benefit or profit from working the premises; Gemini on the 4th gives Mercury for the final outcome, with its condition also informing assessment of the property. Mercury’s additional rulership of the 5th does not require replacement: this branch uses the 10th for working profit. The Moon remains your cosignificator. No natural ruler replaces these roles merely because cabinetmaking involves tools or skilled handwork.
+
+There is a specific positive: Saturn at 10.460° Aries lies close to sextile the Ascendant at 10.899° Aquarius. This meets p. 171’s favourable placement criterion. However, Saturn is in fall, retrograde and within the stated region of affliction opposite the Sun. Its physical placement is the neutral 2nd house, not the 1st house it rules. Nothing supplied describes returning to an old workshop or revisiting an established arrangement, so there is no contextual exemption for retrogradation. The favourable Ascendant relationship consequently offers less reassurance than a dignified Saturn would.
+
+Mercury, the property/outcome ruler, is peregrine, direct, clear of the Sun and physically in the neutral 9th. This is middling rather than sound, strongly supported condition. Its proximity to Venus in detriment adds an adverse influence; it does not establish any particular structural defect. Mercury’s natural association with dexterity is compatible with skilled work, but descriptive compatibility cannot substitute for essential quality or establish practical cabinetmaking suitability.
+
+Jupiter has only minor dignity by term, although angular in the 7th and clear of the Sun: potential benefit has capacity, but modest essential backing. Jupiter is in Saturn’s detriment, an adverse relationship toward you, while strongly favouring the Sun by sign and triplicity. The Sun’s regard for Jupiter is only by term; those directions are unequal.
+
+Buyer and seller nevertheless favour each other: Saturn exalts the Sun, and the Sun exalts Saturn, with triplicity and face support in both directions. This encourages cooperation, but both are in fall, limiting what their mutual goodwill can accomplish. The seller’s fallen Sun in the weak 8th also warrants checking the terms; it does not prove dishonesty.
+
+Your Moon strongly values Mercury by sign, exaltation and face, suggesting considerable attachment to the premises and possible overestimation. Mercury, in the Moon’s fall, does not reciprocate that favourable relationship. The Moon also regards Jupiter adversely by detriment. Peregrine, weak in its judged 8th house and waning, it adds little support. Its calculated void of course suggests inertia, but does not determine whether a workshop suits a trade. The later after-ingress contacts need not be pursued for this suitability judgment. No event has been established that calls for timing.
+
+### Evidence
+
+Roles and procedure: e7, e10–e11, e13, e16; printed pp. 30–32, 168, 171.
+
+Qualified Ascendant support and ability: e6–e7, e38–e41; printed pp. 50, 54, 56–61, 171.
+
+Property/outcome and nearby adverse influence: e2–e3, e25–e31; printed pp. 37, 46, 51, 62–63, 168, 171.
+
+Benefit and seller: e0, e5, e19–e20, e35–e37, e43–e44, e56, e58, e60; printed pp. 49, 71–77, 171.
+
+Moon and attachment: e0–e1, e21–e24, e49, e51–e52, e77; printed pp. 17, 32, 64–65, 73–75, 84.
+
+Calculation boundaries: e65–e78; printed pp. 91, 97, 127–133.
+
+### Unresolved
+
+Actual cabinetmaking requirements and the workshop’s physical provision—space, power, extraction and access—are not supplied, so practical fitness cannot be certified. Positions and event searches are approximate; exact speeds, stations, antiscia and fixed-star contacts are not certified. These limits permit a qualified suitability judgment, not a specific defect diagnosis or precise financial forecast.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Juniper workshop",
+      "quote": "Juniper’s available workshop"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "mine to buy and use"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "buy",
+      "quote": "buy"
+    },
+    {
+      "field": "priorities",
+      "value": "cabinetmaking suitability",
+      "quote": "suit that work"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Purpose can qualify descriptive conditions; do not manufacture takings."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-017 (test)
+
+### Question
+
+My sister Heledd would rent Kite’s farm, work it herself and keep the crop proceeds. This is my concern about her profit.
+
+### Worked answer
+
+**Status:** answer
+
+I would advise Heledd against renting Kite’s farm for profit on the present terms. The strongest testimony points to poor returns, and the eventual outcome looks unsatisfactory. Her interest in taking the farm is stronger than the indications that it will reward her. This is a qualitative judgment, not a calculation of crop income or a prediction of a specific loss.
+
+### Reasoning
+
+This is your concern about your sister, not her question relayed through you. Heledd therefore takes the radical 3rd: Taurus gives Venus. Because she would work the rented farm herself and retain its proceeds, the appropriate procedure is “Should I take the farm, or the business?” Her profit is her 10th, the radical 12th: Capricorn gives Saturn. Her lessor takes her 7th, radical 9th: Scorpio gives Mars. Her final outcome takes her 4th, radical 6th: Cancer gives the Moon.
+
+Saturn also rules your radical Ascendant, but you are not the operator or beneficiary; its relevant role here is Heledd’s profit. The Moon has the specific outcome role and is not transferred to Heledd as a personal cosignificator. No substitute ruler or natural crop significator is needed.
+
+Profit is the decisive weakness. Saturn is in fall, retrograde and within about 5° of opposition to the Sun. No accepted circumstance explains retrogradation as a favourable return. Its radical 2nd-house placement has neutral capacity in the supplied assessment, but it occupies Heledd’s turned 12th, adding weakness in her frame. Its fall concerns the quality of the returns; neither its natural agricultural associations nor any supplied circumstance excuses that debility.
+
+Heledd’s Venus is in detriment and retrograde, with no stated return to an earlier tenancy to explain the latter. It is clear of the Sun. Venus stands immediately before her 7th cusp, counted in that house by the same-sign cusp rule: she has angular engagement with the transaction, despite poor essential condition. It is not in her 1st or in a sign sextile or trine her Taurus Ascendant, so the branch’s favourable placement testimony is absent.
+
+Reception reinforces the concern. Venus strongly regards Mars by sign, triplicity and face: Heledd is strongly invested in the lessor or arrangement. Mars in Leo does not reciprocate that regard for Venus. Saturn regards Venus negatively by detriment, despite minor term reception: the profit is predominantly adverse to her. Mars likewise regards Saturn negatively by detriment, with minor term and face qualifications; this is mixed testimony, not unqualified support for her returns. Mars is peregrine, so the lessor lacks strong testimony of reliability, but this does not establish dishonesty.
+
+The outcome Moon is peregrine rather than dignified. Its radical angular strength does not make the outcome good; in Heledd’s turned chart it occupies her 5th. It is clear of the Sun and waning. Its regard for Venus combines triplicity with the stronger negative reception by fall, supporting an outcome with some attraction or benefit but substantial dissatisfaction.
+
+This branch assumes the farm is available if she chooses it; no buyer–seller aspect is required to judge profitability. The Venus–Mars square candidate therefore does not rescue the poor profit testimony. The void Moon adds stagnation, but is not an automatic refusal or proof that she will never rent. No event timing is warranted.
+
+### Evidence
+
+- Roles: e9, e12, e15, e18; Frawley printed pp. 25–27, 30–32, 137–138, 171.
+- Profit condition: e6, e38–e41; printed pp. 50, 54–57, 61, 171.
+- Heledd and lessor: e3–e4, e27–e34, e45, e63; printed pp. 17, 47, 51, 56–57, 71–77, 171.
+- Profit’s mixed regard for Heledd: e57; printed pp. 74–77.
+- Outcome and Moon: e0–e1, e21–e23, e54, e77; printed pp. 64–66, 75, 171.
+- Aspect and calculation limits: e68, e78; printed pp. 84, 127–133, 171.
+
+### Unresolved
+
+Approximate positions and seven-day hourly contact brackets do not certify fine event order, intervening stations, fixed stars or antiscia. The supplied evidence supports a qualitative recommendation, but not a monetary estimate, precise date or claim about every future season.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Kite farm",
+      "quote": "Kite’s farm"
+    },
+    {
+      "field": "deal_actor",
+      "value": "heledd",
+      "quote": "Heledd would rent"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "heledd",
+      "quote": "keep the crop proceeds"
+    },
+    {
+      "field": "people.heledd.relationship",
+      "value": "sibling",
+      "quote": "My sister"
+    },
+    {
+      "field": "principal_mode",
+      "value": "concerning_other",
+      "quote": "my concern"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Farming is active operator benefit, not passive rent."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-018 (test)
+
+### Question
+
+Larch’s art studio is available to me for earning my living by painting there. Does that workplace look good for my business?
+
+### Worked answer
+
+**Status:** answer
+
+I would lean against taking Larch’s studio for your painting business. The chart shows some earning potential, but less support for those earnings benefiting you, and an unpromising overall outcome. Mutual enthusiasm between you and the other party is a positive, but it does not outweigh the business concerns. Check the contractual terms closely before committing.
+
+### Reasoning
+
+This is an available workplace you would actively use to earn your living, so the appropriate procedure is “Should I take the farm, or the business?” An aspect completing a purchase or lease is not required to judge its suitability.
+
+Aquarius on the Ascendant gives you Saturn; Leo on the 7th gives the seller or lessor the Sun. Sagittarius on the 10th gives prospective operating profit to Jupiter, while Gemini on the 4th gives the final outcome to Mercury. These are role assignments: Jupiter physically occupies the 7th, Mercury the 9th. Lord 5 is not the profit significator here, because this is your working business rather than a property bought to generate rent or resale profit. The Moon remains your cosignificator; there is no relevant shared-ruler collision. Venus’s natural association with art does not replace the house rulers.
+
+Your Saturn occupies Aries, a sign sextile the rising sign: a modest favorable indication under this recipe. However, Saturn is in fall, retrograde, and severely afflicted by proximity to opposition with the Sun. Its 2nd-house placement gives neutral capacity. Nothing supplied describes a return that would explain away retrogradation. These weaknesses substantially reduce the favorable indication.
+
+Jupiter, the profit, has minor dignity by its own term, strong angular capacity, direct motion and freedom from solar affliction. This is real support for some earning potential, although not strong essential testimony for excellent profits. Crucially, Jupiter is in Saturn’s detriment: the prospective profit is adverse to you. Jupiter strongly regards the Sun by domicile and triplicity, whereas the Sun has only minor regard for Jupiter by term. The financial picture therefore favors the other party more clearly than it favors you; this does not establish any particular payment arrangement.
+
+Saturn and the Sun each exalt the other, with additional triplicity and face reception. This supports mutual willingness, although expectations may be inflated. It does not remove either planet’s fall. The Sun is also weak in the 8th house. A debilitated Lord 7 warrants scrutiny of the terms, without establishing dishonesty as a fact.
+
+Mercury, the final outcome, is peregrine, direct, clear of the Sun and neutral by house: not a strong promise of a beneficial deal. Its close conjunction with Venus in detriment and retrograde adds adverse influence. Mercury’s minor regard for Jupiter gives limited support, while its placement in the Moon’s fall is unfavorable to your emotional stake.
+
+The Moon is angular but peregrine, waning and low in light. It strongly values Mercury by domicile and exaltation, yet is in Jupiter’s detriment: investment in the hoped-for outcome coexists with discomfort about the profit. Mercury’s adverse reception toward the Moon is not reciprocal affection. The calculated void Moon adds stagnation testimony, but is not the basis for rejecting this workplace. Later post-ingress contacts do not establish improved suitability. No event or timing is being predicted.
+
+### Evidence
+
+- Roles and workplace procedure: e7, e10, e13, e16; Frawley printed pp. 30–32, 170–171.
+- Your condition and limited favorable Ascendant testimony: e6, e38–e41; printed pp. 50, 56–61, 171.
+- Profit quality, capacity and directed receptions: e5, e35–e37, e43–e44, e58; printed pp. 49, 54–56, 71–77, 171.
+- Other party and mutual willingness: e0, e19–e20, e56, e60; printed pp. 73–77, 171.
+- Final outcome and nearby debilitated Venus: e2–e3, e24–e31, e47, e49; printed pp. 51, 57, 62–63, 171.
+- Moon and limits on following later contacts: e1, e0, e21–e23, e51–e52, e65–e77; printed pp. 64–65, 90–97.
+- Calculation limitations: e78.
+
+### Unresolved
+
+The supplied astronomy is approximate. Exact speeds, intervening stations, antiscia and fixed-star contacts are not certified. These limit confidence but do not prevent a qualified suitability judgment from the main significators. The chart does not quantify earnings or identify a specific unfavorable contract clause.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "situation",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Larch studio",
+      "quote": "Larch’s art studio"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "available to me"
+    },
+    {
+      "field": "context",
+      "value": "active painting business",
+      "quote": "earning my living by painting"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Infer workplace scope rather than an employer’s offered job."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-019 (test)
+
+### Question
+
+I own Meadow’s farm and will operate it for my own crop income. Would that farming business be worthwhile?
+
+### Worked answer
+
+**Status:** answer
+
+On this chart, I would lean against operating Meadow farm for your own crop income. It shows some capacity to generate returns, but the indications that those returns will benefit you are poor, and the overall outcome looks underwhelming. This is a qualified judgment against the business being worthwhile, not a prediction of no harvest or no revenue.
+
+### Reasoning
+
+This is about working your own farm, not acquiring it, letting it out, or completing a sale. The working-property procedure on printed p. 171 therefore fits: you are Lord 1, the operating profit is Lord 10, and the final outcome is Lord 4. Aquarius rising gives Saturn for you; Sagittarius on the 10th gives Jupiter for profit; Gemini on the 4th gives Mercury for the outcome. Lord 5 also happens to be Mercury, but rental or resale profit is not the requested facet. No substitute ruler is needed. The Moon remains your cosignificator. No seller or lessor is established, so the Sun’s rulership of the 7th does not create one.
+
+There is some support: Saturn occupies Aries, which sextiles the ascending sign, a favorable placement under this recipe. However, it is not close to the exact Ascendant sextile and lacks essential strength. Saturn is in fall, retrograde, and within the supplied severe solar-opposition region. Its physical placement in the 2nd appropriately emphasizes your income and resources, but offers only middling capacity. No return or resumption circumstance has been supplied to explain away the retrogradation.
+
+Jupiter, the profit, has minor dignity by term, is direct, clear of the Sun, and angular in the 7th: returns have some ability to materialize. But angularity is capacity, not proof of substantial or beneficial profit. Jupiter is in Saturn’s detriment: the profit is adversely disposed toward you. Its minor regard for Mars, your money ruler, is insufficient to offset that major negative. Mars itself is peregrine and weak in the 6th, although its joy there gives modest relief. Mars’s term-and-face regard for Saturn is mixed with much stronger detriment reception. You, Saturn, strongly value Mars: your interest in income does not establish that the finances will reward you.
+
+Mercury, the outcome, is peregrine, direct, solar-clear, and in the judgment 9th under the same-sign cusp rule. Its capacity is neutral and its quality unimpressive. It is also within about 2.45° of debilitated, retrograde Venus, an adverse close influence. Mercury’s minor regard for Jupiter offers limited support; its strong regard for Mars emphasizes the financial outcome rather than establishing financial strength.
+
+The Moon strongly values and exalts Mercury, showing investment in the farm’s outcome, while Mercury is in the Moon’s fall: that favorable regard is not reciprocated. The Moon also occupies Jupiter’s detriment. It is angular but peregrine, waning toward the Sun, and void of course within the supplied calculation. This supports limited development, but is not the basis of the negative judgment. This is a worthwhileness question: no buyer–seller aspect is required, and later lunar contacts cannot rescue weak profit and outcome testimony. No event timing is warranted.
+
+### Evidence
+
+Roles and procedure: e7, e10–e11, e13, e16; printed pp. 30–32, 170–171.
+Your condition and favorable sign relationship: e6–e7, e39–e42; pp. 50, 56–61, 171.
+Profit and finances: e4–e5, e8, e33–e38, e43–e46, e56; pp. 49, 54–56, 71–77, 171.
+Outcome and close affliction: e2–e3, e24–e32, e48–e51; pp. 17, 51, 62–63, 171.
+Moon and directed attitudes: e0–e1, e21–e23, e50, e52–e54, e78; pp. 32, 64–65, 71–77.
+State judgment and timing limits: e66–e79; pp. 84, 97, 127–133.
+
+### Unresolved
+
+Exact planetary speeds, intervening stations, antiscia, and fixed-star contacts are not certified. Positions and the seven-day event search are approximate. These limit confidence and precision but do not prevent this qualified state judgment. The evidence does not establish a monetary return or a dated improvement.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Meadow farm",
+      "quote": "Meadow’s farm"
+    },
+    {
+      "field": "subject.owner_id",
+      "value": "querent",
+      "quote": "I own"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "will operate"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "my own crop income"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Title is available because stated, not inferred from cultivation."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
+## dspy-business_property-first-020 (test)
+
+### Question
+
+I would rent a shop in Springfield, our nearby Virginia town, to run my bicycle business. Would working there profit me?
+
+### Worked answer
+
+**Status:** answer
+
+I would advise against renting this shop on the expectation that working there will profit you. The chart allows some earning potential, but gives stronger indications that the benefit would favour the landlord and leave you poorly rewarded. This is a qualified judgment, not a prediction of a specific financial loss.
+
+### Reasoning
+
+This is the working-premises question on printed p. 171: whether taking an available shop to operate your business would benefit you. It does not require an aspect completing a tenancy agreement. Aquarius on the 1st gives you Saturn; Leo on the 7th gives the landlord the Sun; Sagittarius on the 10th gives the operating profit Jupiter; Gemini on the 4th gives the eventual outcome Mercury. The Moon remains your cosignificator. Mercury also rules the 5th, but that creates no necessary substitution: this branch uses the 10th for profit, rather than the ordinary property-investment 5th.
+
+Jupiter provides the strongest favourable testimony: it is direct, clear of the Sun, angular and in its own term. There is some capacity to produce earnings, although term is only a minor essential dignity. The decisive qualification is its direction of reception: Jupiter in Leo strongly favours the Sun, the landlord, while occupying Saturn’s detriment. Thus the profit is poorly disposed toward you. Its placement immediately inside the landlord’s 7th reinforces that concern; angular strength is not the same as benefit to you.
+
+Saturn is in fall, retrograde and within the stated region of affliction opposite the Sun. No return or resumption is specified that would explain away the retrogradation. Its 2nd-house placement fits your financial concern, but provides no angular strength. Aries sextiles the ascending sign, a favourable consideration under this recipe, yet Saturn is not close to the exact sextile degree and its poor condition substantially qualifies that support.
+
+You and the landlord mutually exalt one another, with additional triplicity and face reception. This supports willingness to deal, but can involve inflated expectations; it does not make either party strong or prove profitability. The Sun itself is fallen and weak in the 8th. That warrants scrutiny of the proposed terms, without establishing dishonesty. Your money, Mars as ruler of the Aries 2nd, is peregrine and weak in the 6th. Its minor term-and-face regard for Saturn coexists with much stronger negative reception by detriment; it also strongly favours the landlord’s Sun. This is additional financial caution, not a quantified loss.
+
+Mercury, the eventual outcome, is peregrine, direct and clear of the Sun, with neutral capacity in the judgment 9th under the five-degree cusp rule. It supplies no strong assurance of a satisfactory result. Mercury has only minor regard for profit through Jupiter’s term and is in the Moon’s fall. Conversely, your Moon strongly values and exalts Mercury: your investment in the hoped-for outcome exceeds the outcome’s support for you.
+
+The Moon is angular but peregrine, waning toward the Sun and void of course in the supplied calculation. It also occupies Jupiter’s detriment. This adds hesitation or stagnation, but is not an automatic denial of profit. Its later contacts require sign changes; the Jupiter sextile comes only after other contacts and cannot be promoted into an immediate promise of earnings. No event has been established that should be timed.
+
+### Evidence
+
+- Roles and working-premises procedure: e7, e10–e11, e13, e16; printed pp. 30–32, 171.
+- Profit’s limited dignity, angular capacity and directed preferences: e5, e35–e37, e43–e44; printed pp. 49, 54–56, 71–77, 171.
+- Your condition and the qualified Ascendant-sign support: e6–e8, e38–e41; printed pp. 50, 56–61, 171.
+- Landlord’s condition and mutual reception: e0, e19–e20, e56, e60; printed pp. 73–77, 171.
+- Your money’s condition and mixed reception: e4, e8, e32–e34, e45–e46; printed pp. 18, 51, 56, 74–77.
+- Final outcome and unequal reception with the Moon: e2, e24–e27, e47, e49, e52; printed pp. 17, 51, 73–77, 171.
+- Moon and event limits: e0–e1, e21–e23, e51, e65–e69, e78–e79; printed pp. 64–65, 84, 91, 97, 127–133.
+
+### Unresolved
+
+Exact profitability, monetary amounts and dates are not established. Planetary positions and contact brackets are approximate; precise speeds, intervening stations, antiscia and fixed-star contacts are not certified. These limit confidence and finer judgment but do not prevent the qualified assessment of whether this shop would benefit you.
+
+### Rubric (separate from the worked answer)
+
+```json
+{
+  "facet": "profit",
+  "facts": [
+    {
+      "field": "subject.name",
+      "value": "Springfield shop",
+      "quote": "shop in Springfield"
+    },
+    {
+      "field": "deal_actor",
+      "value": "querent",
+      "quote": "my bicycle business"
+    },
+    {
+      "field": "deal_capacity",
+      "value": "rent",
+      "quote": "rent"
+    },
+    {
+      "field": "deal_beneficiary",
+      "value": "querent",
+      "quote": "profit me"
+    },
+    {
+      "field": "event_place",
+      "value": "Springfield, Virginia",
+      "quote": "Springfield"
+    }
+  ],
+  "missing": [
+
+  ],
+  "reading_status": "answer",
+  "must_explain": [
+    "Use available work premises with actual operator and beneficiary, distinguishing profit tenth/final outcome fourth from passive property income.",
+    "Geography remains contextual and does not recast reader chart."
+  ],
+  "must_not": [
+    "Do not infer title from operation or declare the source recipe unavailable because current native coverage is ExpertReview."
+  ],
+  "source_pages": [
+    137,
+    138,
+    170,
+    171
+  ]
+}
+```
+
