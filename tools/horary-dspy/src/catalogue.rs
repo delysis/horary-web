@@ -252,6 +252,10 @@ fn component_family_role_reference(
                 | "contest"
                 | "politics"
                 | "court_case"
+                | "pregnancy"
+                | "fertility"
+                | "adoption"
+                | "medical"
         ),
         "Unsupported role family"
     );
@@ -472,6 +476,163 @@ fn component_family_role_reference(
             "conditional_wages_reference_not_acquisition",
             "The job's wages".into(),
             sources,
+        );
+    } else if matches!(method, "pregnancy" | "fertility" | "medical") {
+        let person = value("subject.owner_id");
+        let animal = value("subject.kind") == Some("animal");
+        let house = if animal {
+            match value("animal_kind") {
+                Some("small_kind") => Some(6),
+                Some("large_kind") => Some(12),
+                _ => None,
+            }
+        } else {
+            person.and_then(person_house)
+        };
+        let primary = if method == "medical" {
+            "patient.person"
+        } else {
+            "mother.person"
+        };
+        add(
+            primary,
+            (!animal).then_some(person).flatten(),
+            house,
+            false,
+            "actual_patient_or_mother_not_title_owner_of_animal",
+            value("subject.name")
+                .unwrap_or("Person/animal concerned")
+                .into(),
+            vec![
+                "subject.owner_id".into(),
+                "subject.kind".into(),
+                "animal_kind".into(),
+            ],
+        );
+        let refs: &[(&str, u8, &str)] = if method == "medical" {
+            &[
+                ("medical.doctor", 7, "Actual treating/potential doctor"),
+                ("medical.treatment", 10, "Actual prescribed treatment"),
+                ("medical.surgery", 6, "Surgery if actual concern"),
+                (
+                    "medical.turned_death",
+                    8,
+                    "Patient's death only if prognosis requires it",
+                ),
+            ]
+        } else {
+            &[
+                ("mother.baby", 5, "Mother's baby"),
+                (
+                    "mother.partner",
+                    7,
+                    "Partner only where source fertility context requires",
+                ),
+                (
+                    "mother.partner_potential",
+                    11,
+                    "Partner's reproductive potential, not substitute conception baby",
+                ),
+            ]
+        };
+        for (role, offset, label) in refs {
+            add(
+                role,
+                None,
+                house.map(|h| crate::native_evidence::turn(h, *offset)),
+                *role != "mother.baby",
+                "source_context_conditional_body_reference",
+                (*label).into(),
+                vec!["subject.owner_id".into()],
+            );
+        }
+        if method == "medical" {
+            add(
+                "medical.radical_death",
+                None,
+                Some(8),
+                true,
+                "conditional_mortality_reference_not_a_death_verdict",
+                "Radical eighth only if prognosis requires it".into(),
+                vec![],
+            );
+        } else if value("parenthood") == Some("father") && house == Some(7) {
+            add(
+                "father.own_baby",
+                principal,
+                Some(5),
+                true,
+                "own_child_only_when_question_explicitly_establishes_father_context",
+                "Father's baby, not a twin prediction".into(),
+                vec!["parenthood".into()],
+            );
+        }
+        if animal && house.is_none() {
+            for (role, house, label) in [
+                (
+                    "mother.small_animal",
+                    6,
+                    "Mother if actual small-animal kind",
+                ),
+                (
+                    "mother.small_animal_baby",
+                    10,
+                    "Small-animal mother's fifth",
+                ),
+                (
+                    "mother.large_animal",
+                    12,
+                    "Mother if actual large-animal kind",
+                ),
+                ("mother.large_animal_baby", 4, "Large-animal mother's fifth"),
+            ] {
+                add(
+                    role,
+                    None,
+                    Some(house),
+                    true,
+                    "conditional_animal_kind_original_question_selects",
+                    label.into(),
+                    vec!["subject.kind".into()],
+                );
+            }
+        }
+    } else if method == "adoption" {
+        let adopter = value("adopter").or_else(|| {
+            (value("principal_mode") != Some("concerning_other"))
+                .then_some(principal)
+                .flatten()
+        });
+        let adopter_house = adopter.and_then(person_house);
+        let state = value("adoption_state");
+        let parent = value("birth_parent");
+        let baby_house = match state {
+            Some("completed") => adopter_house.map(|h| crate::native_evidence::turn(h, 5)),
+            Some("prospective") => adopter_house.map(|h| crate::native_evidence::turn(h, 11)),
+            Some("prospective_known_parent") => parent
+                .and_then(person_house)
+                .map(|h| crate::native_evidence::turn(h, 5)),
+            _ => None,
+        };
+        add(
+            "adoption.adopter",
+            adopter,
+            adopter_house,
+            false,
+            "actual_adopter_not_merely_speaker",
+            adopter
+                .map(label)
+                .unwrap_or_else(|| "Unbound adopter".into()),
+            vec!["adopter".into(), "principal_mode".into()],
+        );
+        add(
+            "adoption.child",
+            None,
+            baby_house,
+            false,
+            "actual_adoption_state_and_known_birth_parent_reference",
+            value("subject.name").unwrap_or("Child").into(),
+            vec!["adoption_state".into(), "birth_parent".into()],
         );
     } else if matches!(method, "choice" | "contest" | "politics") {
         let refs: &[(&str, u8, &str)] = match method {
@@ -1631,6 +1792,9 @@ fn component_family_role_reference(
                 | "exam"
                 | "undertaking"
                 | "education"
+                | "pregnancy"
+                | "fertility"
+                | "medical"
         ) || value("subject.owner_id") == principal);
     if moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
@@ -1898,6 +2062,10 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "contest" => Ok(CONCISE_CONTEST_PROCEDURE),
         "politics" => Ok(CONCISE_POLITICS_PROCEDURE),
         "court_case" => Ok(CONCISE_COURT_PROCEDURE),
+        "pregnancy" => Ok(CONCISE_PREGNANCY_PROCEDURE),
+        "fertility" => Ok(CONCISE_FERTILITY_PROCEDURE),
+        "adoption" => Ok(CONCISE_ADOPTION_PROCEDURE),
+        "medical" => Ok(CONCISE_MEDICAL_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -2368,6 +2536,66 @@ Parties joining each other can mean settlement: conjunction before court opens; 
 Winning and financial benefit are different. Verdict can favour a party yet harm their pocket; judge can prefer one morally but rule for the other's legal point. Consider actual money/financial reception separately. Do not turn merit into guaranteed victory or a weak judge into verified corruption. Do not introduce bribery unless raised; even then keep allegation and chart inference distinct. Abstract ninth-house law is not the active court process.
 
 Timing follows supported event with actual travel and justified units; astronomical hours are not hearing/verdict dates. No invented damages, criminal guilt or private judicial motive. Missing antiscia, separating contacts and fine precision remain unknown. Return status, answer, analysis, evidence, unresolved: useful proportionate case/settlement judgment with native eIDs/pages, contrary testimony and limits.
+";
+
+const CONCISE_PREGNANCY_PROCEDURE: &str = "PRESENT PREGNANCY PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 173–175.
+Preserve whose present pregnancy is asked about, actual relationship/animal kind and explicit father context. This is not future conception or general lifetime fertility. Genuine relay mother takes first; concerning another mother retains her actual house. Her baby is fifth from her. Dogs are sixth-house mothers and horses twelfth by kind, not an owner's pregnancy; if canonical animal kind is absent, original words must select the conditional kind references without invented identity.
+
+Strongest picture is baby's ruler inside mother's house close to her cusp: pregnancy need not have a new linking aspect. Mother's ruler or principal Moon in baby's house mainly shows interest and requires support. A close strong benefic or strongly received angular connection can support a positive judgment. Radical angularity remains radical even in a turned inquiry. Assigned house differs from body's occupied house; shared rulers preserve distinct roles without fictitious aspects.
+
+A malefic close to mother's Ascendant or baby's cusp is adverse unless it is mother/baby's own ruler. Baby combust is strongly adverse. In these bodily pregnancy questions an antiscion ALONE cannot replace bodily testimony. Barren signs do not veto a clear present-pregnancy picture; fertility signs are more important to lifetime potential. Do not turn weak dignity or one uncomputed technique into a verified medical fact.
+
+When an actual father asks whether a seventh-house woman carries THEIR baby, radical fifth and her turned fifth can both show that same child. This is not a general licence to add radical fifth to every other person's pregnancy, nor does two rulers joining prove twins. A sister/mother inquiry uses that woman's actual house and its fifth. Principal's Moon does not automatically become another mother's cosignificator; main-house claims take priority.
+
+Baby ruler already in eighth does NOT mean a dead baby. Entering eighth or serious fifth-house affliction can indicate potential loss only with established pregnancy and supporting event testimony; miscarriage is an event, not one adverse potential. Do not announce fetal death, paternity or an exact count from a single indicator. Keep reported tests, pregnancy and observations distinct from chart inference.
+
+Use actual positions, source-bounded aspects/reception and motion rather than invented stations, sign changes or future dignities. Reception A→B is A's regard for B and preserves every positive/negative quality. Astronomical hours are not clinical dates; missing calculations stay unknown. Return status, answer, analysis, evidence, unresolved: direct qualified present-state judgment with eIDs/pages, counterevidence and limits, not a fabricated test result or contraception assurance.
+";
+
+const CONCISE_FERTILITY_PROCEDURE: &str = "FERTILITY AND CONCEPTION PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 173–177.
+Preserve actual mother, conception versus carrying-to-term versus lifetime potential, age/context and whether pregnancy/treatment already exists. Genuine relay principal takes first; another mother retains her actual house and fifth for baby. Do not transfer principal Moon to another woman. Actual house claims have priority and assigned houses differ from occupied houses.
+
+For conception, mother and baby need bodily linking testimony; fertile signs help but even strong rulers in barren signs can conceive with a clear connection. Antiscion alone cannot supply bodily pregnancy. Baby combust is strongly adverse unless Sun is mother ruler; source exceptions require actual roles, not a benefic-name shortcut. Jupiter/Venus can harm when debilitated; a negative potential is not automatically a medical diagnosis.
+
+For potential fertility inspect mothers, babies, partner and partner-potential houses (principal-frame1/5/7/11), Moon and its dispositor: rulers' signs, NOT a count of cusp signs. Cancer/Scorpio/Pisces fertile; Gemini/Leo/Virgo barren; others neutral. Judge actual house/ruler benefits and afflictions. Do not use partner's potential ruler as a substitute for the mother-to-baby connection in straight conception.
+
+Assisted conception commonly uses supported translation/collection; the intermediary's house need not be a mandatory treatment tenth. Evaluate its condition/receptions toward mother/baby and fifth-house testimony to distinguish conception from carrying to term. Severe fifth-house affliction after established pregnancy can suggest loss potential but needs actual supporting action before calling miscarriage. Use care; don't manufacture a diagnosis, outcome or viable treatment from a chart.
+
+'Will I ever?' depends on actual age/default: younger context can need little positive fertility and no overwhelming harm; older context needs much stronger fertility and connection. Establish 'if' before 'when'. Only after occurrence is genuinely supported may the source's long-term timing latitude pass ordinary intervening aspects/sign changes; station and Sun conjunction remain barriers. Unknown future calculations do not become a licence to advance arbitrarily.
+
+Number is coarse: one, one/two, few or many after fertility established; strength and fertility qualify it, not exact inventory. Traditional sex testimony uses actual planets/signs and strength with Moon included, not a fabricated certain sex or many children's sequence.
+
+Reception A→B preserves positive AND negative qualities. Attribute condition/motion to its actual role; astronomical hours are not civil conception dates. Return status, answer, analysis, evidence, unresolved: proportionate useful judgment with material eIDs/pages, contrary testimony and honest limits, not a test result or contraception guarantee.
+";
+
+const CONCISE_ADOPTION_PROCEDURE: &str = "ADOPTION PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 177–178.
+Preserve actual adoption state, prospective child, known birth parent if any, genuine principal and what outcome is asked. A prospective child not yet one's own is generally someone else's child: fifth from seventh, eleventh. If the birth parent is specifically identified in an operative relationship, use that person's fifth instead: a sister's child is fifth from third, seventh. Do not use eleventh merely because it is the default when a known parent requires turning. A missing parent relationship remains unresolved; do not fabricate kinship or substitute title ownership.
+
+Once adoption is COMPLETED, the child is the adoptive principal's fifth, exactly as a natural child. Do not leave an already adopted child eleventh or treat a proposed placement as completed. Genuine relay adopter takes first; concerning another adopter preserves that person's actual house. Turn prospective/default or completed roles from the actual adopter where relevant, and known birth parent's fifth from that parent's actual relationship. Assigned house differs from body's occupied house; keep coincident aliases and main-house priority over Moon.
+
+For 'will I get this child?', seek a supported connection between actual adopter and prospective child, using available principal Moon only in its proper role. Do not read the child's dignity alone as a completed placement or use biological conception tests as adoption requirements. Translation/collection or actual material impediments need contextual support, not every incidental aspect as a social worker, birth parent or legal delay. No intermediary biography is required merely because adoption involves institutions.
+
+Judge willingness/capacity contextually with supplied essential condition, occupied-house capacity, solar state and actual motion. Reception A→B is A's regard for B, retaining every positive AND negative quality without inferring reciprocity, private motives or a child's independently known preference. Exaltation may overrate; an easy aspect does not erase significant harm or unavailable circumstances.
+
+For an already adopted child's welfare or an existing relationship, use that actual concern's recipe, not a new acquisition aspect. Do not invent parental consent, a court decision, eligibility, paternity, conception or a future date. Reported paperwork/placement remains observed context distinct from chart interpretation. Shared rulers do not create a fictitious aspect between identical planets.
+
+If timing is asked, first support the relevant event then use actual applying travel and plausible contextual units. Astronomical search hours are not civil placement dates. After ingress changes circumstances/reception; missing techniques, separating contacts, stations or fine order remain unknown rather than absence. Return status, answer, analysis, evidence, unresolved: direct useful state-correct judgment with native eIDs/pages, substantial counterevidence and explicit limits.
+";
+
+const CONCISE_MEDICAL_PROCEDURE: &str = "MEDICAL SOURCE PROCEDURE — Frawley printed pp. 19–32, 40–77, 84–101, 127–136, 179–190.
+Preserve patient, actual diagnosed/reported condition, prognosis versus diagnosis/treatment and severity. Genuine relay patient takes first; another patient retains their actual house, without transferred principal Moon. The whole chart concerns illness; sixth is NOT automatically illness. Assigned house differs from occupied house.
+
+Find actual affliction of patient ruler: incompatible planet/sign nature, debility, combustion or adverse contact. Dispositor or afflicting body may be illness; patient ruler itself can be illness, and several causes can coexist. Mercury/Saturn cold-dry, Moon/Venus cold-moist, Sun/Mars hot-dry, Jupiter hot-moist; fire hot-dry, earth cold-dry, air hot-moist, water cold-moist. These are traditional source categories, not invented modern diagnoses; detailed diagnosis needs Saunders, not supplied invented pathology.
+
+For prognosis inspect moving toward/away from actual affliction, new sign/condition, and actual station: first station adverse, second recovery. Fixed illness can persist, cardinal shorten, mutable recur, qualified by patient/context. Do not claim a station, recent contact or future improvement absent calculation.
+
+For genuine mortality concern inspect both radical and patient's turned eighth, actual person–death joining, applying combustion or contextually grave deterioration. Any death ruler can harm despite benefic name. Major mutual reception can save while intact. Separation can support survival in an alert patient but differs in reported coma; no clear substantial death testimony is not an invitation to find a fatal minor detail. Certain-death long-term timing exemptions do not establish an uncertain death, and uncomputed Parts cannot supply one.
+
+Actual treating/potential doctor is patient's seventh, not generic ninth. Treatment BEING GIVEN is their tenth; surgery sixth or natural Mars, potentially part of prescribed tenth. Distinct surgeon can be surgery ruler's dispositor. Comparisons need actual brief descriptions/roles, not assigning every doctor seventh. A spouse's doctor may legitimately occupy radical first, without needing principal in that role.
+
+Assess actual power over illness and effect on patient: illness in doctor's dignity gives doctor power; doctor in illness's dignity gives illness power. Treatment favouring patient helps, harming patient is adverse. Preserve every positive AND negative directed reception A→B, not reversed control. Descriptive surgery debility may fit its nature; dignity alone is not treatment efficacy. Don't fabricate medical knowledge or tell a person to change treatment from an unsupported inference.
+
+Astronomical hours are not clinical dates. Unknown separating contacts, future condition, Parts or fine order stay unknown. Return status, answer, analysis, evidence, unresolved: qualified source-scoped answer with native eIDs/pages, counterevidence and explicit diagnostic/calculation limits, not an invented clinical finding.
 ";
 
 /// Present an existing declared component input with the same finite native
@@ -2934,6 +3162,45 @@ fn relevant_family_ids(
                 }
             }
         },
+        "pregnancy" | "fertility" => {
+            recipient("mother.person");
+            if is_principal("mother.person") {
+                recipient("principal.moon");
+            }
+            target("mother.baby");
+            target("father.own_baby");
+            for row in roles.iter().filter(|r| {
+                r[0].as_str().is_some_and(|id| {
+                    id.starts_with("mother.small_animal") || id.starts_with("mother.large_animal")
+                })
+            }) {
+                if let Some(p) = row[4].as_str() {
+                    targets.insert(p.into());
+                }
+            }
+        }
+        "adoption" => {
+            recipient("adoption.adopter");
+            if is_principal("adoption.adopter") {
+                recipient("principal.moon");
+            }
+            target("adoption.child");
+        }
+        "medical" => {
+            recipient("patient.person");
+            if is_principal("patient.person") {
+                recipient("principal.moon");
+            }
+            for id in [
+                "medical.doctor",
+                "medical.treatment",
+                "medical.surgery",
+                "medical.turned_death",
+                "medical.radical_death",
+            ] {
+                target(id);
+            }
+        }
         "choice" | "contest" | "politics" => {
             for row in roles.iter().filter(|r| r[0] != "principal.person") {
                 if let Some(p) = row[4].as_str() {
@@ -3135,7 +3402,16 @@ fn relevant_family_ids(
     // without an assigned person alias. This does not assign natural roles.
     if matches!(
         method,
-        "education" | "dream" | "choice" | "contest" | "politics" | "court_case"
+        "education"
+            | "dream"
+            | "choice"
+            | "contest"
+            | "politics"
+            | "court_case"
+            | "pregnancy"
+            | "fertility"
+            | "adoption"
+            | "medical"
     ) {
         // Alternative schools use actually supplied natural descriptions;
         // dream meaning uses ordinary roles across the whole chart. Keep
@@ -4334,6 +4610,68 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_body_roles_distinguish_actual_mother_father_child_and_adoption_state() {
+        let (input, _) = relevant_family_input(
+            "pregnancy",
+            json!({"facts":[fact("subject.kind","person"),fact("subject.owner_id","wife"),fact("people.wife.relationship","partner"),fact("parenthood","father")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("mother.person(wife) = H7/")
+                && chart.contains("mother.baby(?) = H11/")
+                && chart.contains("father.own_baby(querent) = H5/")
+        );
+        let (input, _) = relevant_family_input(
+            "pregnancy",
+            json!({"facts":[fact("subject.kind","animal"),fact("subject.owner_id","querent")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("mother.person(?) = —/?")
+                && chart.contains("mother.small_animal(?) = H6/")
+                && chart.contains("mother.large_animal(?) = H12/")
+        );
+        assert!(!chart.contains("mother.person(querent) = H1/"));
+        for (state, house) in [("prospective", 11), ("completed", 5)] {
+            let (input, _) = relevant_family_input(
+                "adoption",
+                json!({"facts":[fact("adoption_state",state)],"unknown":[]}),
+            );
+            assert!(
+                input
+                    .get("chart_evidence")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .contains(&format!("adoption.child(?) = H{house}/"))
+            );
+        }
+        let (input, _) = relevant_family_input(
+            "adoption",
+            json!({"facts":[fact("adoption_state","prospective_known_parent"),fact("birth_parent","sister"),fact("people.sister.relationship","sibling")],"unknown":[]}),
+        );
+        assert!(
+            input
+                .get("chart_evidence")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("adoption.child(?) = H7/")
+        );
+        let (input, _) = relevant_family_input(
+            "medical",
+            json!({"facts":[fact("subject.kind","person"),fact("subject.owner_id","partner"),fact("people.partner.relationship","partner")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("patient.person(partner) = H7/")
+                && chart.contains("medical.doctor(?) = H1/")
+                && chart.contains("medical.treatment(?) = H4/")
+        );
+        assert!(!chart.contains("principal.moon("));
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -4364,6 +4702,10 @@ mod concise_projection_tests {
             "contest",
             "politics",
             "court_case",
+            "pregnancy",
+            "fertility",
+            "adoption",
+            "medical",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
