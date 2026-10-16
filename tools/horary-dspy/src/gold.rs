@@ -1634,6 +1634,39 @@ fn first_family_gate(campaign: &Path, gate: &Path) -> Result<()> {
 }
 
 fn received_answer_matches(directory: &Path, answer: &WorkedAnswer) -> Result<bool> {
+    let reused = directory.join("reused-approval.json");
+    if reused.exists() {
+        let receipt: Value = serde_json::from_slice(&fs::read(reused)?)?;
+        let source = Path::new(
+            receipt["source"]
+                .as_str()
+                .context("Missing reused approval source")?,
+        );
+        let original = fs::read(source)?;
+        let current = fs::read(directory.join("gold.json"))?;
+        ensure!(
+            receipt["new_provider_calls"] == 0
+                && receipt["sha256"] == google::digest(&original)
+                && original == current,
+            "Reused approval ancestry or exact record identity differs"
+        );
+        let record: GoldRecord = serde_json::from_slice(&original)?;
+        ensure!(
+            record.answer == *answer
+                && record.review["passed"] == true
+                && record.review["reading"] == "pass"
+                && record.review["answer_quality"] == "pass",
+            "Reused approval lacks its exact passed answer"
+        );
+        let original_directory = source
+            .parent()
+            .context("Missing original approval directory")?;
+        ensure!(
+            !original_directory.join("reused-approval.json").exists(),
+            "Nested approval ancestry is not supported"
+        );
+        return received_answer_matches(original_directory, answer);
+    }
     for attempt in ["attempt-1", "attempt-2"] {
         let path = directory.join(attempt).join("answer.json");
         if path.exists() && serde_json::from_slice::<WorkedAnswer>(&fs::read(path)?)? == *answer {
@@ -1895,6 +1928,36 @@ mod tests {
             unresolved: "Synthetic missing calculation".into(),
         }
     }
+    #[test]
+    fn reused_approval_requires_exact_record_and_original_received_witness() {
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("old");
+        let current = temp.path().join("current");
+        fs::create_dir_all(old.join("attempt-1")).unwrap();
+        fs::create_dir(&current).unwrap();
+        let record = GoldRecord {
+            case_id: "synthetic-train".into(),
+            split: "train".into(),
+            input_hash: "bound-input".into(),
+            answer: answer(),
+            source_witnesses: json!({"book":"bound"}),
+            review: json!({"passed":true,"reading":"pass","answer_quality":"pass"}),
+        };
+        let bytes = serde_json::to_vec(&record).unwrap();
+        fs::write(old.join("gold.json"), &bytes).unwrap();
+        fs::write(current.join("gold.json"), &bytes).unwrap();
+        fs::write(current.join("reused-approval.json"),serde_json::to_vec(&json!({"source":old.join("gold.json"),"sha256":google::digest(&bytes),"new_provider_calls":0})).unwrap()).unwrap();
+        assert!(!received_answer_matches(&current, &record.answer).unwrap());
+        fs::write(
+            old.join("attempt-1/answer.json"),
+            serde_json::to_vec(&record.answer).unwrap(),
+        )
+        .unwrap();
+        assert!(received_answer_matches(&current, &record.answer).unwrap());
+        fs::write(current.join("gold.json"), b"changed").unwrap();
+        assert!(received_answer_matches(&current, &record.answer).is_err());
+    }
+
     #[test]
     fn continuation_inventory_charges_unsettled_requests_and_binds_changes() {
         let temp = tempfile::tempdir().unwrap();
