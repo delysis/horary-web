@@ -243,6 +243,11 @@ fn component_family_role_reference(
                 | "lost_object"
                 | "lost_animal"
                 | "missing_person"
+                | "knowledge"
+                | "exam"
+                | "undertaking"
+                | "education"
+                | "dream"
         ),
         "Unsupported role family"
     );
@@ -464,6 +469,147 @@ fn component_family_role_reference(
             "The job's wages".into(),
             sources,
         );
+    } else if matches!(method, "knowledge" | "exam" | "undertaking" | "education") {
+        let owner = value("subject.owner_id");
+        let house = owner.and_then(person_house);
+        add(
+            "learning.person",
+            owner,
+            house,
+            false,
+            "actual_candidate_learner_or_knowledge_owner",
+            owner
+                .map(label)
+                .unwrap_or_else(|| "Unbound learner/owner".into()),
+            vec!["subject.owner_id".into()],
+        );
+        if method == "education" {
+            let level = value("school_level");
+            let school = match level {
+                Some("school") => Some(3),
+                Some("university") => Some(9),
+                _ => None,
+            };
+            add(
+                "education.institution",
+                None,
+                school,
+                false,
+                "external_school_radical_not_turned_from_child",
+                value("subject.name").unwrap_or("Institution").into(),
+                vec!["school_level".into()],
+            );
+        } else {
+            let refs: &[(&str, u8, &str)] = match method {
+                "exam" => &[
+                    ("exam.knowledge", 9, "Candidate's knowledge"),
+                    (
+                        "exam.result",
+                        10,
+                        "Candidate's examination result as profit from knowledge",
+                    ),
+                    (
+                        "exam.institution",
+                        9,
+                        "External higher institution only if admission question",
+                    ),
+                ],
+                "undertaking" => &[
+                    ("undertaking.primary", 9, "Voyage/course/fair"),
+                    ("undertaking.profit", 10, "Benefit/profit from undertaking"),
+                    (
+                        "learning.customers_money",
+                        8,
+                        "Customers' money only if actual earnings question",
+                    ),
+                ],
+                _ => &[
+                    ("knowledge.higher", 9, "Higher knowledge"),
+                    (
+                        "knowledge.higher_profit",
+                        10,
+                        "Profit from higher knowledge",
+                    ),
+                    (
+                        "knowledge.elementary",
+                        3,
+                        "Elementary reading/writing only if applicable",
+                    ),
+                    (
+                        "knowledge.elementary_profit",
+                        4,
+                        "Profit from elementary knowledge only if applicable",
+                    ),
+                    (
+                        "learning.customers_money",
+                        8,
+                        "Customers' money if earnings concern",
+                    ),
+                    (
+                        "knowledge.payroll_job",
+                        10,
+                        "Employment boundary only if actual salaried job",
+                    ),
+                    (
+                        "knowledge.payroll_wages",
+                        11,
+                        "Wages boundary only if actual employment",
+                    ),
+                ],
+            };
+            for (role, offset, label) in refs {
+                let role_house = if *role == "exam.institution" {
+                    Some(9)
+                } else {
+                    house.map(|h| crate::native_evidence::turn(h, *offset))
+                };
+                add(
+                    role,
+                    None,
+                    role_house,
+                    true,
+                    "conditional_source_recipe_reference_not_branch_selection",
+                    (*label).into(),
+                    vec!["subject.owner_id".into()],
+                );
+            }
+        }
+    } else if method == "dream" {
+        add(
+            "dream.principal",
+            principal,
+            principal.map(|_| 1),
+            false,
+            "actual_dreamer_even_when_dream_identity_differs",
+            "Dreamer".into(),
+            vec!["principal_mode".into(), "principal_id".into()],
+        );
+        if value("dream_task") != Some("meaning") {
+            add(
+                "dream.prophetic_claim",
+                None,
+                Some(9),
+                true,
+                "conditional_prediction_veracity_not_general_dream_location",
+                "Ninth only for actual prophetic truth inquiry".into(),
+                vec!["dream_task".into()],
+            );
+        }
+        for field in fields
+            .keys()
+            .filter(|f| f.starts_with("people.") && f.ends_with(".relationship"))
+        {
+            let id = &field[7..field.len() - 13];
+            add(
+                &format!("dream.declared.{id}"),
+                Some(id),
+                person_house(id),
+                true,
+                "actual_declared_dream_character_not_observed_real_event",
+                label(id),
+                person_sources(Some(id)),
+            );
+        }
     } else if method == "lost_object" {
         let owner = value("subject.owner_id");
         let house = owner.and_then(person_house);
@@ -1338,7 +1484,16 @@ fn component_family_role_reference(
             .all(|r| r["ruler_planet"].is_string())
         && (!matches!(
             method,
-            "new_job" | "return_to_job" | "job_offer" | "existing_job" | "money" | "investment"
+            "new_job"
+                | "return_to_job"
+                | "job_offer"
+                | "existing_job"
+                | "money"
+                | "investment"
+                | "knowledge"
+                | "exam"
+                | "undertaking"
+                | "education"
         ) || value("subject.owner_id") == principal);
     if moon_available {
         aliases.push(json!({"role_id":"principal.moon","actor_id":principal,
@@ -1597,6 +1752,11 @@ pub fn concise_reader_source(method: &str) -> Result<&'static str> {
         "lost_object" => Ok(CONCISE_LOST_OBJECT_PROCEDURE),
         "lost_animal" => Ok(CONCISE_LOST_ANIMAL_PROCEDURE),
         "missing_person" => Ok(CONCISE_MISSING_PERSON_PROCEDURE),
+        "knowledge" => Ok(CONCISE_KNOWLEDGE_PROCEDURE),
+        "exam" => Ok(CONCISE_EXAM_PROCEDURE),
+        "undertaking" => Ok(CONCISE_UNDERTAKING_PROCEDURE),
+        "education" => Ok(CONCISE_EDUCATION_PROCEDURE),
+        "dream" => Ok(CONCISE_DREAM_PROCEDURE),
         _ => anyhow::bail!("No reviewed concise procedure for {method}"),
     }
 }
@@ -1943,6 +2103,76 @@ For actual safety prognosis, use the person as patient: sixth is not automatical
 Unknown stations, health, precise order, separating contacts, fixed stars and antiscia stay unknown. Do not invent an assault, custody, diagnosis or verified sighting. Astronomical hours are not civil return/death dates; timing requires actual supported event and contextual units. Return status, answer, analysis, evidence, unresolved: useful proportionate whereabouts/return/safety answer with material eIDs/pages, contrary testimony and explicit limits, not a guaranteed location or fatal claim.
 ";
 
+const CONCISE_KNOWLEDGE_PROCEDURE: &str = "KNOWLEDGE PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 216–218.
+Preserve whose knowledge, actual subject, quality versus earnings concern and livelihood context. Genuine relay principal takes first; concerning another owner retains their actual house. Higher knowledge is ninth; explicitly elementary reading/writing can use third. Profit is the knowledge's second: tenth for higher, fourth for elementary. Turn another person's owned knowledge/profit context explicitly. Conditional references do not select a branch from private expected facts. A salaried position remains job tenth/wages eleventh; a particular client's payment uses the actual payer's money, not general knowledge-profit.
+
+Judge knowledge ruler's essential quality and actual ability to express it separately. More essential dignity supports sound knowledge. Angularity can aid manifestation, but knowledge in principal's first/fixed can remain stuck inside them; a mute sign may hinder expression. Contextually appropriate accidental weakness is descriptive: historical knowledge retrograde or animal knowledge in twelfth need not be harmed merely for that placement. Actual recent sign change may show improvement; don't invent its history or future dignity.
+
+Consider supplied knowledge-house occupants and relevant help/hindrance with directed receptions. A square from a child's role can help learning with good reception or harm it where the actual role/context supports that. Neither every incidental planet nor a vague example becomes an actual person in this question. A new owner–knowledge aspect is not compulsory for present quality; an actual harmful connection still matters.
+
+Profit is assessed through its house/ruler in the same way, independently of intrinsic soundness: good knowledge need not pay and unsound knowledge can earn. No universal profit-to-owner or profit-to-knowledge arrival aspect is required; profit assumes it reaches its beneficiary. An actual trine can ease small profit, square can make large profit laborious, opposition can make it not worthwhile. Coincident ninth/tenth rulers are not a missing aspect or automatic failure.
+
+Customers' eighth-house money can limit income; strong money in its own house, especially fixed, can stay in their pockets. Then consider whether the owner can take advantage of prospects or overcome difficulty. Do not substitute dignity for independently known market demand, credentials or an exact income.
+
+Reception A→B is A's regard for B, retaining every positive AND negative quality. Astronomical hours are not civil earning dates; missing future condition, stations, Parts and fine order stay unknown. Return status, answer, analysis, evidence, unresolved: useful branch-correct judgment with eIDs/pages, contrary testimony and limits, not a guaranteed business forecast or invented sum.
+";
+
+const CONCISE_EXAM_PROCEDURE: &str = "EXAMINATION PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 216–220, 224.
+Preserve actual candidate, passing versus admission, existing permission to sit, and any deadline. Genuine relay principal takes first; concerning another candidate does not. Candidate has their actual relationship ruler and the principal's Moon is not transferred to them. The exam result is profit from that candidate's knowledge: tenth in the principal's question, turned with another person's own knowledge/result context. The external institution in an admission question is a different role: radical third for elementary or ninth for higher education, not automatically turned from a child.
+
+Do not treat every exam as a ninth-house institution or every passing question as getting an unavailable place. An actual accepted candidate sitting the exam asks about the outcome of knowledge. Examine candidate/result condition, directed receptions and actual aspects. Aspect helps but adequate reception can suffice without it: do not impose a universal acquisition-aspect veto. Square can pass unless reception is bad; opposition fails unless reception is especially good, when it can mean a disappointing passing grade. Do not invent a numeric grade or certain rank.
+
+Knowledge quality, result and candidate capability are distinct. Assess actual essential/accidental condition and supplied house benefits/afflictions. Interpret descriptive context rather than a summed planet strength score. Shared knowledge/result ruler does not itself make passing impossible. Candidate enthusiasm is not automatically the examiner/result's favourable regard.
+
+Reception A→B means A regards B. Keep all positive AND negative qualities; domicile/exaltation major, triplicity moderate, term/face minor. Exaltation can overrate ability or expected results. Do not infer reciprocity or a pass merely from a single favourable minor quality. Retain significant contrary condition and reception even if an aspect is easy.
+
+For actual admission rather than passing, use the appropriate external-school recipe and original availability/application context; an institution's good quality is not by itself admission. Do not invent a second examination or change the original query to obtain a more convenient answer.
+
+Use actual candidate order and supported prevention where material, without every incidental contact becoming an invented examiner/intermediary. Timing concerns a supported result and actual horizon, with justified travel/units; astronomical hours are not civil publication dates. Unknown separating testimony, future condition and precision remain unknown. Work remains necessary whatever the chart indicates. Return status, answer, analysis, evidence, unresolved: direct proportionate answer, material eIDs/pages, contrary evidence and honest limits.
+";
+
+const CONCISE_UNDERTAKING_PROCEDURE: &str = "VOYAGE COURSE OR FAIR BENEFIT PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 216–219.
+Preserve the actual undertaking, participant/beneficiary and what 'worthwhile' means in the stated question. A voyage, course, trade-show or knowledge activity can be good in itself yet fail to pay. Genuine relay principal takes first; concerning someone else retains their actual house. Undertaking is ninth, its prospective profit second from ninth, tenth; turn another person's undertaking context explicitly. Assigned houses differ from occupied houses and shared rulers retain their roles.
+
+This is not a universal label for every project or sale. A specific transaction requires the appropriate parties/deal method, an employee's wages the job/payment recipe, and an exact number of goods sold cannot be manufactured from general benefit testimony. Do not silently rewrite an unavailable precise question into the broad one. Preserve actual action and stated benefit rather than interpreting a title alone as a complete undertaking scope.
+
+Judge ninth/undertaking and tenth/profit separately as with knowledge and its reward. Essential quality, accidental ability, actual solar/motion conditions, occupants and relevant help/hindrance can materially differ. A square to the undertaking may show delay; a square to profit restricts money. An easy aspect to the undertaking with an opposition to profit can make a pleasant voyage that does not pay. Do not infer enjoyable experience from a good profit ruler or financial gain from strong ninth alone.
+
+Profit already means benefit to its recipient, so no universal ninth/tenth-to-principal arrival aspect is required to assess it. If an actual aspect exists, weigh its nature and reception; opposition can mean returns are not worth effort. Customers' money can constrain a commercial undertaking. The participant's own ability matters when taking advantage of promising circumstances or overcoming a poor outlook. Coincident undertaking/profit ruler is not automatically missing testimony.
+
+Reception A→B is A's regard for B, retaining all positive AND negative qualities and contextual inanimate fit, not literal feelings. Appropriate descriptive weakness can fit the activity; do not ignore actual contrary evidence merely because a story can be imagined. Do not invent market demand, a vendor's motives or a future successful launch.
+
+For an actual occurrence or timing subquestion distinguish undertaking quality from whether the event happens; use supported occasion and source-bounded travel/context. Astronomical search hours are not civil deadlines, and omitted/uncomputed events or future conditions remain unknown. Return status, answer, analysis, evidence, unresolved: practical benefit judgment with material native eIDs/pages, contrary evidence and honest scope/calculation limits, not a generic success promise.
+";
+
+const CONCISE_EDUCATION_PROCEDURE: &str = "EDUCATION PROCEDURE — Frawley printed pp. 19–32, 44–77, 84–101, 127–136, 219–221, 224.
+Preserve actual learner, institution/level, admission versus present quality/enjoyment, favoured option and finite alternatives. Genuine relay principal takes first; concerning a child does not. The child/learner uses their actual relationship house. School remains external: radical third for elementary/lower education or ninth for higher education, not that house turned from the child. Relative higher/lower distinction can matter. An unknown level needs conditional alternatives, not a private expected choice. Assigned house differs from occupied house.
+
+Quality/enjoyment is a state of affairs, so do not demand a new event aspect for an already enrolled or admitted learner. Judge school ruler/house condition and actual occupants, but distinguish good school from good fit. Directed compatibility matters: school exalting learner can favour them; school in learner's fall can harm them. Learner liking the school is a different direction. Preserve every positive AND negative reception rather than one aggregate score.
+
+The source's hypothetical placement of learner just inside school cusp can assess fit, including actual dignity, solar state or a nearby sign change. It is not the learner's real position and does not earn automatic angular strength. If such hypothetical conditions are not calculated, do not invent them. Actual supplied school-house planets can benefit or afflict according to dignity and context; dignified Saturn can help while debilitated Jupiter can harm.
+
+For choosing institutions, give the appropriate school house to the actually favoured option. Other options need identification from supplied brief distinguishing descriptions and planetary nature: arty can suggest Venus, old-fashioned Saturn. Do not assign alternatives as the first school's sibling or arbitrary seventh-house rival. No favourite is invented from list order. Preserve uncertain mappings and source evidence for all plausible actual options rather than use private Gold roles.
+
+Admission is a separate occurrence question: institution quality or affection alone does not assert that an unmade application succeeds. Use original application/availability and supported relevant occasion. An exam result is profit from knowledge, not automatically the institution itself. Do not answer admission when asked whether the child will enjoy a place already obtained.
+
+Reception A→B means A regards B; exaltation can exaggerate. Consider actual capacity and changes with native event order, not every incidental contact as prohibition or a made-up teacher. Timing needs supported event and contextual units; astronomical hours are not calendar dates. Return status, answer, analysis, evidence, unresolved: useful learner-specific judgment with eIDs/pages, contrary evidence, mapping/hypothetical-calculation limits and no invented admission or educational diagnosis.
+";
+
+const CONCISE_DREAM_PROCEDURE: &str = "DREAM PROCEDURE — Frawley printed pp. 19–38, 44–83, 84–101, 164–165, 219.
+Preserve the dream account, actual dreamer and whether the request is meaning or prophetic truth. Cast for understanding this question, not an invented exact dream time. Genuine relay dreamer takes first; do not convert the person telling the dream on someone else's behalf into the dream's principal. A dreamer remains first even when dreaming they are a celebrity or someone else.
+
+For meaning, treat characters and places with their ordinary houses as if the dream were a scene of daily life: principal first, farm/home fourth, dog sixth, actual relatives their relationships. The whole chart concerns the dream; ninth is not an automatic container for every character. Ninth can genuinely show a teacher, priest, voyage or dream inside the dream. Use actual supplied character context, aspects and directed receptions to develop a coherent, qualified interpretation. Do not assign arbitrary new actors or replace every character with an ungrounded psychological archetype.
+
+Dream events are not reported waking facts. A sister carrying a box in a dream does not prove she stole something, and a conjunction in this symbolic account does not verify an affair. Separate account, symbolic inference and actual-world claim. Don't invent a physical address, diagnosis, trauma, secret motive or future event from an ambiguous image. Main role and occupied house differ; preserve shared aliases and justified unknowns.
+
+For a genuinely prophetic-veracity question, use ninth instead of third in the information test: fixed angles; principal ruler, ninth ruler, Moon and Moon's dispositor in fixed signs and angular, or at least succedent, houses. A majority supports truth; no unanimity requirement or invented numeric threshold. Void Moon says nothing comes of it, true or false, not automatic falsehood. If the apparent prediction really asks a specific relationship/job outcome, use that shortest actual topic route rather than make every question ninth-house veracity.
+
+Reception A→B is A's regard for B and retains all positive AND negative qualities; it never supplies reciprocity by assumption. Dignity, capacity and motion are contextual symbolic testimony, not independently known feelings. Missing separating aspects, precise contacts or calculations remain unknown. Meaning is not a future occurrence requiring a new perfection; do not fabricate an event to justify answering.
+
+Return only status, answer, analysis, evidence, unresolved: a useful proportionate interpretation or qualified truth judgment with material eIDs/pages, the actual account's relevant details, contrary testimony and unresolved alternatives. Never present dream interpretation as certain factual disclosure or a guaranteed civil-time prediction.
+";
+
 /// Present an existing declared component input with the same finite native
 /// evidence, once. Private references, expected labels and verdicts are not read.
 /// This is a new student presentation; its full original remains judge evidence.
@@ -2013,7 +2243,9 @@ fn verified_concise_chart(
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
         | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
         | "existing_job" | "work_person" | "hiring" | "lost_object" | "lost_animal"
-        | "missing_person" => component_family_role_reference(consultation, &native, method)?,
+        | "missing_person" | "knowledge" | "exam" | "undertaking" | "education" | "dream" => {
+            component_family_role_reference(consultation, &native, method)?
+        }
         _ => unreachable!("The concise procedure admits only implemented families"),
     };
     let supplied = original.get("role_reference");
@@ -2175,7 +2407,7 @@ pub fn relevant_reader_chart(
         | "return_to_job" | "job_offer" | "investment" | "business_property" | "parcel"
         | "visit" | "trust" | "information" | "vehicle" | "person_description" | "tax" | "bet"
         | "existing_job" | "work_person" | "hiring" | "lost_object" | "lost_animal"
-        | "missing_person" => {
+        | "missing_person" | "knowledge" | "exam" | "undertaking" | "education" | "dream" => {
             relevant_family_ids(&table, &native, consultation, method, extra_demo_ids)?
         }
         _ => unreachable!("The source procedure admits only implemented families"),
@@ -2517,6 +2749,41 @@ fn relevant_family_ids(
                 }
             }
         },
+        "knowledge" | "exam" | "undertaking" | "education" => {
+            recipient("learning.person");
+            if is_principal("learning.person") {
+                recipient("principal.moon");
+            }
+            for id in [
+                "education.institution",
+                "exam.result",
+                "exam.institution",
+                "knowledge.higher",
+                "knowledge.higher_profit",
+                "knowledge.elementary",
+                "knowledge.elementary_profit",
+                "undertaking.primary",
+                "undertaking.profit",
+                "learning.customers_money",
+                "knowledge.payroll_job",
+                "knowledge.payroll_wages",
+            ] {
+                target(id);
+            }
+        }
+        "dream" => {
+            recipient("dream.principal");
+            recipient("principal.moon");
+            target("dream.prophetic_claim");
+            for row in roles.iter().filter(|r| {
+                r[0].as_str()
+                    .is_some_and(|id| id.starts_with("dream.declared."))
+            }) {
+                if let Some(p) = row[4].as_str() {
+                    targets.insert(p.into());
+                }
+            }
+        }
         "lost_object" => {
             recipient("lost.owner");
             recipient("lost.owner_pocket");
@@ -2662,6 +2929,23 @@ fn relevant_family_ids(
     }
     // These bodies have explicit family-specific ancillary relevance even
     // without an assigned person alias. This does not assign natural roles.
+    if matches!(method, "education" | "dream") {
+        // Alternative schools use actually supplied natural descriptions;
+        // dream meaning uses ordinary roles across the whole chart. Keep
+        // source-relevant alternatives, never map them from expected answers.
+        planets.extend(
+            [
+                "Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn",
+            ]
+            .map(str::to_owned),
+        );
+        ids.extend(
+            native
+                .iter()
+                .filter(|f| f.kind == "house")
+                .map(|f| f.id.clone()),
+        );
+    }
     if matches!(method, "lost_object" | "lost_animal" | "missing_person") {
         // Location symbolism depends on occupied houses, angles, dignity
         // hosts and genuinely close neighbours. Preserve their native
@@ -3706,6 +3990,59 @@ mod concise_projection_tests {
     }
 
     #[test]
+    fn compact_learning_roles_keep_external_school_and_owned_knowledge_distinct() {
+        for (level, school) in [("school", 3), ("university", 9)] {
+            let (input, _) = relevant_family_input(
+                "education",
+                json!({"facts":[fact("subject.owner_id","child"),fact("people.child.relationship","child"),fact("school_level",level)],"unknown":[]}),
+            );
+            let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+            assert!(chart.contains("learning.person(child) = H5/"));
+            assert!(chart.contains(&format!("education.institution(?) = H{school}/")));
+        }
+        let (input, _) = relevant_family_input(
+            "knowledge",
+            json!({"facts":[fact("subject.owner_id","child"),fact("people.child.relationship","child")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("knowledge.higher(?) = H1/")
+                && chart.contains("knowledge.higher_profit(?) = H2/")
+        );
+        assert!(
+            chart.contains("knowledge.elementary(?) = H7/")
+                && chart.contains("knowledge.elementary_profit(?) = H8/")
+        );
+        let (input, _) = relevant_family_input(
+            "exam",
+            json!({"facts":[fact("subject.owner_id","child"),fact("people.child.relationship","child")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(
+            chart.contains("exam.result(?) = H2/") && chart.contains("exam.institution(?) = H9/")
+        );
+        let (input, _) = relevant_family_input(
+            "dream",
+            json!({"facts":[fact("dream_task","meaning"),fact("dream_account","I was Elvis at home")],"unknown":[]}),
+        );
+        let chart = input.get("chart_evidence").unwrap().as_str().unwrap();
+        assert!(chart.contains("dream.principal(querent) = H1/"));
+        assert!(!chart.contains("dream.prophetic_claim("));
+        let (input, _) = relevant_family_input(
+            "dream",
+            json!({"facts":[fact("dream_task","prophetic_truth")],"unknown":[]}),
+        );
+        assert!(
+            input
+                .get("chart_evidence")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .contains("dream.prophetic_claim(?) = H9/")
+        );
+    }
+
+    #[test]
     fn compact_next_families_actual_twenty_declared_components_are_native_verified() {
         let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         for method in [
@@ -3727,6 +4064,11 @@ mod concise_projection_tests {
             "lost_object",
             "lost_animal",
             "missing_person",
+            "knowledge",
+            "exam",
+            "undertaking",
+            "education",
+            "dream",
         ] {
             let bank = cases(&base.join("examples"), method).unwrap();
             let mut max_bytes = 0;
